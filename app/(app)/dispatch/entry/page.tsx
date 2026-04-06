@@ -102,6 +102,16 @@ export default function DispatchMaterialsPage() {
     const checkExistingEntry = async () => {
       if (!selectedJob || !date) {
         setExistingEntry(null);
+        // Reset to 5 empty rows when job/date is cleared
+        setLines(
+          Array.from({ length: 5 }, () => ({
+            id: generateId(),
+            jobId: '',
+            materialId: '',
+            dispatchQty: '',
+            returnQty: '',
+          }))
+        );
         return;
       }
 
@@ -123,11 +133,36 @@ export default function DispatchMaterialsPage() {
               dispatchQty: line.quantity.toString(),
               returnQty: line.returnQty ? line.returnQty.toString() : '',
             }));
-            setLines(newLines);
+
+            // If less than 5 items, pad with empty rows to reach 5
+            // If 5 or more items, keep exactly that many
+            const paddedLines =
+              newLines.length < 5
+                ? [
+                    ...newLines,
+                    ...Array.from({ length: 5 - newLines.length }, () => ({
+                      id: generateId(),
+                      jobId: selectedJob,
+                      materialId: '',
+                      dispatchQty: '',
+                      returnQty: '',
+                    })),
+                  ]
+                : newLines;
+
+            setLines(paddedLines);
             setNotes(data.notes || '');
           } else {
-            // No existing entry for this job+date, clear form
-            setLines([]);
+            // No existing entry for this job+date, show 5 empty rows
+            setLines(
+              Array.from({ length: 5 }, () => ({
+                id: generateId(),
+                jobId: selectedJob,
+                materialId: '',
+                dispatchQty: '',
+                returnQty: '',
+              }))
+            );
             setNotes('');
           }
         }
@@ -168,8 +203,16 @@ export default function DispatchMaterialsPage() {
   const confirmChange = () => {
     if (!changeWarningModal.pendingChange) return;
 
-    // Clear materials and notes
-    setLines([]);
+    // Clear materials and notes, reset to 5 rows
+    setLines(
+      Array.from({ length: 5 }, () => ({
+        id: generateId(),
+        jobId: '',
+        materialId: '',
+        dispatchQty: '',
+        returnQty: '',
+      }))
+    );
     setNotes('');
 
     // Apply the change
