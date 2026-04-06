@@ -33,7 +33,15 @@ export default function DispatchMaterialsPage() {
   const { items: materials } = useAppSelector((s) => s.materials);
   const { items: jobs } = useAppSelector((s) => s.jobs);
 
-  const [lines,        setLines]        = useState<Line[]>([]);
+  const [lines,        setLines]        = useState<Line[]>(() => [
+    {
+      id: generateId(),
+      jobId: '',
+      materialId: '',
+      dispatchQty: '',
+      returnQty: '',
+    },
+  ]);
   const [selectedJob,  setSelectedJob]  = useState('');
   const [date,         setDate]         = useState(() => new Date().toISOString().slice(0, 10));
   const [notes,        setNotes]        = useState('');
