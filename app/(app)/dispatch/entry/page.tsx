@@ -7,6 +7,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { fetchMaterials }                 from '@/store/slices/materialsSlice';
 import { fetchJobs }                      from '@/store/slices/jobsSlice';
 import { Button }                         from '@/components/ui/Button';
+import SearchSelect                       from '@/components/ui/SearchSelect';
 import toast                              from 'react-hot-toast';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -246,24 +247,26 @@ export default function DispatchMaterialsPage() {
         <div className="rounded-t-xl bg-slate-800 border border-slate-700 border-b-0 p-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <div>
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">
-                Job *
-              </label>
-              <select
+              <SearchSelect
+                label="Job"
                 required
                 value={selectedJob}
-                onChange={(e) => handleJobChange(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-              >
-                <option value="">Select job…</option>
-                {jobs
+                onChange={(id) => handleJobChange(id)}
+                placeholder="Search jobs by number or customer..."
+                items={jobs
                   .filter((j) => j.status !== 'COMPLETED' && j.status !== 'CANCELLED')
-                  .map((j) => (
-                    <option key={j._id} value={j._id}>
-                      {j.jobNumber} — {typeof j.customerId === 'object' ? j.customerId.name : 'Unknown'}
-                    </option>
-                  ))}
-              </select>
+                  .map((j) => ({
+                    id: j._id,
+                    label: j.jobNumber,
+                    searchText: typeof j.customerId === 'object' ? j.customerId.name : 'Unknown',
+                  }))}
+                renderItem={(item) => (
+                  <div>
+                    <div className="font-medium">{item.label}</div>
+                    <div className="text-xs text-slate-400">{item.searchText}</div>
+                  </div>
+                )}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">
@@ -324,20 +327,24 @@ export default function DispatchMaterialsPage() {
                       <td className="px-4 py-2.5 text-slate-500 text-xs font-mono">{idx + 1}</td>
 
                       <td className="px-4 py-2">
-                        <select
+                        <SearchSelect
                           value={line.materialId}
-                          onChange={(e) => updateLine(line.id, 'materialId', e.target.value)}
-                          className="w-full px-2.5 py-1.5 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-slate-800 border border-slate-600 text-white"
-                        >
-                          <option value="">— Select —</option>
-                          {materials
+                          onChange={(id) => updateLine(line.id, 'materialId', id)}
+                          placeholder="Search materials..."
+                          items={materials
                             .filter((m) => m.isActive && m.currentStock > 0)
-                            .map((m) => (
-                              <option key={m._id} value={m._id}>
-                                {m.name} ({m.currentStock} {m.unit})
-                              </option>
-                            ))}
-                        </select>
+                            .map((m) => ({
+                              id: m._id,
+                              label: m.name,
+                              searchText: `${m.currentStock} ${m.unit}`,
+                            }))}
+                          renderItem={(item) => (
+                            <div>
+                              <div className="font-medium text-white">{item.label}</div>
+                              <div className="text-xs text-slate-400">{item.searchText}</div>
+                            </div>
+                          )}
+                        />
                       </td>
 
                       <td className="px-3 py-2 text-center text-slate-400 text-xs">
