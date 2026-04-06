@@ -43,6 +43,9 @@ export default function SearchSelect<T extends { id: string; label: string; sear
   useEffect(() => {
     if (selectedItem && !isOpen) {
       setInput(selectedItem.label);
+    } else if (!value && !isOpen) {
+      // Clear input when value is cleared
+      setInput('');
     }
   }, [value, selectedItem, isOpen]);
 
