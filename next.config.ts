@@ -1,7 +1,8 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Suppress Mongoose model-compilation warnings in dev HMR
+  serverExternalPackages: ['mongoose'],
 };
 
 export default nextConfig;

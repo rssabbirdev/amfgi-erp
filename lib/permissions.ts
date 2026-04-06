@@ -1,0 +1,144 @@
+// ── Permission keys ───────────────────────────────────────────────────────────
+export const P = {
+  // Company
+  COMPANY_VIEW:   'company.view',
+  COMPANY_CREATE: 'company.create',
+  COMPANY_EDIT:   'company.edit',
+
+  // Users
+  USER_VIEW:   'user.view',
+  USER_CREATE: 'user.create',
+  USER_EDIT:   'user.edit',
+  USER_DELETE: 'user.delete',
+
+  // Roles
+  ROLE_MANAGE: 'role.manage',
+
+  // Materials
+  MATERIAL_VIEW:   'material.view',
+  MATERIAL_CREATE: 'material.create',
+  MATERIAL_EDIT:   'material.edit',
+  MATERIAL_DELETE: 'material.delete',
+
+  // Jobs
+  JOB_VIEW:   'job.view',
+  JOB_CREATE: 'job.create',
+  JOB_EDIT:   'job.edit',
+  JOB_DELETE: 'job.delete',
+
+  // Customers
+  CUSTOMER_VIEW:   'customer.view',
+  CUSTOMER_CREATE: 'customer.create',
+  CUSTOMER_EDIT:   'customer.edit',
+  CUSTOMER_DELETE: 'customer.delete',
+
+  // Transactions
+  TXN_STOCK_IN:  'transaction.stock_in',
+  TXN_STOCK_OUT: 'transaction.stock_out',
+  TXN_RETURN:    'transaction.return',
+  TXN_TRANSFER:  'transaction.transfer',
+
+  // Reports
+  REPORT_VIEW: 'report.view',
+} as const;
+
+export type Permission = (typeof P)[keyof typeof P];
+export const ALL_PERMISSIONS = Object.values(P) as Permission[];
+
+// ── Predefined role permission sets ───────────────────────────────────────────
+export const ROLE_PRESETS: Record<string, Permission[]> = {
+  super_admin: ALL_PERMISSIONS,
+
+  manager: [
+    P.MATERIAL_VIEW, P.MATERIAL_CREATE, P.MATERIAL_EDIT,
+    P.JOB_VIEW,      P.JOB_CREATE,      P.JOB_EDIT,
+    P.CUSTOMER_VIEW, P.CUSTOMER_CREATE, P.CUSTOMER_EDIT,
+    P.TXN_STOCK_IN,  P.TXN_STOCK_OUT,   P.TXN_RETURN, P.TXN_TRANSFER,
+    P.REPORT_VIEW,
+    P.USER_VIEW,
+  ],
+
+  store_keeper: [
+    P.MATERIAL_VIEW,
+    P.JOB_VIEW,
+    P.TXN_STOCK_OUT,
+    P.TXN_RETURN,
+  ],
+};
+
+// ── Permission group labels (for UI checkboxes) ───────────────────────────────
+export const PERMISSION_GROUPS: Array<{
+  group:   string;
+  perms: Array<{ key: Permission; label: string }>;
+}> = [
+  {
+    group: 'Materials',
+    perms: [
+      { key: P.MATERIAL_VIEW,   label: 'View'   },
+      { key: P.MATERIAL_CREATE, label: 'Create' },
+      { key: P.MATERIAL_EDIT,   label: 'Edit'   },
+      { key: P.MATERIAL_DELETE, label: 'Delete' },
+    ],
+  },
+  {
+    group: 'Jobs',
+    perms: [
+      { key: P.JOB_VIEW,   label: 'View'   },
+      { key: P.JOB_CREATE, label: 'Create' },
+      { key: P.JOB_EDIT,   label: 'Edit'   },
+      { key: P.JOB_DELETE, label: 'Delete' },
+    ],
+  },
+  {
+    group: 'Customers',
+    perms: [
+      { key: P.CUSTOMER_VIEW,   label: 'View'   },
+      { key: P.CUSTOMER_CREATE, label: 'Create' },
+      { key: P.CUSTOMER_EDIT,   label: 'Edit'   },
+      { key: P.CUSTOMER_DELETE, label: 'Delete' },
+    ],
+  },
+  {
+    group: 'Transactions',
+    perms: [
+      { key: P.TXN_STOCK_IN,  label: 'Receive Stock'    },
+      { key: P.TXN_STOCK_OUT, label: 'Dispatch'         },
+      { key: P.TXN_RETURN,    label: 'Return'           },
+      { key: P.TXN_TRANSFER,  label: 'Inter-Company Transfer' },
+    ],
+  },
+  {
+    group: 'Reports',
+    perms: [{ key: P.REPORT_VIEW, label: 'View Reports' }],
+  },
+  {
+    group: 'User Management',
+    perms: [
+      { key: P.USER_VIEW,   label: 'View'   },
+      { key: P.USER_CREATE, label: 'Create' },
+      { key: P.USER_EDIT,   label: 'Edit'   },
+      { key: P.USER_DELETE, label: 'Delete' },
+    ],
+  },
+  {
+    group: 'Role Management',
+    perms: [{ key: P.ROLE_MANAGE, label: 'Manage Roles' }],
+  },
+  {
+    group: 'Company Management',
+    perms: [
+      { key: P.COMPANY_VIEW,   label: 'View'   },
+      { key: P.COMPANY_CREATE, label: 'Create' },
+      { key: P.COMPANY_EDIT,   label: 'Edit'   },
+    ],
+  },
+];
+
+// ── Runtime helpers ───────────────────────────────────────────────────────────
+export function can(permissions: string[], perm: Permission): boolean {
+  return permissions.includes(perm);
+}
+
+export function canAny(permissions: string[], perms: Permission[]): boolean {
+  return perms.some((p) => permissions.includes(p));
+}
