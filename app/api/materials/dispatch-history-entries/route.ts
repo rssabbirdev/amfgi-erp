@@ -79,25 +79,36 @@ export async function GET(req: Request) {
     },
   ]);
 
-  // Enrich each entry with material details
+  // Enrich each entry with material details and calculate net quantities
   const enrichedEntries = await Promise.all(
     entries.map(async (entry) => {
       const materialsMap = new Map();
+      let totalNetQuantity = 0;
 
       for (const txn of entry.transactions) {
         const material = await Material.findById(txn.materialId).lean();
         if (material) {
+          // Find any linked RETURN transactions
+          const returnTxns = await Transaction.find({
+            type: 'RETURN',
+            parentTransactionId: txn._id,
+          }).lean();
+
+          const returnQuantity = returnTxns.reduce((sum, rt: any) => sum + (rt.quantity ?? 0), 0);
+          const netQuantity = txn.quantity - returnQuantity;
+          totalNetQuantity += netQuantity;
+
           const key = txn.materialId.toString();
           if (materialsMap.has(key)) {
             const existing = materialsMap.get(key);
-            existing.quantity += txn.quantity;
+            existing.quantity += netQuantity;
             existing.transactionIds.push(txn._id);
           } else {
             materialsMap.set(key, {
               materialId: txn.materialId,
               materialName: material.name,
               materialUnit: material.unit,
-              quantity: txn.quantity,
+              quantity: netQuantity,
               transactionIds: [txn._id],
             });
           }
@@ -112,7 +123,7 @@ export async function GET(req: Request) {
         jobNumber: entry.jobDetails?.jobNumber ?? 'N/A',
         jobDescription: entry.jobDetails?.description ?? '',
         dispatchDate: entry.firstDate,
-        totalQuantity: entry.totalQuantity,
+        totalQuantity: totalNetQuantity,
         materialsCount: materialsMap.size,
         materials: Array.from(materialsMap.values()),
         transactionIds: entry.transactions.map((t: any) => t._id),
