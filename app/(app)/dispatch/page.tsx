@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import DataTable from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
@@ -34,6 +35,8 @@ interface Entry {
 }
 
 export default function DispatchPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const isSA = session?.user?.isSuperAdmin ?? false;
   const perms = (session?.user?.permissions ?? []) as string[];
@@ -47,6 +50,19 @@ export default function DispatchPage() {
   );
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Load filter state from URL on mount
+  useEffect(() => {
+    const urlFilterType = searchParams.get('filterType') as 'day' | 'month' | 'all' | null;
+    const urlDate = searchParams.get('date');
+
+    if (urlFilterType && ['day', 'month', 'all'].includes(urlFilterType)) {
+      setFilterType(urlFilterType);
+    }
+    if (urlDate) {
+      setSelectedDate(urlDate);
+    }
+  }, []);
 
   const [viewModal, setViewModal] = useState<{ open: boolean; entry: Entry | null }>({
     open: false,
@@ -84,6 +100,26 @@ export default function DispatchPage() {
       fetchEntries();
     }
   }, [filterType, selectedDate, canView]);
+
+  const handleFilterTypeChange = (newFilterType: 'day' | 'month' | 'all') => {
+    setFilterType(newFilterType);
+    // Update URL
+    const params = new URLSearchParams();
+    params.set('filterType', newFilterType);
+    if (newFilterType !== 'all') {
+      params.set('date', selectedDate);
+    }
+    router.push(`?${params.toString()}`);
+  };
+
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    // Update URL
+    const params = new URLSearchParams();
+    params.set('filterType', filterType);
+    params.set('date', newDate);
+    router.push(`?${params.toString()}`);
+  };
 
   const handleDelete = async (entry: Entry) => {
     setDeleteModal({ open: true, entry, loading: false });
@@ -215,7 +251,7 @@ export default function DispatchPage() {
             ].map((option) => (
               <button
                 key={option.value}
-                onClick={() => setFilterType(option.value)}
+                onClick={() => handleFilterTypeChange(option.value)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   filterType === option.value
                     ? 'bg-emerald-600 text-white'
@@ -236,7 +272,7 @@ export default function DispatchPage() {
             <input
               type={filterType === 'day' ? 'date' : 'month'}
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => handleDateChange(e.target.value)}
               className="px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
             />
           </div>
