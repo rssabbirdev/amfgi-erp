@@ -15,16 +15,93 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
   const { id } = await params;
 
+  const conn = await getCompanyDB(dbName);
+  const dbSession = await conn.startSession();
+  dbSession.startTransaction();
+
   try {
-    const conn = await getCompanyDB(dbName);
-    const { Transaction } = getModels(conn);
+    const { Transaction, Material } = getModels(conn);
 
-    const txn = await Transaction.findById(id);
-    if (!txn) return errorResponse('Transaction not found', 404);
+    const txn = await Transaction.findById(id).session(dbSession);
+    if (!txn) {
+      await dbSession.abortTransaction();
+      return errorResponse('Transaction not found', 404);
+    }
 
-    await Transaction.findByIdAndDelete(id);
+    // Create reversal transaction for audit trail instead of just deleting
+    if (txn.type === 'STOCK_OUT' || txn.type === 'RETURN') {
+      // Reverse the stock impact
+      await Material.findByIdAndUpdate(
+        txn.materialId,
+        { $inc: { currentStock: txn.quantity } },
+        { session: dbSession }
+      );
+
+      // Create reversal transaction for ledger
+      await Transaction.create(
+        [
+          {
+            type: 'REVERSAL',
+            materialId: new Types.ObjectId(txn.materialId),
+            quantity: txn.quantity,
+            jobId: txn.jobId,
+            parentTransactionId: txn._id,
+            notes: `Reversal of ${txn.type} - ${txn.notes || ''}`,
+            date: new Date(),
+            performedBy: session.user.id,
+          },
+        ],
+        { session: dbSession }
+      );
+    }
+
+    // Delete the original transaction
+    await Transaction.findByIdAndDelete(id, { session: dbSession });
+
+    // If this was a STOCK_OUT, also delete any linked RETURN transactions
+    if (txn.type === 'STOCK_OUT') {
+      const returnTxns = await Transaction.find(
+        { parentTransactionId: txn._id },
+        {},
+        { session: dbSession }
+      );
+
+      for (const returnTxn of returnTxns) {
+        // Reverse RETURN stock impact
+        await Material.findByIdAndUpdate(
+          returnTxn.materialId,
+          { $inc: { currentStock: -returnTxn.quantity } },
+          { session: dbSession }
+        );
+
+        // Create reversal for RETURN transaction
+        await Transaction.create(
+          [
+            {
+              type: 'REVERSAL',
+              materialId: new Types.ObjectId(returnTxn.materialId),
+              quantity: returnTxn.quantity,
+              jobId: returnTxn.jobId,
+              parentTransactionId: returnTxn._id,
+              notes: `Reversal of RETURN - ${returnTxn.notes || ''}`,
+              date: new Date(),
+              performedBy: session.user.id,
+            },
+          ],
+          { session: dbSession }
+        );
+
+        // Delete the RETURN transaction
+        await Transaction.findByIdAndDelete(returnTxn._id, { session: dbSession });
+      }
+    }
+
+    await dbSession.commitTransaction();
     return successResponse({ deleted: true });
   } catch (err) {
+    await dbSession.abortTransaction();
     return errorResponse('Failed to delete transaction', 500);
+  } finally {
+    dbSession.endSession();
   }
 }
