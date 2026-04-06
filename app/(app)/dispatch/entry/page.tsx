@@ -19,6 +19,11 @@ interface Line {
   returnQty:   string;
 }
 
+interface PendingChange {
+  type: 'job' | 'date';
+  newValue: string;
+}
+
 export default function DispatchMaterialsPage() {
   const dispatch = useAppDispatch();
   const { data: session } = useSession();
@@ -32,6 +37,10 @@ export default function DispatchMaterialsPage() {
   const [submitting,   setSubmitting]   = useState(false);
   const [existingEntry, setExistingEntry] = useState<{ exists: boolean; lines: any[]; transactionIds: string[]; notes: string } | null>(null);
   const [checkingEntry, setCheckingEntry] = useState(false);
+  const [changeWarningModal, setChangeWarningModal] = useState<{ open: boolean; pendingChange: PendingChange | null }>({
+    open: false,
+    pendingChange: null,
+  });
 
   useEffect(() => {
     dispatch(fetchMaterials());
@@ -66,6 +75,10 @@ export default function DispatchMaterialsPage() {
             }));
             setLines(newLines);
             setNotes(data.notes || '');
+          } else {
+            // No existing entry for this job+date, clear form
+            setLines([]);
+            setNotes('');
           }
         }
       } catch (err) {
@@ -77,6 +90,47 @@ export default function DispatchMaterialsPage() {
 
     checkExistingEntry();
   }, [selectedJob, date]);
+
+  const handleJobChange = (newJobId: string) => {
+    // If materials are added, show warning
+    if (lines.length > 0) {
+      setChangeWarningModal({
+        open: true,
+        pendingChange: { type: 'job', newValue: newJobId },
+      });
+    } else {
+      setSelectedJob(newJobId);
+    }
+  };
+
+  const handleDateChange = (newDate: string) => {
+    // If materials are added, show warning
+    if (lines.length > 0) {
+      setChangeWarningModal({
+        open: true,
+        pendingChange: { type: 'date', newValue: newDate },
+      });
+    } else {
+      setDate(newDate);
+    }
+  };
+
+  const confirmChange = () => {
+    if (!changeWarningModal.pendingChange) return;
+
+    // Clear materials and notes
+    setLines([]);
+    setNotes('');
+
+    // Apply the change
+    if (changeWarningModal.pendingChange.type === 'job') {
+      setSelectedJob(changeWarningModal.pendingChange.newValue);
+    } else {
+      setDate(changeWarningModal.pendingChange.newValue);
+    }
+
+    setChangeWarningModal({ open: false, pendingChange: null });
+  };
 
   const getMaterial = (id: string) => materials.find((m) => m._id === id);
   const getJob = (id: string) => jobs.find((j) => j._id === id);
@@ -198,7 +252,7 @@ export default function DispatchMaterialsPage() {
               <select
                 required
                 value={selectedJob}
-                onChange={(e) => setSelectedJob(e.target.value)}
+                onChange={(e) => handleJobChange(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
               >
                 <option value="">Select job…</option>
@@ -219,7 +273,7 @@ export default function DispatchMaterialsPage() {
                 type="date"
                 required
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => handleDateChange(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
               />
             </div>
@@ -339,7 +393,13 @@ export default function DispatchMaterialsPage() {
 
         {/* Footer */}
         <div className="rounded-b-xl bg-slate-800 border border-slate-700 border-t-0 p-4 flex gap-3 justify-between">
-          <Button type="button" variant="secondary" onClick={addLine}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={addLine}
+            disabled={!selectedJob || !date}
+            title={!selectedJob || !date ? 'Select a job and date first' : ''}
+          >
             + Add Material
           </Button>
           <div className="flex gap-3">
@@ -352,6 +412,43 @@ export default function DispatchMaterialsPage() {
           </div>
         </div>
       </form>
+
+      {/* Change Warning Modal */}
+      {changeWarningModal.open && changeWarningModal.pendingChange && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={() => setChangeWarningModal({ open: false, pendingChange: null })}
+          />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm shadow-2xl">
+            <h2 className="text-lg font-semibold text-white mb-2">Unsaved Changes</h2>
+            <p className="text-slate-300 text-sm mb-4">
+              You have {lines.length} material{lines.length !== 1 ? 's' : ''} added. Changing the {changeWarningModal.pendingChange.type} will clear all unsaved materials and notes.
+            </p>
+
+            <div className="bg-amber-600/15 border border-amber-500/30 rounded-lg p-3 mb-6">
+              <p className="text-xs text-amber-300">
+                ⚠️ <strong>Save first</strong> to keep your changes, or continue to discard them.
+              </p>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setChangeWarningModal({ open: false, pendingChange: null })}
+                className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmChange}
+                className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-500 text-sm font-medium transition-colors"
+              >
+                Discard & Change
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
