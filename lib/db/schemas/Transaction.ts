@@ -1,6 +1,6 @@
 import { Schema, type Document, type Types } from 'mongoose';
 
-export type TransactionType = 'STOCK_IN' | 'STOCK_OUT' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT';
+export type TransactionType = 'STOCK_IN' | 'STOCK_OUT' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'REVERSAL';
 
 export interface ITransaction extends Document {
   type:                TransactionType;
@@ -21,7 +21,7 @@ export const TransactionSchema = new Schema<ITransaction>(
   {
     type: {
       type: String,
-      enum: ['STOCK_IN', 'STOCK_OUT', 'RETURN', 'TRANSFER_IN', 'TRANSFER_OUT'],
+      enum: ['STOCK_IN', 'STOCK_OUT', 'RETURN', 'TRANSFER_IN', 'TRANSFER_OUT', 'REVERSAL'],
       required: true,
     },
     materialId:          { type: Schema.Types.ObjectId, ref: 'Material', required: true },
