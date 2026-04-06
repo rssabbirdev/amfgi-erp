@@ -20,6 +20,13 @@ const BatchSchema = z.object({
   notes:         z.string().max(500).optional(),
   date:          z.string().optional(),
   existingTransactionIds: z.array(z.string()).optional(),
+  billAmount:    z.number().optional(),
+  includeTax:    z.boolean().optional(),
+  taxAmount:     z.number().optional(),
+  materialUpdates: z.array(z.object({
+    materialId: z.string(),
+    unitCost: z.number(),
+  })).optional(),
 });
 
 export async function POST(req: Request) {
@@ -33,7 +40,7 @@ export async function POST(req: Request) {
   const parsed = BatchSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  const { type, lines, receiptNumber, jobId, supplier, notes, date, existingTransactionIds } = parsed.data;
+  const { type, lines, receiptNumber, jobId, supplier, notes, date, existingTransactionIds, billAmount, includeTax, taxAmount, materialUpdates } = parsed.data;
 
   // Permission check
   if (type === 'STOCK_IN') {
@@ -178,8 +185,25 @@ export async function POST(req: Request) {
       }
     }
 
+    // Update material unit costs if provided
+    if (materialUpdates && materialUpdates.length > 0) {
+      for (const update of materialUpdates) {
+        await Material.findByIdAndUpdate(
+          update.materialId,
+          { unitCost: update.unitCost },
+          { session: dbSession }
+        );
+      }
+    }
+
     await dbSession.commitTransaction();
-    return successResponse({ created: created.length, ids: created }, 201);
+    return successResponse({
+      created: created.length,
+      ids: created,
+      billAmount,
+      includeTax,
+      taxAmount,
+    }, 201);
   } catch (err: unknown) {
     await dbSession.abortTransaction();
     return errorResponse(err instanceof Error ? err.message : 'Batch failed', 400);

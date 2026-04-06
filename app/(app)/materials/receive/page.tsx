@@ -1,27 +1,33 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter }        from 'next/navigation';
-import Link                 from 'next/link';
-import { useAppDispatch }   from '@/store/hooks';
-import { fetchMaterials }   from '@/store/slices/materialsSlice';
-import { Button }           from '@/components/ui/Button';
-import { useSession }       from 'next-auth/react';
-import toast                from 'react-hot-toast';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useAppDispatch } from '@/store/hooks';
+import { fetchMaterials } from '@/store/slices/materialsSlice';
+import { Button } from '@/components/ui/Button';
+import SearchSelect from '@/components/ui/SearchSelect';
+import { useSession } from 'next-auth/react';
+import toast from 'react-hot-toast';
 
 interface Material {
-  _id:          string;
-  name:         string;
-  unit:         string;
+  _id: string;
+  name: string;
+  unit: string;
   currentStock: number;
-  unitCost?:    number;
+  unitCost?: number;
+}
+
+interface Supplier {
+  id: string;
+  label: string;
 }
 
 interface LineItem {
-  id:         string; // local key only
+  id: string;
   materialId: string;
-  quantity:   string;
-  unitCost:   string;
+  quantity: string;
+  unitCost: string;
 }
 
 function uid() {
@@ -33,35 +39,51 @@ function emptyLine(): LineItem {
 }
 
 export default function ReceiveStockPage() {
-  const router              = useRouter();
-  const dispatch            = useAppDispatch();
-  const { data: session }   = useSession();
+  const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { data: session } = useSession();
 
-  const [materials,      setMaterials]      = useState<Material[]>([]);
-  const [lines,          setLines]          = useState<LineItem[]>([emptyLine()]);
-  const [receiptNumber,  setReceiptNumber]  = useState('');
-  const [supplier,       setSupplier]       = useState('');
-  const [date,           setDate]           = useState(new Date().toISOString().split('T')[0]);
-  const [notes,          setNotes]          = useState('');
-  const [submitting,     setSubmitting]     = useState(false);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [lines, setLines] = useState<LineItem[]>([emptyLine()]);
+  const [receiptNumber, setReceiptNumber] = useState('');
+  const [supplierId, setSupplierId] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [notes, setNotes] = useState('');
+  const [includeTax, setIncludeTax] = useState(true);
+  const TAX_RATE = 0.05; // 5%
+  const [submitting, setSubmitting] = useState(false);
 
   // Auto-generate receipt number on mount
   useEffect(() => {
-    const now  = new Date();
+    const now = new Date();
     const yyyy = now.getFullYear();
-    const mm   = String(now.getMonth() + 1).padStart(2, '0');
-    const dd   = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
     const rand = Math.floor(Math.random() * 900 + 100);
     setReceiptNumber(`GRN-${yyyy}${mm}${dd}-${rand}`);
   }, []);
 
+  // Load materials and suppliers
   useEffect(() => {
-    fetch('/api/materials')
-      .then((r) => r.json())
-      .then((j) => setMaterials(j.data ?? []));
+    Promise.all([
+      fetch('/api/materials')
+        .then((r) => r.json())
+        .then((j) => setMaterials(j.data ?? [])),
+      fetch('/api/suppliers')
+        .then((r) => r.json())
+        .then((j) =>
+          setSuppliers(
+            (j.data?.suppliers ?? []).map((s: any) => ({
+              id: s._id,
+              label: s.name,
+            }))
+          )
+        ),
+    ]);
   }, []);
 
-  // ── Line operations ──────────────────────────────────────────────────────
+  // Line operations
   const updateLine = (id: string, field: keyof LineItem, value: string) => {
     setLines((prev) =>
       prev.map((l) => {
@@ -79,46 +101,43 @@ export default function ReceiveStockPage() {
     );
   };
 
-  const addLine    = () => setLines((prev) => [...prev, emptyLine()]);
+  const addLine = () => setLines((prev) => [...prev, emptyLine()]);
   const removeLine = (id: string) => {
-    if (lines.length === 1) return; // keep at least one row
+    if (lines.length === 1) return;
     setLines((prev) => prev.filter((l) => l.id !== id));
   };
 
   const duplicateLine = (id: string) => {
     const src = lines.find((l) => l.id === id);
     if (!src) return;
-    const idx  = lines.findIndex((l) => l.id === id);
+    const idx = lines.findIndex((l) => l.id === id);
     const copy = { ...src, id: uid() };
-    setLines((prev) => [
-      ...prev.slice(0, idx + 1),
-      copy,
-      ...prev.slice(idx + 1),
-    ]);
+    setLines((prev) => [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)]);
   };
 
-  // ── Computed ─────────────────────────────────────────────────────────────
+  // Computed values
   const getMaterial = (id: string) => materials.find((m) => m._id === id);
+  const getSupplier = (id: string) => suppliers.find((s) => s.id === id);
 
   const lineTotal = (line: LineItem) => {
-    const qty  = parseFloat(line.quantity)  || 0;
-    const cost = parseFloat(line.unitCost)  || 0;
+    const qty = parseFloat(line.quantity) || 0;
+    const cost = parseFloat(line.unitCost) || 0;
     return qty * cost;
   };
 
-  const grandTotal  = lines.reduce((acc, l) => acc + lineTotal(l), 0);
+  const subTotal = lines.reduce((acc, l) => acc + lineTotal(l), 0);
+  const taxAmount = includeTax ? subTotal * TAX_RATE : 0;
+  const billAmount = subTotal + taxAmount;
   const totalQtyLines = lines.filter((l) => l.materialId && parseFloat(l.quantity) > 0).length;
 
-  // ── Validation ───────────────────────────────────────────────────────────
-  const validLines = lines.filter(
-    (l) => l.materialId && parseFloat(l.quantity) > 0
-  );
+  // Validation
+  const validLines = lines.filter((l) => l.materialId && parseFloat(l.quantity) > 0);
 
   const duplicateMaterials = validLines
     .map((l) => l.materialId)
     .filter((id, i, arr) => arr.indexOf(id) !== i);
 
-  // ── Submit ───────────────────────────────────────────────────────────────
+  // Submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -134,19 +153,29 @@ export default function ReceiveStockPage() {
     setSubmitting(true);
     try {
       const res = await fetch('/api/transactions/batch', {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          type:             'STOCK_IN',
+        body: JSON.stringify({
+          type: 'STOCK_IN',
           receiptNumber,
-          supplier:         supplier || undefined,
-          notes:            notes    || undefined,
+          supplier: getSupplier(supplierId)?.label || undefined,
+          notes: notes || undefined,
           date,
+          billAmount,
+          includeTax,
+          taxAmount,
           lines: validLines.map((l) => ({
             materialId: l.materialId,
-            quantity:   parseFloat(l.quantity),
-            unitCost:   l.unitCost ? parseFloat(l.unitCost) : undefined,
+            quantity: parseFloat(l.quantity),
+            unitCost: l.unitCost ? parseFloat(l.unitCost) : undefined,
           })),
+          // Update material unit costs
+          materialUpdates: validLines
+            .filter((l) => l.unitCost)
+            .map((l) => ({
+              materialId: l.materialId,
+              unitCost: parseFloat(l.unitCost),
+            })),
         }),
       });
 
@@ -156,7 +185,7 @@ export default function ReceiveStockPage() {
       }
 
       const json = await res.json();
-      dispatch(fetchMaterials()); // refresh Redux store
+      dispatch(fetchMaterials());
       toast.success(`Receipt posted — ${json.data.created} item(s) received`);
       router.push('/materials');
     } catch (err: unknown) {
@@ -166,10 +195,8 @@ export default function ReceiveStockPage() {
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-
+    <div className="max-w-6xl mx-auto space-y-6">
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
@@ -184,10 +211,8 @@ export default function ReceiveStockPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-0">
-
-        {/* ── Bill Header ─────────────────────────────────────────────────── */}
+        {/* Bill Header */}
         <div className="rounded-t-xl bg-slate-800 border border-slate-700 border-b-0 p-6">
-          {/* Top bar: GRN branding + receipt number */}
           <div className="flex items-start justify-between mb-6 pb-5 border-b border-slate-700">
             <div>
               <div className="flex items-center gap-3 mb-1">
@@ -214,14 +239,12 @@ export default function ReceiveStockPage() {
           {/* Meta fields */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <div>
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">
-                Supplier / Vendor
-              </label>
-              <input
-                value={supplier}
-                onChange={(e) => setSupplier(e.target.value)}
-                placeholder="Supplier name or bill reference"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              <SearchSelect
+                label="Supplier / Vendor"
+                value={supplierId}
+                onChange={setSupplierId}
+                placeholder="Search suppliers..."
+                items={suppliers}
               />
             </div>
             <div>
@@ -250,7 +273,7 @@ export default function ReceiveStockPage() {
           </div>
         </div>
 
-        {/* ── Line Items Table ─────────────────────────────────────────────── */}
+        {/* Line Items Table */}
         <div className="border border-slate-700 border-b-0 bg-slate-900 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -258,16 +281,16 @@ export default function ReceiveStockPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide w-8">#</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide min-w-[220px]">Material</th>
                 <th className="px-3 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide w-20">Unit</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-28">Current Stock</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Qty Received *</th>
+                <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-28">Stock</th>
+                <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Qty *</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Unit Cost (AED)</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Line Total</th>
+                <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Total</th>
                 <th className="px-2 py-3 w-20"></th>
               </tr>
             </thead>
             <tbody>
               {lines.map((line, idx) => {
-                const mat  = getMaterial(line.materialId);
+                const mat = getMaterial(line.materialId);
                 const isDup = duplicateMaterials.includes(line.materialId);
                 const total = lineTotal(line);
 
@@ -278,40 +301,36 @@ export default function ReceiveStockPage() {
                       isDup ? 'bg-red-900/10' : 'hover:bg-slate-800/40'
                     }`}
                   >
-                    {/* Row number */}
                     <td className="px-4 py-2.5 text-slate-500 text-xs font-mono">{idx + 1}</td>
 
-                    {/* Material select */}
                     <td className="px-4 py-2">
-                      <select
+                      <SearchSelect
                         value={line.materialId}
-                        onChange={(e) => updateLine(line.id, 'materialId', e.target.value)}
-                        className={`w-full px-2.5 py-1.5 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-800 border text-white
-                          ${isDup ? 'border-red-500' : 'border-slate-600'}`}
-                      >
-                        <option value="">— Select material —</option>
-                        {materials.map((m) => (
-                          <option key={m._id} value={m._id}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </select>
-                      {isDup && (
-                        <p className="text-red-400 text-xs mt-0.5">Duplicate — merge rows</p>
-                      )}
+                        onChange={(id) => updateLine(line.id, 'materialId', id)}
+                        placeholder="Search materials..."
+                        disabled={false}
+                        items={materials.map((m) => ({
+                          id: m._id,
+                          label: m.name,
+                          searchText: m.unit,
+                        }))}
+                        renderItem={(item) => (
+                          <div>
+                            <div className="font-medium text-white">{item.label}</div>
+                            <div className="text-xs text-slate-400">{item.searchText}</div>
+                          </div>
+                        )}
+                      />
+                      {isDup && <p className="text-red-400 text-xs mt-0.5">Duplicate — merge rows</p>}
                     </td>
 
-                    {/* Unit */}
                     <td className="px-3 py-2 text-center">
-                      <span className="text-slate-400 text-xs font-medium">
-                        {mat?.unit ?? '—'}
-                      </span>
+                      <span className="text-slate-400 text-xs font-medium">{mat?.unit ?? '—'}</span>
                     </td>
 
-                    {/* Current stock */}
                     <td className="px-3 py-2 text-right font-mono text-sm">
                       {mat ? (
-                        <span className={mat.currentStock <= (0) ? 'text-red-400' : 'text-slate-300'}>
+                        <span className={mat.currentStock <= 0 ? 'text-red-400' : 'text-slate-300'}>
                           {mat.currentStock}
                         </span>
                       ) : (
@@ -319,7 +338,6 @@ export default function ReceiveStockPage() {
                       )}
                     </td>
 
-                    {/* Quantity */}
                     <td className="px-3 py-2">
                       <input
                         type="number"
@@ -332,7 +350,6 @@ export default function ReceiveStockPage() {
                       />
                     </td>
 
-                    {/* Unit cost */}
                     <td className="px-3 py-2">
                       <input
                         type="number"
@@ -345,7 +362,6 @@ export default function ReceiveStockPage() {
                       />
                     </td>
 
-                    {/* Line total */}
                     <td className="px-3 py-2 text-right font-mono text-sm">
                       {total > 0 ? (
                         <span className="text-white font-medium">
@@ -356,12 +372,11 @@ export default function ReceiveStockPage() {
                       )}
                     </td>
 
-                    {/* Row actions */}
                     <td className="px-2 py-2">
                       <div className="flex items-center gap-1 justify-end">
                         <button
                           type="button"
-                          title="Duplicate row"
+                          title="Duplicate"
                           onClick={() => duplicateLine(line.id)}
                           className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-700 rounded transition-colors"
                         >
@@ -372,7 +387,7 @@ export default function ReceiveStockPage() {
                         </button>
                         <button
                           type="button"
-                          title="Remove row"
+                          title="Remove"
                           onClick={() => removeLine(line.id)}
                           disabled={lines.length === 1}
                           className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
@@ -387,7 +402,6 @@ export default function ReceiveStockPage() {
                 );
               })}
 
-              {/* Add row */}
               <tr className="border-b border-slate-700/30">
                 <td colSpan={8} className="px-4 py-2">
                   <button
@@ -398,7 +412,7 @@ export default function ReceiveStockPage() {
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    Add line item
+                    Add Material
                   </button>
                 </td>
               </tr>
@@ -406,62 +420,63 @@ export default function ReceiveStockPage() {
           </table>
         </div>
 
-        {/* ── Footer / Totals ───────────────────────────────────────────────── */}
-        <div className="rounded-b-xl bg-slate-800 border border-slate-700 p-5">
-          <div className="flex items-end justify-between">
-
-            {/* Left: summary stats */}
-            <div className="space-y-1 text-sm text-slate-400">
-              <div className="flex items-center gap-2">
-                <span className="w-28">Line items:</span>
-                <span className="text-white font-medium">{totalQtyLines}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-28">Total qty:</span>
-                <span className="text-white font-medium">
-                  {lines
-                    .reduce((acc, l) => acc + (parseFloat(l.quantity) || 0), 0)
-                    .toLocaleString('en-AE', { maximumFractionDigits: 3 })}
-                </span>
-              </div>
+        {/* Summary & Tax */}
+        <div className="bg-slate-800 border border-slate-700 border-t-0 p-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Tax toggle */}
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeTax}
+                  onChange={(e) => setIncludeTax(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-600 text-emerald-600 focus:ring-2 focus:ring-emerald-500"
+                />
+                <span className="text-sm font-medium text-slate-300">Include 5% Tax (VAT)</span>
+              </label>
+              <p className="text-xs text-slate-500">Tax will be {includeTax ? 'added to' : 'excluded from'} bill total</p>
             </div>
 
-            {/* Right: grand total + actions */}
-            <div className="flex items-end gap-6">
-              {/* Grand total box */}
-              <div className="text-right">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Value (AED)</p>
-                <p className="text-3xl font-bold text-white font-mono">
-                  {grandTotal > 0
-                    ? grandTotal.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : '—'}
-                </p>
+            {/* Summary */}
+            <div className="space-y-2 text-right">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Subtotal:</span>
+                <span className="text-white font-mono">
+                  {subTotal.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
-
-              {/* Action buttons */}
-              <div className="flex gap-3">
-                <Link href="/materials">
-                  <Button type="button" variant="ghost">
-                    Cancel
-                  </Button>
-                </Link>
-                <Button
-                  type="submit"
-                  loading={submitting}
-                  disabled={validLines.length === 0 || duplicateMaterials.length > 0}
-                  size="lg"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Post Receipt
-                </Button>
+              {includeTax && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">Tax (5%):</span>
+                  <span className="text-white font-mono">
+                    {taxAmount.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between text-base font-bold pt-2 border-t border-slate-700">
+                <span className="text-white">Bill Amount:</span>
+                <span className="text-emerald-400 font-mono">
+                  {billAmount.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Actions */}
+        <div className="rounded-b-xl bg-slate-800 border border-slate-700 border-t-0 p-4 flex gap-3 justify-between">
+          <div></div>
+          <div className="flex gap-3">
+            <Link href="/materials">
+              <Button type="button" variant="ghost">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" loading={submitting}>
+              Post Receipt
+            </Button>
+          </div>
+        </div>
       </form>
     </div>
   );
