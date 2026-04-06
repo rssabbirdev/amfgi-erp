@@ -19,6 +19,7 @@ interface Line {
   materialId: string;
   dispatchQty: string;
   returnQty:   string;
+  originalDispatchQty?: number; // Track original qty for editing validation
 }
 
 interface PendingChange {
@@ -132,6 +133,7 @@ export default function DispatchMaterialsPage() {
               materialId: line.materialId,
               dispatchQty: line.quantity.toString(),
               returnQty: line.returnQty ? line.returnQty.toString() : '',
+              originalDispatchQty: line.quantity, // Track original for validation
             }));
 
             // If less than 5 items, pad with empty rows to reach 5
@@ -260,12 +262,16 @@ export default function DispatchMaterialsPage() {
       const qty = parseFloat(line.dispatchQty);
       const ret = line.returnQty ? parseFloat(line.returnQty) : 0;
       const mat = getMaterial(line.materialId);
+      const originalQty = line.originalDispatchQty ?? 0;
 
       if (!qty || qty <= 0) { toast.error('Invalid dispatch quantity'); return; }
       if (ret < 0) { toast.error('Invalid return quantity'); return; }
       if (!mat) { toast.error('Material not found'); return; }
-      if (mat.currentStock < qty) {
-        toast.error(`Insufficient stock for ${mat.name}. Available: ${mat.currentStock}`);
+
+      // When editing, available stock = current stock + original dispatch qty (which was deducted)
+      const availableStock = mat.currentStock + originalQty;
+      if (availableStock < qty) {
+        toast.error(`Insufficient stock for ${mat.name}. Available: ${availableStock}`);
         return;
       }
       if (ret > qty) {
