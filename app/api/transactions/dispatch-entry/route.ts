@@ -45,15 +45,23 @@ export async function GET(req: Request) {
     });
   }
 
-  // Enrich with material details
+  // Enrich with material details and find return quantities
   const lines = await Promise.all(
     transactions.map(async (txn: any) => {
       const material = await Material.findById(txn.materialId).lean();
+
+      // Find linked RETURN transaction if any
+      const returnTxn = await Transaction.findOne({
+        type: 'RETURN',
+        parentTransactionId: txn._id,
+      }).lean();
+
       return {
         materialId: txn.materialId.toString(),
         materialName: material?.name ?? 'Unknown',
         unit: material?.unit ?? '',
         quantity: txn.quantity,
+        returnQty: returnTxn?.quantity ?? 0,
         transactionId: txn._id.toString(),
       };
     })

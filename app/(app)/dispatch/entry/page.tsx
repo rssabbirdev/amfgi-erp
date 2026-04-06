@@ -85,7 +85,7 @@ export default function DispatchMaterialsPage() {
               jobId: selectedJob,
               materialId: line.materialId,
               dispatchQty: line.quantity.toString(),
-              returnQty: '',
+              returnQty: line.returnQty ? line.returnQty.toString() : '',
             }));
             setLines(newLines);
             setNotes(data.notes || '');
