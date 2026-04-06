@@ -3,6 +3,7 @@
 import { useEffect, useState }            from 'react';
 import Link                               from 'next/link';
 import { useSession }                     from 'next-auth/react';
+import { useSearchParams }                from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { fetchMaterials }                 from '@/store/slices/materialsSlice';
 import { fetchJobs }                      from '@/store/slices/jobsSlice';
@@ -28,6 +29,7 @@ interface PendingChange {
 export default function DispatchMaterialsPage() {
   const dispatch = useAppDispatch();
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
   const { items: materials } = useAppSelector((s) => s.materials);
   const { items: jobs } = useAppSelector((s) => s.jobs);
 
@@ -47,6 +49,17 @@ export default function DispatchMaterialsPage() {
     dispatch(fetchMaterials());
     dispatch(fetchJobs());
   }, [dispatch]);
+
+  // Load from query params if editing
+  useEffect(() => {
+    const jobId = searchParams.get('jobId');
+    const dateParam = searchParams.get('date');
+
+    if (jobId && dateParam) {
+      setSelectedJob(jobId);
+      setDate(dateParam);
+    }
+  }, [searchParams]);
 
   // Check for existing entry when job or date changes
   useEffect(() => {

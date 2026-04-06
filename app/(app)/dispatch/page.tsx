@@ -164,13 +164,14 @@ export default function DispatchPage() {
             View
           </Button>
           {canEdit && (
-            <button
-              disabled
-              className="px-2.5 py-1.5 rounded text-xs font-medium bg-slate-700 text-slate-500 cursor-not-allowed"
-              title="Edit feature coming soon"
-            >
-              Edit
-            </button>
+            <Link href={`/dispatch/entry?jobId=${e.jobId}&date=${e.dispatchDate.split('T')[0]}`}>
+              <Button
+                size="sm"
+                variant="secondary"
+              >
+                Edit
+              </Button>
+            </Link>
           )}
           {canDelete && (
             <Button

@@ -130,9 +130,9 @@ export async function POST(req: Request) {
       }
 
       // Create STOCK_OUT or STOCK_IN transaction
-      const ref = type === 'STOCK_IN'
-        ? `Receipt #${receiptNumber}${supplier ? ` | ${supplier}` : ''}`
-        : `Job: ${jobId}`;
+      const txNotes = type === 'STOCK_IN'
+        ? notes || undefined
+        : notes || undefined;
 
       const [tx] = await Transaction.create(
         [
@@ -141,7 +141,7 @@ export async function POST(req: Request) {
             materialId:  new Types.ObjectId(line.materialId),
             quantity:    line.quantity,
             jobId:       type === 'STOCK_OUT' && jobId ? new Types.ObjectId(jobId) : null,
-            notes:       [ref, notes].filter(Boolean).join(' — ') || undefined,
+            notes:       txNotes,
             date:        txDate,
             performedBy: session.user.id,
           },
