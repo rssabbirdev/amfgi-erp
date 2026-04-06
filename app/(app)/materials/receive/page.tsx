@@ -137,6 +137,7 @@ export default function ReceiveStockPage() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
+          type:             'STOCK_IN',
           receiptNumber,
           supplier:         supplier || undefined,
           notes:            notes    || undefined,
