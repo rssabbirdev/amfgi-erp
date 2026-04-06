@@ -41,6 +41,34 @@ export default function DispatchMaterialsPage() {
       dispatchQty: '',
       returnQty: '',
     },
+    {
+      id: generateId(),
+      jobId: '',
+      materialId: '',
+      dispatchQty: '',
+      returnQty: '',
+    },
+    {
+      id: generateId(),
+      jobId: '',
+      materialId: '',
+      dispatchQty: '',
+      returnQty: '',
+    },
+    {
+      id: generateId(),
+      jobId: '',
+      materialId: '',
+      dispatchQty: '',
+      returnQty: '',
+    },
+    {
+      id: generateId(),
+      jobId: '',
+      materialId: '',
+      dispatchQty: '',
+      returnQty: '',
+    },
   ]);
   const [selectedJob,  setSelectedJob]  = useState('');
   const [date,         setDate]         = useState(() => new Date().toISOString().slice(0, 10));
@@ -352,6 +380,7 @@ export default function DispatchMaterialsPage() {
                           value={line.materialId}
                           onChange={(id) => updateLine(line.id, 'materialId', id)}
                           placeholder="Search materials..."
+                          disabled={!selectedJob}
                           items={materials
                             .filter((m) => m.isActive && m.currentStock > 0)
                             .map((m) => ({
@@ -384,7 +413,8 @@ export default function DispatchMaterialsPage() {
                           value={line.dispatchQty}
                           onChange={(e) => updateLine(line.id, 'dispatchQty', e.target.value)}
                           placeholder="0.00"
-                          className="w-full px-2.5 py-1.5 text-right bg-slate-800 border border-slate-600 rounded-md text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                          disabled={!selectedJob}
+                          className="w-full px-2.5 py-1.5 text-right bg-slate-800 border border-slate-600 rounded-md text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                       </td>
 
@@ -396,7 +426,8 @@ export default function DispatchMaterialsPage() {
                           value={line.returnQty}
                           onChange={(e) => updateLine(line.id, 'returnQty', e.target.value)}
                           placeholder="0.00"
-                          className="w-full px-2.5 py-1.5 text-right bg-slate-800 border border-slate-600 rounded-md text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                          disabled={!selectedJob}
+                          className="w-full px-2.5 py-1.5 text-right bg-slate-800 border border-slate-600 rounded-md text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                       </td>
 
