@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { useSession } from 'next-auth/react';
 import { formatDateTime, formatDate } from '@/lib/utils/formatters';
 import type { Column } from '@/components/ui/DataTable';
+import { useGetDispatchEntriesQuery, useDeleteTransactionMutation } from '@/store/hooks';
 
 interface Material {
   materialId: string;
@@ -74,6 +75,8 @@ export default function DispatchPage() {
     loading: false,
   });
 
+  const [deleteTransaction] = useDeleteTransactionMutation();
+
   const fetchEntries = async () => {
     setLoading(true);
     try {
@@ -131,15 +134,13 @@ export default function DispatchPage() {
     try {
       // Delete all transactions in this entry
       for (const txnId of deleteModal.entry.transactionIds) {
-        await fetch(`/api/transactions/${txnId}`, {
-          method: 'DELETE',
-        });
+        await deleteTransaction(txnId).unwrap();
       }
       toast.success('Entry deleted successfully');
       setDeleteModal({ open: false, entry: null, loading: false });
       fetchEntries();
-    } catch (err) {
-      toast.error('Failed to delete entry');
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? 'Failed to delete entry');
       setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
@@ -152,7 +153,7 @@ export default function DispatchPage() {
     );
   }
 
-  const columns = [
+  const columns: Column<Entry>[] = [
     {
       key: 'jobNumber',
       header: 'Job',

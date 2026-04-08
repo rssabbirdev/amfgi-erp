@@ -17,16 +17,25 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const conn = await getCompanyDB(dbName);
   const { Transaction } = getModels(conn);
 
-  // Check for linked transactions
+  // Check for linked transactions with job info populated
   const transactions = await Transaction.find({ materialId: new Types.ObjectId(id) })
+    .populate('jobId', 'jobNumber')
     .lean()
     .limit(10);
 
   const txnCount = await Transaction.countDocuments({ materialId: new Types.ObjectId(id) });
 
+  // Format transactions for frontend
+  const formattedTransactions = transactions.map((tx: any) => ({
+    type: tx.type,
+    quantity: tx.quantity,
+    jobNumber: tx.jobId?.jobNumber || 'N/A',
+    date: tx.date,
+  }));
+
   return successResponse({
     canDelete: txnCount === 0,
-    linkedTransactions: transactions,
+    linkedTransactions: formattedTransactions,
     linkedTransactionsCount: txnCount,
   });
 }

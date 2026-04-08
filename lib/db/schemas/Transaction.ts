@@ -13,6 +13,16 @@ export interface ITransaction extends Document {
   notes?:              string;
   date:                Date;
   performedBy:         string; // user ID (string — cross-DB)
+  // FIFO tracking and costing
+  batchesUsed?: Array<{
+    batchId: Types.ObjectId;
+    batchNumber: string;
+    quantityFromBatch: number;
+    unitCost: number;
+    costAmount: number;
+  }>;
+  totalCost?:          number; // Total actual cost of materials (for STOCK_OUT)
+  averageCost?:        number; // Average cost per unit
   createdAt:           Date;
   updatedAt:           Date;
 }
@@ -32,6 +42,18 @@ export const TransactionSchema = new Schema<ITransaction>(
     notes:               { type: String, trim: true },
     date:                { type: Date, required: true, default: Date.now },
     performedBy:         { type: String, required: true },
+    // FIFO tracking
+    batchesUsed: [
+      {
+        batchId: Schema.Types.ObjectId,
+        batchNumber: String,
+        quantityFromBatch: Number,
+        unitCost: Number,
+        costAmount: Number,
+      },
+    ],
+    totalCost:           { type: Number, default: 0 },
+    averageCost:         { type: Number, default: 0 },
   },
   { timestamps: true }
 );

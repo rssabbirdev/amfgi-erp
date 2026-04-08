@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useAppDispatch, useAppSelector }   from '@/store/hooks';
-import { fetchJobs }                        from '@/store/slices/jobsSlice';
+import { useState } from 'react';
 import { Button }                           from '@/components/ui/Button';
 import JobConsumptionTable                  from '@/components/reports/JobConsumptionTable';
 import Spinner                              from '@/components/ui/Spinner';
+import { useGetJobsQuery, useLazyGetJobConsumptionQuery } from '@/store/hooks';
 
 interface ReportRow {
   jobId:        string;
@@ -19,30 +18,21 @@ interface ReportRow {
 }
 
 export default function JobConsumptionPage() {
-  const dispatch = useAppDispatch();
-  const { items: jobs } = useAppSelector((s) => s.jobs);
+  const { data: jobs = [] } = useGetJobsQuery();
+  const [triggerGetJobConsumption, { data: rows = [], isLoading: loading }] = useLazyGetJobConsumptionQuery();
 
   const [from,        setFrom]        = useState('');
   const [to,          setTo]          = useState('');
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
-  const [rows,        setRows]        = useState<ReportRow[]>([]);
-  const [loading,     setLoading]     = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
-  useEffect(() => { dispatch(fetchJobs()); }, [dispatch]);
-
   const handleSearch = async () => {
-    setLoading(true);
     setHasSearched(true);
-    const params = new URLSearchParams();
-    if (from) params.set('from', from);
-    if (to)   params.set('to', to);
-    selectedJobs.forEach((id) => params.append('jobId', id));
-
-    const res  = await fetch(`/api/reports/job-consumption?${params}`);
-    const json = await res.json();
-    setRows(json.data ?? []);
-    setLoading(false);
+    await triggerGetJobConsumption({
+      from: from || undefined,
+      to: to || undefined,
+      jobIds: selectedJobs,
+    });
   };
 
   const handleExport = () => {

@@ -1,30 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { StatusBadge }         from '@/components/ui/Badge';
 import { formatDate }          from '@/lib/utils/formatters';
 import Spinner                 from '@/components/ui/Spinner';
+import { useGetTransactionsByJobQuery } from '@/store/hooks';
 
 interface Transaction {
   _id:        string;
   type:       string;
   quantity:   number;
-  date:       string;
+  date:       Date | string;
   notes?:     string;
-  materialId: { name: string; unit: string } | string;
-  performedBy?: { name: string } | string;
+  materialId: string;
+  performedBy: string;
 }
 
-export default function TransactionLedger({ jobId, refresh }: { jobId: string; refresh?: number }) {
-  const [txns,    setTxns]    = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    fetch(`/api/transactions?jobId=${jobId}&limit=100`)
-      .then((r) => r.json())
-      .then((j) => { setTxns(j.data ?? []); setLoading(false); });
-  }, [jobId, refresh]);
+export default function TransactionLedger({ jobId }: { jobId: string }) {
+  const { data: txns = [], isLoading: loading } = useGetTransactionsByJobQuery({
+    jobId,
+    limit: 100,
+  });
 
   if (loading) return <Spinner />;
   if (txns.length === 0) return (
@@ -46,20 +41,18 @@ export default function TransactionLedger({ jobId, refresh }: { jobId: string; r
         </thead>
         <tbody>
           {txns.map((t) => {
-            const mat = typeof t.materialId === 'object' ? t.materialId : { name: t.materialId, unit: '' };
-            const by  = typeof t.performedBy === 'object' ? t.performedBy?.name : '—';
             return (
               <tr key={t._id} className="border-b border-slate-700/50 hover:bg-slate-800/40">
                 <td className="px-4 py-3 text-slate-400">{formatDate(t.date)}</td>
                 <td className="px-4 py-3"><StatusBadge status={t.type} /></td>
-                <td className="px-4 py-3 font-medium text-white">{mat.name}</td>
+                <td className="px-4 py-3 font-medium text-white">—</td>
                 <td className="px-4 py-3 text-right font-mono">
                   <span className={t.type === 'RETURN' ? 'text-blue-400' : t.type === 'STOCK_OUT' ? 'text-orange-400' : 'text-emerald-400'}>
-                    {t.type === 'STOCK_OUT' ? '-' : '+'}{t.quantity} {mat.unit}
+                    {t.type === 'STOCK_OUT' ? '-' : '+'}{t.quantity}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-slate-400">{t.notes ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-400">{by}</td>
+                <td className="px-4 py-3 text-slate-400">{t.performedBy ?? '—'}</td>
               </tr>
             );
           })}

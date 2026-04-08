@@ -1,14 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useAppDispatch } from '@/store/hooks';
-import { fetchMaterials } from '@/store/slices/materialsSlice';
 import { Button } from '@/components/ui/Button';
 import SearchSelect from '@/components/ui/SearchSelect';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
+import {
+  useGetMaterialsQuery,
+  useGetSuppliersQuery,
+  useAddBatchTransactionMutation,
+  useDeleteReceiptEntryMutation,
+} from '@/store/hooks';
 
 interface Material {
   _id: string;
@@ -40,11 +44,17 @@ function emptyLine(): LineItem {
 
 export default function ReceiveStockPage() {
   const router = useRouter();
-  const dispatch = useAppDispatch();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const { data: materialsData = [] } = useGetMaterialsQuery();
+  const { data: suppliersData = [] } = useGetSuppliersQuery();
+  const [addBatchTransaction] = useAddBatchTransactionMutation();
+  const [deleteReceiptEntry] = useDeleteReceiptEntryMutation();
 
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  // Edit mode detection
+  const editReceiptNumber = searchParams.get('edit');
+  const isEditMode = !!editReceiptNumber;
+
   const [lines, setLines] = useState<LineItem[]>([emptyLine()]);
   const [receiptNumber, setReceiptNumber] = useState('');
   const [supplierId, setSupplierId] = useState('');
@@ -54,34 +64,74 @@ export default function ReceiveStockPage() {
   const TAX_RATE = 0.05; // 5%
   const [submitting, setSubmitting] = useState(false);
 
-  // Auto-generate receipt number on mount
+  // Load edit data if in edit mode
   useEffect(() => {
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const rand = Math.floor(Math.random() * 900 + 100);
-    setReceiptNumber(`GRN-${yyyy}${mm}${dd}-${rand}`);
-  }, []);
+    if (isEditMode && editReceiptNumber) {
+      // Set the receipt number
+      setReceiptNumber(editReceiptNumber);
 
-  // Load materials and suppliers
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/materials')
-        .then((r) => r.json())
-        .then((j) => setMaterials(j.data ?? [])),
-      fetch('/api/suppliers')
-        .then((r) => r.json())
-        .then((j) =>
-          setSuppliers(
-            (j.data?.suppliers ?? []).map((s: any) => ({
-              id: s._id,
-              label: s.name,
-            }))
-          )
-        ),
-    ]);
-  }, []);
+      // Fetch the receipt data using the receiptNumber
+      const fetchReceiptData = async () => {
+        try {
+          const response = await fetch(`/api/materials/receipt-history-entries?receiptNumber=${editReceiptNumber}`);
+          const json = await response.json();
+
+          if (json.data && json.data.entries && json.data.entries.length > 0) {
+            const entry = json.data.entries[0];
+
+            // Populate form fields
+            if (entry.supplier) {
+              const supplier = suppliersData.find(s => s.name === entry.supplier);
+              if (supplier) setSupplierId(supplier._id);
+            }
+
+            if (entry.receivedDate) {
+              setDate(new Date(entry.receivedDate).toISOString().split('T')[0]);
+            }
+
+            if (entry.notes) {
+              setNotes(entry.notes);
+            }
+
+            // Populate line items
+            if (entry.lines && entry.lines.length > 0) {
+              const loadedLines = entry.lines.map((line: any, idx: number) => ({
+                id: `line-${idx}`,
+                materialId: line.materialId || '',
+                quantity: String(line.quantity || ''),
+                unitCost: String(line.unitCost || ''),
+              }));
+              setLines(loadedLines);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to load receipt data:', err);
+          toast.error('Failed to load receipt data');
+        }
+      };
+
+      fetchReceiptData();
+    } else {
+      // Auto-generate receipt number on mount (create mode)
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const rand = Math.floor(Math.random() * 900 + 100);
+      setReceiptNumber(`GRN-${yyyy}${mm}${dd}-${rand}`);
+    }
+  }, [isEditMode, editReceiptNumber, suppliersData]);
+
+  // Transform suppliers data for SearchSelect
+  const suppliers = suppliersData.map((s) => ({
+    id: s._id,
+    label: s.name,
+  }));
+
+  // Get supplier name from ID
+  const getSupplierName = (id: string) => {
+    return suppliers.find((s) => s.id === id)?.label || '';
+  };
 
   // Line operations
   const updateLine = (id: string, field: keyof LineItem, value: string) => {
@@ -91,7 +141,7 @@ export default function ReceiveStockPage() {
         const updated = { ...l, [field]: value };
         // Auto-fill unit cost from material master when material is selected
         if (field === 'materialId' && value) {
-          const mat = materials.find((m) => m._id === value);
+          const mat = materialsData.find((m) => m._id === value);
           if (mat?.unitCost !== undefined) {
             updated.unitCost = String(mat.unitCost);
           }
@@ -116,8 +166,7 @@ export default function ReceiveStockPage() {
   };
 
   // Computed values
-  const getMaterial = (id: string) => materials.find((m) => m._id === id);
-  const getSupplier = (id: string) => suppliers.find((s) => s.id === id);
+  const getMaterial = (id: string) => materialsData.find((m) => m._id === id);
 
   const lineTotal = (line: LineItem) => {
     const qty = parseFloat(line.quantity) || 0;
@@ -152,44 +201,43 @@ export default function ReceiveStockPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/transactions/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'STOCK_IN',
-          receiptNumber,
-          supplier: getSupplier(supplierId)?.label || undefined,
-          notes: notes || undefined,
-          date,
-          billAmount,
-          includeTax,
-          taxAmount,
-          lines: validLines.map((l) => ({
-            materialId: l.materialId,
-            quantity: parseFloat(l.quantity),
-            unitCost: l.unitCost ? parseFloat(l.unitCost) : undefined,
-          })),
-          // Update material unit costs
-          materialUpdates: validLines
-            .filter((l) => l.unitCost)
-            .map((l) => ({
-              materialId: l.materialId,
-              unitCost: parseFloat(l.unitCost),
-            })),
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? 'Submission failed');
+      // If editing, delete the old receipt first
+      if (isEditMode && editReceiptNumber) {
+        await deleteReceiptEntry(editReceiptNumber).unwrap();
       }
 
-      const json = await res.json();
-      dispatch(fetchMaterials());
-      toast.success(`Receipt posted — ${json.data.created} item(s) received`);
-      router.push('/materials');
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Error');
+      // Create the new receipt
+      await addBatchTransaction({
+        type: 'STOCK_IN',
+        receiptNumber,
+        supplier: getSupplierName(supplierId) || undefined,
+        notes: notes || undefined,
+        date,
+        billAmount,
+        includeTax,
+        taxAmount,
+        lines: validLines.map((l) => ({
+          materialId: l.materialId,
+          quantity: parseFloat(l.quantity),
+          unitCost: l.unitCost ? parseFloat(l.unitCost) : undefined,
+        })),
+        // Update material unit costs
+        materialUpdates: validLines
+          .filter((l) => l.unitCost)
+          .map((l) => ({
+            materialId: l.materialId,
+            unitCost: parseFloat(l.unitCost),
+          })),
+      }).unwrap();
+
+      toast.success(
+        isEditMode
+          ? `Receipt updated — ${validLines.length} item(s) processed`
+          : `Receipt posted — ${validLines.length} item(s) received`
+      );
+      router.push('/goods-receipt');
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? 'Submission failed');
     } finally {
       setSubmitting(false);
     }
@@ -201,12 +249,18 @@ export default function ReceiveStockPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <Link href="/materials" className="text-slate-500 hover:text-slate-300 text-sm">
-              ← Materials
+            <Link href="/goods-receipt" className="text-slate-500 hover:text-slate-300 text-sm">
+              ← Goods Receipt History
             </Link>
           </div>
-          <h1 className="text-2xl font-bold text-white">Goods Receipt Note</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Receive stock into inventory against a supplier bill</p>
+          <h1 className="text-2xl font-bold text-white">
+            {isEditMode ? 'Edit Goods Receipt' : 'New Goods Receipt Note'}
+          </h1>
+          <p className="text-slate-400 text-sm mt-0.5">
+            {isEditMode
+              ? 'Update the receipt details and line items'
+              : 'Receive stock into inventory against a supplier bill'}
+          </p>
         </div>
       </div>
 
@@ -215,7 +269,7 @@ export default function ReceiveStockPage() {
         <div className="rounded-t-xl bg-slate-800 border border-slate-700 border-b-0 p-6">
           <div className="flex items-start justify-between mb-6 pb-5 border-b border-slate-700">
             <div>
-              <div className="flex items-center gap-3 mb-1">
+              <div className="flex items-center gap-3 mb-3">
                 <div className="h-10 w-10 rounded-lg bg-emerald-600 flex items-center justify-center">
                   <span className="text-white font-bold text-sm">A</span>
                 </div>
@@ -224,6 +278,12 @@ export default function ReceiveStockPage() {
                   <p className="text-xs text-slate-400">Goods Receipt Note</p>
                 </div>
               </div>
+              {supplierId && (
+                <p className="text-sm text-emerald-400 ml-13">
+                  <span className="text-slate-400">From: </span>
+                  {getSupplierName(supplierId)}
+                </p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Receipt No.</p>
@@ -231,22 +291,21 @@ export default function ReceiveStockPage() {
                 value={receiptNumber}
                 onChange={(e) => setReceiptNumber(e.target.value)}
                 required
-                className="text-right text-emerald-400 font-mono font-bold text-lg bg-transparent border-b border-slate-600 focus:border-emerald-500 focus:outline-none pb-0.5 w-52"
+                disabled={isEditMode}
+                className="text-right text-emerald-400 font-mono font-bold text-lg bg-transparent border-b border-slate-600 focus:border-emerald-500 focus:outline-none pb-0.5 w-52 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
           </div>
 
           {/* Meta fields */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <div>
-              <SearchSelect
-                label="Supplier / Vendor"
-                value={supplierId}
-                onChange={setSupplierId}
-                placeholder="Search suppliers..."
-                items={suppliers}
-              />
-            </div>
+            <SearchSelect
+              label="Supplier / Vendor"
+              value={supplierId}
+              onChange={setSupplierId}
+              placeholder="Search suppliers..."
+              items={suppliers}
+            />
             <div>
               <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">
                 Receipt Date
@@ -309,7 +368,7 @@ export default function ReceiveStockPage() {
                         onChange={(id) => updateLine(line.id, 'materialId', id)}
                         placeholder="Search materials..."
                         disabled={false}
-                        items={materials.map((m) => ({
+                        items={materialsData.map((m) => ({
                           id: m._id,
                           label: m.name,
                           searchText: m.unit,
@@ -324,8 +383,8 @@ export default function ReceiveStockPage() {
                       {isDup && <p className="text-red-400 text-xs mt-0.5">Duplicate — merge rows</p>}
                     </td>
 
-                    <td className="px-3 py-2 text-center">
-                      <span className="text-slate-400 text-xs font-medium">{mat?.unit ?? '—'}</span>
+                    <td className="px-3 py-2 text-center text-slate-400 text-xs font-medium min-w-[90px]">
+                      {mat?.unit ?? '—'}
                     </td>
 
                     <td className="px-3 py-2 text-right font-mono text-sm">
@@ -381,8 +440,12 @@ export default function ReceiveStockPage() {
                           className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-700 rounded transition-colors"
                         >
                           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            />
                           </svg>
                         </button>
                         <button
@@ -467,13 +530,13 @@ export default function ReceiveStockPage() {
         <div className="rounded-b-xl bg-slate-800 border border-slate-700 border-t-0 p-4 flex gap-3 justify-between">
           <div></div>
           <div className="flex gap-3">
-            <Link href="/materials">
+            <Link href="/goods-receipt">
               <Button type="button" variant="ghost">
                 Cancel
               </Button>
             </Link>
             <Button type="submit" loading={submitting}>
-              Post Receipt
+              {isEditMode ? 'Update Receipt' : 'Post Receipt'}
             </Button>
           </div>
         </div>

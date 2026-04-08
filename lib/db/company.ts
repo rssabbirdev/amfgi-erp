@@ -7,6 +7,12 @@ import { MaterialSchema }   from './schemas/Material';
 import { JobSchema }        from './schemas/Job';
 import { CustomerSchema }   from './schemas/Customer';
 import { TransactionSchema } from './schemas/Transaction';
+import { StockBatchSchema } from './schemas/StockBatch';
+import { UnitSchema }       from './schemas/Unit';
+import { CategorySchema }   from './schemas/Category';
+import { WarehouseSchema }  from './schemas/Warehouse';
+import { MaterialLogSchema } from './schemas/MaterialLog';
+import { PriceLogSchema }   from './schemas/PriceLog';
 
 const BASE_URI = process.env.MONGODB_BASE_URI!;
 
@@ -45,6 +51,12 @@ export function getModels(conn: mongoose.Connection) {
     Job:         conn.models.Job         || conn.model('Job',         JobSchema),
     Customer:    conn.models.Customer    || conn.model('Customer',    CustomerSchema),
     Transaction: conn.models.Transaction || conn.model('Transaction', TransactionSchema),
+    StockBatch:  conn.models.StockBatch  || conn.model('StockBatch',  StockBatchSchema),
+    Unit:        conn.models.Unit        || conn.model('Unit',        UnitSchema),
+    Category:    conn.models.Category    || conn.model('Category',    CategorySchema),
+    Warehouse:   conn.models.Warehouse   || conn.model('Warehouse',   WarehouseSchema),
+    MaterialLog: conn.models.MaterialLog || conn.model('MaterialLog', MaterialLogSchema),
+    PriceLog:    conn.models.PriceLog    || conn.model('PriceLog',    PriceLogSchema),
   };
 }
 

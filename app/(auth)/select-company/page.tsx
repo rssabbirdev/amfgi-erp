@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState }  from 'react';
+import { useState }              from 'react';
 import { useSession }            from 'next-auth/react';
 import { useRouter }             from 'next/navigation';
 import { useAppDispatch }        from '@/store/hooks';
 import { switchActiveCompany }   from '@/store/slices/companySlice';
 import toast                     from 'react-hot-toast';
+import { useGetCompaniesQuery } from '@/store/hooks';
+import { appApi } from '@/store/api/appApi';
 
 interface Company { _id: string; name: string; slug: string; description?: string }
 
@@ -13,14 +15,16 @@ export default function SelectCompanyPage() {
   const { data: session, update } = useSession();
   const router   = useRouter();
   const dispatch = useAppDispatch();
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const { data: companiesData = [] } = useGetCompaniesQuery();
   const [loading,   setLoading]   = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/companies')
-      .then((r) => r.json())
-      .then((j) => setCompanies(j.data ?? []));
-  }, []);
+  // For type safety, cast companies data
+  const companies: Company[] = companiesData.map((c: any) => ({
+    _id: c._id,
+    name: c.name,
+    slug: c.slug,
+    description: c.description,
+  }));
 
   const allowed = (session?.user?.isSuperAdmin
     ? companies
@@ -52,6 +56,9 @@ export default function SelectCompanyPage() {
         activeCompanyName: data.activeCompanyName,
         permissions:       data.permissions,
       }));
+
+      // Reset all company-scoped cache
+      dispatch(appApi.util.resetApiState());
 
       router.push('/dashboard');
     } catch {

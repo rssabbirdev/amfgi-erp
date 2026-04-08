@@ -1,10 +1,15 @@
 'use client';
 
-import { useState, useEffect }  from 'react';
+import { useState }              from 'react';
 import { useSession }            from 'next-auth/react';
 import Modal                     from '@/components/ui/Modal';
 import { Button }                from '@/components/ui/Button';
 import toast                     from 'react-hot-toast';
+import {
+  useGetMaterialsQuery,
+  useGetCompaniesQuery,
+  useTransferStockMutation,
+} from '@/store/hooks';
 
 interface Material { _id: string; name: string; unit: string; currentStock: number }
 interface Company  { _id: string; name: string; slug: string }
@@ -17,9 +22,9 @@ interface Props {
 
 export default function TransferModal({ isOpen, onClose, onSuccess }: Props) {
   const { data: session } = useSession();
-  const [materials,  setMaterials]  = useState<Material[]>([]);
-  const [companies,  setCompanies]  = useState<Company[]>([]);
-  const [loading,    setLoading]    = useState(false);
+  const { data: materialsData = [] } = useGetMaterialsQuery();
+  const { data: companiesData = [] } = useGetCompaniesQuery();
+  const [transferStock, { isLoading: loading }] = useTransferStockMutation();
 
   const [materialId, setMaterialId] = useState('');
   const [destId,     setDestId]     = useState('');
@@ -27,21 +32,11 @@ export default function TransferModal({ isOpen, onClose, onSuccess }: Props) {
   const [notes,      setNotes]      = useState('');
   const [date,       setDate]       = useState(() => new Date().toISOString().slice(0, 10));
 
-  useEffect(() => {
-    if (!isOpen) return;
-    fetch('/api/materials')
-      .then((r) => r.json())
-      .then((j) => setMaterials(j.data ?? []));
-    fetch('/api/companies')
-      .then((r) => r.json())
-      .then((j) => {
-        // Exclude the currently active company
-        const others = (j.data ?? []).filter(
-          (c: Company) => c._id !== session?.user?.activeCompanyId
-        );
-        setCompanies(others);
-      });
-  }, [isOpen, session?.user?.activeCompanyId]);
+  // Exclude the currently active company
+  const companies = companiesData.filter(
+    (c) => c._id !== session?.user?.activeCompanyId
+  );
+  const materials = materialsData;
 
   const selectedMaterial = materials.find((m) => m._id === materialId);
 
@@ -51,35 +46,23 @@ export default function TransferModal({ isOpen, onClose, onSuccess }: Props) {
     const qty = parseFloat(quantity);
     if (!qty || qty <= 0) { toast.error('Enter a valid quantity'); return; }
 
-    setLoading(true);
     try {
-      const res = await fetch('/api/transactions/transfer', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          destinationCompanyId: destId,
-          materialId,
-          quantity:  qty,
-          notes:     notes || undefined,
-          date,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        toast.error(json.error ?? 'Transfer failed');
-      } else {
-        toast.success(
-          `Transferred ${qty} ${selectedMaterial?.unit ?? ''} of ${selectedMaterial?.name ?? ''} to ${companies.find((c) => c._id === destId)?.name}`
-        );
-        onSuccess();
-        onClose();
-        // Reset
-        setMaterialId(''); setDestId(''); setQuantity(''); setNotes('');
-      }
-    } catch {
-      toast.error('Transfer failed');
-    } finally {
-      setLoading(false);
+      await transferStock({
+        materialId,
+        quantity: qty,
+        destinationCompanyId: destId,
+        notes: notes || undefined,
+      }).unwrap();
+
+      toast.success(
+        `Transferred ${qty} ${selectedMaterial?.unit ?? ''} of ${selectedMaterial?.name ?? ''} to ${companies.find((c) => c._id === destId)?.name}`
+      );
+      onSuccess();
+      onClose();
+      // Reset
+      setMaterialId(''); setDestId(''); setQuantity(''); setNotes('');
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? 'Transfer failed');
     }
   };
 

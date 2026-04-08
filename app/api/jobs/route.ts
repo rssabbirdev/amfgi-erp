@@ -32,7 +32,6 @@ export async function GET(req: Request) {
   if (status) filter.status = status;
 
   const jobs = await Job.find(filter)
-    .populate('customerId', 'name')
     .sort({ createdAt: -1 })
     .lean();
   return successResponse(jobs);
@@ -58,6 +57,5 @@ export async function POST(req: Request) {
     ...parsed.data,
     createdBy: session.user.id, // string — cross-DB reference
   });
-  const populated = await job.populate('customerId', 'name');
-  return successResponse(populated, 201);
+  return successResponse(job, 201);
 }

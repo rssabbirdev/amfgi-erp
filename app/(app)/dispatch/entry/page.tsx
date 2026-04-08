@@ -1,15 +1,25 @@
 'use client';
 
-import { useEffect, useState }            from 'react';
+import { useEffect, useState, useCallback }       from 'react';
 import Link                               from 'next/link';
 import { useSession }                     from 'next-auth/react';
 import { useSearchParams }                from 'next/navigation';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchMaterials }                 from '@/store/slices/materialsSlice';
-import { fetchJobs }                      from '@/store/slices/jobsSlice';
 import { Button }                         from '@/components/ui/Button';
+import { Badge }                          from '@/components/ui/Badge';
 import SearchSelect                       from '@/components/ui/SearchSelect';
+import Modal                              from '@/components/ui/Modal';
 import toast                              from 'react-hot-toast';
+import {
+  useGetMaterialsQuery,
+  useGetJobsQuery,
+  useGetDispatchEntryQuery,
+  useGetJobMaterialsQuery,
+  useGetCustomersQuery,
+  useAddBatchTransactionMutation,
+  useGetCompaniesQuery,
+  useGetCrossCompanyMaterialsQuery,
+  useTransferStockMutation,
+} from '@/store/hooks';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -20,6 +30,8 @@ interface Line {
   dispatchQty: string;
   returnQty:   string;
   originalDispatchQty?: number; // Track original qty for editing validation
+  sourceCompanyId?:   string;   // undefined = own company; '' = toggled but unpicked
+  sourceCompanyName?: string;
 }
 
 interface PendingChange {
@@ -27,12 +39,58 @@ interface PendingChange {
   newValue: string;
 }
 
+interface CrossCompanyMaterial {
+  _id: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  isActive: boolean;
+}
+
+// Sub-component to avoid conditional hook calls
+function CrossCompanyMaterialLoader({
+  companyId,
+  onLoaded,
+}: {
+  companyId: string;
+  onLoaded: (companyId: string, materials: CrossCompanyMaterial[]) => void;
+}) {
+  const { data = [] } = useGetCrossCompanyMaterialsQuery(companyId, { skip: !companyId });
+  useEffect(() => {
+    onLoaded(companyId, data);
+  }, [companyId, data, onLoaded]);
+  return null;
+}
+
 export default function DispatchMaterialsPage() {
-  const dispatch = useAppDispatch();
   const { data: session } = useSession();
   const searchParams = useSearchParams();
-  const { items: materials } = useAppSelector((s) => s.materials);
-  const { items: jobs } = useAppSelector((s) => s.jobs);
+  const { data: materials = [] } = useGetMaterialsQuery();
+  const { data: jobs = [] } = useGetJobsQuery();
+  const { data: customers = [] } = useGetCustomersQuery();
+  const { data: allCompanies = [] } = useGetCompaniesQuery();
+  const [addBatchTransaction] = useAddBatchTransactionMutation();
+  const [transferStock] = useTransferStockMutation();
+
+  // Permission check for cross-company transfers
+  const isSA = session?.user?.isSuperAdmin ?? false;
+  const perms = (session?.user?.permissions ?? []) as string[];
+  const canTransfer = isSA || perms.includes('transaction.transfer');
+
+  // Companies other than the active one
+  const otherCompanies = allCompanies.filter((c) => c._id !== session?.user?.activeCompanyId);
+
+  // Cross-company materials storage
+  const [crossCompanyMaterialsMap, setCrossCompanyMaterialsMap] = useState<Record<string, any[]>>({});
+  const handleCrossCompanyMaterialsLoaded = useCallback(
+    (companyId: string, mats: any[]) => {
+      setCrossCompanyMaterialsMap((prev) => ({ ...prev, [companyId]: mats }));
+    },
+    []
+  );
+
+  // Confirmation modal state
+  const [confirmModal, setConfirmModal] = useState<{ open: boolean; crossCompanyLines: Line[] } | null>(null);
 
   const [lines,        setLines]        = useState<Line[]>(() => [
     {
@@ -76,16 +134,14 @@ export default function DispatchMaterialsPage() {
   const [notes,        setNotes]        = useState('');
   const [submitting,   setSubmitting]   = useState(false);
   const [existingEntry, setExistingEntry] = useState<{ exists: boolean; lines: any[]; transactionIds: string[]; notes: string } | null>(null);
-  const [checkingEntry, setCheckingEntry] = useState(false);
+  const [allowInterCompanyTransfers, setAllowInterCompanyTransfers] = useState(false);
+
+  // Get total dispatched/returned for each material on this job across all dates
+  const { data: jobMaterials = [] } = useGetJobMaterialsQuery(selectedJob, { skip: !selectedJob });
   const [changeWarningModal, setChangeWarningModal] = useState<{ open: boolean; pendingChange: PendingChange | null }>({
     open: false,
     pendingChange: null,
   });
-
-  useEffect(() => {
-    dispatch(fetchMaterials());
-    dispatch(fetchJobs());
-  }, [dispatch]);
 
   // Load from query params if editing
   useEffect(() => {
@@ -99,88 +155,74 @@ export default function DispatchMaterialsPage() {
   }, [searchParams]);
 
   // Check for existing entry when job or date changes
+  const { data: entryData } = useGetDispatchEntryQuery(
+    { jobId: selectedJob, date },
+    { skip: !selectedJob || !date }
+  );
+
+  // Auto-populate form when entry data loads
   useEffect(() => {
-    const checkExistingEntry = async () => {
-      if (!selectedJob || !date) {
-        setExistingEntry(null);
-        // Reset to 5 empty rows when job/date is cleared
+    if (!selectedJob || !date) {
+      setExistingEntry(null);
+      setLines(
+        Array.from({ length: 5 }, () => ({
+          id: generateId(),
+          jobId: '',
+          materialId: '',
+          dispatchQty: '',
+          returnQty: '',
+        }))
+      );
+      return;
+    }
+
+    if (entryData) {
+      setExistingEntry(entryData);
+
+      if (entryData.exists) {
+        const newLines = entryData.lines.map((line: any) => ({
+          id: generateId(),
+          jobId: selectedJob,
+          materialId: line.materialId,
+          dispatchQty: line.quantity.toString(),
+          returnQty: line.returnQty ? line.returnQty.toString() : '',
+          originalDispatchQty: line.quantity,
+        }));
+
+        const paddedLines =
+          newLines.length < 5
+            ? [
+                ...newLines,
+                ...Array.from({ length: 5 - newLines.length }, () => ({
+                  id: generateId(),
+                  jobId: selectedJob,
+                  materialId: '',
+                  dispatchQty: '',
+                  returnQty: '',
+                })),
+              ]
+            : newLines;
+
+        setLines(paddedLines);
+        setNotes(entryData.notes || '');
+      } else {
         setLines(
           Array.from({ length: 5 }, () => ({
             id: generateId(),
-            jobId: '',
+            jobId: selectedJob,
             materialId: '',
             dispatchQty: '',
             returnQty: '',
           }))
         );
-        return;
+        setNotes('');
       }
-
-      setCheckingEntry(true);
-      try {
-        const params = new URLSearchParams({ jobId: selectedJob, date });
-        const res = await fetch(`/api/transactions/dispatch-entry?${params}`);
-        const json = await res.json();
-        if (res.ok && json.data) {
-          const data = json.data;
-          setExistingEntry(data);
-
-          // Auto-populate form if entry exists
-          if (data.exists) {
-            const newLines = data.lines.map((line: any) => ({
-              id: generateId(),
-              jobId: selectedJob,
-              materialId: line.materialId,
-              dispatchQty: line.quantity.toString(),
-              returnQty: line.returnQty ? line.returnQty.toString() : '',
-              originalDispatchQty: line.quantity, // Track original for validation
-            }));
-
-            // If less than 5 items, pad with empty rows to reach 5
-            // If 5 or more items, keep exactly that many
-            const paddedLines =
-              newLines.length < 5
-                ? [
-                    ...newLines,
-                    ...Array.from({ length: 5 - newLines.length }, () => ({
-                      id: generateId(),
-                      jobId: selectedJob,
-                      materialId: '',
-                      dispatchQty: '',
-                      returnQty: '',
-                    })),
-                  ]
-                : newLines;
-
-            setLines(paddedLines);
-            setNotes(data.notes || '');
-          } else {
-            // No existing entry for this job+date, show 5 empty rows
-            setLines(
-              Array.from({ length: 5 }, () => ({
-                id: generateId(),
-                jobId: selectedJob,
-                materialId: '',
-                dispatchQty: '',
-                returnQty: '',
-              }))
-            );
-            setNotes('');
-          }
-        }
-      } catch (err) {
-        console.error('Failed to check entry:', err);
-      } finally {
-        setCheckingEntry(false);
-      }
-    };
-
-    checkExistingEntry();
-  }, [selectedJob, date]);
+    }
+  }, [selectedJob, date, entryData]);
 
   const handleJobChange = (newJobId: string) => {
-    // If materials are added, show warning
-    if (lines.length > 0) {
+    // If there's actual data in rows, show warning
+    if (hasData()) {
       setChangeWarningModal({
         open: true,
         pendingChange: { type: 'job', newValue: newJobId },
@@ -191,8 +233,8 @@ export default function DispatchMaterialsPage() {
   };
 
   const handleDateChange = (newDate: string) => {
-    // If materials are added, show warning
-    if (lines.length > 0) {
+    // If there's actual data in rows, show warning
+    if (hasData()) {
       setChangeWarningModal({
         open: true,
         pendingChange: { type: 'date', newValue: newDate },
@@ -230,6 +272,17 @@ export default function DispatchMaterialsPage() {
   const getMaterial = (id: string) => materials.find((m) => m._id === id);
   const getJob = (id: string) => jobs.find((j) => j._id === id);
 
+  // Get material from correct source (own company or cross-company)
+  const getEffectiveMaterial = (line: Line) => {
+    if (line.sourceCompanyId) {
+      return (crossCompanyMaterialsMap[line.sourceCompanyId] ?? []).find((m) => m._id === line.materialId);
+    }
+    return getMaterial(line.materialId);
+  };
+
+  // Check if any line has actual data (not empty)
+  const hasData = () => lines.some((l) => l.materialId || l.dispatchQty || l.returnQty);
+
   const addLine = () => {
     setLines((prev) => [...prev, {
       id:            generateId(),
@@ -250,6 +303,100 @@ export default function DispatchMaterialsPage() {
     );
   };
 
+  const toggleSourceMode = (lineId: string) => {
+    setLines((prev) =>
+      prev.map((l) =>
+        l.id === lineId
+          ? {
+              ...l,
+              sourceCompanyId:   l.sourceCompanyId !== undefined ? undefined : '',
+              sourceCompanyName: undefined,
+              materialId:        '',  // reset material when toggling mode
+            }
+          : l
+      )
+    );
+  };
+
+  const setLineSourceCompany = (lineId: string, companyId: string) => {
+    const co = allCompanies.find((c) => c._id === companyId);
+    setLines((prev) =>
+      prev.map((l) =>
+        l.id === lineId
+          ? {
+              ...l,
+              sourceCompanyId:   companyId,
+              sourceCompanyName: co?.name,
+              materialId:        '',  // reset material when changing company
+            }
+          : l
+      )
+    );
+  };
+
+  // Execute the actual batch dispatch
+  const executeSubmit = async (linesToSubmit: Line[]) => {
+    try {
+      await addBatchTransaction({
+        type:  'STOCK_OUT',
+        jobId: selectedJob,
+        notes: notes || undefined,
+        date,
+        existingTransactionIds: existingEntry?.transactionIds,
+        lines: linesToSubmit.map((l) => ({
+          materialId: l.materialId,
+          quantity: parseFloat(l.dispatchQty),
+          returnQty: l.returnQty ? parseFloat(l.returnQty) : undefined,
+        })),
+      }).unwrap();
+
+      toast.success(`Dispatched ${linesToSubmit.length} item(s)`);
+      setLines([]);
+      setSelectedJob('');
+      setNotes('');
+      setExistingEntry(null);
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? 'Dispatch failed');
+      throw err;
+    }
+  };
+
+  // Handle confirmation modal confirm button
+  const handleConfirmTransfer = async () => {
+    if (!confirmModal) return;
+    setConfirmModal(null);
+    setSubmitting(true);
+    try {
+      // Step 1: Execute transfers sequentially
+      const transferResults: Array<{ lineId: string; destMaterialId: string }> = [];
+      for (const line of confirmModal.crossCompanyLines) {
+        const result = await transferStock({
+          destinationCompanyId: session!.user!.activeCompanyId!,
+          materialId:           line.materialId,
+          quantity:             parseFloat(line.dispatchQty),
+          notes:                `Cross-company sourcing for dispatch`,
+          date,
+        }).unwrap();
+        transferResults.push({ lineId: line.id, destMaterialId: result.destMaterialId });
+      }
+
+      // Step 2: Remap cross-company lines to use local material IDs
+      const crossCompanyLines = lines.filter((l) => l.sourceCompanyId);
+      const ownLines = lines.filter((l) => !l.sourceCompanyId);
+      const remappedCrossLines = crossCompanyLines.map((line) => {
+        const mapping = transferResults.find((r) => r.lineId === line.id);
+        return { ...line, materialId: mapping?.destMaterialId ?? line.materialId };
+      });
+
+      // Step 3: Submit batch dispatch with all lines
+      await executeSubmit([...ownLines, ...remappedCrossLines]);
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? 'Transfer or dispatch failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const validateAndSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedJob) { toast.error('Select a job'); return; }
@@ -257,62 +404,136 @@ export default function DispatchMaterialsPage() {
     const validLines = lines.filter((l) => l.materialId && l.dispatchQty);
     if (validLines.length === 0) { toast.error('Add at least one material'); return; }
 
-    // Validate quantities
-    for (const line of validLines) {
-      const qty = parseFloat(line.dispatchQty);
-      const ret = line.returnQty ? parseFloat(line.returnQty) : 0;
+    // Partition lines
+    const crossCompanyLines = validLines.filter((l) => l.sourceCompanyId);
+    const ownLines = validLines.filter((l) => !l.sourceCompanyId);
+
+    // If cross-company and !canTransfer, error
+    if (crossCompanyLines.length > 0 && !canTransfer) {
+      toast.error('You do not have permission to source from other companies');
+      return;
+    }
+
+    // Validate own-company quantities
+    for (const line of ownLines) {
+      if (!line.materialId || !line.dispatchQty) {
+        // Skip lines with empty material or qty
+        continue;
+      }
+
+      let qty = parseFloat(line.dispatchQty);
       const mat = getMaterial(line.materialId);
-      const originalQty = line.originalDispatchQty ?? 0;
 
-      if (!qty || qty <= 0) { toast.error('Invalid dispatch quantity'); return; }
-      if (ret < 0) { toast.error('Invalid return quantity'); return; }
-      if (!mat) { toast.error('Material not found'); return; }
-
-      // When editing, available stock = current stock + original dispatch qty (which was deducted)
-      const availableStock = mat.currentStock + originalQty;
-      if (availableStock < qty) {
-        toast.error(`Insufficient stock for ${mat.name}. Available: ${availableStock}`);
+      // First check: Material exists
+      if (!mat) {
+        toast.error(`Material not found: ${line.materialId}`);
         return;
       }
-      if (ret > qty) {
-        toast.error(`Return qty cannot exceed dispatch qty for ${mat.name}`);
+
+      // Second check: Valid dispatch quantity
+      if (isNaN(qty) || qty <= 0) {
+        toast.error(`Invalid dispatch quantity for ${mat.name}. Please enter a valid number greater than 0.`);
         return;
+      }
+
+      // Third check: Material has stock data
+      if (mat.currentStock === undefined || mat.currentStock === null) {
+        toast.error(`Stock information missing for ${mat.name}. Please try refreshing the page.`);
+        return;
+      }
+
+      // Fourth check: Parse stock value correctly
+      const currentStock = typeof mat.currentStock === 'number' ? mat.currentStock : parseFloat(String(mat.currentStock));
+      if (isNaN(currentStock) || currentStock < 0) {
+        toast.error(`Invalid stock value for ${mat.name}: ${mat.currentStock}`);
+        return;
+      }
+
+      // Fifth check: Return quantity is valid
+      const ret = line.returnQty ? parseFloat(line.returnQty) : 0;
+      if (isNaN(ret) || ret < 0) {
+        toast.error(`Invalid return quantity for ${mat.name}`);
+        return;
+      }
+
+      // Sixth check: Sufficient stock
+      const originalQty = line.originalDispatchQty ? parseFloat(String(line.originalDispatchQty)) : 0;
+      if (isNaN(originalQty)) {
+        const availableStock = currentStock;
+        if (availableStock < qty) {
+          toast.error(`Insufficient stock for ${mat.name}. Requested: ${qty.toFixed(3)} ${mat.unit}, Available: ${availableStock.toFixed(3)} ${mat.unit}`);
+          return;
+        }
+      } else {
+        const availableStock = currentStock + originalQty;
+        if (availableStock < qty) {
+          toast.error(`Insufficient stock for ${mat.name}. Requested: ${qty.toFixed(3)} ${mat.unit}, Available: ${availableStock.toFixed(3)} ${mat.unit}`);
+          return;
+        }
+      }
+
+      if (ret > 0) {
+        const jobMatSummary = jobMaterials.find((jm: any) => jm.materialId === line.materialId);
+        if (jobMatSummary) {
+          const totalReturnAfter = jobMatSummary.returned + ret;
+          if (totalReturnAfter > jobMatSummary.dispatched) {
+            const maxCanReturn = jobMatSummary.dispatched - jobMatSummary.returned;
+            toast.error(`Cannot return ${ret} ${mat.unit} of ${mat.name}. Only ${maxCanReturn.toFixed(3)} ${mat.unit} can be returned for this job (Total dispatched: ${jobMatSummary.dispatched.toFixed(3)}, Already returned: ${jobMatSummary.returned.toFixed(3)})`);
+            return;
+          }
+        }
       }
     }
 
+    // Validate cross-company quantities
+    for (const line of crossCompanyLines) {
+      if (!line.sourceCompanyId || line.sourceCompanyId === '') {
+        toast.error('Select a source company for all cross-company rows');
+        return;
+      }
+      if (line.sourceCompanyId === session?.user?.activeCompanyId) {
+        toast.error('Cannot transfer from your own company. Select a different company.');
+        return;
+      }
+      const ccMat = (crossCompanyMaterialsMap[line.sourceCompanyId] ?? []).find((m) => m._id === line.materialId);
+      if (!ccMat) { toast.error(`Cross-company material not found for ${line.materialId}`); return; }
+      const qty = parseFloat(line.dispatchQty);
+      if (isNaN(qty)) { toast.error('Invalid dispatch quantity'); return; }
+
+      const ccStock = typeof ccMat.currentStock === 'number' ? ccMat.currentStock : (typeof ccMat.currentStock === 'string' ? parseFloat(ccMat.currentStock) : 0);
+      if (isNaN(ccStock)) {
+        toast.error(`Invalid stock value for ${ccMat.name} at ${line.sourceCompanyName}`);
+        return;
+      }
+
+      if (ccStock < qty) {
+        toast.error(`Insufficient stock for ${ccMat.name} at ${line.sourceCompanyName}. Requested: ${qty.toFixed(3)}, Available: ${ccStock.toFixed(3)} ${ccMat.unit}`);
+        return;
+      }
+      const ret = line.returnQty ? parseFloat(line.returnQty) : 0;
+      if (ret > 0) {
+        const jobMatSummary = jobMaterials.find((jm: any) => jm.materialId === line.materialId);
+        if (jobMatSummary) {
+          const totalReturnAfter = jobMatSummary.returned + ret;
+          if (totalReturnAfter > jobMatSummary.dispatched) {
+            const maxCanReturn = jobMatSummary.dispatched - jobMatSummary.returned;
+            toast.error(`Cannot return ${ret} ${ccMat.unit} of ${ccMat.name}. Only ${maxCanReturn.toFixed(3)} ${ccMat.unit} can be returned for this job`);
+            return;
+          }
+        }
+      }
+    }
+
+    // If cross-company lines exist, show confirmation modal
+    if (crossCompanyLines.length > 0) {
+      setConfirmModal({ open: true, crossCompanyLines });
+      return;
+    }
+
+    // Otherwise, submit directly
     setSubmitting(true);
     try {
-      const res = await fetch('/api/transactions/batch', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          type:  'STOCK_OUT',
-          jobId: selectedJob,
-          notes: notes || undefined,
-          date,
-          existingTransactionIds: existingEntry?.transactionIds,
-          lines: validLines.map((l) => ({
-            materialId: l.materialId,
-            quantity:   parseFloat(l.dispatchQty),
-            returnQty:  l.returnQty ? parseFloat(l.returnQty) : undefined,
-          })),
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error ?? 'Dispatch failed');
-      } else {
-        const json = await res.json();
-        toast.success(`Dispatched ${validLines.length} item(s)`);
-        dispatch(fetchMaterials());
-        setLines([]);
-        setSelectedJob('');
-        setNotes('');
-        setExistingEntry(null);
-      }
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Error');
+      await executeSubmit(validLines);
     } finally {
       setSubmitting(false);
     }
@@ -340,9 +561,41 @@ export default function DispatchMaterialsPage() {
         </div>
       )}
 
+      {/* Load cross-company materials for all other companies upfront */}
+      {allowInterCompanyTransfers && otherCompanies.map((company) => (
+        <CrossCompanyMaterialLoader
+          key={company._id}
+          companyId={company._id}
+          onLoaded={handleCrossCompanyMaterialsLoaded}
+        />
+      ))}
+
       <form onSubmit={validateAndSubmit} className="space-y-0">
         {/* Header */}
         <div className="rounded-t-xl bg-slate-800 border border-slate-700 border-b-0 p-6">
+          {/* Toggle for inter-company transfers */}
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-700">
+            <div>
+              <p className="text-sm font-medium text-slate-300">Allow Inter-Company Transfers</p>
+              <p className="text-xs text-slate-500 mt-0.5">Enable sourcing from other company stock</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAllowInterCompanyTransfers(!allowInterCompanyTransfers)}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                allowInterCompanyTransfers
+                  ? 'bg-emerald-600'
+                  : 'bg-slate-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                  allowInterCompanyTransfers ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <div>
               <SearchSelect
@@ -356,7 +609,7 @@ export default function DispatchMaterialsPage() {
                   .map((j) => ({
                     id: j._id,
                     label: j.jobNumber,
-                    searchText: typeof j.customerId === 'object' ? j.customerId.name : 'Unknown',
+                    searchText: customers.find((c) => c._id === j.customerId)?.name || 'Unknown',
                   }))}
                 renderItem={(item) => (
                   <div>
@@ -415,38 +668,99 @@ export default function DispatchMaterialsPage() {
                 </tr>
               ) : (
                 lines.map((line, idx) => {
-                  const mat = getMaterial(line.materialId);
+                  const mat = getEffectiveMaterial(line);
                   const dispatchQty = parseFloat(line.dispatchQty) || 0;
                   const returnQty = parseFloat(line.returnQty) || 0;
                   const netQty = dispatchQty - returnQty;
 
                   return (
-                    <tr key={line.id} className="border-b border-slate-700/60 hover:bg-slate-800/40">
+                    <tr key={line.id} className="border-b border-slate-700/60 hover:bg-slate-800/40 align-top">
                       <td className="px-4 py-2.5 text-slate-500 text-xs font-mono">{idx + 1}</td>
 
                       <td className="px-4 py-2">
-                        <SearchSelect
-                          value={line.materialId}
-                          onChange={(id) => updateLine(line.id, 'materialId', id)}
-                          placeholder="Search materials..."
-                          disabled={!selectedJob}
-                          items={materials
-                            .filter((m) => m.isActive && m.currentStock > 0)
-                            .map((m) => ({
-                              id: m._id,
-                              label: m.name,
-                              searchText: `${m.currentStock} ${m.unit}`,
-                            }))}
-                          renderItem={(item) => (
-                            <div>
-                              <div className="font-medium text-white">{item.label}</div>
-                              <div className="text-xs text-slate-400">{item.searchText}</div>
+                        {/* Cross-company toggle and selector - only show if inter-company transfers enabled */}
+                        {allowInterCompanyTransfers && canTransfer && (
+                          <>
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <button
+                                type="button"
+                                onClick={() => toggleSourceMode(line.id)}
+                                className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                                  line.sourceCompanyId !== undefined
+                                    ? 'bg-blue-600/20 border-blue-500/40 text-blue-300'
+                                    : 'bg-slate-700/40 border-slate-600 text-slate-400 hover:text-slate-300'
+                                }`}
+                              >
+                                {line.sourceCompanyId !== undefined ? 'Other company' : 'Own stock'}
+                              </button>
+                              {line.sourceCompanyId && line.sourceCompanyId !== '' && (
+                                <Badge label={line.sourceCompanyName ?? 'External'} variant="blue" />
+                              )}
                             </div>
+
+                            {/* Company selector (shown only when cross-company toggled) */}
+                            {line.sourceCompanyId !== undefined && (
+                              <select
+                                value={line.sourceCompanyId}
+                                onChange={(e) => setLineSourceCompany(line.id, e.target.value)}
+                                className="w-full mb-1.5 px-2.5 py-1.5 bg-slate-800 border border-slate-600 rounded-md text-white text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                              >
+                                <option value="">Select company...</option>
+                                {otherCompanies.map((c) => (
+                                  <option key={c._id} value={c._id}>{c.name}</option>
+                                ))}
+                              </select>
+                            )}
+                          </>
+                        )}
+
+                        {/* Material selection with inline stock display */}
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            {line.sourceCompanyId && !line.sourceCompanyId && (
+                              <div className="text-xs text-yellow-400 mb-1">Loading materials...</div>
+                            )}
+                            <SearchSelect
+                              value={line.materialId}
+                              onChange={(id) => updateLine(line.id, 'materialId', id)}
+                              placeholder={
+                                line.sourceCompanyId && !line.sourceCompanyId
+                                  ? 'Select a company first...'
+                                  : 'Search materials...'
+                              }
+                              disabled={!selectedJob || (line.sourceCompanyId !== undefined && !line.sourceCompanyId)}
+                              items={(
+                                line.sourceCompanyId && line.sourceCompanyId !== ''
+                                  ? (crossCompanyMaterialsMap[line.sourceCompanyId] ?? []).filter(
+                                      (m) => m.isActive && m.currentStock > 0
+                                    )
+                                  : line.sourceCompanyId === undefined
+                                  ? materials.filter((m) => m.isActive && m.currentStock > 0)
+                                  : []
+                              ).map((m) => ({
+                                id: m._id,
+                                label: m.name,
+                                searchText: `${m.currentStock} ${m.unit}`,
+                              }))}
+                              renderItem={(item) => (
+                                <div className="flex items-center justify-between w-full">
+                                  <div className="font-medium text-white">{item.label}</div>
+                                  <Badge label={item.searchText} variant="blue" />
+                                </div>
+                              )}
+                            />
+                          </div>
+                          {/* Inline stock badge next to material name */}
+                          {mat && line.materialId && (
+                            <Badge
+                              label={`${mat.currentStock.toFixed(3)} ${mat.unit}`}
+                              variant="blue"
+                            />
                           )}
-                        />
+                        </div>
                       </td>
 
-                      <td className="px-3 py-2 text-center text-slate-400 text-xs">
+                      <td className="px-3 py-2 text-center text-slate-400 text-xs min-w-[90px]">
                         {mat?.unit ?? '—'}
                       </td>
 
@@ -557,6 +871,61 @@ export default function DispatchMaterialsPage() {
           </div>
         </>
       )}
+
+      {/* Confirmation Modal — Cross-Company Transfer */}
+      <Modal
+        isOpen={!!confirmModal?.open}
+        onClose={() => setConfirmModal(null)}
+        title="Confirm Cross-Company Sourcing"
+        size="sm"
+      >
+        <p className="text-slate-300 text-sm mb-4">
+          The following {confirmModal?.crossCompanyLines.length} material(s) will be sourced from other
+          companies. Stock will first be <strong>transferred to your company</strong>, then dispatched.
+        </p>
+
+        <ul className="space-y-2 mb-5">
+          {confirmModal?.crossCompanyLines.map((line) => {
+            const mat = (crossCompanyMaterialsMap[line.sourceCompanyId!] ?? []).find(
+              (m) => m._id === line.materialId
+            );
+            return (
+              <li key={line.id} className="flex items-center justify-between bg-slate-700/40 rounded-lg px-3 py-2 text-sm">
+                <span className="text-white font-medium">{mat?.name ?? line.materialId}</span>
+                <span className="text-slate-400">
+                  {line.dispatchQty} {mat?.unit} from{' '}
+                  <span className="text-blue-300">{line.sourceCompanyName}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="bg-amber-600/15 border border-amber-500/30 rounded-lg p-3 mb-5">
+          <p className="text-xs text-amber-300">
+            This will create TRANSFER_OUT transactions in the source companies and credit stock to your
+            company before dispatch. This action cannot be undone.
+          </p>
+        </div>
+
+        <div className="flex gap-3 justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setConfirmModal(null)}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleConfirmTransfer}
+            loading={submitting}
+          >
+            Transfer and Dispatch
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -43,11 +43,29 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    href: '/goods-receipt', label: 'Goods Receipt', perm: 'transaction.stock_in',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
     href: '/dispatch', label: 'Dispatch', perm: 'transaction.stock_out',
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
           d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/suppliers', label: 'Suppliers', perm: 'supplier.view',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5.581a1 1 0 00-.424.106A2 2 0 005 19m2 0H3m2 0h5.581A2 2 0 0010 21m0-6h6m-6 0h6m0 0v-3m0 3v3" />
       </svg>
     ),
   },

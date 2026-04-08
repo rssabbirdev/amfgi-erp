@@ -20,7 +20,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   dbSession.startTransaction();
 
   try {
-    const { Transaction, Material } = getModels(conn);
+    const { Transaction, Material, StockBatch } = getModels(conn);
 
     const txn = await Transaction.findById(id).session(dbSession);
     if (!txn) {
@@ -36,6 +36,17 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
         { $inc: { currentStock: txn.quantity } },
         { session: dbSession }
       );
+
+      // Restore batch quantities for STOCK_OUT
+      if (txn.type === 'STOCK_OUT' && txn.batchesUsed && txn.batchesUsed.length > 0) {
+        for (const batchUsed of txn.batchesUsed) {
+          await StockBatch.findByIdAndUpdate(
+            batchUsed.batchId,
+            { $inc: { quantityAvailable: batchUsed.quantityFromBatch } },
+            { session: dbSession }
+          );
+        }
+      }
 
       // Create reversal transaction for ledger
       await Transaction.create(

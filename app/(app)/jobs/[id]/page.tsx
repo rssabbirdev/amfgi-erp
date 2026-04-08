@@ -1,63 +1,46 @@
 'use client';
 
-import { useEffect, useState, use }       from 'react';
-import Link                               from 'next/link';
-import { Button }             from '@/components/ui/Button';
-import { StatusBadge }        from '@/components/ui/Badge';
-import TransactionLedger      from '@/components/transactions/TransactionLedger';
-import StockTransactionModal  from '@/components/transactions/StockTransactionModal';
-import { formatDate }         from '@/lib/utils/formatters';
-import { useSession }         from 'next-auth/react';
-import Spinner                from '@/components/ui/Spinner';
-
-interface Job {
-  _id:        string;
-  jobNumber:  string;
-  description: string;
-  site?:      string;
-  status:     string;
-  startDate?: string;
-  customerId: { _id: string; name: string };
-}
+import { use, useState } from 'react';
+import Link from 'next/link';
+import { Button } from '@/components/ui/Button';
+import { StatusBadge } from '@/components/ui/Badge';
+import TransactionLedger from '@/components/transactions/TransactionLedger';
+import StockTransactionModal from '@/components/transactions/StockTransactionModal';
+import Spinner from '@/components/ui/Spinner';
+import { useGetJobByIdQuery, useGetJobMaterialsQuery } from '@/store/hooks';
 
 interface MaterialSummary {
-  materialId:        string;
-  materialName:      string;
-  unit:              string;
-  dispatched:        number;
-  returned:          number;
-  netConsumed:       number;
+  materialId: string;
+  materialName: string;
+  unit: string;
+  dispatched: number;
+  returned: number;
+  netConsumed: number;
   availableToReturn: number;
 }
 
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { data: session } = useSession();
+  const [txMode, setTxMode] = useState<'STOCK_OUT' | 'RETURN' | null>(null);
 
-  const [job,       setJob]       = useState<Job | null>(null);
-  const [summary,   setSummary]   = useState<MaterialSummary[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [txMode,    setTxMode]    = useState<'STOCK_OUT' | 'RETURN' | null>(null);
-  const [refresh,   setRefresh]   = useState(0);
+  const { data: job, isLoading: jobLoading } = useGetJobByIdQuery(id);
+  const { data: materialsData, isLoading: materialsLoading } = useGetJobMaterialsQuery(id);
+  const summary = materialsData || [];
 
-  const fetchJob = () =>
-    fetch(`/api/jobs/${id}`).then((r) => r.json()).then((j) => setJob(j.data));
-
-  const fetchSummary = () =>
-    fetch(`/api/jobs/${id}/materials`).then((r) => r.json()).then((j) => setSummary(j.data ?? []));
-
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([fetchJob(), fetchSummary()]).finally(() => setLoading(false));
-  }, [id, refresh]);
+  const isLoading = jobLoading || materialsLoading;
 
   const onTxSuccess = () => {
     setTxMode(null);
-    setRefresh((r) => r + 1);
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Spinner size="lg" /></div>;
-  if (!job)    return <p className="text-slate-400 text-center py-12">Job not found.</p>;
+  if (isLoading)
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Spinner size="lg" />
+      </div>
+    );
+  if (!job)
+    return <p className="text-slate-400 text-center py-12">Job not found.</p>;
 
   return (
     <div className="space-y-6">
@@ -65,7 +48,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <Link href="/jobs" className="text-slate-500 hover:text-slate-300 text-sm">← Jobs</Link>
+            <Link href="/jobs" className="text-slate-500 hover:text-slate-300 text-sm">
+              ← Jobs
+            </Link>
             <StatusBadge status={job.status} />
           </div>
           <h1 className="text-2xl font-bold text-white">{job.jobNumber}</h1>
@@ -81,75 +66,102 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
-      {/* Info cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Customer',   value: job.customerId?.name ?? '—' },
-          { label: 'Site',       value: job.site ?? '—' },
-          { label: 'Start Date', value: job.startDate ? formatDate(job.startDate) : '—' },
-          { label: 'Status',     value: job.status.replace('_', ' ') },
-        ].map((item) => (
-          <div key={item.label} className="rounded-xl bg-slate-800 border border-slate-700 p-4">
-            <p className="text-xs text-slate-500 mb-1">{item.label}</p>
-            <p className="font-semibold text-white text-sm">{item.value}</p>
+      {/* Job Details Grid */}
+      {job && (
+        <div className="grid grid-cols-4 gap-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+            <p className="text-xs text-slate-400 uppercase tracking-wide">Customer</p>
+            <p className="text-white font-medium mt-2">—</p>
           </div>
-        ))}
-      </div>
-
-      {/* Material Consumption Summary */}
-      {summary.length > 0 && (
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-3">Material Consumption Summary</h2>
-          <div className="overflow-x-auto rounded-xl border border-slate-700">
-            <table className="w-full text-sm text-slate-300">
-              <thead>
-                <tr className="bg-slate-800 border-b border-slate-700">
-                  <th className="px-4 py-3 text-left font-medium text-slate-400">Material</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-400">Dispatched</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-400">Returned</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-400">Net Consumed</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-400">Available to Return</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.map((s) => (
-                  <tr key={s.materialId} className="border-b border-slate-700/50 hover:bg-slate-800/40">
-                    <td className="px-4 py-3 font-medium text-white">{s.materialName}</td>
-                    <td className="px-4 py-3 text-right font-mono text-orange-400">{s.dispatched} {s.unit}</td>
-                    <td className="px-4 py-3 text-right font-mono text-blue-400">{s.returned} {s.unit}</td>
-                    <td className="px-4 py-3 text-right font-mono text-white font-semibold">{s.netConsumed} {s.unit}</td>
-                    <td className="px-4 py-3 text-right font-mono text-emerald-400">{s.availableToReturn} {s.unit}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+            <p className="text-xs text-slate-400 uppercase tracking-wide">Site</p>
+            <p className="text-white font-medium mt-2">{job.site || '—'}</p>
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+            <p className="text-xs text-slate-400 uppercase tracking-wide">Start Date</p>
+            <p className="text-white font-medium mt-2">
+              {job.startDate
+                ? new Date(job.startDate).toLocaleDateString('en-AE')
+                : '—'}
+            </p>
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+            <p className="text-xs text-slate-400 uppercase tracking-wide">Status</p>
+            <p className="text-white font-medium mt-2">{job.status}</p>
           </div>
         </div>
       )}
 
-      {/* Transaction Ledger */}
-      <div>
-        <h2 className="text-lg font-semibold text-white mb-3">Transaction History</h2>
-        <TransactionLedger jobId={id} refresh={refresh} />
+      {/* Material Summary Table */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-700">
+          <h2 className="text-lg font-bold text-white">Material Summary</h2>
+          <p className="text-sm text-slate-400 mt-1">Dispatched and returned quantities for this job</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-900 border-b border-slate-700">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  Material
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  Dispatched
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  Returned
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  Net Consumed
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  Available to Return
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-4 text-center text-slate-500">
+                    No materials dispatched yet
+                  </td>
+                </tr>
+              ) : (
+                summary.map((mat: MaterialSummary) => (
+                  <tr key={mat.materialId} className="border-b border-slate-700/50 hover:bg-slate-900/50">
+                    <td className="px-6 py-3">
+                      <div>
+                        <p className="text-white font-medium">{mat.materialName}</p>
+                        <p className="text-xs text-slate-500">{mat.unit}</p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-3 text-right text-slate-300">{mat.dispatched.toFixed(3)}</td>
+                    <td className="px-6 py-3 text-right text-slate-300">{mat.returned.toFixed(3)}</td>
+                    <td className="px-6 py-3 text-right text-emerald-400 font-semibold">
+                      {mat.netConsumed.toFixed(3)}
+                    </td>
+                    <td className="px-6 py-3 text-right text-slate-300">{mat.availableToReturn.toFixed(3)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Dispatch Modal */}
-      <StockTransactionModal
-        isOpen={txMode === 'STOCK_OUT'}
-        onClose={() => setTxMode(null)}
-        onSuccess={onTxSuccess}
-        mode="STOCK_OUT"
-        preselectedJobId={id}
-      />
+      {/* Transaction Ledger */}
+      <TransactionLedger jobId={id} />
 
-      {/* Return Modal */}
-      <StockTransactionModal
-        isOpen={txMode === 'RETURN'}
-        onClose={() => setTxMode(null)}
-        onSuccess={onTxSuccess}
-        mode="RETURN"
-        preselectedJobId={id}
-      />
+      {/* Stock Transaction Modal */}
+      {txMode && (
+        <StockTransactionModal
+          mode={txMode}
+          preselectedJobId={id}
+          isOpen={txMode !== null}
+          onClose={() => setTxMode(null)}
+          onSuccess={onTxSuccess}
+        />
+      )}
     </div>
   );
 }

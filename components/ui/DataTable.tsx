@@ -2,6 +2,7 @@
 
 import { useState, useMemo, type ReactNode } from 'react';
 import Spinner from './Spinner';
+import { TableSkeleton } from './skeleton/TableSkeleton';
 
 export interface Column<T> {
   key:        string;
@@ -12,11 +13,12 @@ export interface Column<T> {
 }
 
 interface DataTableProps<T extends { _id: string }> {
-  columns:     Column<T>[];
-  data:        T[];
-  loading?:    boolean;
-  emptyText?:  string;
-  searchKeys?: (keyof T)[];
+  columns:            Column<T>[];
+  data:               T[];
+  loading?:           boolean;
+  emptyText?:         string;
+  searchKeys?:        (keyof T)[];
+  onRowContextMenu?:  (row: T, e: React.MouseEvent) => void;
 }
 
 export default function DataTable<T extends { _id: string }>({
@@ -25,6 +27,7 @@ export default function DataTable<T extends { _id: string }>({
   loading,
   emptyText = 'No records found.',
   searchKeys = [],
+  onRowContextMenu,
 }: DataTableProps<T>) {
   const [search,    setSearch]    = useState('');
   const [sortKey,   setSortKey]   = useState<string | null>(null);
@@ -99,11 +102,7 @@ export default function DataTable<T extends { _id: string }>({
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={columns.length} className="py-12 text-center">
-                  <Spinner />
-                </td>
-              </tr>
+              <TableSkeleton rows={5} columns={columns.length} />
             ) : sorted.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="py-12 text-center text-slate-500">
@@ -112,7 +111,12 @@ export default function DataTable<T extends { _id: string }>({
               </tr>
             ) : (
               sorted.map((row) => (
-                <tr key={row._id} className="border-b border-slate-700/50 hover:bg-slate-800/40 transition-colors">
+                <tr
+                  key={row._id}
+                  className={`border-b border-slate-700/50 hover:bg-slate-800/40 transition-colors ${onRowContextMenu ? 'cursor-pointer' : ''}`}
+                  onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(row, e) : undefined}
+                  data-context-menu={onRowContextMenu ? 'true' : undefined}
+                >
                   {columns.map((col) => (
                     <td key={col.key} className={`px-4 py-3 ${col.className ?? ''}`}>
                       {col.render

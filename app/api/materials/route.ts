@@ -4,11 +4,15 @@ import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }                 from 'zod';
 
 const MaterialSchema = z.object({
-  name:         z.string().min(1).max(100),
-  unit:         z.string().min(1).max(20),
-  description:  z.string().max(500).optional(),
-  unitCost:     z.number().min(0).optional(),
-  minStock:     z.number().min(0).optional(),
+  name:                z.string().min(1).max(100),
+  description:         z.string().max(500).optional(),
+  unit:                z.string().min(1).max(20),
+  category:            z.string().min(1).max(100),
+  warehouse:           z.string().min(1).max(100),
+  stockType:           z.string().min(1).max(50),
+  externalItemName:    z.string().min(1).max(100),
+  unitCost:            z.number().min(0).optional(),
+  reorderLevel:        z.number().min(0).optional(),
 });
 
 export async function GET() {

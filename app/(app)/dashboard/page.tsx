@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { redirect } from 'next/navigation';
 import StatCard from '@/components/ui/StatCard';
-import toast from 'react-hot-toast';
+import { StatCardSkeleton } from '@/components/ui/skeleton/StatCardSkeleton';
+import { TableSkeleton } from '@/components/ui/skeleton/TableSkeleton';
+import { useGetStockValuationQuery, useGetConsumptionQuery } from '@/store/hooks';
 
 interface Material {
   _id: string;
@@ -30,11 +31,6 @@ interface ConsumptionData {
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [topMaterials, setTopMaterials] = useState<Material[]>([]);
-  const [topConsumed, setTopConsumed] = useState<Material[]>([]);
-  const [currentConsumption, setCurrentConsumption] = useState<ConsumptionData | null>(null);
 
   if (!session?.user) {
     redirect('/login');
@@ -42,38 +38,23 @@ export default function DashboardPage() {
 
   const dbName = session.user.activeCompanyDbName;
 
-  useEffect(() => {
-    if (!dbName) return;
+  // Fetch both reports in parallel, skip if no company selected
+  const { data: valuationData, isFetching: isValuationLoading } = useGetStockValuationQuery(
+    undefined,
+    { skip: !dbName }
+  );
+  const { data: consumptionData, isFetching: isConsumptionLoading } = useGetConsumptionQuery(
+    undefined,
+    { skip: !dbName }
+  );
 
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [valRes, consRes] = await Promise.all([
-          fetch('/api/reports/stock-valuation'),
-          fetch('/api/reports/consumption'),
-        ]);
+  const summary: Summary | undefined = valuationData?.summary;
+  const topMaterials: Material[] = valuationData?.topMaterialsByValue || [];
+  const topConsumed: Material[] = valuationData?.topConsumedItems || [];
+  const currentConsumption: ConsumptionData | null | undefined = consumptionData?.currentMonth;
 
-        const valData = await valRes.json();
-        const consData = await consRes.json();
-
-        if (valRes.ok) {
-          setSummary(valData.data?.summary);
-          setTopMaterials(valData.data?.topMaterialsByValue || []);
-          setTopConsumed(valData.data?.topConsumedItems || []);
-        }
-
-        if (consRes.ok) {
-          setCurrentConsumption(consData.data?.currentMonth);
-        }
-      } catch (err) {
-        toast.error('Failed to load dashboard data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [dbName]);
+  const isLoadingSummary = isValuationLoading && !summary;
+  const isLoadingTable = isValuationLoading && topMaterials.length === 0;
 
   if (!dbName) {
     return (
@@ -98,28 +79,37 @@ export default function DashboardPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-4">
-        <StatCard
-          title="Total Stock Value (Now)"
-          value={summary ? `AED ${(summary.totalStockValue || 0).toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : '—'}
-          color="green"
-          icon={
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-          }
-        />
-        <StatCard
-          title="Previous Month Consumption Value"
-          value={summary ? `AED ${(summary.prevMonthConsumptionValue || 0).toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : '—'}
-          color="orange"
-          icon={
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          }
-        />
+        {isLoadingSummary ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          <>
+            <StatCard
+              title="Total Stock Value (Now)"
+              value={summary ? `AED ${(summary.totalStockValue || 0).toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : '—'}
+              color="green"
+              icon={
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              }
+            />
+            <StatCard
+              title="Previous Month Consumption Value"
+              value={summary ? `AED ${(summary.prevMonthConsumptionValue || 0).toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : '—'}
+              color="orange"
+              icon={
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+            />
+          </>
+        )}
       </div>
 
       {/* Current Month Consumption */}
@@ -163,12 +153,8 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-slate-500">
-                    Loading...
-                  </td>
-                </tr>
+              {isLoadingTable ? (
+                <TableSkeleton rows={5} columns={5} />
               ) : topMaterials.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-4 text-center text-slate-500">
@@ -218,12 +204,8 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-slate-500">
-                    Loading...
-                  </td>
-                </tr>
+              {isLoadingTable ? (
+                <TableSkeleton rows={5} columns={5} />
               ) : topConsumed.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-4 text-center text-slate-500">

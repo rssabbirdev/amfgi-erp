@@ -5,11 +5,15 @@ import { z }                 from 'zod';
 import { Types }             from 'mongoose';
 
 const UpdateSchema = z.object({
-  name:        z.string().min(1).max(100).optional(),
-  unit:        z.string().min(1).max(20).optional(),
-  description: z.string().max(500).optional(),
-  unitCost:    z.number().min(0).optional(),
-  minStock:    z.number().min(0).optional(),
+  name:                z.string().min(1).max(100).optional(),
+  description:         z.string().max(500).optional(),
+  unit:                z.string().min(1).max(20).optional(),
+  category:            z.string().min(1).max(100).optional(),
+  warehouse:           z.string().min(1).max(100).optional(),
+  stockType:           z.string().min(1).max(50).optional(),
+  externalItemName:    z.string().min(1).max(100).optional(),
+  unitCost:            z.number().min(0).optional(),
+  reorderLevel:        z.number().min(0).optional(),
 });
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {

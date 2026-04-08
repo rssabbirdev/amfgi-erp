@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect }      from 'react';
+import { useState }                  from 'react';
 import { useSession }                from 'next-auth/react';
 import { useAppDispatch }            from '@/store/hooks';
 import { switchActiveCompany }       from '@/store/slices/companySlice';
-import { fetchMaterials }            from '@/store/slices/materialsSlice';
-import { fetchCustomers }            from '@/store/slices/customersSlice';
-import { fetchJobs }                 from '@/store/slices/jobsSlice';
 import toast                         from 'react-hot-toast';
+import { useGetCompaniesQuery } from '@/store/hooks';
+import { appApi } from '@/store/api/appApi';
 
 interface Company {
   _id:  string;
@@ -18,16 +17,17 @@ interface Company {
 export default function CompanySwitcher() {
   const { data: session, update } = useSession();
   const dispatch = useAppDispatch();
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const { data: companiesData = [] } = useGetCompaniesQuery();
   const [open,      setOpen]      = useState(false);
   const [loading,   setLoading]   = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ show: boolean; targetId: string | null }>({ show: false, targetId: null });
 
-  useEffect(() => {
-    fetch('/api/companies')
-      .then((r) => r.json())
-      .then((j) => setCompanies(j.data ?? []));
-  }, []);
+  // For type safety, cast companies data
+  const companies: Company[] = companiesData.map((c: any) => ({
+    _id: c._id,
+    name: c.name,
+    slug: c.slug,
+  }));
 
   const activeCompany = companies.find(
     (c) => c._id === session?.user?.activeCompanyId
@@ -72,10 +72,8 @@ export default function CompanySwitcher() {
         permissions:       data.permissions,
       }));
 
-      // Refresh all data from new company
-      dispatch(fetchMaterials());
-      dispatch(fetchCustomers());
-      dispatch(fetchJobs());
+      // Reset all company-scoped cache (materials, jobs, customers, etc.)
+      dispatch(appApi.util.resetApiState());
 
       toast.success(data.activeCompanyName ? `Switched to ${data.activeCompanyName}` : 'Viewing all companies');
     } catch (err) {

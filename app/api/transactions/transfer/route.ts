@@ -180,5 +180,6 @@ export async function POST(req: Request) {
     materialName:       srcMaterial.name,
     sourceCompany:      srcCompanySlug,
     destinationCompany: destCompanySlug,
+    destMaterialId:     destMaterialId.toString(),
   }, 201);
 }
