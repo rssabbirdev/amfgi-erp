@@ -1,8 +1,7 @@
 import { auth } from '@/auth';
-import { getCompanyDB } from '@/lib/db/company';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
-import { SupplierSchema } from '@/lib/db/schemas/Supplier';
 
 const CreateSupplierSchema = z.object({
   name: z.string().min(1).max(100),
@@ -22,14 +21,16 @@ export async function GET(req: Request) {
     return errorResponse('Forbidden', 403);
   }
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   try {
-    const conn = await getCompanyDB(dbName);
-    const Supplier = conn.model('Supplier', SupplierSchema);
-
-    const suppliers = await Supplier.find({ isActive: true }).sort({ name: 1 }).lean();
+    const suppliers = await prisma.supplier.findMany({
+      where: {
+        companyId: session.user.activeCompanyId,
+        isActive: true,
+      },
+      orderBy: { name: 'asc' },
+    });
     return successResponse(suppliers);
   } catch (err) {
     return errorResponse('Failed to fetch suppliers', 500);
@@ -43,8 +44,7 @@ export async function POST(req: Request) {
     return errorResponse('Forbidden', 403);
   }
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   try {
     const body = await req.json();
@@ -53,13 +53,19 @@ export async function POST(req: Request) {
       return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
     }
 
-    const conn = await getCompanyDB(dbName);
-    const Supplier = conn.model('Supplier', SupplierSchema);
-
-    const supplier = await Supplier.create(parsed.data);
+    const supplier = await prisma.supplier.create({
+      data: {
+        ...parsed.data,
+        companyId: session.user.activeCompanyId,
+        email: parsed.data.email || null,
+      },
+    });
     return successResponse(supplier, 201);
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to create supplier';
+    if (errorMsg.includes('Unique constraint failed')) {
+      return errorResponse('Supplier name already exists for this company', 409);
+    }
     return errorResponse(errorMsg, 500);
   }
 }

@@ -1,10 +1,7 @@
 import NextAuth, { type DefaultSession, type NextAuthConfig } from 'next-auth';
 import Google      from 'next-auth/providers/google';
 import Credentials from 'next-auth/providers/credentials';
-import { connectSystemDB }  from '@/lib/db/system';
-import { User }    from '@/lib/db/models/system/User';
-import { Role }    from '@/lib/db/models/system/Role';
-import { Company } from '@/lib/db/models/system/Company';
+import { prisma } from '@/lib/db/prisma';
 import bcrypt      from 'bcryptjs';
 import type { Permission } from '@/lib/permissions';
 import { ALL_PERMISSIONS } from '@/lib/permissions';
@@ -13,24 +10,22 @@ import { ALL_PERMISSIONS } from '@/lib/permissions';
 declare module 'next-auth' {
   interface Session {
     user: {
-      id:                   string;
-      isSuperAdmin:         boolean;
-      activeCompanyId:      string | null;
-      activeCompanySlug:    string | null;
-      activeCompanyDbName:  string | null;
-      activeCompanyName:    string | null;
-      permissions:          Permission[];
-      allowedCompanyIds:    string[];
+      id:                string;
+      isSuperAdmin:      boolean;
+      activeCompanyId:   string | null;
+      activeCompanySlug: string | null;
+      activeCompanyName: string | null;
+      permissions:       Permission[];
+      allowedCompanyIds: string[];
     } & DefaultSession['user'];
   }
   interface User {
-    isSuperAdmin:         boolean;
-    activeCompanyId:      string | null;
-    activeCompanySlug:    string | null;
-    activeCompanyDbName:  string | null;
-    activeCompanyName:    string | null;
-    permissions:          Permission[];
-    allowedCompanyIds:    string[];
+    isSuperAdmin:      boolean;
+    activeCompanyId:   string | null;
+    activeCompanySlug: string | null;
+    activeCompanyName: string | null;
+    permissions:       Permission[];
+    allowedCompanyIds: string[];
   }
 }
 
@@ -40,23 +35,31 @@ async function resolvePermissions(
   companyId: string | null
 ): Promise<Permission[]> {
   if (!companyId) return [];
-  const user = await User.findById(userId).lean();
-  if (!user) return [];
-  if (user.isSuperAdmin) return ALL_PERMISSIONS;
 
-  const access = user.companyAccess.find(
-    (a: { companyId: { toString(): string }; roleId: unknown }) =>
-      a.companyId.toString() === companyId
-  );
+  // Get user's access to this company
+  const access = await prisma.userCompanyAccess.findUnique({
+    where: {
+      userId_companyId: { userId, companyId },
+    },
+    include: { role: true },
+  });
+
   if (!access) return [];
 
-  const role = await Role.findById(access.roleId).lean();
-  return (role?.permissions ?? []) as Permission[];
+  // Super admin has all permissions
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+  if (user?.isSuperAdmin) return ALL_PERMISSIONS;
+
+  // Return role's permissions
+  const permissions = (access.role.permissions as Permission[]) ?? [];
+  return permissions;
 }
 
 const config: NextAuthConfig = {
   session: { strategy: 'jwt' },
-  pages:   { signIn: '/login', error: '/login' },
+  pages: { signIn: '/login', error: '/login' },
   providers: [
     Google({
       clientId:     process.env.GOOGLE_CLIENT_ID ?? '',
@@ -69,42 +72,46 @@ const config: NextAuthConfig = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
-        await connectSystemDB();
 
-        const user = await User.findOne({ email: credentials.email, isActive: true })
-          .select('+password')
-          .lean();
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email as string },
+          include: {
+            companyAccess: {
+              include: { company: true },
+            },
+          },
+        });
+
         if (!user || !user.password) return null;
 
         const valid = await bcrypt.compare(credentials.password as string, user.password);
         if (!valid) return null;
 
-        const userId    = (user._id as { toString(): string }).toString();
-        const companyId = user.activeCompanyId?.toString() ?? null;
+        const userId    = user.id;
+        const companyId = user.activeCompanyId;
 
         // Resolve active company details
-        let activeCompanySlug:   string | null = null;
-        let activeCompanyDbName: string | null = null;
-        let activeCompanyName:   string | null = null;
+        let activeCompanySlug: string | null = null;
+        let activeCompanyName: string | null = null;
         if (companyId) {
-          const co = await Company.findById(companyId).lean();
-          activeCompanySlug   = co?.slug   ?? null;
-          activeCompanyDbName = co?.dbName ?? null;
-          activeCompanyName   = co?.name   ?? null;
+          const co = await prisma.company.findUnique({
+            where: { id: companyId },
+          });
+          activeCompanySlug = co?.slug ?? null;
+          activeCompanyName = co?.name ?? null;
         }
 
         const permissions    = await resolvePermissions(userId, companyId);
-        const allowedCompanyIds = user.companyAccess.map((a: { companyId: { toString(): string } }) => a.companyId.toString());
+        const allowedCompanyIds = user.companyAccess.map((a) => a.companyId);
 
         return {
-          id:                  userId,
-          name:                user.name,
-          email:               user.email,
-          image:               user.image ?? null,
-          isSuperAdmin:        user.isSuperAdmin,
-          activeCompanyId:     companyId,
+          id:                userId,
+          name:              user.name,
+          email:             user.email,
+          image:             user.image ?? null,
+          isSuperAdmin:      user.isSuperAdmin,
+          activeCompanyId:   companyId,
           activeCompanySlug,
-          activeCompanyDbName,
           activeCompanyName,
           permissions,
           allowedCompanyIds,
@@ -116,34 +123,40 @@ const config: NextAuthConfig = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === 'google') {
-        await connectSystemDB();
-        const dbUser = await User.findOne({ email: user.email, isActive: true }).lean();
-        if (!dbUser) return '/login?error=NotRegistered';
+        const dbUser = await prisma.user.findUnique({
+          where: { email: user.email ?? '' },
+          include: {
+            companyAccess: {
+              include: { company: true },
+            },
+          },
+        });
 
-        const userId    = (dbUser._id as { toString(): string }).toString();
-        const companyId = dbUser.activeCompanyId?.toString() ?? null;
+        if (!dbUser || !dbUser.isActive) return '/login?error=NotRegistered';
 
-        let activeCompanySlug:   string | null = null;
-        let activeCompanyDbName: string | null = null;
-        let activeCompanyName:   string | null = null;
+        const userId    = dbUser.id;
+        const companyId = dbUser.activeCompanyId;
+
+        let activeCompanySlug: string | null = null;
+        let activeCompanyName: string | null = null;
         if (companyId) {
-          const co = await Company.findById(companyId).lean();
-          activeCompanySlug   = co?.slug   ?? null;
-          activeCompanyDbName = co?.dbName ?? null;
-          activeCompanyName   = co?.name   ?? null;
+          const co = await prisma.company.findUnique({
+            where: { id: companyId },
+          });
+          activeCompanySlug = co?.slug ?? null;
+          activeCompanyName = co?.name ?? null;
         }
 
         const permissions       = await resolvePermissions(userId, companyId);
-        const allowedCompanyIds = dbUser.companyAccess.map((a: { companyId: { toString(): string } }) => a.companyId.toString());
+        const allowedCompanyIds = dbUser.companyAccess.map((a) => a.companyId);
 
-        user.id                  = userId;
-        user.isSuperAdmin        = dbUser.isSuperAdmin;
-        user.activeCompanyId     = companyId;
-        user.activeCompanySlug   = activeCompanySlug;
-        user.activeCompanyDbName = activeCompanyDbName;
-        user.activeCompanyName   = activeCompanyName;
-        user.permissions         = permissions;
-        user.allowedCompanyIds   = allowedCompanyIds;
+        user.id                = userId;
+        user.isSuperAdmin      = dbUser.isSuperAdmin;
+        user.activeCompanyId   = companyId;
+        user.activeCompanySlug = activeCompanySlug;
+        user.activeCompanyName = activeCompanyName;
+        user.permissions       = permissions;
+        user.allowedCompanyIds = allowedCompanyIds;
       }
       return true;
     },
@@ -151,36 +164,33 @@ const config: NextAuthConfig = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async jwt({ token, user, trigger, session }: any) {
       if (user) {
-        token.sub                  = user.id;
-        token.isSuperAdmin         = user.isSuperAdmin;
-        token.activeCompanyId      = user.activeCompanyId;
-        token.activeCompanySlug    = user.activeCompanySlug;
-        token.activeCompanyDbName  = user.activeCompanyDbName;
-        token.activeCompanyName    = user.activeCompanyName;
-        token.permissions          = user.permissions;
-        token.allowedCompanyIds    = user.allowedCompanyIds;
+        token.sub                 = user.id;
+        token.isSuperAdmin        = user.isSuperAdmin;
+        token.activeCompanyId     = user.activeCompanyId;
+        token.activeCompanySlug   = user.activeCompanySlug;
+        token.activeCompanyName   = user.activeCompanyName;
+        token.permissions         = user.permissions;
+        token.allowedCompanyIds   = user.allowedCompanyIds;
       }
       // Company switch — client calls update({ activeCompanyId, ... })
       if (trigger === 'update' && session?.activeCompanyId !== undefined) {
-        token.activeCompanyId     = session.activeCompanyId;
-        token.activeCompanySlug   = session.activeCompanySlug;
-        token.activeCompanyDbName = session.activeCompanyDbName;
-        token.activeCompanyName   = session.activeCompanyName;
-        token.permissions         = session.permissions;
+        token.activeCompanyId   = session.activeCompanyId;
+        token.activeCompanySlug = session.activeCompanySlug;
+        token.activeCompanyName = session.activeCompanyName;
+        token.permissions       = session.permissions;
       }
       return token;
     },
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async session({ session, token }: any) {
-      session.user.id                  = token.sub;
-      session.user.isSuperAdmin        = token.isSuperAdmin        ?? false;
-      session.user.activeCompanyId     = token.activeCompanyId     ?? null;
-      session.user.activeCompanySlug   = token.activeCompanySlug   ?? null;
-      session.user.activeCompanyDbName = token.activeCompanyDbName ?? null;
-      session.user.activeCompanyName   = token.activeCompanyName   ?? null;
-      session.user.permissions         = token.permissions         ?? [];
-      session.user.allowedCompanyIds   = token.allowedCompanyIds   ?? [];
+      session.user.id                = token.sub;
+      session.user.isSuperAdmin      = token.isSuperAdmin ?? false;
+      session.user.activeCompanyId   = token.activeCompanyId ?? null;
+      session.user.activeCompanySlug = token.activeCompanySlug ?? null;
+      session.user.activeCompanyName = token.activeCompanyName ?? null;
+      session.user.permissions       = token.permissions ?? [];
+      session.user.allowedCompanyIds = token.allowedCompanyIds ?? [];
       return session;
     },
   },

@@ -8,18 +8,47 @@ import Modal                    from '@/components/ui/Modal';
 import toast                    from 'react-hot-toast';
 import type { Column }          from '@/components/ui/DataTable';
 
-interface Company { _id: string; name: string; slug: string }
-interface Role    { _id: string; name: string }
-interface CompanyAccess { companyId: Company; roleId: Role }
-interface User {
-  _id:           string;
-  name:          string;
-  email:         string;
-  isSuperAdmin:  boolean;
-  isActive:      boolean;
-  companyAccess: CompanyAccess[];
-  createdAt:     string;
-}
+type Company = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  isActive: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+};
+
+type Role = {
+  id: string;
+  name: string;
+  slug: string;
+  permissions: string[];
+  isSystem: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+};
+
+type UserCompanyAccessItem = {
+  userId: string;
+  companyId: string;
+  roleId: string;
+  role?: { id: string; name: string; permissions: string[] };
+  company?: { id: string; name: string; slug: string };
+};
+
+type User = {
+  id: string;
+  name: string;
+  email: string;
+  password?: string;
+  image?: string;
+  isSuperAdmin: boolean;
+  isActive: boolean;
+  activeCompanyId?: string;
+  companyAccess?: UserCompanyAccessItem[];
+  createdAt: string | Date;
+  updatedAt?: string | Date;
+};
 
 export default function AdminUsersPage() {
   const [users,       setUsers]       = useState<User[]>([]);
@@ -63,16 +92,16 @@ export default function AdminUsersPage() {
     setName(u.name); setEmail(u.email); setPassword('');
     setIsSuperAdmin(u.isSuperAdmin);
     setAccessRows(
-      u.companyAccess.map((a) => ({
-        companyId: a.companyId._id,
-        roleId:    a.roleId._id,
+      (u.companyAccess ?? []).map((a) => ({
+        companyId: a.companyId,
+        roleId:    a.roleId,
       }))
     );
     setModal(true);
   };
 
   const addAccessRow = () =>
-    setAccessRows((prev) => [...prev, { companyId: companies[0]?._id ?? '', roleId: roles[0]?._id ?? '' }]);
+    setAccessRows((prev) => [...prev, { companyId: companies[0]?.id ?? '', roleId: roles[0]?.id ?? '' }]);
 
   const removeAccessRow = (i: number) =>
     setAccessRows((prev) => prev.filter((_, idx) => idx !== i));
@@ -92,7 +121,7 @@ export default function AdminUsersPage() {
     if (!editing) body.email = email;
     if (password) body.password = password;
 
-    const url    = editing ? `/api/users/${editing._id}` : '/api/users';
+    const url    = editing ? `/api/users/${editing.id}` : '/api/users';
     const method = editing ? 'PUT' : 'POST';
 
     const res = await fetch(url, {
@@ -112,7 +141,7 @@ export default function AdminUsersPage() {
   };
 
   const handleToggleActive = async (u: User) => {
-    const res = await fetch(`/api/users/${u._id}`, {
+    const res = await fetch(`/api/users/${u.id}`, {
       method:  'PUT',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ isActive: !u.isActive }),
@@ -136,12 +165,12 @@ export default function AdminUsersPage() {
       key: 'companyAccess', header: 'Company Access',
       render: (u) => u.isSuperAdmin
         ? <span className="text-slate-400 text-xs">All companies</span>
-        : u.companyAccess.length
+        : (u.companyAccess ?? []).length
           ? (
             <div className="flex gap-1 flex-wrap">
-              {u.companyAccess.map((a, i) => (
+              {(u.companyAccess ?? []).map((a, i) => (
                 <span key={i} className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">
-                  {a.companyId.name} / {a.roleId.name}
+                  {a.company?.name} / {a.role?.name}
                 </span>
               ))}
             </div>
@@ -263,7 +292,7 @@ export default function AdminUsersPage() {
                       className="flex-1 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                     >
                       <option value="">Select company…</option>
-                      {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                      {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                     <select
                       value={row.roleId}
@@ -271,7 +300,7 @@ export default function AdminUsersPage() {
                       className="flex-1 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                     >
                       <option value="">Select role…</option>
-                      {roles.map((r) => <option key={r._id} value={r._id}>{r.name}</option>)}
+                      {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
                     <button
                       type="button"

@@ -1,23 +1,28 @@
 import { auth }            from '@/auth';
-import { connectSystemDB } from '@/lib/db/system';
-import { User }            from '@/lib/db/models/system/User';
+import { prisma }          from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }               from 'zod';
 import bcrypt              from 'bcryptjs';
-import { Types }           from 'mongoose';
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.isSuperAdmin && !session?.user?.permissions.includes('user.view')) {
     return errorResponse('Forbidden', 403);
   }
-  await connectSystemDB();
-  const users = await User.find({})
-    .populate('companyAccess.companyId', 'name slug')
-    .populate('companyAccess.roleId',    'name')
-    .populate('activeCompanyId',         'name slug')
-    .sort({ createdAt: -1 })
-    .lean();
+
+  const users = await prisma.user.findMany({
+    include: {
+      companyAccess: {
+        include: {
+          company: { select: { id: true, name: true, slug: true } },
+          role: { select: { id: true, name: true } },
+        },
+      },
+      activeCompany: { select: { id: true, name: true, slug: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
   return successResponse(users);
 }
 
@@ -42,28 +47,52 @@ export async function POST(req: Request) {
   const parsed = CreateUserSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  await connectSystemDB();
-  if (await User.findOne({ email: parsed.data.email })) {
+  const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  if (existing) {
     return errorResponse('Email already registered', 409);
   }
 
-  const userData: Record<string, unknown> = {
-    name:         parsed.data.name,
-    email:        parsed.data.email,
-    isSuperAdmin: parsed.data.isSuperAdmin,
-    companyAccess: parsed.data.companyAccess.map((a) => ({
-      companyId: new Types.ObjectId(a.companyId),
-      roleId:    new Types.ObjectId(a.roleId),
-    })),
-  };
-  if (parsed.data.password) {
-    userData.password = await bcrypt.hash(parsed.data.password, 12);
+  let user;
+  try {
+    user = await prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          name:         parsed.data.name,
+          email:        parsed.data.email,
+          isSuperAdmin: parsed.data.isSuperAdmin,
+          password: parsed.data.password ? await bcrypt.hash(parsed.data.password, 12) : null,
+        },
+      });
+
+      for (const access of parsed.data.companyAccess) {
+        await tx.userCompanyAccess.create({
+          data: {
+            userId:    newUser.id,
+            companyId: access.companyId,
+            roleId:    access.roleId,
+          },
+        });
+      }
+
+      return tx.user.findUnique({
+        where: { id: newUser.id },
+        include: {
+          companyAccess: {
+            include: {
+              company: { select: { id: true, name: true, slug: true } },
+              role: { select: { id: true, name: true } },
+            },
+          },
+          activeCompany: { select: { id: true, name: true, slug: true } },
+        },
+      });
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Foreign key constraint')) {
+      return errorResponse('Invalid company or role ID', 422);
+    }
+    throw err;
   }
 
-  const user = await User.create(userData);
-  const safe = await User.findById(user._id)
-    .populate('companyAccess.companyId', 'name slug')
-    .populate('companyAccess.roleId',    'name')
-    .lean();
-  return successResponse(safe, 201);
+  return successResponse(user, 201);
 }

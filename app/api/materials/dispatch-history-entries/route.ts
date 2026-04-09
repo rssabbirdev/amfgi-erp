@@ -1,7 +1,6 @@
 import { auth }              from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { Types }             from 'mongoose';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -10,9 +9,9 @@ export async function GET(req: Request) {
     return errorResponse('Forbidden', 403);
   }
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
+  const companyId = session.user.activeCompanyId;
   const { searchParams } = new URL(req.url);
   const filterType = searchParams.get('filterType') ?? 'all';
   const dateStr = searchParams.get('date');
@@ -30,107 +29,103 @@ export async function GET(req: Request) {
     endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
   }
 
-  const conn = await getCompanyDB(dbName);
-  const { Transaction, Material, Job } = getModels(conn);
+  // Fetch all dispatch transactions within the date range
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      companyId,
+      type: 'STOCK_OUT',
+      date: { gte: startDate, lte: endDate },
+    },
+    include: {
+      material: { select: { id: true, name: true, unit: true, unitCost: true } },
+      job: { select: { id: true, jobNumber: true, description: true } },
+    },
+    orderBy: { date: 'asc' },
+  });
 
-  // Group transactions by jobId and date (calendar day)
-  const entries = await Transaction.aggregate([
-    {
-      $match: {
-        type: 'STOCK_OUT',
-        date: { $gte: startDate, $lte: endDate },
-      },
-    },
-    {
-      $addFields: {
-        dateOnly: {
-          $dateToString: { format: '%Y-%m-%d', date: '$date' },
-        },
-      },
-    },
-    {
-      $group: {
-        _id: {
-          jobId: '$jobId',
-          dateOnly: '$dateOnly',
-        },
-        transactions: { $push: '$$ROOT' },
-        totalQuantity: { $sum: '$quantity' },
-        firstDate: { $min: '$date' },
-        entryCount: { $sum: 1 },
-      },
-    },
-    {
-      $lookup: {
-        from: 'jobs',
-        localField: '_id.jobId',
-        foreignField: '_id',
-        as: 'jobDetails',
-      },
-    },
-    {
-      $unwind: {
-        path: '$jobDetails',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $sort: { firstDate: -1 },
-    },
-  ]);
+  // Group transactions by jobId and calendar day
+  const groupedMap = new Map<string, typeof transactions>();
+  for (const txn of transactions) {
+    const dateOnly = txn.date.toISOString().split('T')[0];
+    const key = `${txn.jobId}-${dateOnly}`;
+    if (!groupedMap.has(key)) {
+      groupedMap.set(key, []);
+    }
+    groupedMap.get(key)!.push(txn);
+  }
 
   // Enrich each entry with material details and calculate net quantities
   const enrichedEntries = await Promise.all(
-    entries.map(async (entry) => {
-      const materialsMap = new Map();
+    Array.from(groupedMap.entries()).map(async ([groupKey, groupedTxns]) => {
+      const materialsMap = new Map<string, {
+        materialId: string;
+        materialName: string;
+        materialUnit: string;
+        quantity: number;
+        unitCost: number;
+        transactionIds: string[];
+      }>();
       let totalNetQuantity = 0;
+      let totalValuation = 0;
 
-      for (const txn of entry.transactions) {
-        const material = await Material.findById(txn.materialId).lean();
-        if (material) {
-          // Find any linked RETURN transactions
-          const returnTxns = await Transaction.find({
+      for (const txn of groupedTxns) {
+        // Find any linked RETURN transactions
+        const returnTxns = await prisma.transaction.findMany({
+          where: {
+            companyId,
             type: 'RETURN',
-            parentTransactionId: txn._id,
-          }).lean();
+            parentTransactionId: txn.id ?? undefined,
+          },
+        });
 
-          const returnQuantity = returnTxns.reduce((sum, rt: any) => sum + (rt.quantity ?? 0), 0);
-          const netQuantity = txn.quantity - returnQuantity;
-          totalNetQuantity += netQuantity;
+        const returnQuantity = returnTxns.reduce((sum, rt) => sum + rt.quantity, 0);
+        const netQuantity = txn.quantity - returnQuantity;
+        totalNetQuantity += netQuantity;
 
-          const key = txn.materialId.toString();
-          if (materialsMap.has(key)) {
-            const existing = materialsMap.get(key);
-            existing.quantity += netQuantity;
-            existing.transactionIds.push(txn._id);
-          } else {
-            materialsMap.set(key, {
-              materialId: txn.materialId,
-              materialName: material.name,
-              materialUnit: material.unit,
-              quantity: netQuantity,
-              transactionIds: [txn._id],
-            });
-          }
+        const key = txn.materialId;
+        const unitCost = txn.material?.unitCost ?? 0;
+        const materialValuation = netQuantity * unitCost;
+        totalValuation += materialValuation;
+
+        if (materialsMap.has(key)) {
+          const existing = materialsMap.get(key)!;
+          existing.quantity += netQuantity;
+          existing.transactionIds.push(txn.id);
+        } else {
+          materialsMap.set(key, {
+            materialId: txn.materialId,
+            materialName: txn.material?.name ?? 'Unknown',
+            materialUnit: txn.material?.unit ?? '—',
+            quantity: netQuantity,
+            unitCost,
+            transactionIds: [txn.id],
+          });
         }
       }
 
-      const entryId = `${entry._id.jobId}-${entry._id.dateOnly}`;
+      const firstTxn = groupedTxns[0];
+      const dateOnly = firstTxn.date.toISOString().split('T')[0];
+      const entryId = `${firstTxn.jobId}-${dateOnly}`;
       return {
+        id: entryId,
         _id: entryId,
         entryId,
-        jobId: entry._id.jobId,
-        jobNumber: entry.jobDetails?.jobNumber ?? 'N/A',
-        jobDescription: entry.jobDetails?.description ?? '',
-        dispatchDate: entry.firstDate,
+        jobId: firstTxn.jobId,
+        jobNumber: firstTxn.job?.jobNumber ?? 'N/A',
+        jobDescription: firstTxn.job?.description ?? '',
+        dispatchDate: firstTxn.date,
         totalQuantity: totalNetQuantity,
+        totalValuation,
         materialsCount: materialsMap.size,
         materials: Array.from(materialsMap.values()),
-        transactionIds: entry.transactions.map((t: any) => t._id),
-        transactionCount: entry.entryCount,
+        transactionIds: groupedTxns.map(t => t.id),
+        transactionCount: groupedTxns.length,
       };
     })
   );
+
+  // Sort by dispatchDate descending
+  enrichedEntries.sort((a, b) => b.dispatchDate.getTime() - a.dispatchDate.getTime());
 
   return successResponse({
     entries: enrichedEntries,

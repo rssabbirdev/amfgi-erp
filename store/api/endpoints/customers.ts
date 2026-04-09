@@ -1,14 +1,16 @@
 import { appApi } from '../appApi';
 
 interface Customer {
-  _id: string;
+  id: string;
+  companyId: string;
   name: string;
   contactPerson?: string;
   phone?: string;
   email?: string;
   address?: string;
-  city?: string;
-  createdAt: Date;
+  isActive: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 export const customersApi = appApi.injectEndpoints({
@@ -18,7 +20,7 @@ export const customersApi = appApi.injectEndpoints({
       transformResponse: (r: { data: Customer[] }) => r.data,
       providesTags: (result) =>
         result
-          ? [{ type: 'Customer', id: 'LIST' }, ...result.map((c) => ({ type: 'Customer' as const, id: c._id }))]
+          ? [{ type: 'Customer', id: 'LIST' }, ...result.map((c) => ({ type: 'Customer' as const, id: c.id }))]
           : [{ type: 'Customer', id: 'LIST' }],
     }),
 

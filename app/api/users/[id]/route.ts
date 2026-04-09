@@ -1,10 +1,8 @@
 import { auth }            from '@/auth';
-import { connectSystemDB } from '@/lib/db/system';
-import { User }            from '@/lib/db/models/system/User';
+import { prisma }          from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }               from 'zod';
 import bcrypt              from 'bcryptjs';
-import { Types }           from 'mongoose';
 
 const UpdateSchema = z.object({
   name:         z.string().min(1).max(100).optional(),
@@ -17,6 +15,30 @@ const UpdateSchema = z.object({
   })).optional(),
 });
 
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user?.isSuperAdmin && !session?.user?.permissions.includes('user.view')) {
+    return errorResponse('Forbidden', 403);
+  }
+  const { id } = await params;
+
+  const user = await prisma.user.findUnique({
+    where: { id },
+    include: {
+      companyAccess: {
+        include: {
+          company: { select: { id: true, name: true, slug: true } },
+          role: { select: { id: true, name: true } },
+        },
+      },
+      activeCompany: { select: { id: true, name: true, slug: true } },
+    },
+  });
+
+  if (!user) return errorResponse('User not found', 404);
+  return successResponse(user);
+}
+
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.isSuperAdmin && !session?.user?.permissions.includes('user.edit')) {
@@ -28,35 +50,67 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const parsed = UpdateSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  await connectSystemDB();
-  const update: Record<string, unknown> = {};
+  try {
+    const user = await prisma.$transaction(async (tx) => {
+      const existing = await tx.user.findUnique({ where: { id } });
+      if (!existing) return null;
 
-  if (parsed.data.name         !== undefined) update.name         = parsed.data.name;
-  if (parsed.data.isSuperAdmin !== undefined) update.isSuperAdmin = parsed.data.isSuperAdmin;
-  if (parsed.data.isActive     !== undefined) update.isActive     = parsed.data.isActive;
-  if (parsed.data.password) {
-    update.password = await bcrypt.hash(parsed.data.password, 12);
-  }
-  if (parsed.data.companyAccess) {
-    update.companyAccess = parsed.data.companyAccess.map((a) => ({
-      companyId: new Types.ObjectId(a.companyId),
-      roleId:    new Types.ObjectId(a.roleId),
-    }));
-  }
+      const update: Record<string, unknown> = {};
+      if (parsed.data.name !== undefined) update.name = parsed.data.name;
+      if (parsed.data.isSuperAdmin !== undefined) update.isSuperAdmin = parsed.data.isSuperAdmin;
+      if (parsed.data.isActive !== undefined) update.isActive = parsed.data.isActive;
+      if (parsed.data.password) {
+        update.password = await bcrypt.hash(parsed.data.password, 12);
+      }
 
-  const user = await User.findByIdAndUpdate(id, update, { new: true })
-    .populate('companyAccess.companyId', 'name slug')
-    .populate('companyAccess.roleId',    'name')
-    .lean();
-  if (!user) return errorResponse('User not found', 404);
-  return successResponse(user);
+      await tx.user.update({ where: { id }, data: update });
+
+      if (parsed.data.companyAccess) {
+        await tx.userCompanyAccess.deleteMany({ where: { userId: id } });
+        for (const access of parsed.data.companyAccess) {
+          await tx.userCompanyAccess.create({
+            data: {
+              userId:    id,
+              companyId: access.companyId,
+              roleId:    access.roleId,
+            },
+          });
+        }
+      }
+
+      return tx.user.findUnique({
+        where: { id },
+        include: {
+          companyAccess: {
+            include: {
+              company: { select: { id: true, name: true, slug: true } },
+              role: { select: { id: true, name: true } },
+            },
+          },
+          activeCompany: { select: { id: true, name: true, slug: true } },
+        },
+      });
+    });
+
+    if (!user) return errorResponse('User not found', 404);
+    return successResponse(user);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Foreign key constraint')) {
+      return errorResponse('Invalid company or role ID', 422);
+    }
+    throw err;
+  }
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.isSuperAdmin) return errorResponse('Forbidden', 403);
   const { id } = await params;
-  await connectSystemDB();
-  await User.findByIdAndUpdate(id, { isActive: false });
+
+  await prisma.user.update({
+    where: { id },
+    data: { isActive: false },
+  });
+
   return successResponse({ deleted: true });
 }

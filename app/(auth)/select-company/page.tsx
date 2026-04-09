@@ -9,7 +9,7 @@ import toast                     from 'react-hot-toast';
 import { useGetCompaniesQuery } from '@/store/hooks';
 import { appApi } from '@/store/api/appApi';
 
-interface Company { _id: string; name: string; slug: string; description?: string }
+interface Company { id: string; name: string; slug: string; description?: string }
 
 export default function SelectCompanyPage() {
   const { data: session, update } = useSession();
@@ -20,7 +20,7 @@ export default function SelectCompanyPage() {
 
   // For type safety, cast companies data
   const companies: Company[] = companiesData.map((c: any) => ({
-    _id: c._id,
+    id: c.id,
     name: c.name,
     slug: c.slug,
     description: c.description,
@@ -28,7 +28,7 @@ export default function SelectCompanyPage() {
 
   const allowed = (session?.user?.isSuperAdmin
     ? companies
-    : companies.filter((c) => session?.user?.allowedCompanyIds?.includes(c._id))
+    : companies.filter((c) => session?.user?.allowedCompanyIds?.includes(c.id))
   );
 
   const handleSelect = async (companyId: string) => {
@@ -45,7 +45,6 @@ export default function SelectCompanyPage() {
       await update({
         activeCompanyId:     data.activeCompanyId,
         activeCompanySlug:   data.activeCompanySlug,
-        activeCompanyDbName: data.activeCompanyDbName,
         activeCompanyName:   data.activeCompanyName,
         permissions:         data.permissions,
       });
@@ -86,8 +85,8 @@ export default function SelectCompanyPage() {
         <div className="space-y-3">
           {allowed.map((c) => (
             <button
-              key={c._id}
-              onClick={() => handleSelect(c._id)}
+              key={c.id}
+              onClick={() => handleSelect(c.id)}
               disabled={!!loading}
               className="w-full flex items-center gap-4 p-5 rounded-xl bg-slate-800 border border-slate-700 hover:border-emerald-500/50 hover:bg-slate-800/80 transition-all text-left group disabled:opacity-50"
             >
@@ -100,7 +99,7 @@ export default function SelectCompanyPage() {
                   <p className="text-sm text-slate-400 truncate mt-0.5">{c.description}</p>
                 )}
               </div>
-              {loading === c._id ? (
+              {loading === c.id ? (
                 <svg className="animate-spin h-5 w-5 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />

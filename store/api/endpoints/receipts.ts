@@ -12,7 +12,7 @@ export interface ReceiptMaterial {
 }
 
 export interface ReceiptEntry {
-  _id: string;
+  id: string;
   receiptNumber: string;
   receivedDate: Date;
   supplier?: string;

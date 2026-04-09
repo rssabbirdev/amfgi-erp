@@ -41,6 +41,8 @@ export {
   useUpdateMaterialMutation,
   useDeleteMaterialMutation,
   useGetCrossCompanyMaterialsQuery,
+  useBulkCreateMaterialsMutation,
+  type Material,
 } from './api/endpoints/materials';
 
 export {
@@ -92,16 +94,25 @@ export {
 export {
   useGetUnitsQuery,
   useCreateUnitMutation,
+  useUpdateUnitMutation,
+  useDeleteUnitMutation,
+  type Unit,
 } from './api/endpoints/units';
 
 export {
   useGetCategoriesQuery,
   useCreateCategoryMutation,
+  useUpdateCategoryMutation,
+  useDeleteCategoryMutation,
+  type Category,
 } from './api/endpoints/categories';
 
 export {
   useGetWarehousesQuery,
   useCreateWarehouseMutation,
+  useUpdateWarehouseMutation,
+  useDeleteWarehouseMutation,
+  type Warehouse,
 } from './api/endpoints/warehouses';
 
 export {

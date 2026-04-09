@@ -1,11 +1,13 @@
 import { adminApi } from '../adminApi';
 
 interface CompanyProfile {
-  _id: string;
+  id: string;
   name: string;
   slug: string;
   description?: string;
-  isActive?: boolean;
+  isActive: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 export const profilesApi = adminApi.injectEndpoints({

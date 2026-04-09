@@ -1,7 +1,6 @@
-import { auth }              from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { auth } from '@/auth';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { Types }             from 'mongoose';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -10,20 +9,31 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     return errorResponse('Forbidden', 403);
   }
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { id } = await params;
-  const conn = await getCompanyDB(dbName);
-  const { Transaction } = getModels(conn);
 
   // Check for linked transactions
-  const transactions = await Transaction.find({ jobId: new Types.ObjectId(id) })
-    .select('type quantity materialId')
-    .lean()
-    .limit(10);
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      jobId: id,
+      companyId: session.user.activeCompanyId,
+    },
+    select: {
+      id: true,
+      type: true,
+      quantity: true,
+      materialId: true,
+    },
+    take: 10,
+  });
 
-  const txnCount = await Transaction.countDocuments({ jobId: new Types.ObjectId(id) });
+  const txnCount = await prisma.transaction.count({
+    where: {
+      jobId: id,
+      companyId: session.user.activeCompanyId,
+    },
+  });
 
   return successResponse({
     canDelete: txnCount === 0,

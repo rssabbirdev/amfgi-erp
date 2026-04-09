@@ -13,15 +13,15 @@ import {
   useUpdateCompanyMutation,
 } from '@/store/hooks';
 
-interface Company {
-  _id: string;
+type Company = {
+  id: string;
   name: string;
   slug: string;
-  dbName: string;
   description?: string;
   isActive: boolean;
-  createdAt: Date;
-}
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+};
 
 export default function AdminCompaniesPage() {
   const { data: companies = [], isFetching } = useGetCompaniesQuery();
@@ -53,7 +53,7 @@ export default function AdminCompaniesPage() {
 
     try {
       if (editing) {
-        await updateCompany({ id: editing._id, data: body }).unwrap();
+        await updateCompany({ id: editing.id, data: body }).unwrap();
         toast.success('Company updated');
       } else {
         await createCompany(body).unwrap();
@@ -68,7 +68,7 @@ export default function AdminCompaniesPage() {
   const handleToggleActive = async (c: Company) => {
     try {
       await updateCompany({
-        id: c._id,
+        id: c.id,
         data: { isActive: !c.isActive },
       }).unwrap();
       toast.success(c.isActive ? 'Company deactivated' : 'Company activated');
@@ -83,11 +83,6 @@ export default function AdminCompaniesPage() {
       key: 'slug',
       header: 'Slug',
       render: (c) => <code className="text-xs text-emerald-400 bg-slate-900 px-2 py-0.5 rounded">{c.slug}</code>,
-    },
-    {
-      key: 'dbName',
-      header: 'Database',
-      render: (c) => <code className="text-xs text-blue-400 bg-slate-900 px-2 py-0.5 rounded">{c.dbName}</code>,
     },
     {
       key: 'description',
@@ -152,14 +147,12 @@ export default function AdminCompaniesPage() {
                 Slug: <code className="text-emerald-400">{editing.slug}</code>
               </p>
               <p>
-                Database: <code className="text-blue-400">{editing.dbName}</code>
               </p>
             </div>
           )}
           {!editing && (
             <div className="p-3 bg-amber-900/30 border border-amber-700/50 rounded-lg text-xs text-amber-300">
-              A unique database will be automatically created for this company. The slug and database name are derived
-              from the company name and cannot be changed later.
+              Company slug is derived from the company name and cannot be changed later.
             </div>
           )}
           <div>

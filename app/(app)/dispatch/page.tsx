@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
@@ -12,16 +12,19 @@ import { useSession } from 'next-auth/react';
 import { formatDateTime, formatDate } from '@/lib/utils/formatters';
 import type { Column } from '@/components/ui/DataTable';
 import { useGetDispatchEntriesQuery, useDeleteTransactionMutation } from '@/store/hooks';
+import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
 
 interface Material {
   materialId: string;
   materialName: string;
   materialUnit: string;
   quantity: number;
+  unitCost: number;
   transactionIds: string[];
 }
 
 interface Entry {
+  id: string;
   _id?: string;
   entryId: string;
   jobId: string;
@@ -29,6 +32,7 @@ interface Entry {
   jobDescription: string;
   dispatchDate: string;
   totalQuantity: number;
+  totalValuation: number;
   materialsCount: number;
   materials: Material[];
   transactionIds: string[];
@@ -39,6 +43,7 @@ export default function DispatchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const { openMenu: openContextMenu } = useGlobalContextMenu();
   const isSA = session?.user?.isSuperAdmin ?? false;
   const perms = (session?.user?.permissions ?? []) as string[];
   const canView = isSA || perms.includes('transaction.stock_out');
@@ -145,6 +150,24 @@ export default function DispatchPage() {
     }
   };
 
+  const handleRowContextMenu = useCallback((entry: Entry, e: React.MouseEvent) => {
+    e.preventDefault();
+    const dateStr = typeof entry.dispatchDate === 'string'
+      ? entry.dispatchDate.split('T')[0]
+      : new Date(entry.dispatchDate).toISOString().split('T')[0];
+    const options: any[] = [
+      { label: 'View', action: () => setViewModal({ open: true, entry }) },
+    ];
+    if (canEdit) {
+      options.push({ label: 'Edit', action: () => router.push(`/dispatch/entry?jobId=${entry.jobId}&date=${dateStr}`) });
+    }
+    if (canDelete) {
+      options.push({ divider: true });
+      options.push({ label: 'Delete', action: () => handleDelete(entry), danger: true });
+    }
+    openContextMenu(e.clientX, e.clientY, options);
+  }, [canEdit, canDelete, openContextMenu, router]);
+
   if (!canView) {
     return (
       <div className="text-center py-12">
@@ -178,54 +201,15 @@ export default function DispatchPage() {
       render: (e: Entry) => <Badge label={`${e.materialsCount}`} variant="blue" />,
     },
     {
-      key: 'totalQuantity',
-      header: 'Total Qty',
+      key: 'totalValuation',
+      header: 'Total Value',
       sortable: true,
-      render: (e: Entry) => <span className="font-semibold text-emerald-400">{e.totalQuantity.toFixed(3)}</span>,
-    },
-    {
-      key: 'transactionCount',
-      header: 'Transactions',
-      render: (e: Entry) => <span className="text-sm text-slate-400">{e.transactionCount}</span>,
-    },
-    {
-      key: 'actions',
-      header: '',
-      render: (e: Entry) => (
-        <div className="flex gap-2 justify-end">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setViewModal({ open: true, entry: e })}
-          >
-            View
-          </Button>
-          {canEdit && (
-            <Link href={`/dispatch/entry?jobId=${e.jobId}&date=${e.dispatchDate.split('T')[0]}`}>
-              <Button
-                size="sm"
-                variant="secondary"
-              >
-                Edit
-              </Button>
-            </Link>
-          )}
-          {canDelete && (
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={() => handleDelete(e)}
-            >
-              Delete
-            </Button>
-          )}
-        </div>
-      ),
+      render: (e: Entry) => <span className="font-semibold text-emerald-400">{e.totalValuation.toFixed(2)}</span>,
     },
   ];
 
   const totalEntries = entries.length;
-  const totalQuantityDispatched = entries.reduce((sum, e) => sum + e.totalQuantity, 0);
+  const totalDispatchValuation = entries.reduce((sum, e) => sum + e.totalValuation, 0);
   const totalMaterials = new Set(entries.flatMap(e => e.materials.map(m => m.materialId))).size;
 
   return (
@@ -287,8 +271,8 @@ export default function DispatchPage() {
           <p className="text-2xl font-bold text-white">{totalEntries}</p>
         </div>
         <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-          <p className="text-xs text-slate-400 mb-1">Total Qty Dispatched</p>
-          <p className="text-2xl font-bold text-emerald-400">{totalQuantityDispatched.toFixed(3)}</p>
+          <p className="text-xs text-slate-400 mb-1">Dispatch Valuation</p>
+          <p className="text-2xl font-bold text-emerald-400">{totalDispatchValuation.toFixed(2)}</p>
         </div>
         <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
           <p className="text-xs text-slate-400 mb-1">Unique Materials</p>
@@ -303,6 +287,7 @@ export default function DispatchPage() {
         loading={loading}
         emptyText="No dispatch entries found for this period."
         searchKeys={['jobNumber', 'jobDescription'] as any}
+        onRowContextMenu={handleRowContextMenu}
       />
 
       {/* View Modal */}
@@ -331,21 +316,23 @@ export default function DispatchPage() {
               <div>
                 <p className="text-xs text-slate-400 mb-2">Materials Dispatched</p>
                 <div className="space-y-2">
-                  {viewModal.entry.materials.map((material, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-slate-900 rounded-lg p-3 flex items-center justify-between border border-slate-700"
-                    >
-                      <div className="flex-1">
-                        <p className="font-medium text-white">{material.materialName}</p>
-                        <p className="text-xs text-slate-400">{material.materialUnit}</p>
+                  {viewModal.entry.materials.map((material, idx) => {
+                    const materialValuation = material.quantity * material.unitCost;
+                    return (
+                      <div
+                        key={idx}
+                        className="bg-slate-900 rounded-lg p-3 flex items-center justify-between border border-slate-700"
+                      >
+                        <div className="flex-1">
+                          <p className="font-medium text-white">{material.materialName}</p>
+                          <p className="text-xs text-slate-400">{material.quantity.toFixed(3)} {material.materialUnit} @ {material.unitCost.toFixed(2)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-emerald-400">{materialValuation.toFixed(2)}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold text-emerald-400">{material.quantity.toFixed(3)}</p>
-                        <p className="text-xs text-slate-400">{material.transactionIds.length} txn(s)</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -356,8 +343,8 @@ export default function DispatchPage() {
                     <p className="text-lg font-bold text-white">{viewModal.entry.materialsCount}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Total Quantity</p>
-                    <p className="text-lg font-bold text-emerald-400">{viewModal.entry.totalQuantity.toFixed(3)}</p>
+                    <p className="text-xs text-slate-400">Total Valuation</p>
+                    <p className="text-lg font-bold text-emerald-400">{viewModal.entry.totalValuation.toFixed(2)}</p>
                   </div>
                 </div>
               </div>

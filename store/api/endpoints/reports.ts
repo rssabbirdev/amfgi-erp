@@ -1,7 +1,7 @@
 import { appApi } from '../appApi';
 
 interface Material {
-  _id: string;
+  id: string;
   name: string;
   unit: string;
   quantity: number;

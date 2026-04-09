@@ -1,7 +1,6 @@
-import { auth }              from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { auth } from '@/auth';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { Types }             from 'mongoose';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -10,67 +9,106 @@ export async function GET(req: Request) {
     return errorResponse('Forbidden', 403);
   }
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { searchParams } = new URL(req.url);
-  const from   = searchParams.get('from');
-  const to     = searchParams.get('to');
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
   const jobIds = searchParams.getAll('jobId');
 
-  const conn = await getCompanyDB(dbName);
-  const { Transaction } = getModels(conn);
+  try {
+    const companyId = session.user.activeCompanyId;
 
-  const match: Record<string, unknown> = {
-    type: { $in: ['STOCK_OUT', 'RETURN'] },
-  };
-  if (from || to) {
+    // Build date filter
     const dateFilter: Record<string, Date> = {};
-    if (from) dateFilter.$gte = new Date(from);
-    if (to)   dateFilter.$lte = new Date(new Date(to).setHours(23, 59, 59, 999));
-    match.date = dateFilter;
-  }
-  if (jobIds.length > 0) {
-    match.jobId = { $in: jobIds.map((id) => new Types.ObjectId(id)) };
-  }
+    if (from) dateFilter.gte = new Date(from);
+    if (to) dateFilter.lte = new Date(new Date(to).setHours(23, 59, 59, 999));
 
-  // Pivot: rows = jobs, columns = materials, values = net consumption
-  const rows = await Transaction.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: { jobId: '$jobId', materialId: '$materialId' },
-        dispatched: { $sum: { $cond: [{ $eq: ['$type', 'STOCK_OUT'] }, '$quantity', 0] } },
-        returned:   { $sum: { $cond: [{ $eq: ['$type', 'RETURN']   }, '$quantity', 0] } },
+    // Get STOCK_OUT and RETURN transactions
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        companyId,
+        type: {
+          in: ['STOCK_OUT', 'RETURN'],
+        },
+        date: Object.keys(dateFilter).length > 0 ? dateFilter : undefined,
+        jobId: jobIds.length > 0 ? { in: jobIds } : undefined,
       },
-    },
-    {
-      $addFields: {
-        netConsumed: { $subtract: ['$dispatched', '$returned'] },
+      select: {
+        type: true,
+        quantity: true,
+        jobId: true,
+        materialId: true,
+        job: {
+          select: {
+            jobNumber: true,
+          },
+        },
+        material: {
+          select: {
+            name: true,
+            unit: true,
+          },
+        },
       },
-    },
-    {
-      $lookup: { from: 'jobs',      localField: '_id.jobId',      foreignField: '_id', as: 'job'      },
-    },
-    {
-      $lookup: { from: 'materials', localField: '_id.materialId', foreignField: '_id', as: 'material' },
-    },
-    { $unwind: '$job'      },
-    { $unwind: '$material' },
-    {
-      $project: {
-        jobId:        '$_id.jobId',
-        jobNumber:    '$job.jobNumber',
-        materialId:   '$_id.materialId',
-        materialName: '$material.name',
-        unit:         '$material.unit',
-        dispatched:   1,
-        returned:     1,
-        netConsumed:  1,
-      },
-    },
-    { $sort: { jobNumber: 1, materialName: 1 } },
-  ]);
+    });
 
-  return successResponse(rows);
+    // Group by jobId + materialId and calculate net consumption
+    const grouped: Record<
+      string,
+      {
+        jobId: string;
+        jobNumber: string;
+        materialId: string;
+        materialName: string;
+        unit: string;
+        dispatched: number;
+        returned: number;
+        netConsumed: number;
+      }
+    > = {};
+
+    for (const txn of transactions) {
+      if (!txn.jobId) continue; // Skip if no job
+
+      const key = `${txn.jobId}|${txn.materialId}`;
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          jobId: txn.jobId,
+          jobNumber: txn.job?.jobNumber || 'Unknown',
+          materialId: txn.materialId,
+          materialName: txn.material?.name || 'Unknown',
+          unit: txn.material?.unit || '',
+          dispatched: 0,
+          returned: 0,
+          netConsumed: 0,
+        };
+      }
+
+      if (txn.type === 'STOCK_OUT') {
+        grouped[key].dispatched += txn.quantity;
+      } else if (txn.type === 'RETURN') {
+        grouped[key].returned += txn.quantity;
+      }
+    }
+
+    // Calculate net consumed and sort
+    const rows = Object.values(grouped)
+      .map((row) => ({
+        ...row,
+        netConsumed: row.dispatched - row.returned,
+      }))
+      .sort((a, b) => {
+        if (a.jobNumber !== b.jobNumber) {
+          return a.jobNumber.localeCompare(b.jobNumber);
+        }
+        return a.materialName.localeCompare(b.materialName);
+      });
+
+    return successResponse(rows);
+  } catch (err) {
+    console.error('Job consumption report error:', err);
+    return errorResponse('Failed to fetch job consumption data', 500);
+  }
 }

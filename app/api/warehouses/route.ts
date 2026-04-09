@@ -1,5 +1,5 @@
 import { auth } from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
@@ -12,14 +12,16 @@ export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   try {
-    const conn = await getCompanyDB(dbName);
-    const { Warehouse } = getModels(conn);
-
-    const warehouses = await Warehouse.find({ isActive: true }).sort({ name: 1 }).lean();
+    const warehouses = await prisma.warehouse.findMany({
+      where: {
+        companyId: session.user.activeCompanyId,
+        isActive: true,
+      },
+      orderBy: { name: 'asc' },
+    });
     return successResponse(warehouses, 200);
   } catch (err: unknown) {
     return errorResponse(err instanceof Error ? err.message : 'Fetch failed', 400);
@@ -30,28 +32,27 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const body = await req.json();
   const parsed = WarehouseSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
   try {
-    const conn = await getCompanyDB(dbName);
-    const { Warehouse } = getModels(conn);
-
-    const warehouse = await Warehouse.create({
-      name: parsed.data.name.trim(),
-      location: parsed.data.location?.trim(),
-      isActive: true,
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        name: parsed.data.name.trim(),
+        location: parsed.data.location?.trim() || null,
+        companyId: session.user.activeCompanyId,
+        isActive: true,
+      },
     });
 
     return successResponse(warehouse, 201);
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : 'Creation failed';
-    if (errMsg.includes('duplicate')) {
-      return errorResponse('Warehouse already exists', 409);
+    if (errMsg.includes('Unique constraint failed')) {
+      return errorResponse('Warehouse already exists for this company', 409);
     }
     return errorResponse(errMsg, 400);
   }

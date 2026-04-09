@@ -9,18 +9,20 @@ interface BatchConsumption {
 }
 
 interface Transaction {
-  _id: string;
+  id: string;
+  companyId: string;
   type: 'STOCK_IN' | 'STOCK_OUT' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'REVERSAL';
   materialId: string;
   quantity: number;
   jobId?: string;
   batchesUsed?: BatchConsumption[];
-  totalCost?: number;
-  averageCost?: number;
-  date: Date;
+  totalCost: number;
+  averageCost: number;
   performedBy: string;
+  date: string | Date;
   notes?: string;
-  createdAt: Date;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 interface AddTransactionPayload {
@@ -33,6 +35,7 @@ interface AddTransactionPayload {
 }
 
 interface TransferPayload {
+  sourceCompanyId?: string;
   materialId: string;
   quantity: number;
   destinationCompanyId: string;

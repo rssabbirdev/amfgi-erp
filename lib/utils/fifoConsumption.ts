@@ -1,7 +1,6 @@
-import { Types } from 'mongoose';
-
 interface StockBatch {
-  _id: Types.ObjectId;
+  _id?: any; // Can be ObjectId (MongoDB) or string (Prisma)
+  id?: string; // Prisma ID
   batchNumber: string;
   quantityAvailable: number;
   unitCost: number;
@@ -9,7 +8,7 @@ interface StockBatch {
 }
 
 interface BatchConsumption {
-  batchId: Types.ObjectId;
+  batchId: any; // Can be ObjectId (MongoDB) or string (Prisma)
   batchNumber: string;
   quantityFromBatch: number;
   unitCost: number;
@@ -55,7 +54,7 @@ export function calculateFIFOConsumption(
       const costAmount = quantityFromBatch * batch.unitCost;
 
       batchesUsed.push({
-        batchId: batch._id,
+        batchId: batch._id || batch.id, // Support both MongoDB and Prisma IDs
         batchNumber: batch.batchNumber,
         quantityFromBatch,
         unitCost: batch.unitCost,

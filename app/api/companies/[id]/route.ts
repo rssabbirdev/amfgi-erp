@@ -1,6 +1,5 @@
 import { auth }            from '@/auth';
-import { connectSystemDB } from '@/lib/db/system';
-import { Company }         from '@/lib/db/models/system/Company';
+import { prisma }          from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }               from 'zod';
 
@@ -9,6 +8,17 @@ const UpdateSchema = z.object({
   description: z.string().max(300).optional(),
   isActive:    z.boolean().optional(),
 });
+
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user) return errorResponse('Unauthorized', 401);
+  const { id } = await params;
+
+  const company = await prisma.company.findUnique({ where: { id } });
+  if (!company) return errorResponse('Company not found', 404);
+
+  return successResponse(company);
+}
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -19,8 +29,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const parsed = UpdateSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  await connectSystemDB();
-  const company = await Company.findByIdAndUpdate(id, parsed.data, { new: true }).lean();
+  const update: Record<string, unknown> = {};
+  if (parsed.data.name !== undefined) update.name = parsed.data.name;
+  if (parsed.data.description !== undefined) update.description = parsed.data.description;
+  if (parsed.data.isActive !== undefined) update.isActive = parsed.data.isActive;
+
+  const company = await prisma.company.update({
+    where: { id },
+    data: update,
+  });
+
   if (!company) return errorResponse('Company not found', 404);
   return successResponse(company);
 }

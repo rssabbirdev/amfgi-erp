@@ -1,7 +1,6 @@
-import { auth }              from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { auth } from '@/auth';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { Types }             from 'mongoose';
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -10,109 +9,127 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     return errorResponse('Forbidden', 403);
   }
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { id } = await params;
-
-  const conn = await getCompanyDB(dbName);
-  const dbSession = await conn.startSession();
-  dbSession.startTransaction();
+  const companyId = session.user.activeCompanyId;
 
   try {
-    const { Transaction, Material, StockBatch } = getModels(conn);
+    const result = await prisma.$transaction(async (tx) => {
+      // Get the transaction
+      const txn = await tx.transaction.findUnique({
+        where: { id },
+        include: {
+          batchesUsed: true,
+        },
+      });
 
-    const txn = await Transaction.findById(id).session(dbSession);
-    if (!txn) {
-      await dbSession.abortTransaction();
-      return errorResponse('Transaction not found', 404);
-    }
-
-    // Create reversal transaction for audit trail instead of just deleting
-    if (txn.type === 'STOCK_OUT' || txn.type === 'RETURN') {
-      // Reverse the stock impact
-      await Material.findByIdAndUpdate(
-        txn.materialId,
-        { $inc: { currentStock: txn.quantity } },
-        { session: dbSession }
-      );
-
-      // Restore batch quantities for STOCK_OUT
-      if (txn.type === 'STOCK_OUT' && txn.batchesUsed && txn.batchesUsed.length > 0) {
-        for (const batchUsed of txn.batchesUsed) {
-          await StockBatch.findByIdAndUpdate(
-            batchUsed.batchId,
-            { $inc: { quantityAvailable: batchUsed.quantityFromBatch } },
-            { session: dbSession }
-          );
-        }
+      if (!txn) {
+        throw new Error('Transaction not found');
       }
 
-      // Create reversal transaction for ledger
-      await Transaction.create(
-        [
-          {
+      if (txn.companyId !== companyId) {
+        throw new Error('Unauthorized');
+      }
+
+      // Create reversal transaction for audit trail instead of just deleting
+      if (txn.type === 'STOCK_OUT' || txn.type === 'RETURN') {
+        // Reverse the stock impact
+        await tx.material.update({
+          where: { id: txn.materialId },
+          data: {
+            currentStock: {
+              increment: txn.quantity,
+            },
+          },
+        });
+
+        // Restore batch quantities for STOCK_OUT
+        if (txn.type === 'STOCK_OUT' && txn.batchesUsed && txn.batchesUsed.length > 0) {
+          for (const batchUsed of txn.batchesUsed) {
+            await tx.stockBatch.update({
+              where: { id: batchUsed.batchId },
+              data: {
+                quantityAvailable: {
+                  increment: batchUsed.quantityFromBatch,
+                },
+              },
+            });
+          }
+        }
+
+        // Create reversal transaction for ledger
+        await tx.transaction.create({
+          data: {
+            companyId,
             type: 'REVERSAL',
-            materialId: new Types.ObjectId(txn.materialId),
+            materialId: txn.materialId,
             quantity: txn.quantity,
             jobId: txn.jobId,
-            parentTransactionId: txn._id,
+            parentTransactionId: txn.id,
             notes: `Reversal of ${txn.type} - ${txn.notes || ''}`,
             date: new Date(),
             performedBy: session.user.id,
           },
-        ],
-        { session: dbSession }
-      );
-    }
+        });
+      }
 
-    // Delete the original transaction
-    await Transaction.findByIdAndDelete(id, { session: dbSession });
+      // Delete the original transaction (cascade will remove batchesUsed)
+      await tx.transaction.delete({
+        where: { id },
+      });
 
-    // If this was a STOCK_OUT, also delete any linked RETURN transactions
-    if (txn.type === 'STOCK_OUT') {
-      const returnTxns = await Transaction.find(
-        { parentTransactionId: txn._id },
-        {},
-        { session: dbSession }
-      );
+      // If this was a STOCK_OUT, also delete any linked RETURN transactions
+      if (txn.type === 'STOCK_OUT') {
+        const returnTxns = await tx.transaction.findMany({
+          where: {
+            parentTransactionId: txn.id,
+          },
+          include: {
+            batchesUsed: true,
+          },
+        });
 
-      for (const returnTxn of returnTxns) {
-        // Reverse RETURN stock impact
-        await Material.findByIdAndUpdate(
-          returnTxn.materialId,
-          { $inc: { currentStock: -returnTxn.quantity } },
-          { session: dbSession }
-        );
+        for (const returnTxn of returnTxns) {
+          // Reverse RETURN stock impact
+          await tx.material.update({
+            where: { id: returnTxn.materialId },
+            data: {
+              currentStock: {
+                increment: -returnTxn.quantity,
+              },
+            },
+          });
 
-        // Create reversal for RETURN transaction
-        await Transaction.create(
-          [
-            {
+          // Create reversal for RETURN transaction
+          await tx.transaction.create({
+            data: {
+              companyId,
               type: 'REVERSAL',
-              materialId: new Types.ObjectId(returnTxn.materialId),
+              materialId: returnTxn.materialId,
               quantity: returnTxn.quantity,
               jobId: returnTxn.jobId,
-              parentTransactionId: returnTxn._id,
+              parentTransactionId: returnTxn.id,
               notes: `Reversal of RETURN - ${returnTxn.notes || ''}`,
               date: new Date(),
               performedBy: session.user.id,
             },
-          ],
-          { session: dbSession }
-        );
+          });
 
-        // Delete the RETURN transaction
-        await Transaction.findByIdAndDelete(returnTxn._id, { session: dbSession });
+          // Delete the RETURN transaction (cascade will remove batchesUsed)
+          await tx.transaction.delete({
+            where: { id: returnTxn.id },
+          });
+        }
       }
-    }
 
-    await dbSession.commitTransaction();
-    return successResponse({ deleted: true });
-  } catch (err) {
-    await dbSession.abortTransaction();
-    return errorResponse('Failed to delete transaction', 500);
-  } finally {
-    dbSession.endSession();
+      return { deleted: true };
+    });
+
+    return successResponse(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to delete transaction';
+    const status = message === 'Unauthorized' ? 403 : message === 'Transaction not found' ? 404 : 500;
+    return errorResponse(message, status);
   }
 }

@@ -1,7 +1,8 @@
 import { appApi } from '../appApi';
 
 interface Supplier {
-  _id: string;
+  id: string;
+  companyId: string;
   name: string;
   contactPerson?: string;
   email?: string;
@@ -10,6 +11,8 @@ interface Supplier {
   city?: string;
   country?: string;
   isActive: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 export const suppliersApi = appApi.injectEndpoints({
@@ -19,7 +22,7 @@ export const suppliersApi = appApi.injectEndpoints({
       transformResponse: (r: { data: Supplier[] }) => r.data,
       providesTags: (result) =>
         result
-          ? [{ type: 'Supplier', id: 'LIST' }, ...result.map((s) => ({ type: 'Supplier' as const, id: s._id }))]
+          ? [{ type: 'Supplier', id: 'LIST' }, ...result.map((s) => ({ type: 'Supplier' as const, id: s.id }))]
           : [{ type: 'Supplier', id: 'LIST' }],
     }),
 

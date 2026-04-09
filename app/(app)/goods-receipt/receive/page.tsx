@@ -82,7 +82,7 @@ export default function ReceiveStockPage() {
             // Populate form fields
             if (entry.supplier) {
               const supplier = suppliersData.find(s => s.name === entry.supplier);
-              if (supplier) setSupplierId(supplier._id);
+              if (supplier) setSupplierId(supplier.id);
             }
 
             if (entry.receivedDate) {
@@ -124,7 +124,7 @@ export default function ReceiveStockPage() {
 
   // Transform suppliers data for SearchSelect
   const suppliers = suppliersData.map((s) => ({
-    id: s._id,
+    id: s.id,
     label: s.name,
   }));
 
@@ -141,7 +141,7 @@ export default function ReceiveStockPage() {
         const updated = { ...l, [field]: value };
         // Auto-fill unit cost from material master when material is selected
         if (field === 'materialId' && value) {
-          const mat = materialsData.find((m) => m._id === value);
+          const mat = materialsData.find((m) => m.id === value);
           if (mat?.unitCost !== undefined) {
             updated.unitCost = String(mat.unitCost);
           }
@@ -166,7 +166,7 @@ export default function ReceiveStockPage() {
   };
 
   // Computed values
-  const getMaterial = (id: string) => materialsData.find((m) => m._id === id);
+  const getMaterial = (id: string) => materialsData.find((m) => m.id === id);
 
   const lineTotal = (line: LineItem) => {
     const qty = parseFloat(line.quantity) || 0;
@@ -369,7 +369,7 @@ export default function ReceiveStockPage() {
                         placeholder="Search materials..."
                         disabled={false}
                         items={materialsData.map((m) => ({
-                          id: m._id,
+                          id: m.id,
                           label: m.name,
                           searchText: m.unit,
                         }))}

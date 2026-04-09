@@ -1,7 +1,6 @@
 import { auth }              from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { Types }             from 'mongoose';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -10,8 +9,7 @@ export async function GET(req: Request) {
     return errorResponse('Forbidden', 403);
   }
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { searchParams } = new URL(req.url);
   const filterType = searchParams.get('filterType') ?? 'all';
@@ -30,65 +28,59 @@ export async function GET(req: Request) {
     endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
   }
 
-  const conn = await getCompanyDB(dbName);
-  const { StockBatch, Material } = getModels(conn);
-
   try {
-    // Group StockBatch records by receiptNumber
-    const entries = await StockBatch.aggregate([
-      {
-        $match: {
-          receiptNumber: { $exists: true, $ne: null },
-          receivedDate: { $gte: startDate, $lte: endDate },
+    // Get all StockBatches with receipt numbers in the date range
+    const batches = await prisma.stockBatch.findMany({
+      where: {
+        companyId: session.user.activeCompanyId,
+        receiptNumber: { not: null },
+        receivedDate: {
+          gte: startDate,
+          lte: endDate,
         },
       },
-      {
-        $group: {
-          _id: '$receiptNumber',
-          lines: { $push: '$$ROOT' },
-          totalValue: { $sum: '$totalCost' },
-          itemsCount: { $sum: 1 },
-          receivedDate: { $min: '$receivedDate' },
-          supplier: { $first: '$supplier' },
-          notes: { $first: '$notes' },
-        },
-      },
-      {
-        $sort: { receivedDate: -1 },
-      },
-    ]);
+      include: { material: true },
+      orderBy: { receivedDate: 'desc' },
+    });
 
-    // Enrich with material names
-    const enrichedEntries = await Promise.all(
-      entries.map(async (entry) => {
-        const materials = await Promise.all(
-          entry.lines.map(async (line: any) => {
-            const mat = await Material.findById(line.materialId).lean();
-            return {
-              materialId: line.materialId.toString(),
-              materialName: mat?.name ?? 'Unknown',
-              unit: mat?.unit ?? '—',
-              quantityReceived: line.quantityReceived,
-              quantityAvailable: line.quantityAvailable,
-              unitCost: line.unitCost,
-              totalCost: line.totalCost,
-              batchNumber: line.batchNumber,
-            };
-          })
-        );
+    // Group by receiptNumber
+    const grouped = new Map<string, typeof batches>();
+    batches.forEach((batch) => {
+      if (batch.receiptNumber) {
+        if (!grouped.has(batch.receiptNumber)) {
+          grouped.set(batch.receiptNumber, []);
+        }
+        grouped.get(batch.receiptNumber)!.push(batch);
+      }
+    });
 
-        return {
-          _id: entry._id,
-          receiptNumber: entry._id,
-          receivedDate: entry.receivedDate,
-          supplier: entry.supplier || undefined,
-          notes: entry.notes || undefined,
-          itemsCount: entry.itemsCount,
-          totalValue: entry.totalValue,
-          materials,
-        };
-      })
-    );
+    // Format entries
+    const enrichedEntries = Array.from(grouped.entries()).map(([receiptNumber, lines]) => {
+      const materials = lines.map((line) => ({
+        materialId: line.materialId,
+        materialName: line.material?.name ?? 'Unknown',
+        unit: line.material?.unit ?? '—',
+        quantityReceived: line.quantityReceived,
+        quantityAvailable: line.quantityAvailable,
+        unitCost: line.unitCost,
+        totalCost: line.totalCost,
+        batchNumber: line.batchNumber,
+      }));
+
+      const totalValue = lines.reduce((sum, line) => sum + line.totalCost, 0);
+      const firstLine = lines[0];
+
+      return {
+        id: receiptNumber,
+        receiptNumber,
+        receivedDate: firstLine!.receivedDate,
+        supplier: firstLine!.supplier || undefined,
+        notes: firstLine!.notes || undefined,
+        itemsCount: lines.length,
+        totalValue,
+        materials,
+      };
+    });
 
     return successResponse({
       entries: enrichedEntries,

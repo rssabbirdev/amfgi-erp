@@ -1,15 +1,20 @@
 import { appApi } from '../appApi';
 
-interface Job {
-  _id: string;
+export interface Job {
+  id: string;
+  companyId: string;
   jobNumber: string;
   customerId: string;
   customerName?: string;
   description?: string;
   site?: string;
-  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
-  startDate?: Date;
-  createdAt: Date;
+  status: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED';
+  parentJobId?: string;
+  startDate?: string | Date;
+  endDate?: string | Date;
+  createdBy: string;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 interface JobWithMaterials extends Job {
@@ -31,7 +36,7 @@ export const jobsApi = appApi.injectEndpoints({
       transformResponse: (r: { data: Job[] }) => r.data,
       providesTags: (result) =>
         result
-          ? [{ type: 'Job', id: 'LIST' }, ...result.map((j) => ({ type: 'Job' as const, id: j._id }))]
+          ? [{ type: 'Job', id: 'LIST' }, ...result.map((j) => ({ type: 'Job' as const, id: j.id }))]
           : [{ type: 'Job', id: 'LIST' }],
     }),
 

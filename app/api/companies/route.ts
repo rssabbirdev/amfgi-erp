@@ -1,15 +1,17 @@
-import { auth }             from '@/auth';
-import { connectSystemDB }  from '@/lib/db/system';
-import { Company }          from '@/lib/db/models/system/Company';
+import { auth }            from '@/auth';
+import { prisma }          from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }                from 'zod';
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  await connectSystemDB();
 
-  const companies = await Company.find({ isActive: true }).sort({ name: 1 }).lean();
+  const companies = await prisma.company.findMany({
+    where: { isActive: true },
+    orderBy: { name: 'asc' },
+  });
+
   return successResponse(companies);
 }
 
@@ -26,15 +28,27 @@ export async function POST(req: Request) {
   const parsed = CreateSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  await connectSystemDB();
+  const slug = parsed.data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-  // Auto-generate slug and dbName from name
-  const slug   = parsed.data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  const dbName = `company_${slug.replace(/-/g, '_')}`;
+  const existing = await prisma.company.findFirst({
+    where: {
+      OR: [
+        { slug },
+        { name: parsed.data.name },
+      ],
+    },
+  });
 
-  const existing = await Company.findOne({ $or: [{ slug }, { name: parsed.data.name }] });
   if (existing) return errorResponse('Company with this name already exists', 409);
 
-  const company = await Company.create({ ...parsed.data, slug, dbName });
+  const company = await prisma.company.create({
+    data: {
+      name:        parsed.data.name,
+      slug,
+      description: parsed.data.description,
+      isActive:    true,
+    },
+  });
+
   return successResponse(company, 201);
 }

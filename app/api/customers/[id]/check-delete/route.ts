@@ -1,7 +1,6 @@
-import { auth }              from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { auth } from '@/auth';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { Types }             from 'mongoose';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -10,20 +9,31 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     return errorResponse('Forbidden', 403);
   }
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { id } = await params;
-  const conn = await getCompanyDB(dbName);
-  const { Job } = getModels(conn);
 
   // Check for linked jobs
-  const jobs = await Job.find({ customerId: new Types.ObjectId(id) })
-    .select('jobNumber description status')
-    .lean()
-    .limit(10);
+  const jobs = await prisma.job.findMany({
+    where: {
+      customerId: id,
+      companyId: session.user.activeCompanyId,
+    },
+    select: {
+      id: true,
+      jobNumber: true,
+      description: true,
+      status: true,
+    },
+    take: 10,
+  });
 
-  const jobCount = await Job.countDocuments({ customerId: new Types.ObjectId(id) });
+  const jobCount = await prisma.job.count({
+    where: {
+      customerId: id,
+      companyId: session.user.activeCompanyId,
+    },
+  });
 
   return successResponse({
     canDelete: jobCount === 0,

@@ -3,9 +3,11 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/Button';
 import DataTable from '@/components/ui/DataTable';
 import TransferModal from '@/components/transactions/TransferModal';
+import BulkImportModal from '@/components/materials/BulkImportModal';
 import toast from 'react-hot-toast';
 import type { Column } from '@/components/ui/DataTable';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
@@ -15,19 +17,19 @@ import {
 } from '@/store/hooks';
 
 interface Material {
-  _id: string;
+  id: string;
   name: string;
   description?: string;
   unit: string;
-  category: string;
-  warehouse: string;
+  category?: string;
+  warehouse?: string;
   stockType: string;
-  externalItemName: string;
+  externalItemName?: string;
   currentStock: number;
-  reorderLevel: number;
-  unitCost: number;
+  reorderLevel?: number;
+  unitCost?: number;
   isActive: boolean;
-  createdAt: Date;
+  createdAt?: string | Date;
 }
 
 export default function MaterialsPage() {
@@ -43,6 +45,7 @@ export default function MaterialsPage() {
   const canTransfer = isSA || perms.includes('transaction.transfer');
 
   const [transferModal, setTransferModal] = useState(false);
+  const [importModal, setImportModal] = useState(false);
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     material: Material | null;
@@ -53,10 +56,33 @@ export default function MaterialsPage() {
     canDelete: boolean;
   }>({ open: false, material: null, loading: false, checking: false, linkedTransactions: [], linkedCount: 0, canDelete: true });
 
+  const handleExport = () => {
+    const exportData = materials
+      .filter((m) => m.isActive)
+      .map((m) => ({
+        'Item Name': m.name,
+        'Unit': m.unit,
+        'Stock Type': m.stockType,
+        'Category': m.category || '',
+        'Warehouse': m.warehouse || '',
+        'Description': m.description || '',
+        'External Item Name': m.externalItemName || '',
+        'Unit Cost': m.unitCost ?? '',
+        'Reorder Level': m.reorderLevel ?? '',
+        'Opening Stock': m.currentStock,
+      }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Materials');
+    XLSX.writeFile(wb, `materials-${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success('Materials exported successfully');
+  };
+
   const openDeleteModal = async (material: Material) => {
     setDeleteModal({ open: true, material, loading: false, checking: true, linkedTransactions: [], linkedCount: 0, canDelete: true });
     try {
-      const res = await fetch(`/api/materials/${material._id}/check-delete`);
+      const res = await fetch(`/api/materials/${material.id}/check-delete`);
       const json = await res.json();
       if (json.data) {
         setDeleteModal((prev) => ({
@@ -81,7 +107,7 @@ export default function MaterialsPage() {
     options.push({
       label: 'Edit',
       icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-      action: () => router.push(`/materials/${material._id}`),
+      action: () => router.push(`/materials/${material.id}`),
     });
 
     if (canDelete) {
@@ -103,7 +129,7 @@ export default function MaterialsPage() {
     if (!deleteModal.material) return;
     setDeleteModal((prev) => ({ ...prev, loading: true }));
     try {
-      await deleteMaterial(deleteModal.material._id).unwrap();
+      await deleteMaterial(deleteModal.material.id).unwrap();
       toast.success('Material deleted');
       setDeleteModal({ open: false, material: null, loading: false, checking: false, linkedTransactions: [], linkedCount: 0, canDelete: true });
     } catch (err: any) {
@@ -132,12 +158,12 @@ export default function MaterialsPage() {
     {
       key: 'reorderLevel',
       header: 'Reorder At',
-      render: (m) => (m.reorderLevel !== undefined ? String(m.reorderLevel) : '—'),
+      render: (m) => (m.reorderLevel !== undefined ? (m.reorderLevel === null ? '—' : String(m.reorderLevel)) : '—'),
     },
     {
       key: 'unitCost',
       header: 'Unit Cost (AED)',
-      render: (m) => `AED ${m.unitCost.toFixed(2)}`,
+      render: (m) => m.unitCost !== undefined ? `AED ${m.unitCost.toFixed(2)}` : '—',
     },
   ];
 
@@ -158,6 +184,20 @@ export default function MaterialsPage() {
               Transfer
             </Button>
           )}
+          <Button variant="secondary" onClick={() => setImportModal(true)}>
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 16v-4m0 0V8m0 4H8m4 0h4M9 20H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2h-4" />
+            </svg>
+            Import Excel
+          </Button>
+          <Button variant="secondary" onClick={handleExport}>
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 8v8m0 0l-4-4m4 4l4-4M9 20H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2h-4" />
+            </svg>
+            Export Excel
+          </Button>
           <Button onClick={() => router.push('/materials/new')}>+ Add Material</Button>
         </div>
       </div>
@@ -172,6 +212,12 @@ export default function MaterialsPage() {
       />
 
       <TransferModal isOpen={transferModal} onClose={() => setTransferModal(false)} onSuccess={() => {}} />
+
+      <BulkImportModal
+        isOpen={importModal}
+        onClose={() => setImportModal(false)}
+        existingMaterials={materials}
+      />
 
       {/* Delete Modal */}
       {deleteModal.open && deleteModal.material && (

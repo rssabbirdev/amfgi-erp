@@ -1,5 +1,5 @@
 import { auth } from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
@@ -13,23 +13,29 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const body = await req.json();
   const parsed = LogSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
   try {
-    const conn = await getCompanyDB(dbName);
-    const { MaterialLog } = getModels(conn);
+    // Verify material exists and belongs to this company
+    const material = await prisma.material.findUnique({
+      where: { id: parsed.data.materialId },
+    });
+    if (!material || material.companyId !== session.user.activeCompanyId) {
+      return errorResponse('Material not found', 404);
+    }
 
-    const log = await MaterialLog.create({
-      materialId: parsed.data.materialId,
-      action: parsed.data.action,
-      changes: parsed.data.changes,
-      changedBy: session.user.name || session.user.email || session.user.id,
-      timestamp: new Date(),
+    const log = await prisma.materialLog.create({
+      data: {
+        companyId: session.user.activeCompanyId,
+        materialId: parsed.data.materialId,
+        action: parsed.data.action,
+        changes: parsed.data.changes,
+        changedBy: session.user.name || session.user.email || session.user.id,
+      },
     });
 
     return successResponse(log, 201);

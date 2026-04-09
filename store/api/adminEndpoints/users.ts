@@ -1,13 +1,25 @@
 import { adminApi } from '../adminApi';
 
+interface UserCompanyAccessItem {
+  userId: string;
+  companyId: string;
+  roleId: string;
+  role?: { id: string; name: string; permissions: string[] };
+  company?: { id: string; name: string; slug: string };
+}
+
 interface User {
-  _id: string;
+  id: string;
   name: string;
   email: string;
+  password?: string;
+  image?: string;
   isSuperAdmin: boolean;
   isActive: boolean;
-  companyAccess: Array<{ companyId: string; roleId: string }>;
-  createdAt: Date;
+  activeCompanyId?: string;
+  companyAccess?: UserCompanyAccessItem[];
+  createdAt: string | Date;
+  updatedAt?: string | Date;
 }
 
 export const usersApi = adminApi.injectEndpoints({

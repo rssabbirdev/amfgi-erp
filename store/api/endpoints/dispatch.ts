@@ -1,7 +1,7 @@
 import { appApi } from '../appApi';
 
 interface DispatchEntry {
-  _id: string;
+  id: string;
   entryId: string;
   jobId: string;
   jobNumber: string;

@@ -1,11 +1,12 @@
 import { appApi } from '../appApi';
 
 export interface Category {
-  _id: string;
+  id: string;
+  companyId: string;
   name: string;
   isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 interface CategoryResponse {
@@ -19,7 +20,7 @@ export const categoriesApi = appApi.injectEndpoints({
       transformResponse: (r: Category[] | CategoryResponse) => (Array.isArray(r) ? r : (r.data as Category[]) || []),
       providesTags: (result) =>
         result
-          ? [{ type: 'Category', id: 'LIST' }, ...result.map((c) => ({ type: 'Category' as const, id: c._id }))]
+          ? [{ type: 'Category', id: 'LIST' }, ...result.map((c) => ({ type: 'Category' as const, id: c.id }))]
           : [{ type: 'Category', id: 'LIST' }],
     }),
 
@@ -30,7 +31,35 @@ export const categoriesApi = appApi.injectEndpoints({
         body,
       }),
       transformResponse: (r: any) => (r && '_id' in r ? (r as Category) : ((r.data as Category) || r)),
-      invalidatesTags: [{ type: 'Category', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Category', id: 'LIST' }, { type: 'Material', id: 'LIST' }],
+    }),
+
+    updateCategory: builder.mutation<Category, { id: string; name: string }>({
+      query: ({ id, ...body }) => ({
+        url: `/categories/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      transformResponse: (r: Category | { data: Category }) => ('data' in r ? r.data : r),
+      invalidatesTags: (result, error, { id }) => [
+        { type: 'Category', id },
+        { type: 'Category', id: 'LIST' },
+        { type: 'Material', id: 'LIST' },
+      ],
+    }),
+
+    deleteCategory: builder.mutation<{ deleted: boolean }, string>({
+      query: (id) => ({
+        url: `/categories/${id}`,
+        method: 'DELETE',
+      }),
+      transformResponse: (r: { deleted: boolean } | { data: { deleted: boolean } }) =>
+        ('data' in r ? r.data : r),
+      invalidatesTags: (result, error, id) => [
+        { type: 'Category', id },
+        { type: 'Category', id: 'LIST' },
+        { type: 'Material', id: 'LIST' },
+      ],
     }),
   }),
   overrideExisting: true,
@@ -39,4 +68,6 @@ export const categoriesApi = appApi.injectEndpoints({
 export const {
   useGetCategoriesQuery,
   useCreateCategoryMutation,
+  useUpdateCategoryMutation,
+  useDeleteCategoryMutation,
 } = categoriesApi;

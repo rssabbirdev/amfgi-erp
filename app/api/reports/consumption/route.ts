@@ -1,61 +1,68 @@
 import { auth } from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   try {
-    const conn = await getCompanyDB(dbName);
-    const { Transaction } = getModels(conn);
+    const companyId = session.user.activeCompanyId;
 
     // Current month consumption
     const now = new Date();
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    const currentMonthConsumption = await Transaction.aggregate([
-      {
-        $match: {
-          type: 'STOCK_OUT',
-          date: { $gte: currentMonthStart, $lte: currentMonthEnd },
+    // Get STOCK_OUT transactions from current month
+    const currentMonthTransactions = await prisma.transaction.findMany({
+      where: {
+        companyId,
+        type: 'STOCK_OUT',
+        date: {
+          gte: currentMonthStart,
+          lte: currentMonthEnd,
         },
       },
-      {
-        $group: {
-          _id: '$materialId',
-          totalQuantity: { $sum: '$quantity' },
-        },
-      },
-      {
-        $lookup: {
-          from: 'materials',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'material',
-        },
-      },
-      {
-        $unwind: {
-          path: '$material',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $addFields: {
-          totalValue: {
-            $multiply: ['$totalQuantity', { $ifNull: ['$material.unitCost', 0] }],
+      select: {
+        materialId: true,
+        quantity: true,
+        material: {
+          select: {
+            name: true,
+            unit: true,
+            unitCost: true,
           },
         },
       },
-      {
-        $sort: { totalValue: -1 },
-      },
-    ]);
+    });
+
+    // Group by material and calculate totals
+    const consumptionByMaterial: Record<
+      string,
+      { totalQuantity: number; material: { name: string; unit: string; unitCost: number | null } }
+    > = {};
+
+    for (const txn of currentMonthTransactions) {
+      if (!consumptionByMaterial[txn.materialId]) {
+        consumptionByMaterial[txn.materialId] = {
+          totalQuantity: 0,
+          material: txn.material,
+        };
+      }
+      consumptionByMaterial[txn.materialId].totalQuantity += txn.quantity;
+    }
+
+    const currentMonthConsumption = Object.entries(consumptionByMaterial)
+      .map(([materialId, data]) => ({
+        materialId,
+        totalQuantity: data.totalQuantity,
+        material: data.material,
+        totalValue: data.totalQuantity * (data.material.unitCost || 0),
+      }))
+      .sort((a, b) => b.totalValue - a.totalValue);
 
     const totalConsumptionValue = currentMonthConsumption.reduce(
       (sum, item) => sum + (item.totalValue || 0),
@@ -63,11 +70,11 @@ export async function GET(req: Request) {
     );
 
     const consumedItems = currentMonthConsumption.map((item) => ({
-      materialId: item._id,
-      name: item.material?.name || 'Unknown',
-      unit: item.material?.unit || '',
+      materialId: item.materialId,
+      name: item.material.name || 'Unknown',
+      unit: item.material.unit || '',
       quantity: item.totalQuantity,
-      unitCost: item.material?.unitCost || 0,
+      unitCost: item.material.unitCost || 0,
       totalValue: item.totalValue,
     }));
 

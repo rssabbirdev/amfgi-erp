@@ -1,7 +1,7 @@
 import { appApi } from '../appApi';
 
 export interface MaterialLog {
-  _id: string;
+  id: string;
   materialId: string;
   action: 'created' | 'updated';
   changes: Record<string, any>;
@@ -10,7 +10,7 @@ export interface MaterialLog {
 }
 
 export interface PriceLog {
-  _id: string;
+  id: string;
   materialId: string;
   previousPrice: number;
   currentPrice: number;

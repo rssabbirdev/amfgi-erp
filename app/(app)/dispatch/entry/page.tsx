@@ -40,7 +40,7 @@ interface PendingChange {
 }
 
 interface CrossCompanyMaterial {
-  _id: string;
+  id: string;
   name: string;
   unit: string;
   currentStock: number;
@@ -58,7 +58,8 @@ function CrossCompanyMaterialLoader({
   const { data = [] } = useGetCrossCompanyMaterialsQuery(companyId, { skip: !companyId });
   useEffect(() => {
     onLoaded(companyId, data);
-  }, [companyId, data, onLoaded]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, data]);
   return null;
 }
 
@@ -78,7 +79,7 @@ export default function DispatchMaterialsPage() {
   const canTransfer = isSA || perms.includes('transaction.transfer');
 
   // Companies other than the active one
-  const otherCompanies = allCompanies.filter((c) => c._id !== session?.user?.activeCompanyId);
+  const otherCompanies = allCompanies.filter((c) => c.id !== session?.user?.activeCompanyId);
 
   // Cross-company materials storage
   const [crossCompanyMaterialsMap, setCrossCompanyMaterialsMap] = useState<Record<string, any[]>>({});
@@ -269,13 +270,13 @@ export default function DispatchMaterialsPage() {
     setChangeWarningModal({ open: false, pendingChange: null });
   };
 
-  const getMaterial = (id: string) => materials.find((m) => m._id === id);
-  const getJob = (id: string) => jobs.find((j) => j._id === id);
+  const getMaterial = (id: string) => materials.find((m) => m.id === id);
+  const getJob = (id: string) => jobs.find((j) => j.id === id);
 
   // Get material from correct source (own company or cross-company)
   const getEffectiveMaterial = (line: Line) => {
     if (line.sourceCompanyId) {
-      return (crossCompanyMaterialsMap[line.sourceCompanyId] ?? []).find((m) => m._id === line.materialId);
+      return (crossCompanyMaterialsMap[line.sourceCompanyId] ?? []).find((m) => m.id === line.materialId);
     }
     return getMaterial(line.materialId);
   };
@@ -319,7 +320,7 @@ export default function DispatchMaterialsPage() {
   };
 
   const setLineSourceCompany = (lineId: string, companyId: string) => {
-    const co = allCompanies.find((c) => c._id === companyId);
+    const co = allCompanies.find((c) => c.id === companyId);
     setLines((prev) =>
       prev.map((l) =>
         l.id === lineId
@@ -339,8 +340,8 @@ export default function DispatchMaterialsPage() {
     try {
       await addBatchTransaction({
         type:  'STOCK_OUT',
-        jobId: selectedJob,
-        notes: notes || undefined,
+        jobId: selectedJob || undefined,
+        notes: notes?.trim() || undefined,
         date,
         existingTransactionIds: existingEntry?.transactionIds,
         lines: linesToSubmit.map((l) => ({
@@ -371,6 +372,7 @@ export default function DispatchMaterialsPage() {
       const transferResults: Array<{ lineId: string; destMaterialId: string }> = [];
       for (const line of confirmModal.crossCompanyLines) {
         const result = await transferStock({
+          sourceCompanyId:      line.sourceCompanyId,
           destinationCompanyId: session!.user!.activeCompanyId!,
           materialId:           line.materialId,
           quantity:             parseFloat(line.dispatchQty),
@@ -495,7 +497,7 @@ export default function DispatchMaterialsPage() {
         toast.error('Cannot transfer from your own company. Select a different company.');
         return;
       }
-      const ccMat = (crossCompanyMaterialsMap[line.sourceCompanyId] ?? []).find((m) => m._id === line.materialId);
+      const ccMat = (crossCompanyMaterialsMap[line.sourceCompanyId] ?? []).find((m) => m.id === line.materialId);
       if (!ccMat) { toast.error(`Cross-company material not found for ${line.materialId}`); return; }
       const qty = parseFloat(line.dispatchQty);
       if (isNaN(qty)) { toast.error('Invalid dispatch quantity'); return; }
@@ -564,8 +566,8 @@ export default function DispatchMaterialsPage() {
       {/* Load cross-company materials for all other companies upfront */}
       {allowInterCompanyTransfers && otherCompanies.map((company) => (
         <CrossCompanyMaterialLoader
-          key={company._id}
-          companyId={company._id}
+          key={company.id}
+          companyId={company.id}
           onLoaded={handleCrossCompanyMaterialsLoaded}
         />
       ))}
@@ -607,9 +609,9 @@ export default function DispatchMaterialsPage() {
                 items={jobs
                   .filter((j) => j.status !== 'COMPLETED' && j.status !== 'CANCELLED')
                   .map((j) => ({
-                    id: j._id,
+                    id: j.id,
                     label: j.jobNumber,
-                    searchText: customers.find((c) => c._id === j.customerId)?.name || 'Unknown',
+                    searchText: customers.find((c) => c.id === j.customerId)?.name || 'Unknown',
                   }))}
                 renderItem={(item) => (
                   <div>
@@ -707,7 +709,7 @@ export default function DispatchMaterialsPage() {
                               >
                                 <option value="">Select company...</option>
                                 {otherCompanies.map((c) => (
-                                  <option key={c._id} value={c._id}>{c.name}</option>
+                                  <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                               </select>
                             )}
@@ -738,7 +740,7 @@ export default function DispatchMaterialsPage() {
                                   ? materials.filter((m) => m.isActive && m.currentStock > 0)
                                   : []
                               ).map((m) => ({
-                                id: m._id,
+                                id: m.id,
                                 label: m.name,
                                 searchText: `${m.currentStock} ${m.unit}`,
                               }))}
@@ -887,7 +889,7 @@ export default function DispatchMaterialsPage() {
         <ul className="space-y-2 mb-5">
           {confirmModal?.crossCompanyLines.map((line) => {
             const mat = (crossCompanyMaterialsMap[line.sourceCompanyId!] ?? []).find(
-              (m) => m._id === line.materialId
+              (m) => m.id === line.materialId
             );
             return (
               <li key={line.id} className="flex items-center justify-between bg-slate-700/40 rounded-lg px-3 py-2 text-sm">

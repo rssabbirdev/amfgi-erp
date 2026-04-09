@@ -10,13 +10,15 @@ import { PERMISSION_GROUPS, ROLE_PRESETS } from '@/lib/permissions';
 import type { Permission }      from '@/lib/permissions';
 import type { Column }          from '@/components/ui/DataTable';
 
-interface Role {
-  _id:         string;
-  name:        string;
-  slug:        string;
+type Role = {
+  id: string;
+  name: string;
+  slug: string;
   permissions: string[];
-  isSystem:    boolean;
-}
+  isSystem: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+};
 
 export default function AdminRolesPage() {
   const [roles,       setRoles]       = useState<Role[]>([]);
@@ -68,7 +70,7 @@ export default function AdminRolesPage() {
     setFormLoading(true);
     const body = { name, permissions: Array.from(permissions) };
 
-    const url    = editing ? `/api/roles/${editing._id}` : '/api/roles';
+    const url    = editing ? `/api/roles/${editing.id}` : '/api/roles';
     const method = editing ? 'PUT' : 'POST';
 
     const res = await fetch(url, {
@@ -89,7 +91,7 @@ export default function AdminRolesPage() {
 
   const handleDelete = async (r: Role) => {
     if (!confirm(`Delete role "${r.name}"? This cannot be undone.`)) return;
-    const res = await fetch(`/api/roles/${r._id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/roles/${r.id}`, { method: 'DELETE' });
     if (res.ok) {
       toast.success('Role deleted');
       fetchRoles();

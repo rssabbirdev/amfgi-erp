@@ -1,7 +1,8 @@
 import { appApi } from '../appApi';
 
-interface Material {
-  _id: string;
+export interface Material {
+  id: string;
+  companyId: string;
   name: string;
   description?: string;
   unit: string;
@@ -10,14 +11,15 @@ interface Material {
   stockType: string;
   externalItemName: string;
   currentStock: number;
-  reorderLevel: number;
-  unitCost: number;
+  reorderLevel?: number;
+  unitCost?: number;
   isActive: boolean;
-  createdAt: Date;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 interface CrossCompanyMaterial {
-  _id: string;
+  id: string;
   name: string;
   unit: string;
   currentStock: number;
@@ -31,7 +33,7 @@ export const materialsApi = appApi.injectEndpoints({
       transformResponse: (r: { data: Material[] }) => r.data,
       providesTags: (result) =>
         result
-          ? [{ type: 'Material', id: 'LIST' }, ...result.map((m) => ({ type: 'Material' as const, id: m._id }))]
+          ? [{ type: 'Material', id: 'LIST' }, ...result.map((m) => ({ type: 'Material' as const, id: m.id }))]
           : [{ type: 'Material', id: 'LIST' }],
     }),
 
@@ -80,6 +82,19 @@ export const materialsApi = appApi.injectEndpoints({
       query: (companyId) => `/materials/cross-company?companyId=${companyId}`,
       transformResponse: (r: { data: CrossCompanyMaterial[] }) => r.data,
     }),
+
+    bulkCreateMaterials: builder.mutation<
+      { created: number; updated: number },
+      { newRows: Partial<Material>[]; updateRows: Partial<Material>[] }
+    >({
+      query: (body) => ({
+        url: '/materials/bulk',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (r: { data: { created: number; updated: number } }) => r.data,
+      invalidatesTags: [{ type: 'Material', id: 'LIST' }],
+    }),
   }),
 });
 
@@ -90,4 +105,5 @@ export const {
   useUpdateMaterialMutation,
   useDeleteMaterialMutation,
   useGetCrossCompanyMaterialsQuery,
+  useBulkCreateMaterialsMutation,
 } = materialsApi;

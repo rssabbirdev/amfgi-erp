@@ -3,12 +3,10 @@
 import { useState, useEffect }    from 'react';
 import Modal                      from '@/components/ui/Modal';
 import { Button }                 from '@/components/ui/Button';
-import { useAppDispatch }         from '@/store/hooks';
-import { adjustStock }            from '@/store/slices/materialsSlice';
 import toast                      from 'react-hot-toast';
 
-interface Material { _id: string; name: string; unit: string; currentStock: number }
-interface Job      { _id: string; jobNumber: string; description: string }
+interface Material { id: string; name: string; unit: string; currentStock: number }
+interface Job      { id: string; jobNumber: string; description: string }
 
 interface JobMaterialSummary {
   materialId:       string;
@@ -26,7 +24,6 @@ interface Props {
 }
 
 export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode, preselectedJobId }: Props) {
-  const dispatch = useAppDispatch();
 
   const [materials,      setMaterials]      = useState<Material[]>([]);
   const [jobs,           setJobs]           = useState<Job[]>([]);
@@ -90,9 +87,6 @@ export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode
         throw new Error(err.error ?? 'Transaction failed');
       }
 
-      const delta = mode === 'STOCK_IN' ? qty : mode === 'STOCK_OUT' ? -qty : qty;
-      dispatch(adjustStock({ id: materialId, delta }));
-
       toast.success(
         mode === 'STOCK_IN'  ? 'Stock received successfully' :
         mode === 'STOCK_OUT' ? 'Material dispatched' :
@@ -121,7 +115,7 @@ export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode
   };
 
   const returnableMaterials = mode === 'RETURN' && jobId
-    ? materials.filter((m) => jobSummary.some((s) => s.materialId === m._id && s.availableToReturn > 0))
+    ? materials.filter((m) => jobSummary.some((s) => s.materialId === m.id && s.availableToReturn > 0))
     : materials;
 
   return (
@@ -140,7 +134,7 @@ export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode
             >
               <option value="">Select job...</option>
               {jobs.map((j) => (
-                <option key={j._id} value={j._id}>{j.jobNumber} — {j.description}</option>
+                <option key={j.id} value={j.id}>{j.jobNumber} — {j.description}</option>
               ))}
             </select>
           </div>
@@ -157,7 +151,7 @@ export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode
           >
             <option value="">Select material...</option>
             {returnableMaterials.map((m) => (
-              <option key={m._id} value={m._id}>
+              <option key={m.id} value={m.id}>
                 {m.name} ({m.unit})
                 {mode === 'STOCK_OUT' ? ` — stock: ${m.currentStock}` : ''}
               </option>

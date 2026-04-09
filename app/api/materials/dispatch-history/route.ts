@@ -1,7 +1,6 @@
 import { auth }              from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { Types }             from 'mongoose';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -10,8 +9,7 @@ export async function GET(req: Request) {
     return errorResponse('Forbidden', 403);
   }
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { searchParams } = new URL(req.url);
   const filterType = searchParams.get('filterType') ?? 'all'; // 'day', 'month', 'all'
@@ -30,61 +28,58 @@ export async function GET(req: Request) {
     endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
   }
 
-  const conn = await getCompanyDB(dbName);
-  const { Transaction, Material, Job } = getModels(conn);
-
   // Fetch dispatch transactions (STOCK_OUT only) within the date range
-  const transactions = await Transaction.find({
-    type: 'STOCK_OUT',
-    date: { $gte: startDate, $lte: endDate },
-  })
-    .populate('materialId', 'name unit')
-    .populate('jobId', 'jobNumber description')
-    .sort({ date: -1 })
-    .lean();
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      companyId: session.user.activeCompanyId,
+      type: 'STOCK_OUT',
+      date: { gte: startDate, lte: endDate },
+    },
+    include: {
+      material: { select: { id: true, name: true, unit: true } },
+      job: { select: { id: true, jobNumber: true, description: true } },
+    },
+    orderBy: { date: 'desc' },
+  });
 
   // Calculate consumption summary by material
-  const summary = await Transaction.aggregate([
-    {
-      $match: {
-        type: 'STOCK_OUT',
-        date: { $gte: startDate, $lte: endDate },
-      },
-    },
-    {
-      $group: {
-        _id: '$materialId',
-        totalQuantity: { $sum: '$quantity' },
-        transactionCount: { $sum: 1 },
-      },
-    },
-    {
-      $lookup: {
-        from: 'materials',
-        localField: '_id',
-        foreignField: '_id',
-        as: 'material',
-      },
-    },
-    {
-      $unwind: '$material',
-    },
-    {
-      $project: {
-        _id: 1,
-        materialName: '$material.name',
-        materialUnit: '$material.unit',
-        totalQuantity: 1,
+  const summaryMap = new Map<string, {
+    materialId: string;
+    materialName: string;
+    materialUnit: string;
+    totalQuantity: number;
+    transactionCount: number;
+  }>();
+
+  for (const txn of transactions) {
+    const key = txn.materialId;
+    if (summaryMap.has(key)) {
+      const existing = summaryMap.get(key)!;
+      existing.totalQuantity += txn.quantity;
+      existing.transactionCount += 1;
+    } else {
+      summaryMap.set(key, {
+        materialId: txn.materialId,
+        materialName: txn.material?.name ?? 'Unknown',
+        materialUnit: txn.material?.unit ?? '—',
+        totalQuantity: txn.quantity,
         transactionCount: 1,
-      },
-    },
-    {
-      $sort: { totalQuantity: -1 },
-    },
-  ]);
+      });
+    }
+  }
+
+  const summary = Array.from(summaryMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
 
   return successResponse({
-    transactions,
+    transactions: transactions.map(txn => ({
+      ...txn,
+      materialId: txn.material?.id,
+      materialName: txn.material?.name,
+      materialUnit: txn.material?.unit,
+      jobId: txn.job?.id,
+      jobNumber: txn.job?.jobNumber,
+      jobDescription: txn.job?.description,
+    })),
     summary,
     dateRange: {
       startDate,

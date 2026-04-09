@@ -1,23 +1,21 @@
 /**
  * Inter-company transfer endpoint.
  * Atomically deducts stock from the source company and credits the destination company.
- * Uses two separate DB sessions (one per company connection) — committed sequentially.
- * If the destination commit fails after the source commits, a compensating transaction is created.
+ * Uses Prisma $transaction for atomicity across both operations.
+ * If the destination credit fails, the entire transaction is rolled back automatically.
  */
-import { auth }              from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
-import { connectSystemDB }   from '@/lib/db/system';
-import { Company }           from '@/lib/db/models/system/Company';
+import { auth } from '@/auth';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { z }                 from 'zod';
-import { Types }             from 'mongoose';
+import { z } from 'zod';
 
 const TransferSchema = z.object({
+  sourceCompanyId: z.string().optional(),
   destinationCompanyId: z.string().min(1),
-  materialId:           z.string().min(1),
-  quantity:             z.number().min(0.001),
-  notes:                z.string().max(500).optional(),
-  date:                 z.string().optional(),
+  materialId: z.string().min(1),
+  quantity: z.number().min(0.001),
+  notes: z.string().max(500).optional(),
+  date: z.string().optional(),
 });
 
 export async function POST(req: Request) {
@@ -27,159 +25,140 @@ export async function POST(req: Request) {
     return errorResponse('Forbidden', 403);
   }
 
-  const srcDbName = session.user.activeCompanyDbName;
-  if (!srcDbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
-  const body   = await req.json();
+  const body = await req.json();
   const parsed = TransferSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  const { destinationCompanyId, materialId, quantity, notes, date } = parsed.data;
+  const { sourceCompanyId, destinationCompanyId, materialId, quantity, notes, date } = parsed.data;
   const txDate = date ? new Date(date) : new Date();
 
-  // Resolve destination company
-  await connectSystemDB();
-  const destCompany = await Company.findById(destinationCompanyId).lean();
-  if (!destCompany) return errorResponse('Destination company not found', 404);
-  if (!destCompany.isActive) return errorResponse('Destination company is inactive', 400);
-
-  const destDbName = destCompany.dbName;
-  if (srcDbName === destDbName) return errorResponse('Source and destination cannot be the same', 400);
-
-  const srcCompanySlug  = session.user.activeCompanySlug ?? srcDbName;
-  const destCompanySlug = destCompany.slug;
-
-  // Get both connections and verify material exists in source
-  const srcConn  = await getCompanyDB(srcDbName);
-  const destConn = await getCompanyDB(destDbName);
-  const { Material: SrcMaterial, Transaction: SrcTransaction } = getModels(srcConn);
-  const { Material: DestMaterial, Transaction: DestTransaction } = getModels(destConn);
-
-  // Check source material exists and has sufficient stock
-  const srcMaterial = await SrcMaterial.findById(materialId).lean();
-  if (!srcMaterial) return errorResponse('Material not found in source company', 404);
-  if (srcMaterial.currentStock < quantity) {
-    return errorResponse(
-      `Insufficient stock. Available: ${srcMaterial.currentStock} ${srcMaterial.unit}`,
-      400
-    );
-  }
-
-  // Find or create matching material in destination by name + unit
-  let destMaterial = await DestMaterial.findOne({
-    name: srcMaterial.name,
-    unit: srcMaterial.unit,
-  }).lean();
-
-  if (!destMaterial) {
-    // Auto-create material in destination company
-    destMaterial = await DestMaterial.create({
-      name:         srcMaterial.name,
-      unit:         srcMaterial.unit,
-      description:  srcMaterial.description,
-      unitCost:     srcMaterial.unitCost,
-      minStock:     srcMaterial.minStock,
-      currentStock: 0,
-      isActive:     true,
-    });
-  }
-
-  const destMaterialId = (destMaterial as { _id: Types.ObjectId })._id;
-  const performedBy    = session.user.id;
-
-  // --- Phase 1: Deduct from source ---
-  const srcSession = await srcConn.startSession();
-  srcSession.startTransaction();
-  let srcTxId: Types.ObjectId;
+  // Use provided sourceCompanyId if given, otherwise default to activeCompanyId
+  const srcCompanyId = sourceCompanyId || session.user.activeCompanyId;
 
   try {
-    await SrcMaterial.findByIdAndUpdate(
-      materialId,
-      { $inc: { currentStock: -quantity } },
-      { session: srcSession }
-    );
-
-    const [srcTx] = await SrcTransaction.create(
-      [
-        {
-          type:              'TRANSFER_OUT',
-          materialId:        new Types.ObjectId(materialId),
-          quantity,
-          counterpartCompany: destCompanySlug,
-          notes,
-          date:              txDate,
-          performedBy,
-        },
-      ],
-      { session: srcSession }
-    );
-
-    await srcSession.commitTransaction();
-    srcTxId = srcTx._id as Types.ObjectId;
-  } catch (err: unknown) {
-    await srcSession.abortTransaction();
-    return errorResponse(err instanceof Error ? err.message : 'Transfer deduction failed', 400);
-  } finally {
-    srcSession.endSession();
-  }
-
-  // --- Phase 2: Credit destination ---
-  const destSession = await destConn.startSession();
-  destSession.startTransaction();
-
-  try {
-    await DestMaterial.findByIdAndUpdate(
-      destMaterialId,
-      { $inc: { currentStock: quantity } },
-      { session: destSession }
-    );
-
-    await DestTransaction.create(
-      [
-        {
-          type:              'TRANSFER_IN',
-          materialId:        destMaterialId,
-          quantity,
-          counterpartCompany: srcCompanySlug,
-          notes,
-          date:              txDate,
-          performedBy,
-        },
-      ],
-      { session: destSession }
-    );
-
-    await destSession.commitTransaction();
-  } catch (err: unknown) {
-    await destSession.abortTransaction();
-
-    // Compensating transaction: re-credit source
-    try {
-      await SrcMaterial.findByIdAndUpdate(materialId, { $inc: { currentStock: quantity } });
-      await SrcTransaction.create({
-        type:              'TRANSFER_IN',
-        materialId:        new Types.ObjectId(materialId),
-        quantity,
-        counterpartCompany: destCompanySlug,
-        notes:             `[COMPENSATION] Destination credit failed — stock restored. Original txId: ${srcTxId}`,
-        date:              new Date(),
-        performedBy,
+    const result = await prisma.$transaction(async (tx) => {
+      // Get source company
+      const srcCompany = await tx.company.findUnique({
+        where: { id: srcCompanyId },
       });
-    } catch {
-      // Log compensation failure — manual intervention needed
-      console.error('[TRANSFER] Compensation failed for srcTxId:', srcTxId.toString());
-    }
+      if (!srcCompany) throw new Error('Source company not found');
 
-    return errorResponse('Transfer credit failed — source stock has been restored', 500);
-  } finally {
-    destSession.endSession();
+      // Get destination company
+      const destCompany = await tx.company.findUnique({
+        where: { id: destinationCompanyId },
+      });
+      if (!destCompany) throw new Error('Destination company not found');
+      if (!destCompany.isActive) throw new Error('Destination company is inactive');
+
+      if (srcCompanyId === destinationCompanyId) {
+        throw new Error('Source and destination cannot be the same');
+      }
+
+      // Check source material exists and has sufficient stock
+      const srcMaterial = await tx.material.findUnique({
+        where: { id: materialId },
+      });
+      if (!srcMaterial) throw new Error('Material not found in source company');
+      if (srcCompany.id !== srcMaterial.companyId) {
+        throw new Error('Material does not belong to source company');
+      }
+      if (srcMaterial.currentStock < quantity) {
+        throw new Error(`Insufficient stock. Available: ${srcMaterial.currentStock} ${srcMaterial.unit}`);
+      }
+
+      // Find or create matching material in destination by name + unit
+      let destMaterial = await tx.material.findFirst({
+        where: {
+          companyId: destinationCompanyId,
+          name: srcMaterial.name,
+          unit: srcMaterial.unit,
+        },
+      });
+
+      if (!destMaterial) {
+        // Auto-create material in destination company
+        destMaterial = await tx.material.create({
+          data: {
+            companyId: destinationCompanyId,
+            name: srcMaterial.name,
+            unit: srcMaterial.unit,
+            description: srcMaterial.description,
+            unitCost: srcMaterial.unitCost,
+            category: srcMaterial.category,
+            warehouse: srcMaterial.warehouse,
+            stockType: srcMaterial.stockType,
+            externalItemName: srcMaterial.externalItemName,
+            currentStock: 0,
+            reorderLevel: srcMaterial.reorderLevel,
+            isActive: true,
+          },
+        });
+      }
+
+      const performedBy = session.user.id;
+
+      // Deduct from source
+      await tx.material.update({
+        where: { id: materialId },
+        data: {
+          currentStock: {
+            decrement: quantity,
+          },
+        },
+      });
+
+      // Create TRANSFER_OUT transaction in source
+      await tx.transaction.create({
+        data: {
+          companyId: srcCompanyId,
+          type: 'TRANSFER_OUT',
+          materialId,
+          quantity,
+          counterpartCompany: destCompany.slug,
+          notes: notes || null,
+          date: txDate,
+          performedBy,
+        },
+      });
+
+      // Credit destination
+      await tx.material.update({
+        where: { id: destMaterial.id },
+        data: {
+          currentStock: {
+            increment: quantity,
+          },
+        },
+      });
+
+      // Create TRANSFER_IN transaction in destination
+      await tx.transaction.create({
+        data: {
+          companyId: destinationCompanyId,
+          type: 'TRANSFER_IN',
+          materialId: destMaterial.id,
+          quantity,
+          counterpartCompany: srcCompany.slug,
+          notes: notes || null,
+          date: txDate,
+          performedBy,
+        },
+      });
+
+      return {
+        transferredQty: quantity,
+        materialName: srcMaterial.name,
+        sourceCompany: srcCompany.slug,
+        destinationCompany: destCompany.slug,
+        destMaterialId: destMaterial.id,
+      };
+    });
+
+    return successResponse(result, 201);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Transfer failed';
+    return errorResponse(message, 400);
   }
-
-  return successResponse({
-    transferredQty:     quantity,
-    materialName:       srcMaterial.name,
-    sourceCompany:      srcCompanySlug,
-    destinationCompany: destCompanySlug,
-    destMaterialId:     destMaterialId.toString(),
-  }, 201);
 }

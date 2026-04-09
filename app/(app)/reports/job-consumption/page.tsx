@@ -98,11 +98,11 @@ export default function JobConsumptionPage() {
           <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
             {jobs.map((j) => (
               <button
-                key={j._id}
-                onClick={() => toggleJob(j._id)}
+                key={j.id}
+                onClick={() => toggleJob(j.id)}
                 className={[
                   'px-3 py-1 rounded-full text-xs font-medium transition-colors border',
-                  selectedJobs.includes(j._id)
+                  selectedJobs.includes(j.id)
                     ? 'bg-emerald-600 border-emerald-500 text-white'
                     : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white',
                 ].join(' ')}

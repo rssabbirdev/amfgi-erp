@@ -40,6 +40,9 @@ export const P = {
 
   // Reports
   REPORT_VIEW: 'report.view',
+
+  // Settings
+  SETTINGS_MANAGE: 'settings.manage',
 } as const;
 
 export type Permission = (typeof P)[keyof typeof P];
@@ -56,6 +59,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.TXN_STOCK_IN,  P.TXN_STOCK_OUT,   P.TXN_RETURN, P.TXN_TRANSFER,
     P.REPORT_VIEW,
     P.USER_VIEW,
+    P.SETTINGS_MANAGE,
   ],
 
   store_keeper: [
@@ -123,6 +127,10 @@ export const PERMISSION_GROUPS: Array<{
   {
     group: 'Role Management',
     perms: [{ key: P.ROLE_MANAGE, label: 'Manage Roles' }],
+  },
+  {
+    group: 'Settings',
+    perms: [{ key: P.SETTINGS_MANAGE, label: 'Manage Master Data' }],
   },
   {
     group: 'Company Management',

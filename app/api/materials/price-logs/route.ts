@@ -1,5 +1,5 @@
 import { auth } from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
@@ -16,8 +16,7 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const body = await req.json();
   const parsed = PriceLogSchema.safeParse(body);
@@ -29,18 +28,25 @@ export async function POST(req: Request) {
   }
 
   try {
-    const conn = await getCompanyDB(dbName);
-    const { PriceLog } = getModels(conn);
+    // Verify material exists and belongs to this company
+    const material = await prisma.material.findUnique({
+      where: { id: parsed.data.materialId },
+    });
+    if (!material || material.companyId !== session.user.activeCompanyId) {
+      return errorResponse('Material not found', 404);
+    }
 
-    const log = await PriceLog.create({
-      materialId: parsed.data.materialId,
-      previousPrice: parsed.data.previousPrice,
-      currentPrice: parsed.data.currentPrice,
-      source: parsed.data.source,
-      changedBy: session.user.name || session.user.email || session.user.id,
-      billId: parsed.data.billId,
-      notes: parsed.data.notes,
-      timestamp: new Date(),
+    const log = await prisma.priceLog.create({
+      data: {
+        companyId: session.user.activeCompanyId,
+        materialId: parsed.data.materialId,
+        previousPrice: parsed.data.previousPrice,
+        currentPrice: parsed.data.currentPrice,
+        source: parsed.data.source,
+        changedBy: session.user.name || session.user.email || session.user.id,
+        billId: parsed.data.billId,
+        notes: parsed.data.notes,
+      },
     });
 
     return successResponse(log, 201);

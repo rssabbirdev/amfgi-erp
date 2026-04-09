@@ -9,7 +9,7 @@ import { useGetCompaniesQuery } from '@/store/hooks';
 import { appApi } from '@/store/api/appApi';
 
 interface Company {
-  _id:  string;
+  id:  string;
   name: string;
   slug: string;
 }
@@ -24,17 +24,17 @@ export default function CompanySwitcher() {
 
   // For type safety, cast companies data
   const companies: Company[] = companiesData.map((c: any) => ({
-    _id: c._id,
+    id: c.id,
     name: c.name,
     slug: c.slug,
   }));
 
   const activeCompany = companies.find(
-    (c) => c._id === session?.user?.activeCompanyId
+    (c) => c.id === session?.user?.activeCompanyId
   );
 
   const targetCompany = confirmDialog.targetId
-    ? companies.find((c) => c._id === confirmDialog.targetId)
+    ? companies.find((c) => c.id === confirmDialog.targetId)
     : null;
 
   const handleSwitchConfirmed = async (companyId: string | null) => {
@@ -57,7 +57,6 @@ export default function CompanySwitcher() {
       await update({
         activeCompanyId:     data.activeCompanyId,
         activeCompanySlug:   data.activeCompanySlug,
-        activeCompanyDbName: data.activeCompanyDbName,
         activeCompanyName:   data.activeCompanyName,
         permissions:         data.permissions,
         allowedCompanyIds:   data.allowedCompanyIds,
@@ -97,7 +96,7 @@ export default function CompanySwitcher() {
   // Non-super-admins with exactly one company — no switcher needed
   const visibleCompanies = session?.user?.isSuperAdmin
     ? companies
-    : companies.filter((c) => session?.user?.allowedCompanyIds?.includes(c._id));
+    : companies.filter((c) => session?.user?.allowedCompanyIds?.includes(c.id));
 
   if (visibleCompanies.length === 0) return null;
 
@@ -139,16 +138,16 @@ export default function CompanySwitcher() {
               )}
               {visibleCompanies.map((c) => (
                 <button
-                  key={c._id}
-                  onClick={() => handleSwitch(c._id)}
+                  key={c.id}
+                  onClick={() => handleSwitch(c.id)}
                   className={[
                     'w-full flex items-center gap-2 px-4 py-2.5 text-sm transition-colors',
-                    c._id === session?.user?.activeCompanyId
+                    c.id === session?.user?.activeCompanyId
                       ? 'text-emerald-400 bg-emerald-600/10'
                       : 'text-slate-300 hover:bg-slate-700 hover:text-white',
                   ].join(' ')}
                 >
-                  <span className={`h-2 w-2 rounded-full shrink-0 ${c._id === session?.user?.activeCompanyId ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${c.id === session?.user?.activeCompanyId ? 'bg-emerald-400' : 'bg-slate-500'}`} />
                   <span className="truncate">{c.name}</span>
                 </button>
               ))}

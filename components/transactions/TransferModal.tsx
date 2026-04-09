@@ -11,8 +11,8 @@ import {
   useTransferStockMutation,
 } from '@/store/hooks';
 
-interface Material { _id: string; name: string; unit: string; currentStock: number }
-interface Company  { _id: string; name: string; slug: string }
+interface Material { id: string; name: string; unit: string; currentStock: number }
+interface Company  { id: string; name: string; slug: string }
 
 interface Props {
   isOpen:    boolean;
@@ -34,11 +34,11 @@ export default function TransferModal({ isOpen, onClose, onSuccess }: Props) {
 
   // Exclude the currently active company
   const companies = companiesData.filter(
-    (c) => c._id !== session?.user?.activeCompanyId
+    (c) => c.id !== session?.user?.activeCompanyId
   );
   const materials = materialsData;
 
-  const selectedMaterial = materials.find((m) => m._id === materialId);
+  const selectedMaterial = materials.find((m) => m.id === materialId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +55,7 @@ export default function TransferModal({ isOpen, onClose, onSuccess }: Props) {
       }).unwrap();
 
       toast.success(
-        `Transferred ${qty} ${selectedMaterial?.unit ?? ''} of ${selectedMaterial?.name ?? ''} to ${companies.find((c) => c._id === destId)?.name}`
+        `Transferred ${qty} ${selectedMaterial?.unit ?? ''} of ${selectedMaterial?.name ?? ''} to ${companies.find((c) => c.id === destId)?.name}`
       );
       onSuccess();
       onClose();
@@ -84,7 +84,7 @@ export default function TransferModal({ isOpen, onClose, onSuccess }: Props) {
           >
             <option value="">Select material…</option>
             {materials.map((m) => (
-              <option key={m._id} value={m._id}>
+              <option key={m.id} value={m.id}>
                 {m.name} — Stock: {m.currentStock} {m.unit}
               </option>
             ))}
@@ -101,7 +101,7 @@ export default function TransferModal({ isOpen, onClose, onSuccess }: Props) {
           >
             <option value="">Select company…</option>
             {companies.map((c) => (
-              <option key={c._id} value={c._id}>{c.name}</option>
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </div>

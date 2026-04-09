@@ -12,7 +12,7 @@ export interface Column<T> {
   className?: string;
 }
 
-interface DataTableProps<T extends { _id: string }> {
+interface DataTableProps<T extends { id: string }> {
   columns:            Column<T>[];
   data:               T[];
   loading?:           boolean;
@@ -21,7 +21,7 @@ interface DataTableProps<T extends { _id: string }> {
   onRowContextMenu?:  (row: T, e: React.MouseEvent) => void;
 }
 
-export default function DataTable<T extends { _id: string }>({
+export default function DataTable<T extends { id: string }>({
   columns,
   data,
   loading,
@@ -112,7 +112,7 @@ export default function DataTable<T extends { _id: string }>({
             ) : (
               sorted.map((row) => (
                 <tr
-                  key={row._id}
+                  key={row.id}
                   className={`border-b border-slate-700/50 hover:bg-slate-800/40 transition-colors ${onRowContextMenu ? 'cursor-pointer' : ''}`}
                   onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(row, e) : undefined}
                   data-context-menu={onRowContextMenu ? 'true' : undefined}

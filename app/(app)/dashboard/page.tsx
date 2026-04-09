@@ -8,7 +8,7 @@ import { TableSkeleton } from '@/components/ui/skeleton/TableSkeleton';
 import { useGetStockValuationQuery, useGetConsumptionQuery } from '@/store/hooks';
 
 interface Material {
-  _id: string;
+  id: string;
   name: string;
   unit: string;
   quantity: number;
@@ -36,16 +36,16 @@ export default function DashboardPage() {
     redirect('/login');
   }
 
-  const dbName = session.user.activeCompanyDbName;
+  const hasActiveCompany = !!session.user.activeCompanyId;
 
   // Fetch both reports in parallel, skip if no company selected
   const { data: valuationData, isFetching: isValuationLoading } = useGetStockValuationQuery(
     undefined,
-    { skip: !dbName }
+    { skip: !hasActiveCompany }
   );
   const { data: consumptionData, isFetching: isConsumptionLoading } = useGetConsumptionQuery(
     undefined,
-    { skip: !dbName }
+    { skip: !hasActiveCompany }
   );
 
   const summary: Summary | undefined = valuationData?.summary;
@@ -56,7 +56,7 @@ export default function DashboardPage() {
   const isLoadingSummary = isValuationLoading && !summary;
   const isLoadingTable = isValuationLoading && topMaterials.length === 0;
 
-  if (!dbName) {
+  if (!hasActiveCompany) {
     return (
       <div className="space-y-6">
         <div>
@@ -163,7 +163,7 @@ export default function DashboardPage() {
                 </tr>
               ) : (
                 topMaterials.map((mat, idx) => (
-                  <tr key={mat._id} className="border-b border-slate-700/50 hover:bg-slate-900/50">
+                  <tr key={mat.id} className="border-b border-slate-700/50 hover:bg-slate-900/50">
                     <td className="px-6 py-3 text-slate-400 text-xs font-mono">{idx + 1}</td>
                     <td className="px-6 py-3">
                       <div>
@@ -214,7 +214,7 @@ export default function DashboardPage() {
                 </tr>
               ) : (
                 topConsumed.map((mat, idx) => (
-                  <tr key={mat._id} className="border-b border-slate-700/50 hover:bg-slate-900/50">
+                  <tr key={mat.id} className="border-b border-slate-700/50 hover:bg-slate-900/50">
                     <td className="px-6 py-3 text-slate-400 text-xs font-mono">{idx + 1}</td>
                     <td className="px-6 py-3">
                       <div>

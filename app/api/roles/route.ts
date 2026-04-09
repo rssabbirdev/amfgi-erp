@@ -1,6 +1,5 @@
 import { auth }            from '@/auth';
-import { connectSystemDB } from '@/lib/db/system';
-import { Role }            from '@/lib/db/models/system/Role';
+import { prisma }          from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }               from 'zod';
 import { ALL_PERMISSIONS } from '@/lib/permissions';
@@ -8,8 +7,14 @@ import { ALL_PERMISSIONS } from '@/lib/permissions';
 export async function GET() {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  await connectSystemDB();
-  const roles = await Role.find({}).sort({ isSystem: -1, name: 1 }).lean();
+
+  const roles = await prisma.role.findMany({
+    orderBy: [
+      { isSystem: 'desc' },
+      { name: 'asc' },
+    ],
+  });
+
   return successResponse(roles);
 }
 
@@ -31,8 +36,16 @@ export async function POST(req: Request) {
   const parsed = RoleSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  await connectSystemDB();
   const slug = parsed.data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  const role = await Role.create({ ...parsed.data, slug, isSystem: false });
+
+  const role = await prisma.role.create({
+    data: {
+      name:        parsed.data.name,
+      slug,
+      permissions: parsed.data.permissions,
+      isSystem:    false,
+    },
+  });
+
   return successResponse(role, 201);
 }

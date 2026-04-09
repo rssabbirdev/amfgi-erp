@@ -15,7 +15,8 @@ import {
 } from '@/store/hooks';
 
 interface Supplier {
-  _id: string;
+  id: string;
+  companyId: string;
   name: string;
   contactPerson?: string;
   email?: string;
@@ -24,6 +25,8 @@ interface Supplier {
   city?: string;
   country?: string;
   isActive: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 export default function SuppliersPage() {
@@ -81,7 +84,7 @@ export default function SuppliersPage() {
 
   const openEdit = (supplier: Supplier) => {
     setContextMenu(null);
-    setEditingId(supplier._id);
+    setEditingId(supplier.id);
     setFormData({
       name: supplier.name,
       contactPerson: supplier.contactPerson ?? '',
@@ -118,7 +121,7 @@ export default function SuppliersPage() {
   const confirmDelete = async () => {
     if (!deleteConfirm) return;
     try {
-      await deleteSupplier(deleteConfirm._id).unwrap();
+      await deleteSupplier(deleteConfirm.id).unwrap();
       toast.success('Supplier deleted');
       setDeleteConfirm(null);
     } catch (err: any) {

@@ -13,11 +13,3 @@ export async function requireSession(perm?: Permission) {
   return session;
 }
 
-/** Returns the active company DB name from session — throws if none selected. */
-export function getActiveDbName(
-  session: Awaited<ReturnType<typeof requireSession>>
-): string {
-  const db = session.user.activeCompanyDbName;
-  if (!db) throw new Error('No active company selected');
-  return db;
-}

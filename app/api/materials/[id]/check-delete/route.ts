@@ -1,7 +1,6 @@
 import { auth }              from '@/auth';
-import { getCompanyDB, getModels } from '@/lib/db/company';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { Types }             from 'mongoose';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -10,26 +9,38 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     return errorResponse('Forbidden', 403);
   }
 
-  const dbName = session.user.activeCompanyDbName;
-  if (!dbName) return errorResponse('No active company selected', 400);
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { id } = await params;
-  const conn = await getCompanyDB(dbName);
-  const { Transaction } = getModels(conn);
 
-  // Check for linked transactions with job info populated
-  const transactions = await Transaction.find({ materialId: new Types.ObjectId(id) })
-    .populate('jobId', 'jobNumber')
-    .lean()
-    .limit(10);
+  // Verify material exists and belongs to this company
+  const material = await prisma.material.findUnique({ where: { id } });
+  if (!material || material.companyId !== session.user.activeCompanyId) {
+    return errorResponse('Material not found', 404);
+  }
 
-  const txnCount = await Transaction.countDocuments({ materialId: new Types.ObjectId(id) });
+  // Check for linked transactions with job info
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      materialId: id,
+      companyId: session.user.activeCompanyId,
+    },
+    include: { job: { select: { jobNumber: true } } },
+    take: 10,
+  });
+
+  const txnCount = await prisma.transaction.count({
+    where: {
+      materialId: id,
+      companyId: session.user.activeCompanyId,
+    },
+  });
 
   // Format transactions for frontend
-  const formattedTransactions = transactions.map((tx: any) => ({
+  const formattedTransactions = transactions.map((tx) => ({
     type: tx.type,
     quantity: tx.quantity,
-    jobNumber: tx.jobId?.jobNumber || 'N/A',
+    jobNumber: tx.job?.jobNumber || 'N/A',
     date: tx.date,
   }));
 

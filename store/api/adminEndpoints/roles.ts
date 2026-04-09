@@ -1,11 +1,13 @@
 import { adminApi } from '../adminApi';
 
 interface Role {
-  _id: string;
+  id: string;
   name: string;
   slug: string;
   permissions: string[];
   isSystem: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 export const rolesApi = adminApi.injectEndpoints({

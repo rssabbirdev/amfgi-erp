@@ -6,16 +6,18 @@ import { Badge }               from '@/components/ui/Badge';
 import Modal                   from '@/components/ui/Modal';
 import toast                   from 'react-hot-toast';
 
-interface Profile {
-  _id:         string;
-  name:        string;
-  slug:        string;
+type CompanyProfile = {
+  id: string;
+  name: string;
+  slug: string;
   description?: string;
-  isActive:    boolean;
-}
+  isActive: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+};
 
 export default function AdminProfilesPage() {
-  const [profiles,    setProfiles]    = useState<Profile[]>([]);
+  const [profiles,    setProfiles]    = useState<CompanyProfile[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [modal,       setModal]       = useState(false);
   const [formLoading, setFormLoading] = useState(false);
@@ -69,7 +71,7 @@ export default function AdminProfilesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {profiles.map((p) => (
-            <div key={p._id} className="rounded-xl bg-slate-800 border border-slate-700 p-5 space-y-3">
+            <div key={p.id} className="rounded-xl bg-slate-800 border border-slate-700 p-5 space-y-3">
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-semibold text-white">{p.name}</h3>

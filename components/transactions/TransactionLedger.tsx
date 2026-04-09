@@ -6,13 +6,20 @@ import Spinner                 from '@/components/ui/Spinner';
 import { useGetTransactionsByJobQuery } from '@/store/hooks';
 
 interface Transaction {
-  _id:        string;
-  type:       string;
+  id:         string;
+  type:       'STOCK_IN' | 'STOCK_OUT' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'REVERSAL';
   quantity:   number;
   date:       Date | string;
   notes?:     string;
   materialId: string;
   performedBy: string;
+  companyId: string;
+  jobId?: string;
+  totalCost: number;
+  averageCost: number;
+  batchesUsed?: any[];
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 export default function TransactionLedger({ jobId }: { jobId: string }) {
@@ -42,7 +49,7 @@ export default function TransactionLedger({ jobId }: { jobId: string }) {
         <tbody>
           {txns.map((t) => {
             return (
-              <tr key={t._id} className="border-b border-slate-700/50 hover:bg-slate-800/40">
+              <tr key={t.id} className="border-b border-slate-700/50 hover:bg-slate-800/40">
                 <td className="px-4 py-3 text-slate-400">{formatDate(t.date)}</td>
                 <td className="px-4 py-3"><StatusBadge status={t.type} /></td>
                 <td className="px-4 py-3 font-medium text-white">—</td>

@@ -1,11 +1,12 @@
 import { appApi } from '../appApi';
 
 export interface Unit {
-  _id: string;
+  id: string;
+  companyId: string;
   name: string;
   isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 interface UnitResponse {
@@ -19,7 +20,7 @@ export const unitsApi = appApi.injectEndpoints({
       transformResponse: (r: Unit[] | UnitResponse) => (Array.isArray(r) ? r : r.data as Unit[] || []),
       providesTags: (result) =>
         result
-          ? [{ type: 'Unit', id: 'LIST' }, ...result.map((u) => ({ type: 'Unit' as const, id: u._id }))]
+          ? [{ type: 'Unit', id: 'LIST' }, ...result.map((u) => ({ type: 'Unit' as const, id: u.id }))]
           : [{ type: 'Unit', id: 'LIST' }],
     }),
 
@@ -29,8 +30,36 @@ export const unitsApi = appApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      transformResponse: (r: Unit | UnitResponse) => (r && '_id' in r ? r as Unit : (r.data as Unit) || r),
-      invalidatesTags: [{ type: 'Unit', id: 'LIST' }],
+      transformResponse: (r: Unit | UnitResponse) => (r && 'data' in r ? r.data as Unit : r as Unit),
+      invalidatesTags: [{ type: 'Unit', id: 'LIST' }, { type: 'Material', id: 'LIST' }],
+    }),
+
+    updateUnit: builder.mutation<Unit, { id: string; name: string }>({
+      query: ({ id, ...body }) => ({
+        url: `/units/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      transformResponse: (r: Unit | UnitResponse) => (r && 'data' in r ? r.data as Unit : r as Unit),
+      invalidatesTags: (result, error, { id }) => [
+        { type: 'Unit', id },
+        { type: 'Unit', id: 'LIST' },
+        { type: 'Material', id: 'LIST' },
+      ],
+    }),
+
+    deleteUnit: builder.mutation<{ deleted: boolean }, string>({
+      query: (id) => ({
+        url: `/units/${id}`,
+        method: 'DELETE',
+      }),
+      transformResponse: (r: { deleted: boolean } | { data: { deleted: boolean } }) =>
+        ('data' in r ? r.data : r),
+      invalidatesTags: (result, error, id) => [
+        { type: 'Unit', id },
+        { type: 'Unit', id: 'LIST' },
+        { type: 'Material', id: 'LIST' },
+      ],
     }),
   }),
   overrideExisting: true
@@ -39,4 +68,6 @@ export const unitsApi = appApi.injectEndpoints({
 export const {
   useGetUnitsQuery,
   useCreateUnitMutation,
+  useUpdateUnitMutation,
+  useDeleteUnitMutation,
 } = unitsApi;

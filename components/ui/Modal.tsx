@@ -9,6 +9,7 @@ interface ModalProps {
   title:    string;
   children: ReactNode;
   size?:    'sm' | 'md' | 'lg' | 'xl';
+  actions?: ReactNode;
 }
 
 const sizes = {
@@ -18,7 +19,7 @@ const sizes = {
   xl:  'max-w-4xl',
 };
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, size = 'md', actions }: ModalProps) {
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -44,14 +45,17 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
           <h2 className="text-lg font-semibold text-white">{title}</h2>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            {actions && <div className="flex gap-2">{actions}</div>}
+            <button
+              onClick={onClose}
+              className="rounded-md p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
         {/* Body */}
         <div className="px-6 py-5">{children}</div>
