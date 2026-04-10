@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { TableSkeleton } from '@/components/ui/skeleton/TableSkeleton';
+import { PrintFormatBuilder } from '@/components/print-builder/PrintFormatBuilder';
 import toast from 'react-hot-toast';
 import type { Column } from '@/components/ui/DataTable';
 import type { ContextMenuOption } from '@/components/ui/ContextMenu';
+import type { ItemType, NamedPrintTemplate } from '@/lib/types/printTemplate';
+import { ITEM_TYPE_LABELS } from '@/lib/utils/itemTypeFields';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
 import {
   useGetUnitsQuery,
@@ -39,7 +42,21 @@ export default function SettingsPage() {
   const canManage = isSA || perms.includes('settings.manage');
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'units' | 'categories' | 'warehouses'>('units');
+  const [activeTab, setActiveTab] = useState<'units' | 'categories' | 'warehouses' | 'company' | 'template'>('units');
+
+  // Company Profile state
+  const [companyData, setCompanyData] = useState<any>(null);
+  const [companyForm, setCompanyForm] = useState({ address: '', phone: '', email: '' });
+  const [letterheadFile, setLetterheadFile] = useState<File | null>(null);
+  const [letterheadPreview, setLetterheadPreview] = useState<string | null>(null);
+  const [uploadingLetterhead, setUploadingLetterhead] = useState(false);
+
+  // Template Management state
+  const [templates, setTemplates] = useState<NamedPrintTemplate[]>([]);
+  const [fullscreenEditor, setFullscreenEditor] = useState<{ template: NamedPrintTemplate; index: number } | null>(null);
+  const [newTplModal, setNewTplModal] = useState(false);
+  const [newTplForm, setNewTplForm] = useState({ name: '', itemType: 'delivery-note' as ItemType });
+  const [tplSaving, setTplSaving] = useState(false);
 
   // Units state
   const { data: units = [], isFetching: unitsFetching } = useGetUnitsQuery();
@@ -79,6 +96,163 @@ export default function SettingsPage() {
     item: null,
     linkedCount: 0,
   });
+
+  // Load company profile data
+  useEffect(() => {
+    if (!session?.user?.activeCompanyId) return;
+    const loadCompanyData = async () => {
+      try {
+        const res = await fetch(`/api/companies/${session.user.activeCompanyId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const company = data.data;
+          setCompanyData(company);
+          setCompanyForm({
+            address: company.address || '',
+            phone: company.phone || '',
+            email: company.email || '',
+          });
+          if (company.letterheadUrl) {
+            setLetterheadPreview(company.letterheadUrl);
+          }
+          // Load templates (handle legacy single printTemplate)
+          if (company.printTemplates && Array.isArray(company.printTemplates)) {
+            setTemplates(company.printTemplates);
+          } else if (company.printTemplate) {
+            // Legacy migration: convert single template to array
+            setTemplates([company.printTemplate]);
+          } else {
+            setTemplates([]);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load company data:', err);
+      }
+    };
+    loadCompanyData();
+  }, [session?.user?.activeCompanyId]);
+
+  // ─── TEMPLATE HANDLERS ────────────────────────────────────────────────────────
+
+  const handleTemplateSave = async (updatedTemplate: NamedPrintTemplate) => {
+    if (!session?.user?.activeCompanyId) {
+      toast.error('No active company');
+      return;
+    }
+    setTplSaving(true);
+    try {
+      const newTemplates = fullscreenEditor
+        ? templates.map((t, i) => (i === fullscreenEditor.index ? updatedTemplate : t))
+        : [...templates, updatedTemplate];
+
+      const res = await fetch(`/api/companies/${session.user.activeCompanyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ printTemplates: newTemplates }),
+      });
+
+      if (res.ok) {
+        setTemplates(newTemplates);
+        setFullscreenEditor(null);
+        toast.success(fullscreenEditor ? 'Template updated' : 'Template created');
+      } else {
+        const err = await res.json();
+        toast.error(err.error || 'Failed to save template');
+      }
+    } catch (error) {
+      console.error('Template save error:', error);
+      toast.error('Failed to save template');
+    } finally {
+      setTplSaving(false);
+    }
+  };
+
+  const handleTemplateDelete = async (index: number) => {
+    if (!session?.user?.activeCompanyId) return;
+    if (!window.confirm('Delete this template?')) return;
+
+    setTplSaving(true);
+    try {
+      const newTemplates = templates.filter((_, i) => i !== index);
+      const res = await fetch(`/api/companies/${session.user.activeCompanyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ printTemplates: newTemplates }),
+      });
+
+      if (res.ok) {
+        setTemplates(newTemplates);
+        toast.success('Template deleted');
+      } else {
+        toast.error('Failed to delete template');
+      }
+    } catch (error) {
+      toast.error('Failed to delete template');
+    } finally {
+      setTplSaving(false);
+    }
+  };
+
+  const handleTemplateDuplicate = async (index: number) => {
+    const original = templates[index];
+    const duplicated: NamedPrintTemplate = {
+      ...original,
+      id: `template-${Date.now()}`,
+      name: `${original.name} (Copy)`,
+      isDefault: false,
+    };
+
+    if (!session?.user?.activeCompanyId) return;
+    setTplSaving(true);
+    try {
+      const newTemplates = [...templates, duplicated];
+      const res = await fetch(`/api/companies/${session.user.activeCompanyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ printTemplates: newTemplates }),
+      });
+
+      if (res.ok) {
+        setTemplates(newTemplates);
+        toast.success('Template duplicated');
+      } else {
+        toast.error('Failed to duplicate template');
+      }
+    } catch (error) {
+      toast.error('Failed to duplicate template');
+    } finally {
+      setTplSaving(false);
+    }
+  };
+
+  const handleSetDefault = async (index: number) => {
+    const itemType = templates[index].itemType;
+    const newTemplates = templates.map((t, i) => ({
+      ...t,
+      isDefault: t.itemType === itemType && i === index,
+    }));
+
+    if (!session?.user?.activeCompanyId) return;
+    setTplSaving(true);
+    try {
+      const res = await fetch(`/api/companies/${session.user.activeCompanyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ printTemplates: newTemplates }),
+      });
+
+      if (res.ok) {
+        setTemplates(newTemplates);
+        toast.success('Default template set');
+      } else {
+        toast.error('Failed to set default');
+      }
+    } catch (error) {
+      toast.error('Failed to set default');
+    } finally {
+      setTplSaving(false);
+    }
+  };
 
   if (!canManage) {
     return (
@@ -381,19 +555,18 @@ export default function SettingsPage() {
           { id: 'units', label: 'Units' },
           { id: 'categories', label: 'Categories' },
           { id: 'warehouses', label: 'Warehouses' },
-          { id: 'coming', label: 'Coming Soon' },
+          { id: 'company', label: 'Company Profile' },
+          { id: 'template', label: 'Print Template' },
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => {
-              if (tab.id !== 'coming') setActiveTab(tab.id as typeof activeTab);
+              setActiveTab(tab.id as typeof activeTab);
             }}
             className={`px-4 py-3 border-b-2 transition-colors ${
               activeTab === tab.id
                 ? 'border-emerald-500 text-white'
-                : tab.id === 'coming'
-                  ? 'border-transparent text-slate-500 cursor-not-allowed'
-                  : 'border-transparent text-slate-400 hover:text-white'
+                : 'border-transparent text-slate-400 hover:text-white'
             }`}
             disabled={tab.id === 'coming'}
           >
@@ -492,14 +665,357 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Coming Soon Tab */}
-      {activeTab === 'units' && activeTab !== 'units' && (
-        <div className="text-center py-12 text-slate-400">
-          More settings coming soon...
+      {/* Company Profile Tab */}
+      {activeTab === 'company' && (
+        <div className="space-y-6">
+          {/* Contact Info Card */}
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-white mb-4">Company Information</h2>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  const res = await fetch(`/api/companies/${session?.user?.activeCompanyId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(companyForm),
+                  });
+                  if (res.ok) {
+                    toast.success('Company information saved');
+                    const data = await res.json();
+                    setCompanyData(data.data);
+                  } else {
+                    const err = await res.json();
+                    toast.error(err.error || 'Failed to save');
+                  }
+                } catch (err) {
+                  toast.error('Error saving company information');
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Address</label>
+                <textarea
+                  value={companyForm.address}
+                  onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
+                  placeholder="Your company address"
+                  rows={3}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Phone</label>
+                  <input
+                    type="tel"
+                    value={companyForm.phone}
+                    onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })}
+                    placeholder="Phone number"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
+                  <input
+                    type="email"
+                    value={companyForm.email}
+                    onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })}
+                    placeholder="Email address"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2 border-t border-slate-700">
+                <Button type="submit" fullWidth>
+                  Save Information
+                </Button>
+              </div>
+            </form>
+          </div>
+
+          {/* Letterhead Upload Card */}
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-white mb-4">Letterhead</h2>
+            <p className="text-sm text-slate-400 mb-4">Upload your company letterhead to be displayed on printed delivery notes</p>
+
+            {letterheadPreview ? (
+              <div className="mb-4">
+                <div className="border border-slate-700 rounded-lg p-4 bg-slate-800">
+                  <img src={letterheadPreview} alt="Letterhead preview" className="max-h-32 object-contain mx-auto" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLetterheadFile(null);
+                    setLetterheadPreview(null);
+                  }}
+                  className="mt-2 text-sm text-red-400 hover:text-red-300"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <label className="block">
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={uploadingLetterhead}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setLetterheadFile(file);
+                  }}
+                  className="sr-only"
+                  id="letterhead-input"
+                />
+                <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center cursor-pointer hover:border-slate-500 hover:bg-slate-800/50 transition-colors">
+                  <svg className="mx-auto h-12 w-12 text-slate-500 mb-2" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                    <path d="M28 8H12a4 4 0 00-4 4v20a4 4 0 004 4h24a4 4 0 004-4V20m-8-8l-6.586-6.586A2 2 0 0028.172 2H28a2 2 0 00-2 2v6a2 2 0 002 2h6zm-4 6H12m0 8h16m-6 6H12" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <p className="text-sm font-medium text-slate-300 mb-1">Click to upload or drag and drop</p>
+                  <p className="text-xs text-slate-500">PNG, JPG, WebP up to 5MB</p>
+                </div>
+              </label>
+            )}
+
+            {letterheadFile && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!letterheadFile) return;
+                  setUploadingLetterhead(true);
+                  try {
+                    const formData = new FormData();
+                    formData.append('file', letterheadFile);
+                    formData.append('companyId', session?.user?.activeCompanyId || '');
+
+                    const res = await fetch('/api/upload/letterhead', {
+                      method: 'POST',
+                      body: formData,
+                    });
+
+                    if (res.ok) {
+                      const data = await res.json();
+                      setLetterheadPreview(data.data.letterheadUrl);
+                      setLetterheadFile(null);
+                      toast.success('Letterhead uploaded successfully');
+                    } else {
+                      const err = await res.json();
+                      toast.error(err.error || 'Upload failed');
+                    }
+                  } catch (err) {
+                    toast.error('Upload failed');
+                  } finally {
+                    setUploadingLetterhead(false);
+                  }
+                }}
+                disabled={uploadingLetterhead}
+                className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 text-sm font-medium disabled:opacity-50"
+              >
+                {uploadingLetterhead ? 'Uploading...' : 'Upload Letterhead'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Print Template Tab */}
+      {activeTab === 'template' && (
+        <div className="space-y-4">
+          {/* Template Manager */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">Print Templates</h2>
+            <Button
+              size="sm"
+              onClick={() => setNewTplModal(true)}
+              disabled={tplSaving}
+            >
+              + New Template
+            </Button>
+          </div>
+
+          {templates.length === 0 ? (
+            <div className="text-center py-12 bg-slate-800/50 rounded-lg border border-slate-700">
+              <p className="text-slate-400 mb-4">No templates yet. Create one to get started.</p>
+              <Button onClick={() => setNewTplModal(true)}>+ New Template</Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {templates.map((tpl, idx) => (
+                <div
+                  key={tpl.id}
+                  className="flex items-center justify-between p-4 bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600 transition"
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    const options: ContextMenuOption[] = [
+                      {
+                        label: 'Edit',
+                        icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
+                        action: () => setFullscreenEditor({ template: tpl, index: idx }),
+                      },
+                      { divider: true },
+                      {
+                        label: 'Duplicate',
+                        icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>,
+                        action: () => handleTemplateDuplicate(idx),
+                      },
+                      {
+                        label: tpl.isDefault ? 'Unset as Default' : 'Set as Default',
+                        icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>,
+                        action: () => handleSetDefault(idx),
+                      },
+                      { divider: true },
+                      {
+                        label: 'Delete',
+                        icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
+                        action: () => handleTemplateDelete(idx),
+                        danger: true,
+                      },
+                    ];
+                    openContextMenu(e.clientX, e.clientY, options);
+                  }}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium text-white">{tpl.name}</h3>
+                      <Badge
+                        label={tpl.isDefault ? '★ Default' : ITEM_TYPE_LABELS[tpl.itemType]}
+                        variant={tpl.isDefault ? 'green' : 'gray'}
+                      />
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">{tpl.itemType}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setFullscreenEditor({ template: tpl, index: idx })}
+                    disabled={tplSaving}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Fullscreen Template Editor Overlay */}
+      {fullscreenEditor && (
+        <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold text-white">{fullscreenEditor.template.name}</h2>
+              <Badge label={ITEM_TYPE_LABELS[fullscreenEditor.template.itemType]} />
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setFullscreenEditor(null)}
+              disabled={tplSaving}
+            >
+              ✕ Close
+            </Button>
+          </div>
+
+          {/* Editor */}
+          <div className="flex-1 overflow-hidden">
+            <PrintFormatBuilder
+              itemType={fullscreenEditor.template.itemType}
+              initialTemplate={fullscreenEditor.template}
+              letterheadUrl={companyData?.letterheadUrl}
+              onSave={handleTemplateSave}
+              onClose={() => setFullscreenEditor(null)}
+              saving={tplSaving}
+            />
+          </div>
         </div>
       )}
 
       {/* ──────────────────── MODALS ──────────────────────────────────── */}
+
+      {/* New Template Modal */}
+      <Modal
+        isOpen={newTplModal}
+        onClose={() => {
+          setNewTplModal(false);
+          setNewTplForm({ name: '', itemType: 'delivery-note' });
+        }}
+        title="Create New Template"
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!newTplForm.name.trim()) {
+              toast.error('Template name is required');
+              return;
+            }
+            // Create and immediately open editor
+            const newTemplate: NamedPrintTemplate = {
+              id: `template-${Date.now()}`,
+              name: newTplForm.name,
+              itemType: newTplForm.itemType,
+              isDefault: false,
+              version: 1,
+              pageMargins: { top: 15, right: 15, bottom: 15, left: 15 },
+              elements: [],
+            };
+            setFullscreenEditor({ template: newTemplate, index: templates.length });
+            setNewTplModal(false);
+            setNewTplForm({ name: '', itemType: 'delivery-note' });
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Template Name *</label>
+            <input
+              type="text"
+              value={newTplForm.name}
+              onChange={(e) => setNewTplForm({ ...newTplForm, name: e.target.value })}
+              placeholder="e.g., Delivery Note - Standard"
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              autoFocus
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-3">Document Type *</label>
+            <div className="grid grid-cols-2 gap-3">
+              {(['delivery-note', 'goods-receipt', 'packing-slip', 'material-label'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setNewTplForm({ ...newTplForm, itemType: type })}
+                  className={`p-3 rounded-lg border-2 text-sm font-medium transition ${
+                    newTplForm.itemType === type
+                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                      : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'
+                  }`}
+                >
+                  {ITEM_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2 border-t border-slate-700">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setNewTplModal(false);
+                setNewTplForm({ name: '', itemType: 'delivery-note' });
+              }}
+              fullWidth
+            >
+              Cancel
+            </Button>
+            <Button type="submit" fullWidth>
+              Create & Edit
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Unit Modal */}
       <Modal

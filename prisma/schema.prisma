@@ -1,18 +1,3 @@
-// ============================================================================
-// AMFGI ERP — Prisma Schema (MySQL)
-// ----------------------------------------------------------------------------
-// Multi-tenancy strategy: shared database, discriminated by `companyId` FK on
-// every company-scoped table. System-level tables (Company, User, Role) live
-// alongside company data and are NOT scoped by companyId.
-//
-// Primary keys: cuid() strings — consistent with the existing frontend which
-// already treats all IDs as strings.
-//
-// Composite uniqueness: every per-company "name" is unique via
-// @@unique([companyId, name]) so two companies can independently have a
-// "Primary Warehouse", "Main Supplier", etc.
-// ============================================================================
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -22,9 +7,310 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================================================
-// ENUMS
-// ============================================================================
+model Company {
+  id                String              @id @default(cuid())
+  name              String              @unique
+  slug              String              @unique
+  description       String?             @db.Text
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  address           String?             @db.Text
+  email             String?
+  letterheadDriveId String?
+  letterheadUrl     String?
+  printTemplates    Json?
+  phone             String?
+  categories        Category[]
+  customers         Customer[]
+  jobs              Job[]
+  materials         Material[]
+  stockBatches      StockBatch[]
+  suppliers         Supplier[]
+  transactions      Transaction[]
+  units             Unit[]
+  activeForUsers    User[]              @relation("UserActiveCompany")
+  users             UserCompanyAccess[]
+  warehouses        Warehouse[]
+}
+
+model User {
+  id              String              @id @default(cuid())
+  name            String
+  email           String              @unique
+  password        String?
+  image           String?
+  isSuperAdmin    Boolean             @default(false)
+  isActive        Boolean             @default(true)
+  activeCompanyId String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  activeCompany   Company?            @relation("UserActiveCompany", fields: [activeCompanyId], references: [id])
+  companyAccess   UserCompanyAccess[]
+
+  @@index([activeCompanyId])
+}
+
+model Role {
+  id          String              @id @default(cuid())
+  name        String              @unique
+  slug        String              @unique
+  permissions Json
+  isSystem    Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  userAccess  UserCompanyAccess[]
+}
+
+model UserCompanyAccess {
+  id        String  @id @default(cuid())
+  userId    String
+  companyId String
+  roleId    String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role      Role    @relation(fields: [roleId], references: [id])
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@index([roleId])
+}
+
+model Material {
+  id               String        @id @default(cuid())
+  companyId        String
+  name             String
+  description      String?       @db.Text
+  unit             String
+  category         String?
+  warehouse        String?
+  stockType        String
+  externalItemName String?
+  currentStock     Float         @default(0)
+  reorderLevel     Float?
+  unitCost         Float?
+  isActive         Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  company          Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  stockBatches     StockBatch[]
+  transactions     Transaction[]
+
+  @@unique([companyId, name])
+  @@index([companyId, isActive])
+}
+
+model StockBatch {
+  id                String             @id @default(cuid())
+  companyId         String
+  materialId        String
+  batchNumber       String
+  quantityReceived  Float
+  quantityAvailable Float
+  unitCost          Float
+  totalCost         Float
+  supplier          String?
+  receiptNumber     String?
+  receivedDate      DateTime
+  expiryDate        DateTime?
+  notes             String?            @db.Text
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  material          Material           @relation(fields: [materialId], references: [id])
+  transactionLinks  TransactionBatch[]
+
+  @@unique([companyId, batchNumber])
+  @@index([companyId, materialId, receivedDate])
+  @@index([companyId, materialId, quantityAvailable])
+  @@index([receiptNumber])
+  @@index([materialId], map: "StockBatch_materialId_fkey")
+}
+
+model Transaction {
+  id                  String             @id @default(cuid())
+  companyId           String
+  type                TransactionType
+  materialId          String
+  quantity            Float
+  jobId               String?
+  parentTransactionId String?
+  counterpartCompany  String?
+  notes               String?            @db.Text
+  date                DateTime           @default(now())
+  performedBy         String
+  totalCost           Float              @default(0)
+  averageCost         Float              @default(0)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  isDeliveryNote      Boolean            @default(false)
+  signedCopyDriveId   String?
+  signedCopyUrl       String?
+  company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job                 Job?               @relation(fields: [jobId], references: [id])
+  material            Material           @relation(fields: [materialId], references: [id])
+  parent              Transaction?       @relation("TxParent", fields: [parentTransactionId], references: [id])
+  children            Transaction[]      @relation("TxParent")
+  batchesUsed         TransactionBatch[]
+
+  @@index([companyId, date])
+  @@index([companyId, jobId, materialId])
+  @@index([companyId, materialId, type])
+  @@index([parentTransactionId])
+  @@index([jobId], map: "Transaction_jobId_fkey")
+  @@index([materialId], map: "Transaction_materialId_fkey")
+}
+
+model TransactionBatch {
+  id                String      @id @default(cuid())
+  transactionId     String
+  batchId           String
+  batchNumber       String
+  quantityFromBatch Float
+  unitCost          Float
+  costAmount        Float
+  batch             StockBatch  @relation(fields: [batchId], references: [id])
+  transaction       Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([batchId])
+}
+
+model Job {
+  id              String        @id @default(cuid())
+  companyId       String
+  jobNumber       String
+  customerId      String
+  description     String?       @db.Text
+  site            String?
+  status          JobStatus     @default(ACTIVE)
+  startDate       DateTime?
+  endDate         DateTime?
+  quotationNumber String?
+  lpoNumber       String?
+  projectName     String?
+  projectDetails  String?       @db.Text
+  jobWorkValue    Float?
+  finishedGoods   Json?
+  createdBy       String
+  parentJobId     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  parentJob       Job?          @relation("JobVariations", fields: [parentJobId], references: [id], onDelete: Cascade)
+  variations      Job[]         @relation("JobVariations")
+  transactions    Transaction[]
+
+  @@unique([companyId, jobNumber])
+  @@index([companyId, status])
+  @@index([customerId])
+  @@index([parentJobId])
+}
+
+model Customer {
+  id            String   @id @default(cuid())
+  companyId     String
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?  @db.Text
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobs          Job[]
+
+  @@unique([companyId, name])
+  @@index([companyId, isActive])
+}
+
+model Supplier {
+  id            String   @id @default(cuid())
+  companyId     String
+  name          String
+  contactPerson String?
+  email         String?
+  phone         String?
+  address       String?  @db.Text
+  city          String?
+  country       String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+  @@index([companyId, isActive])
+}
+
+model Unit {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+  @@index([companyId, isActive])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+  @@index([companyId, isActive])
+}
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  location  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+  @@index([companyId, isActive])
+}
+
+model MaterialLog {
+  id         String            @id @default(cuid())
+  companyId  String
+  materialId String
+  action     MaterialLogAction
+  changes    Json
+  changedBy  String
+  timestamp  DateTime          @default(now())
+
+  @@index([companyId, materialId, timestamp])
+}
+
+model PriceLog {
+  id            String      @id @default(cuid())
+  companyId     String
+  materialId    String
+  previousPrice Float
+  currentPrice  Float
+  source        PriceSource
+  changedBy     String
+  billId        String?
+  notes         String?     @db.Text
+  timestamp     DateTime    @default(now())
+
+  @@index([companyId, materialId, timestamp])
+}
 
 enum TransactionType {
   STOCK_IN
@@ -50,341 +336,4 @@ enum MaterialLogAction {
 enum PriceSource {
   manual
   bill
-}
-
-// ============================================================================
-// SYSTEM TABLES (not scoped by companyId)
-// ============================================================================
-
-model Company {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  slug        String   @unique
-  description String?  @db.Text
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  users          UserCompanyAccess[]
-  activeForUsers User[]              @relation("UserActiveCompany")
-  materials      Material[]
-  stockBatches   StockBatch[]
-  transactions   Transaction[]
-  jobs           Job[]
-  customers      Customer[]
-  suppliers      Supplier[]
-  units          Unit[]
-  categories     Category[]
-  warehouses     Warehouse[]
-  materialLogs   MaterialLog[]
-  priceLogs      PriceLog[]
-}
-
-model User {
-  id              String   @id @default(cuid())
-  name            String
-  email           String   @unique
-  password        String?
-  image           String?
-  isSuperAdmin    Boolean  @default(false)
-  isActive        Boolean  @default(true)
-  activeCompanyId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  // Relations
-  activeCompany Company?            @relation("UserActiveCompany", fields: [activeCompanyId], references: [id], onDelete: SetNull)
-  companyAccess UserCompanyAccess[]
-
-  @@index([activeCompanyId])
-}
-
-model Role {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  slug        String   @unique
-  permissions Json // string[] — list of permission keys
-  isSystem    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  userAccess UserCompanyAccess[]
-}
-
-// Junction: User ↔ Company (with Role)
-model UserCompanyAccess {
-  id        String @id @default(cuid())
-  userId    String
-  companyId String
-  roleId    String
-
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  role    Role    @relation(fields: [roleId], references: [id], onDelete: Restrict)
-
-  @@unique([userId, companyId])
-  @@index([companyId])
-  @@index([roleId])
-}
-
-// ============================================================================
-// COMPANY-SCOPED TABLES
-// ============================================================================
-
-model Material {
-  id               String   @id @default(cuid())
-  companyId        String
-  name             String
-  description      String?  @db.Text
-  unit             String
-  category         String?
-  warehouse        String?
-  stockType        String
-  externalItemName String?
-  currentStock     Float    @default(0)
-  reorderLevel     Float?
-  unitCost         Float?
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  // Relations
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  stockBatches StockBatch[]
-  transactions Transaction[]
-
-  @@unique([companyId, name])
-  @@index([companyId, isActive])
-}
-
-model StockBatch {
-  id                String    @id @default(cuid())
-  companyId         String
-  materialId        String
-  batchNumber       String
-  quantityReceived  Float
-  quantityAvailable Float
-  unitCost          Float
-  totalCost         Float
-  supplier          String?
-  receiptNumber     String?
-  receivedDate      DateTime
-  expiryDate        DateTime?
-  notes             String?   @db.Text
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  // Relations
-  company          Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  material         Material           @relation(fields: [materialId], references: [id], onDelete: Restrict)
-  transactionLinks TransactionBatch[]
-
-  @@unique([companyId, batchNumber])
-  @@index([companyId, materialId, receivedDate])
-  @@index([companyId, materialId, quantityAvailable])
-  @@index([receiptNumber])
-}
-
-model Transaction {
-  id                  String          @id @default(cuid())
-  companyId           String
-  type                TransactionType
-  materialId          String
-  quantity            Float
-  jobId               String?
-  parentTransactionId String?
-  counterpartCompany  String? // slug of the other company for inter-company transfers
-  notes               String?         @db.Text
-  date                DateTime        @default(now())
-  performedBy         String // User ID
-  totalCost           Float           @default(0)
-  averageCost         Float           @default(0)
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-
-  // Relations
-  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  material    Material           @relation(fields: [materialId], references: [id], onDelete: Restrict)
-  job         Job?               @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  parent      Transaction?       @relation("TxParent", fields: [parentTransactionId], references: [id], onDelete: SetNull)
-  children    Transaction[]      @relation("TxParent")
-  batchesUsed TransactionBatch[]
-
-  @@index([companyId, date])
-  @@index([companyId, jobId, materialId])
-  @@index([companyId, materialId, type])
-  @@index([parentTransactionId])
-}
-
-// Junction: Transaction ↔ StockBatch (replaces embedded `batchesUsed` array)
-model TransactionBatch {
-  id                String @id @default(cuid())
-  transactionId     String
-  batchId           String
-  batchNumber       String
-  quantityFromBatch Float
-  unitCost          Float
-  costAmount        Float
-
-  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  batch       StockBatch  @relation(fields: [batchId], references: [id], onDelete: Restrict)
-
-  @@index([transactionId])
-  @@index([batchId])
-}
-
-model Job {
-  id               String    @id @default(cuid())
-  companyId        String
-  jobNumber        String
-  customerId       String
-  description      String?   @db.Text
-  site             String?
-  status           JobStatus @default(ACTIVE)
-  startDate        DateTime?
-  endDate          DateTime?
-  quotationNumber  String?
-  lpoNumber        String?
-  projectName      String?
-  projectDetails   String?   @db.Text
-  jobWorkValue     Float?
-  finishedGoods    Json?     // Array of { materialId, materialName, quantity }
-  createdBy        String    // User ID
-  parentJobId      String?   // For job variations
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  // Relations
-  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  parentJob     Job?          @relation("JobVariations", fields: [parentJobId], references: [id], onDelete: Cascade)
-  variations    Job[]         @relation("JobVariations")
-  transactions  Transaction[]
-
-  @@unique([companyId, jobNumber])
-  @@index([companyId, status])
-  @@index([customerId])
-  @@index([parentJobId])
-}
-
-model Customer {
-  id            String   @id @default(cuid())
-  companyId     String
-  name          String
-  contactPerson String?
-  phone         String?
-  email         String?
-  address       String?  @db.Text
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // Relations
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  jobs    Job[]
-
-  @@unique([companyId, name])
-  @@index([companyId, isActive])
-}
-
-model Supplier {
-  id            String   @id @default(cuid())
-  companyId     String
-  name          String
-  contactPerson String?
-  email         String?
-  phone         String?
-  address       String?  @db.Text
-  city          String?
-  country       String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // Relations
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@unique([companyId, name])
-  @@index([companyId, isActive])
-}
-
-model Unit {
-  id        String   @id @default(cuid())
-  companyId String
-  name      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@unique([companyId, name])
-  @@index([companyId, isActive])
-}
-
-model Category {
-  id        String   @id @default(cuid())
-  companyId String
-  name      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@unique([companyId, name])
-  @@index([companyId, isActive])
-}
-
-model Warehouse {
-  id        String   @id @default(cuid())
-  companyId String
-  name      String
-  location  String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@unique([companyId, name])
-  @@index([companyId, isActive])
-}
-
-model MaterialLog {
-  id         String            @id @default(cuid())
-  companyId  String
-  materialId String
-  action     MaterialLogAction
-  changes    Json
-  changedBy  String // User ID or display name
-  timestamp  DateTime          @default(now())
-
-  // Relations
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@index([companyId, materialId, timestamp(sort: Desc)])
-}
-
-model PriceLog {
-  id            String      @id @default(cuid())
-  companyId     String
-  materialId    String
-  previousPrice Float
-  currentPrice  Float
-  source        PriceSource
-  changedBy     String // User ID or display name
-  billId        String?
-  notes         String?     @db.Text
-  timestamp     DateTime    @default(now())
-
-  // Relations
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@index([companyId, materialId, timestamp(sort: Desc)])
 }

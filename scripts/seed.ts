@@ -1,12 +1,21 @@
 /**
  * Seed script — Prisma MySQL version
  * Bootstraps the shared database with comprehensive test data:
- *   • Companies: AMFGI, K&M
- *   • Roles: Admin, Manager, Store Keeper (with permissions)
+ *   • Companies: AMFGI, K&M (with profiles: address, phone, email)
+ *   • Company Print Templates: Default A4 delivery note layout pre-configured
+ *   • Roles: Admin, Manager (with settings.manage), Store Keeper (with permissions)
  *   • Users: Super Admin, AMFGI Manager, Store Keeper
  *   • Per-company: Units, Categories, Warehouses
- *   • Per-company: Materials with stock batches, logs, transactions
+ *   • Per-company: Materials with stock batches, logs, transactions (STOCK_IN)
  *   • Per-company: Customers, Suppliers, Jobs (with variations)
+ *   • Per-company: Sample dispatch entries and 3+ delivery notes (STOCK_OUT)
+ *   • Delivery Notes: Structured with dynamic fields for template rendering
+ *
+ * Features:
+ *   - Print template builder ready (templates pre-configured)
+ *   - Delivery note printing with company letterhead support
+ *   - FIFO stock consumption tracking with batch costing
+ *   - Job variations for complex projects
  *
  * Run with: npx tsx scripts/seed.ts
  */
@@ -34,6 +43,7 @@ const MANAGER_PERMISSIONS = [
   'transaction.stock_in', 'transaction.stock_out', 'transaction.return', 'transaction.transfer',
   'report.view',
   'user.view',
+  'settings.manage',
 ];
 
 const STORE_KEEPER_PERMISSIONS = [
@@ -238,6 +248,7 @@ async function seedCompanyData(
   }
 
   // Create jobs with variations (if customer exists)
+  let firstJobId: string | null = null;
   if (firstCustomerId) {
     for (const j of jobs) {
       // Create main job
@@ -251,9 +262,12 @@ async function seedCompanyData(
           description: j.description || '',
           site: j.site,
           status: 'ACTIVE',
+          createdAt: new Date(),
           createdBy: 'System Seed',
         },
       });
+
+      if (!firstJobId) firstJobId = mainJob.id;
 
       // Create variations if specified
       if (j.variations && j.variations.length > 0) {
@@ -270,6 +284,7 @@ async function seedCompanyData(
               site: j.site,
               status: 'ACTIVE',
               parentJobId: mainJob.id,
+              createdAt: new Date(),
               createdBy: 'System Seed',
             },
           });
@@ -278,8 +293,64 @@ async function seedCompanyData(
     }
   }
 
+  // Create sample dispatch and delivery note transactions
+  if (firstJobId && Object.keys(createdMaterials).length > 0) {
+    const materialIds = Object.values(createdMaterials);
+    const firstMaterialId = materialIds[0];
+    const systemUserId = 'System Seed';
+
+    // Create sample dispatch transaction
+    await prisma.transaction.create({
+      data: {
+        companyId,
+        type: 'STOCK_OUT',
+        materialId: firstMaterialId,
+        quantity: 50,
+        jobId: firstJobId,
+        totalCost: 50 * materials[0].unitCost,
+        averageCost: materials[0].unitCost,
+        performedBy: systemUserId,
+        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+        notes: 'Sample dispatch for job',
+        isDeliveryNote: false,
+      },
+    });
+
+    // Create sample delivery note transactions (multiple to showcase templates)
+    for (let dnNum = 1; dnNum <= 3; dnNum++) {
+      const dnDate = new Date(Date.now() - (5 - dnNum) * 24 * 60 * 60 * 1000);
+      const dnQuantity = 10 + dnNum * 5;
+
+      let dnNotes = `--- DELIVERY NOTE #${dnNum}\n--- DELIVERY NOTE ITEMS (For Printing) ---\n`;
+
+      if (companyName === 'AMFGI') {
+        dnNotes += `• ${materials[0].name} | ${dnQuantity}kg\n`;
+        dnNotes += `• ${materials[1]?.name || 'Polyester Resin'} | ${Math.floor(dnQuantity / 2)} kg`;
+      } else {
+        dnNotes += `• ${materials[0].name} | ${dnQuantity}m\n`;
+        dnNotes += `• ${materials[1]?.name || 'Steel Plate'} | ${Math.floor(dnQuantity / 3)} sheets`;
+      }
+
+      await prisma.transaction.create({
+        data: {
+          companyId,
+          type: 'STOCK_OUT',
+          materialId: firstMaterialId,
+          quantity: dnQuantity,
+          jobId: firstJobId,
+          totalCost: dnQuantity * materials[0].unitCost,
+          averageCost: materials[0].unitCost,
+          performedBy: systemUserId,
+          date: dnDate,
+          notes: dnNotes,
+          isDeliveryNote: true,
+        },
+      });
+    }
+  }
+
   console.log(
-    `    ✓ ${materials.length} materials, ${customers.length} customers, ${suppliers.length} suppliers, ${jobs.length} jobs`
+    `    ✓ ${materials.length} materials, ${customers.length} customers, ${suppliers.length} suppliers, ${jobs.length} jobs (+ sample dispatch & delivery notes)`
   );
 }
 
@@ -307,12 +378,209 @@ async function seed() {
 
   // ── Companies ───────────────────────────────────────────────────────────────
   console.log('\nCreating companies…');
+
+  // Default print template (matches hardcoded layout)
+  const defaultPrintTemplate = {
+    id: 'default-delivery-note',
+    name: 'Delivery Note - Standard',
+    itemType: 'delivery-note',
+    isDefault: true,
+    version: 1,
+    pageMargins: { top: 15, right: 15, bottom: 15, left: 15 },
+    elements: [
+      {
+        id: 'letterhead-bg',
+        type: 'letterhead',
+        x: 0,
+        y: 0,
+        width: 210,
+        height: 100,
+        zIndex: 0,
+        style: { opacity: 0.15 },
+        objectFit: 'contain',
+      },
+      {
+        id: 'header-title',
+        type: 'text',
+        x: 15,
+        y: 102,
+        width: 100,
+        height: 12,
+        zIndex: 1,
+        content: 'DELIVERY NOTE',
+        style: { fontSize: 20, fontWeight: 'bold', color: '#000' },
+      },
+      {
+        id: 'header-dn-number',
+        type: 'field',
+        x: 130,
+        y: 102,
+        width: 65,
+        height: 8,
+        zIndex: 1,
+        field: 'dn.number',
+        label: 'NO:',
+        format: 'text',
+        style: { fontSize: 11, color: '#d32f2f', textAlign: 'right' },
+      },
+      {
+        id: 'header-date',
+        type: 'field',
+        x: 130,
+        y: 112,
+        width: 65,
+        height: 6,
+        zIndex: 1,
+        field: 'dn.date',
+        label: 'DATE:',
+        format: 'date',
+        style: { fontSize: 10, textAlign: 'right' },
+      },
+      {
+        id: 'ms-box',
+        type: 'box',
+        x: 15,
+        y: 125,
+        width: 82,
+        height: 25,
+        zIndex: 1,
+        style: { borderWidth: 2, borderColor: '#000' },
+      },
+      {
+        id: 'ms-label',
+        type: 'text',
+        x: 17,
+        y: 127,
+        width: 30,
+        height: 6,
+        zIndex: 2,
+        content: 'M/S',
+        style: { fontSize: 10, fontWeight: 'bold' },
+      },
+      {
+        id: 'ms-content',
+        type: 'field',
+        x: 17,
+        y: 133,
+        width: 78,
+        height: 15,
+        zIndex: 2,
+        field: 'job.description',
+        style: { fontSize: 9 },
+      },
+      {
+        id: 'project-box',
+        type: 'box',
+        x: 113,
+        y: 125,
+        width: 82,
+        height: 25,
+        zIndex: 1,
+        style: { borderWidth: 2, borderColor: '#000' },
+      },
+      {
+        id: 'project-label',
+        type: 'text',
+        x: 115,
+        y: 127,
+        width: 30,
+        height: 6,
+        zIndex: 2,
+        content: 'PROJECT:',
+        style: { fontSize: 10, fontWeight: 'bold' },
+      },
+      {
+        id: 'project-job-number',
+        type: 'field',
+        x: 115,
+        y: 133,
+        width: 78,
+        height: 6,
+        zIndex: 2,
+        field: 'job.jobNumber',
+        style: { fontSize: 10, fontWeight: 'bold' },
+      },
+      {
+        id: 'project-description',
+        type: 'field',
+        x: 115,
+        y: 139,
+        width: 78,
+        height: 10,
+        zIndex: 2,
+        field: 'job.description',
+        style: { fontSize: 9 },
+      },
+      {
+        id: 'items-table',
+        type: 'table',
+        x: 15,
+        y: 155,
+        width: 180,
+        height: 60,
+        zIndex: 1,
+        dataSource: 'customItems',
+        columns: [
+          { header: 'SL.NO.', field: 'slno', width: 10, align: 'center' },
+          { header: 'DESCRIPTION', field: 'name', width: 55 },
+          { header: 'UNIT', field: 'unit', width: 15, align: 'center' },
+          { header: 'QTY', field: 'qty', width: 20, align: 'right' },
+        ],
+      },
+      {
+        id: 'footer-received',
+        type: 'text',
+        x: 15,
+        y: 220,
+        width: 180,
+        height: 10,
+        zIndex: 1,
+        content: 'Received above goods in perfect condition.',
+        style: { fontSize: 10, fontWeight: 'bold', textAlign: 'center' },
+      },
+      {
+        id: 'signature-prepared',
+        type: 'signature',
+        x: 15,
+        y: 235,
+        width: 50,
+        height: 25,
+        zIndex: 1,
+        label: 'PREPARED BY',
+      },
+      {
+        id: 'signature-delivered',
+        type: 'signature',
+        x: 80,
+        y: 235,
+        width: 50,
+        height: 25,
+        zIndex: 1,
+        label: 'DELIVERED BY',
+      },
+      {
+        id: 'signature-received',
+        type: 'signature',
+        x: 145,
+        y: 235,
+        width: 50,
+        height: 25,
+        zIndex: 1,
+        label: 'RECEIVED BY',
+      },
+    ],
+  };
+
   const amfgi = await prisma.company.create({
     data: {
       name: 'Almuraqib Fiber Glass Industry LLC',
       slug: 'amfgi',
       description: 'Fiberglass fabrication and moulding',
+      address: 'P.O. Box 123456, Dubai, UAE\nJebel Ali Industrial Area 1\nDubai, United Arab Emirates',
+      phone: '+971 4 885 1234',
+      email: 'info@almuraqib.ae',
       isActive: true,
+      printTemplates: [defaultPrintTemplate],
     },
   });
 
@@ -321,7 +589,11 @@ async function seed() {
       name: 'K&M Industries',
       slug: 'km',
       description: 'Steel fabrication and structural work',
+      address: 'P.O. Box 654321, Abu Dhabi, UAE\nIndustrial Zone 3\nAbu Dhabi, United Arab Emirates',
+      phone: '+971 2 555 8888',
+      email: 'info@kandm.ae',
       isActive: true,
+      printTemplates: [defaultPrintTemplate],
     },
   });
 
@@ -605,6 +877,18 @@ async function seed() {
   console.log('  Super Admin:   admin@almuraqib.com     / Admin@1234');
   console.log('  AMFGI Manager: manager@amfgi.com       / Manager@1234');
   console.log('  Store Keeper:  storekeeper@amfgi.com   / Store@1234');
+  console.log('─────────────────────────────────────────────────────');
+  console.log('\n📋 New Features:');
+  console.log('  ✓ Print Template Builder - Customize delivery note layouts');
+  console.log('  ✓ Company Profiles - Address, phone, email configured');
+  console.log('  ✓ Default Templates - Pre-configured A4 delivery note format');
+  console.log('  ✓ Sample Delivery Notes - 3 DNs per company for testing');
+  console.log('  ✓ Manager Permissions - Full access to settings.manage');
+  console.log('\n🚀 Next steps:');
+  console.log('  1. Log in as AMFGI Manager');
+  console.log('  2. Go to Settings → Print Template');
+  console.log('  3. Customize the delivery note format');
+  console.log('  4. Go to Dispatch to print delivery notes');
   console.log('─────────────────────────────────────────────────────');
 
   await prisma.$disconnect();
