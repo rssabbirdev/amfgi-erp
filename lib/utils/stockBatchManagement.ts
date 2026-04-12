@@ -10,6 +10,7 @@ export interface CreateBatchInput {
   quantity: number;
   unitCost: number;
   supplier?: string;
+  supplierId?: string;
   receiptNumber?: string;
   receivedDate: Date;
   expiryDate?: Date;
@@ -35,6 +36,7 @@ export function createBatchData(input: CreateBatchInput) {
     unitCost: input.unitCost,
     totalCost,
     supplier: input.supplier,
+    supplierId: input.supplierId,
     receiptNumber: input.receiptNumber,
     receivedDate: input.receivedDate,
     expiryDate: input.expiryDate,

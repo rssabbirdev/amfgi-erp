@@ -197,7 +197,7 @@ export default function JobFormPage() {
         toast.success(mode === 'variation' ? 'Job variation created' : 'Job created');
       }
 
-      router.push('/jobs');
+      router.back();
     } catch (err: any) {
       toast.error(err?.data?.error ?? 'Failed to save job');
     }

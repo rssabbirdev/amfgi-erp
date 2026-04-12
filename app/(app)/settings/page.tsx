@@ -1,18 +1,19 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { TableSkeleton } from '@/components/ui/skeleton/TableSkeleton';
-import { PrintFormatBuilder } from '@/components/print-builder/PrintFormatBuilder';
 import toast from 'react-hot-toast';
 import type { Column } from '@/components/ui/DataTable';
 import type { ContextMenuOption } from '@/components/ui/ContextMenu';
-import type { ItemType, NamedPrintTemplate } from '@/lib/types/printTemplate';
-import { ITEM_TYPE_LABELS } from '@/lib/utils/itemTypeFields';
+import type { DocumentTemplate, ItemType } from '@/lib/types/documentTemplate';
+import { ITEM_TYPE_LABELS, getItemTypeLabel } from '@/lib/utils/itemTypeFields';
+import { KNOWN_ITEM_TYPES } from '@/lib/types/documentTemplate';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
 import {
   useGetUnitsQuery,
@@ -31,9 +32,12 @@ import {
   type Category,
   type Warehouse,
 } from '@/store/hooks';
+import { NEW_PRINT_TEMPLATE_SESSION_KEY } from '@/lib/utils/printTemplateSession';
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const { data: session } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { openMenu: openContextMenu } = useGlobalContextMenu();
 
   // Permission checks
@@ -44,18 +48,23 @@ export default function SettingsPage() {
   // Active tab
   const [activeTab, setActiveTab] = useState<'units' | 'categories' | 'warehouses' | 'company' | 'template'>('units');
 
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'template') setActiveTab('template');
+  }, [searchParams]);
+
   // Company Profile state
   const [companyData, setCompanyData] = useState<any>(null);
   const [companyForm, setCompanyForm] = useState({ address: '', phone: '', email: '' });
-  const [letterheadFile, setLetterheadFile] = useState<File | null>(null);
-  const [letterheadPreview, setLetterheadPreview] = useState<string | null>(null);
-  const [uploadingLetterhead, setUploadingLetterhead] = useState(false);
 
   // Template Management state
-  const [templates, setTemplates] = useState<NamedPrintTemplate[]>([]);
-  const [fullscreenEditor, setFullscreenEditor] = useState<{ template: NamedPrintTemplate; index: number } | null>(null);
+  const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [newTplModal, setNewTplModal] = useState(false);
-  const [newTplForm, setNewTplForm] = useState({ name: '', itemType: 'delivery-note' as ItemType });
+  const [newTplForm, setNewTplForm] = useState({
+    name: '',
+    itemType: 'delivery-note' as ItemType,
+    customItemKind: '',
+  });
   const [tplSaving, setTplSaving] = useState(false);
 
   // Units state
@@ -112,9 +121,6 @@ export default function SettingsPage() {
             phone: company.phone || '',
             email: company.email || '',
           });
-          if (company.letterheadUrl) {
-            setLetterheadPreview(company.letterheadUrl);
-          }
           // Load templates (handle legacy single printTemplate)
           if (company.printTemplates && Array.isArray(company.printTemplates)) {
             setTemplates(company.printTemplates);
@@ -133,39 +139,6 @@ export default function SettingsPage() {
   }, [session?.user?.activeCompanyId]);
 
   // ─── TEMPLATE HANDLERS ────────────────────────────────────────────────────────
-
-  const handleTemplateSave = async (updatedTemplate: NamedPrintTemplate) => {
-    if (!session?.user?.activeCompanyId) {
-      toast.error('No active company');
-      return;
-    }
-    setTplSaving(true);
-    try {
-      const newTemplates = fullscreenEditor
-        ? templates.map((t, i) => (i === fullscreenEditor.index ? updatedTemplate : t))
-        : [...templates, updatedTemplate];
-
-      const res = await fetch(`/api/companies/${session.user.activeCompanyId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ printTemplates: newTemplates }),
-      });
-
-      if (res.ok) {
-        setTemplates(newTemplates);
-        setFullscreenEditor(null);
-        toast.success(fullscreenEditor ? 'Template updated' : 'Template created');
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to save template');
-      }
-    } catch (error) {
-      console.error('Template save error:', error);
-      toast.error('Failed to save template');
-    } finally {
-      setTplSaving(false);
-    }
-  };
 
   const handleTemplateDelete = async (index: number) => {
     if (!session?.user?.activeCompanyId) return;
@@ -195,7 +168,7 @@ export default function SettingsPage() {
 
   const handleTemplateDuplicate = async (index: number) => {
     const original = templates[index];
-    const duplicated: NamedPrintTemplate = {
+    const duplicated: DocumentTemplate = {
       ...original,
       id: `template-${Date.now()}`,
       name: `${original.name} (Copy)`,
@@ -734,87 +707,12 @@ export default function SettingsPage() {
             </form>
           </div>
 
-          {/* Letterhead Upload Card */}
-          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Letterhead</h2>
-            <p className="text-sm text-slate-400 mb-4">Upload your company letterhead to be displayed on printed delivery notes</p>
-
-            {letterheadPreview ? (
-              <div className="mb-4">
-                <div className="border border-slate-700 rounded-lg p-4 bg-slate-800">
-                  <img src={letterheadPreview} alt="Letterhead preview" className="max-h-32 object-contain mx-auto" />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLetterheadFile(null);
-                    setLetterheadPreview(null);
-                  }}
-                  className="mt-2 text-sm text-red-400 hover:text-red-300"
-                >
-                  Remove
-                </button>
-              </div>
-            ) : (
-              <label className="block">
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={uploadingLetterhead}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) setLetterheadFile(file);
-                  }}
-                  className="sr-only"
-                  id="letterhead-input"
-                />
-                <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center cursor-pointer hover:border-slate-500 hover:bg-slate-800/50 transition-colors">
-                  <svg className="mx-auto h-12 w-12 text-slate-500 mb-2" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                    <path d="M28 8H12a4 4 0 00-4 4v20a4 4 0 004 4h24a4 4 0 004-4V20m-8-8l-6.586-6.586A2 2 0 0028.172 2H28a2 2 0 00-2 2v6a2 2 0 002 2h6zm-4 6H12m0 8h16m-6 6H12" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  <p className="text-sm font-medium text-slate-300 mb-1">Click to upload or drag and drop</p>
-                  <p className="text-xs text-slate-500">PNG, JPG, WebP up to 5MB</p>
-                </div>
-              </label>
-            )}
-
-            {letterheadFile && (
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!letterheadFile) return;
-                  setUploadingLetterhead(true);
-                  try {
-                    const formData = new FormData();
-                    formData.append('file', letterheadFile);
-                    formData.append('companyId', session?.user?.activeCompanyId || '');
-
-                    const res = await fetch('/api/upload/letterhead', {
-                      method: 'POST',
-                      body: formData,
-                    });
-
-                    if (res.ok) {
-                      const data = await res.json();
-                      setLetterheadPreview(data.data.letterheadUrl);
-                      setLetterheadFile(null);
-                      toast.success('Letterhead uploaded successfully');
-                    } else {
-                      const err = await res.json();
-                      toast.error(err.error || 'Upload failed');
-                    }
-                  } catch (err) {
-                    toast.error('Upload failed');
-                  } finally {
-                    setUploadingLetterhead(false);
-                  }
-                }}
-                disabled={uploadingLetterhead}
-                className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 text-sm font-medium disabled:opacity-50"
-              >
-                {uploadingLetterhead ? 'Uploading...' : 'Upload Letterhead'}
-              </button>
-            )}
+          <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-4 text-sm text-slate-400">
+            <p>
+              Letterhead images are set per print template: open{' '}
+              <span className="text-slate-300">Settings → Print Templates → Edit</span>, select the{' '}
+              <span className="text-slate-300">Letterhead</span> block, then paste an image URL or upload.
+            </p>
           </div>
         </div>
       )}
@@ -843,7 +741,7 @@ export default function SettingsPage() {
             <div className="space-y-2">
               {templates.map((tpl, idx) => (
                 <div
-                  key={tpl.id}
+                  key={tpl.id || `tpl-${idx}`}
                   className="flex items-center justify-between p-4 bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600 transition"
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -851,7 +749,10 @@ export default function SettingsPage() {
                       {
                         label: 'Edit',
                         icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
-                        action: () => setFullscreenEditor({ template: tpl, index: idx }),
+                        action: () =>
+                          router.push(
+                            `/settings/print-template/edit?id=${encodeURIComponent(tpl.id)}`
+                          ),
                       },
                       { divider: true },
                       {
@@ -879,7 +780,7 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium text-white">{tpl.name}</h3>
                       <Badge
-                        label={tpl.isDefault ? '★ Default' : ITEM_TYPE_LABELS[tpl.itemType]}
+                        label={tpl.isDefault ? '★ Default' : getItemTypeLabel(String(tpl.itemType))}
                         variant={tpl.isDefault ? 'green' : 'gray'}
                       />
                     </div>
@@ -888,7 +789,11 @@ export default function SettingsPage() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => setFullscreenEditor({ template: tpl, index: idx })}
+                    onClick={() =>
+                      router.push(
+                        `/settings/print-template/edit?id=${encodeURIComponent(tpl.id)}`
+                      )
+                    }
                     disabled={tplSaving}
                   >
                     Edit
@@ -900,39 +805,6 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Fullscreen Template Editor Overlay */}
-      {fullscreenEditor && (
-        <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-semibold text-white">{fullscreenEditor.template.name}</h2>
-              <Badge label={ITEM_TYPE_LABELS[fullscreenEditor.template.itemType]} />
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setFullscreenEditor(null)}
-              disabled={tplSaving}
-            >
-              ✕ Close
-            </Button>
-          </div>
-
-          {/* Editor */}
-          <div className="flex-1 overflow-hidden">
-            <PrintFormatBuilder
-              itemType={fullscreenEditor.template.itemType}
-              initialTemplate={fullscreenEditor.template}
-              letterheadUrl={companyData?.letterheadUrl}
-              onSave={handleTemplateSave}
-              onClose={() => setFullscreenEditor(null)}
-              saving={tplSaving}
-            />
-          </div>
-        </div>
-      )}
-
       {/* ──────────────────── MODALS ──────────────────────────────────── */}
 
       {/* New Template Modal */}
@@ -940,7 +812,7 @@ export default function SettingsPage() {
         isOpen={newTplModal}
         onClose={() => {
           setNewTplModal(false);
-          setNewTplForm({ name: '', itemType: 'delivery-note' });
+          setNewTplForm({ name: '', itemType: 'delivery-note', customItemKind: '' });
         }}
         title="Create New Template"
       >
@@ -951,19 +823,34 @@ export default function SettingsPage() {
               toast.error('Template name is required');
               return;
             }
+            const kind =
+              newTplForm.customItemKind.trim().replace(/\s+/g, '-') || newTplForm.itemType;
             // Create and immediately open editor
-            const newTemplate: NamedPrintTemplate = {
+            const newTemplate: DocumentTemplate = {
               id: `template-${Date.now()}`,
               name: newTplForm.name,
-              itemType: newTplForm.itemType,
+              itemType: kind as ItemType,
               isDefault: false,
-              version: 1,
-              pageMargins: { top: 15, right: 15, bottom: 15, left: 15 },
-              elements: [],
+              pageMargins: { top: 10, right: 12, bottom: 10, left: 12 },
+              sections: [],
+              canvasMode: true,
+              canvasRects: [],
             };
-            setFullscreenEditor({ template: newTemplate, index: templates.length });
+            try {
+              sessionStorage.setItem(
+                NEW_PRINT_TEMPLATE_SESSION_KEY,
+                JSON.stringify({
+                  template: newTemplate,
+                  insertIndex: templates.length,
+                })
+              );
+            } catch {
+              toast.error('Could not start editor (storage blocked).');
+              return;
+            }
             setNewTplModal(false);
-            setNewTplForm({ name: '', itemType: 'delivery-note' });
+            setNewTplForm({ name: '', itemType: 'delivery-note', customItemKind: '' });
+            router.push('/settings/print-template/edit?new=1');
           }}
           className="space-y-4"
         >
@@ -982,13 +869,13 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-3">Document Type *</label>
             <div className="grid grid-cols-2 gap-3">
-              {(['delivery-note', 'goods-receipt', 'packing-slip', 'material-label'] as const).map((type) => (
+              {KNOWN_ITEM_TYPES.map((type) => (
                 <button
                   key={type}
                   type="button"
-                  onClick={() => setNewTplForm({ ...newTplForm, itemType: type })}
+                  onClick={() => setNewTplForm({ ...newTplForm, itemType: type, customItemKind: '' })}
                   className={`p-3 rounded-lg border-2 text-sm font-medium transition ${
-                    newTplForm.itemType === type
+                    newTplForm.itemType === type && !newTplForm.customItemKind.trim()
                       ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
                       : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'
                   }`}
@@ -997,6 +884,18 @@ export default function SettingsPage() {
                 </button>
               ))}
             </div>
+            <p className="text-xs text-slate-500 mt-3">
+              Or enter a custom document kind (slug, e.g. <code className="text-slate-400">work-order</code>).
+              Register fields in code with <code className="text-slate-400">registerPrintItemTypeFields</code>, or the
+              builder will show the merged field catalog.
+            </p>
+            <input
+              type="text"
+              value={newTplForm.customItemKind}
+              onChange={(e) => setNewTplForm({ ...newTplForm, customItemKind: e.target.value })}
+              placeholder="Custom kind (optional)…"
+              className="w-full mt-2 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
+            />
           </div>
           <div className="flex gap-3 pt-2 border-t border-slate-700">
             <Button
@@ -1004,7 +903,7 @@ export default function SettingsPage() {
               variant="ghost"
               onClick={() => {
                 setNewTplModal(false);
-                setNewTplForm({ name: '', itemType: 'delivery-note' });
+                setNewTplForm({ name: '', itemType: 'delivery-note', customItemKind: '' });
               }}
               fullWidth
             >
@@ -1264,5 +1163,13 @@ export default function SettingsPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="text-slate-400 p-6">Loading settings…</div>}>
+      <SettingsPageContent />
+    </Suspense>
   );
 }

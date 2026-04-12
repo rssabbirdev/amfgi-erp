@@ -59,6 +59,9 @@ export {
   useCreateCustomerMutation,
   useUpdateCustomerMutation,
   useDeleteCustomerMutation,
+  useSyncCustomersFromPartyApiMutation,
+  type Customer,
+  type PartyRecordSource,
 } from './api/endpoints/customers';
 
 export {
@@ -81,6 +84,8 @@ export {
   useCreateSupplierMutation,
   useUpdateSupplierMutation,
   useDeleteSupplierMutation,
+  useSyncSuppliersFromPartyApiMutation,
+  type Supplier,
 } from './api/endpoints/suppliers';
 
 export { useGetDispatchEntriesQuery } from './api/endpoints/dispatch';

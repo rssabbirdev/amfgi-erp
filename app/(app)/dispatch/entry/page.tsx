@@ -174,6 +174,7 @@ export default function DispatchMaterialsPage() {
           returnQty: '',
         }))
       );
+      setNotes('');
       return;
     }
 
@@ -259,7 +260,6 @@ export default function DispatchMaterialsPage() {
       }))
     );
     setNotes('');
-
     // Apply the change
     if (changeWarningModal.pendingChange.type === 'job') {
       setSelectedJob(changeWarningModal.pendingChange.newValue);
@@ -404,7 +404,11 @@ export default function DispatchMaterialsPage() {
     if (!selectedJob) { toast.error('Select a job'); return; }
 
     const validLines = lines.filter((l) => l.materialId && l.dispatchQty);
-    if (validLines.length === 0) { toast.error('Add at least one material'); return; }
+
+    if (validLines.length === 0) {
+      toast.error('Add at least one material');
+      return;
+    }
 
     // Partition lines
     const crossCompanyLines = validLines.filter((l) => l.sourceCompanyId);
@@ -583,9 +587,12 @@ export default function DispatchMaterialsPage() {
             </div>
             <button
               type="button"
+              disabled={existingEntry?.exists ?? false}
               onClick={() => setAllowInterCompanyTransfers(!allowInterCompanyTransfers)}
               className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                allowInterCompanyTransfers
+                existingEntry?.exists
+                  ? 'opacity-50 cursor-not-allowed bg-slate-600'
+                  : allowInterCompanyTransfers
                   ? 'bg-emerald-600'
                   : 'bg-slate-600'
               }`}
@@ -737,7 +744,7 @@ export default function DispatchMaterialsPage() {
                                       (m) => m.isActive && m.currentStock > 0
                                     )
                                   : line.sourceCompanyId === undefined
-                                  ? materials.filter((m) => m.isActive && m.currentStock > 0)
+                                  ? materials.filter((m) => m.isActive)
                                   : []
                               ).map((m) => ({
                                 id: m.id,
@@ -775,10 +782,11 @@ export default function DispatchMaterialsPage() {
                           type="number"
                           min="0.001"
                           step="any"
+                          disabled={!selectedJob || !mat || mat.currentStock === 0}
                           value={line.dispatchQty}
                           onChange={(e) => updateLine(line.id, 'dispatchQty', e.target.value)}
+                          title={!mat ? '' : mat.currentStock === 0 ? 'No stock available for this material' : ''}
                           placeholder="0.00"
-                          disabled={!selectedJob}
                           className="w-full px-2.5 py-1.5 text-right bg-slate-800 border border-slate-600 rounded-md text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                       </td>

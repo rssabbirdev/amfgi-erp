@@ -9,6 +9,28 @@
   box-sizing: border-box;
 }
 
+/* Site-wide: no text selection / callout (double-click word select, drag, long-press). */
+html {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Allow selection in real text fields and explicit copy-friendly regions. */
+input,
+textarea,
+select,
+option,
+[contenteditable="true"],
+[contenteditable=""],
+[contenteditable="plaintext-only"],
+[data-user-select="text"],
+.allow-text-select {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

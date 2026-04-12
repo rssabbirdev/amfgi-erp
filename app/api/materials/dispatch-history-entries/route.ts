@@ -36,7 +36,18 @@ export async function GET(req: Request) {
       type: 'STOCK_OUT',
       date: { gte: startDate, lte: endDate },
     },
-    include: {
+    select: {
+      id: true,
+      companyId: true,
+      type: true,
+      materialId: true,
+      quantity: true,
+      jobId: true,
+      notes: true,
+      isDeliveryNote: true,
+      date: true,
+      totalCost: true,
+      signedCopyUrl: true,
       material: { select: { id: true, name: true, unit: true, unitCost: true } },
       job: { select: { id: true, jobNumber: true, description: true } },
     },
@@ -44,10 +55,17 @@ export async function GET(req: Request) {
   });
 
   // Group transactions by jobId and calendar day
+  // For delivery notes, each submission is a separate entry
+  // For dispatch notes, group by jobId-date
   const groupedMap = new Map<string, typeof transactions>();
   for (const txn of transactions) {
     const dateOnly = txn.date.toISOString().split('T')[0];
-    const key = `${txn.jobId}-${dateOnly}`;
+    // Delivery notes: each submission gets a unique key using the transaction ID as a unique identifier
+    // Dispatch notes: group by jobId-date as before
+    const isDeliveryNote = txn.isDeliveryNote ?? false;
+    const key = isDeliveryNote
+      ? `${txn.jobId}-${dateOnly}-dn-${txn.id}`  // Unique per delivery note submission
+      : `${txn.jobId}-${dateOnly}`;               // Group dispatch notes by date
     if (!groupedMap.has(key)) {
       groupedMap.set(key, []);
     }
@@ -105,7 +123,12 @@ export async function GET(req: Request) {
 
       const firstTxn = groupedTxns[0];
       const dateOnly = firstTxn.date.toISOString().split('T')[0];
-      const entryId = `${firstTxn.jobId}-${dateOnly}`;
+      const isDeliveryNote = firstTxn.isDeliveryNote ?? false;
+      // For delivery notes, use transaction ID to make each submission unique
+      // For dispatch notes, use jobId-date
+      const entryId = isDeliveryNote
+        ? `${firstTxn.jobId}-${dateOnly}-dn-${firstTxn.id}`
+        : `${firstTxn.jobId}-${dateOnly}`;
       return {
         id: entryId,
         _id: entryId,
@@ -120,6 +143,9 @@ export async function GET(req: Request) {
         materials: Array.from(materialsMap.values()),
         transactionIds: groupedTxns.map(t => t.id),
         transactionCount: groupedTxns.length,
+        notes: firstTxn.notes ?? undefined,
+        isDeliveryNote: firstTxn.isDeliveryNote ?? false,
+        signedCopyUrl: firstTxn.signedCopyUrl ?? undefined,
       };
     })
   );

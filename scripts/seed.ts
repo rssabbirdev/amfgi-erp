@@ -2,7 +2,7 @@
  * Seed script — Prisma MySQL version
  * Bootstraps the shared database with comprehensive test data:
  *   • Companies: AMFGI, K&M (with profiles: address, phone, email)
- *   • Company Print Templates: Default A4 delivery note layout pre-configured
+ *   • Company Print Templates: Six delivery note layouts — all freeform canvas with stacked rects (one default)
  *   • Roles: Admin, Manager (with settings.manage), Store Keeper (with permissions)
  *   • Users: Super Admin, AMFGI Manager, Store Keeper
  *   • Per-company: Units, Categories, Warehouses
@@ -22,6 +22,8 @@
 
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { parsePartyListDateInput } from '../lib/partyListsApi';
+import { companySeedPrintTemplates } from './seed-print-templates';
 
 const prisma = new PrismaClient();
 
@@ -66,22 +68,40 @@ interface MaterialDef {
   reorderLevel?: number;
 }
 
-interface CustomerDef {
-  name: string;
-  contactPerson?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
+/** Matches party lists API `contacts[]` shape (API-party-lists.md) */
+interface PartyContactSeed {
+  contact_name: string;
+  email?: string | null;
+  phone?: string | null;
+  sort_order?: number;
 }
 
+/** Party API–aligned customer seed (plus optional AMFGI `address`) */
+interface CustomerDef {
+  name: string;
+  email?: string | null;
+  address?: string | null;
+  trade_license_number?: string | null;
+  trade_license_authority?: string | null;
+  trade_license_expiry?: string | null;
+  trn_number?: string | null;
+  trn_expiry?: string | null;
+  contacts?: PartyContactSeed[];
+}
+
+/** Party API–aligned supplier seed + AMFGI city/country/address */
 interface SupplierDef {
   name: string;
-  contactPerson?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  city?: string;
-  country?: string;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  country?: string | null;
+  trade_license_number?: string | null;
+  trade_license_authority?: string | null;
+  trade_license_expiry?: string | null;
+  trn_number?: string | null;
+  trn_expiry?: string | null;
+  contacts?: PartyContactSeed[];
 }
 
 interface JobDef {
@@ -107,19 +127,49 @@ async function seedCompanyData(
   // Create customers first (so jobs can reference them)
   let firstCustomerId: string | null = null;
   for (const c of customers) {
-    const customer = await prisma.customer.upsert({
-      where: { companyId_name: { companyId, name: c.name } },
-      update: { isActive: true },
-      create: {
-        companyId,
-        name: c.name,
-        contactPerson: c.contactPerson,
-        phone: c.phone,
-        email: c.email,
-        address: c.address,
-        isActive: true,
-      },
+    const existing = await prisma.customer.findFirst({
+      where: { companyId, name: c.name },
     });
+    const customer = existing
+      ? await prisma.customer.update({
+          where: { id: existing.id },
+          data: { isActive: true },
+        })
+      : await prisma.customer.create({
+          data: (() => {
+            const sorted = [...(c.contacts ?? [])].sort(
+              (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+            );
+            const primary = sorted[0];
+            const contactsJson =
+              c.contacts?.map((x, i) => ({
+                contact_name: x.contact_name,
+                email: x.email ?? null,
+                phone: x.phone ?? null,
+                sort_order: x.sort_order ?? i,
+              })) ?? [];
+            return {
+              companyId,
+              name: c.name,
+              email: c.email?.trim() || null,
+              address: c.address?.trim() || null,
+              contactPerson: primary?.contact_name?.trim() || null,
+              phone: primary?.phone?.trim() || null,
+              tradeLicenseNumber: c.trade_license_number?.trim() || null,
+              tradeLicenseAuthority: c.trade_license_authority?.trim() || null,
+              tradeLicenseExpiry: parsePartyListDateInput(c.trade_license_expiry ?? undefined),
+              trnNumber: c.trn_number?.trim() || null,
+              trnExpiry: parsePartyListDateInput(c.trn_expiry ?? undefined),
+              contactsJson:
+                contactsJson.length > 0
+                  ? (JSON.parse(JSON.stringify(contactsJson)) as object)
+                  : undefined,
+              isActive: true,
+              source: 'LOCAL' as const,
+              externalPartyId: null,
+            };
+          })(),
+        });
     if (!firstCustomerId) firstCustomerId = customer.id;
   }
 
@@ -232,19 +282,53 @@ async function seedCompanyData(
 
   // Create suppliers
   for (const s of suppliers) {
-    await prisma.supplier.upsert({
-      where: { companyId_name: { companyId, name: s.name } },
-      update: { isActive: true },
-      create: {
-        companyId,
-        name: s.name,
-        contactPerson: s.contactPerson,
-        email: s.email,
-        phone: s.phone,
-        address: s.address,
-        isActive: true,
-      },
+    const existing = await prisma.supplier.findFirst({
+      where: { companyId, name: s.name },
     });
+    if (existing) {
+      await prisma.supplier.update({
+        where: { id: existing.id },
+        data: { isActive: true },
+      });
+    } else {
+      await prisma.supplier.create({
+        data: (() => {
+          const sorted = [...(s.contacts ?? [])].sort(
+            (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+          );
+          const primary = sorted[0];
+          const contactsJson =
+            s.contacts?.map((x, i) => ({
+              contact_name: x.contact_name,
+              email: x.email ?? null,
+              phone: x.phone ?? null,
+              sort_order: x.sort_order ?? i,
+            })) ?? [];
+          return {
+            companyId,
+            name: s.name,
+            email: s.email?.trim() || null,
+            address: s.address?.trim() || null,
+            city: s.city?.trim() || null,
+            country: s.country?.trim() || null,
+            contactPerson: primary?.contact_name?.trim() || null,
+            phone: primary?.phone?.trim() || null,
+            tradeLicenseNumber: s.trade_license_number?.trim() || null,
+            tradeLicenseAuthority: s.trade_license_authority?.trim() || null,
+            tradeLicenseExpiry: parsePartyListDateInput(s.trade_license_expiry ?? undefined),
+            trnNumber: s.trn_number?.trim() || null,
+            trnExpiry: parsePartyListDateInput(s.trn_expiry ?? undefined),
+            contactsJson:
+              contactsJson.length > 0
+                ? (JSON.parse(JSON.stringify(contactsJson)) as object)
+                : undefined,
+            isActive: true,
+            source: 'LOCAL' as const,
+            externalPartyId: null,
+          };
+        })(),
+      });
+    }
   }
 
   // Create jobs with variations (if customer exists)
@@ -379,198 +463,6 @@ async function seed() {
   // ── Companies ───────────────────────────────────────────────────────────────
   console.log('\nCreating companies…');
 
-  // Default print template (matches hardcoded layout)
-  const defaultPrintTemplate = {
-    id: 'default-delivery-note',
-    name: 'Delivery Note - Standard',
-    itemType: 'delivery-note',
-    isDefault: true,
-    version: 1,
-    pageMargins: { top: 15, right: 15, bottom: 15, left: 15 },
-    elements: [
-      {
-        id: 'letterhead-bg',
-        type: 'letterhead',
-        x: 0,
-        y: 0,
-        width: 210,
-        height: 100,
-        zIndex: 0,
-        style: { opacity: 0.15 },
-        objectFit: 'contain',
-      },
-      {
-        id: 'header-title',
-        type: 'text',
-        x: 15,
-        y: 102,
-        width: 100,
-        height: 12,
-        zIndex: 1,
-        content: 'DELIVERY NOTE',
-        style: { fontSize: 20, fontWeight: 'bold', color: '#000' },
-      },
-      {
-        id: 'header-dn-number',
-        type: 'field',
-        x: 130,
-        y: 102,
-        width: 65,
-        height: 8,
-        zIndex: 1,
-        field: 'dn.number',
-        label: 'NO:',
-        format: 'text',
-        style: { fontSize: 11, color: '#d32f2f', textAlign: 'right' },
-      },
-      {
-        id: 'header-date',
-        type: 'field',
-        x: 130,
-        y: 112,
-        width: 65,
-        height: 6,
-        zIndex: 1,
-        field: 'dn.date',
-        label: 'DATE:',
-        format: 'date',
-        style: { fontSize: 10, textAlign: 'right' },
-      },
-      {
-        id: 'ms-box',
-        type: 'box',
-        x: 15,
-        y: 125,
-        width: 82,
-        height: 25,
-        zIndex: 1,
-        style: { borderWidth: 2, borderColor: '#000' },
-      },
-      {
-        id: 'ms-label',
-        type: 'text',
-        x: 17,
-        y: 127,
-        width: 30,
-        height: 6,
-        zIndex: 2,
-        content: 'M/S',
-        style: { fontSize: 10, fontWeight: 'bold' },
-      },
-      {
-        id: 'ms-content',
-        type: 'field',
-        x: 17,
-        y: 133,
-        width: 78,
-        height: 15,
-        zIndex: 2,
-        field: 'job.description',
-        style: { fontSize: 9 },
-      },
-      {
-        id: 'project-box',
-        type: 'box',
-        x: 113,
-        y: 125,
-        width: 82,
-        height: 25,
-        zIndex: 1,
-        style: { borderWidth: 2, borderColor: '#000' },
-      },
-      {
-        id: 'project-label',
-        type: 'text',
-        x: 115,
-        y: 127,
-        width: 30,
-        height: 6,
-        zIndex: 2,
-        content: 'PROJECT:',
-        style: { fontSize: 10, fontWeight: 'bold' },
-      },
-      {
-        id: 'project-job-number',
-        type: 'field',
-        x: 115,
-        y: 133,
-        width: 78,
-        height: 6,
-        zIndex: 2,
-        field: 'job.jobNumber',
-        style: { fontSize: 10, fontWeight: 'bold' },
-      },
-      {
-        id: 'project-description',
-        type: 'field',
-        x: 115,
-        y: 139,
-        width: 78,
-        height: 10,
-        zIndex: 2,
-        field: 'job.description',
-        style: { fontSize: 9 },
-      },
-      {
-        id: 'items-table',
-        type: 'table',
-        x: 15,
-        y: 155,
-        width: 180,
-        height: 60,
-        zIndex: 1,
-        dataSource: 'customItems',
-        columns: [
-          { header: 'SL.NO.', field: 'slno', width: 10, align: 'center' },
-          { header: 'DESCRIPTION', field: 'name', width: 55 },
-          { header: 'UNIT', field: 'unit', width: 15, align: 'center' },
-          { header: 'QTY', field: 'qty', width: 20, align: 'right' },
-        ],
-      },
-      {
-        id: 'footer-received',
-        type: 'text',
-        x: 15,
-        y: 220,
-        width: 180,
-        height: 10,
-        zIndex: 1,
-        content: 'Received above goods in perfect condition.',
-        style: { fontSize: 10, fontWeight: 'bold', textAlign: 'center' },
-      },
-      {
-        id: 'signature-prepared',
-        type: 'signature',
-        x: 15,
-        y: 235,
-        width: 50,
-        height: 25,
-        zIndex: 1,
-        label: 'PREPARED BY',
-      },
-      {
-        id: 'signature-delivered',
-        type: 'signature',
-        x: 80,
-        y: 235,
-        width: 50,
-        height: 25,
-        zIndex: 1,
-        label: 'DELIVERED BY',
-      },
-      {
-        id: 'signature-received',
-        type: 'signature',
-        x: 145,
-        y: 235,
-        width: 50,
-        height: 25,
-        zIndex: 1,
-        label: 'RECEIVED BY',
-      },
-    ],
-  };
-
   const amfgi = await prisma.company.create({
     data: {
       name: 'Almuraqib Fiber Glass Industry LLC',
@@ -580,7 +472,7 @@ async function seed() {
       phone: '+971 4 885 1234',
       email: 'info@almuraqib.ae',
       isActive: true,
-      printTemplates: [defaultPrintTemplate],
+      printTemplates: companySeedPrintTemplates,
     },
   });
 
@@ -593,7 +485,7 @@ async function seed() {
       phone: '+971 2 555 8888',
       email: 'info@kandm.ae',
       isActive: true,
-      printTemplates: [defaultPrintTemplate],
+      printTemplates: companySeedPrintTemplates,
     },
   });
 
@@ -758,18 +650,52 @@ async function seed() {
     [
       {
         name: 'Gulf Marine LLC',
-        phone: '+971 50 123 4567',
         email: 'sales@gulfmarine.ae',
+        trade_license_number: 'TL-784512',
+        trade_license_authority: 'DED Dubai',
+        trade_license_expiry: '2027-06-30',
+        trn_number: 'TRN-100200300',
+        trn_expiry: '2028-01-15',
+        contacts: [
+          {
+            contact_name: 'Operations Desk',
+            email: 'ops@gulfmarine.ae',
+            phone: '+971 50 123 4567',
+            sort_order: 0,
+          },
+        ],
       },
       {
         name: 'Abu Dhabi Ports',
-        phone: '+971 2 500 0000',
         email: 'procurement@adports.ae',
+        trade_license_number: 'TL-991122',
+        trade_license_authority: 'ADGM',
+        contacts: [
+          {
+            contact_name: 'Procurement',
+            email: 'procurement@adports.ae',
+            phone: '+971 2 500 0000',
+            sort_order: 0,
+          },
+        ],
       },
     ],
     [
-      { name: 'Gulf Chemical Supply', contactPerson: 'Ali Ahmed', phone: '+971 4 555 6666', city: 'Dubai' },
-      { name: 'Polymer Industries', contactPerson: 'Hassan Khan', phone: '+971 2 666 7777', city: 'Abu Dhabi' },
+      {
+        name: 'Gulf Chemical Supply',
+        city: 'Dubai',
+        trade_license_number: 'TL-CHEM-01',
+        contacts: [
+          { contact_name: 'Ali Ahmed', phone: '+971 4 555 6666', sort_order: 0 },
+        ],
+      },
+      {
+        name: 'Polymer Industries',
+        city: 'Abu Dhabi',
+        contacts: [
+          { contact_name: 'Hassan Khan', phone: '+971 2 666 7777', sort_order: 0 },
+        ],
+      },
     ],
     [
       {
@@ -850,13 +776,41 @@ async function seed() {
     [
       {
         name: 'Al Fardan Exchange',
-        phone: '+971 4 222 5555',
         email: 'projects@alfardan.ae',
+        trade_license_number: 'TL-FDX-4400',
+        contacts: [
+          { contact_name: 'Projects', email: 'projects@alfardan.ae', phone: '+971 4 222 5555', sort_order: 0 },
+        ],
       },
     ],
     [
-      { name: 'Emirates Steel', phone: '+971 2 555 1234', email: 'sales@emiratessteel.ae', city: 'Abu Dhabi' },
-      { name: 'Gulf Steel Trading', phone: '+971 4 333 4444', email: 'trade@gulfsteel.ae', city: 'Dubai' },
+      {
+        name: 'Emirates Steel',
+        email: 'sales@emiratessteel.ae',
+        city: 'Abu Dhabi',
+        trade_license_number: 'TL-ES-2001',
+        contacts: [
+          {
+            contact_name: 'Sales',
+            email: 'sales@emiratessteel.ae',
+            phone: '+971 2 555 1234',
+            sort_order: 0,
+          },
+        ],
+      },
+      {
+        name: 'Gulf Steel Trading',
+        email: 'trade@gulfsteel.ae',
+        city: 'Dubai',
+        contacts: [
+          {
+            contact_name: 'Trading Desk',
+            email: 'trade@gulfsteel.ae',
+            phone: '+971 4 333 4444',
+            sort_order: 0,
+          },
+        ],
+      },
     ],
     [
       {
@@ -881,7 +835,7 @@ async function seed() {
   console.log('\n📋 New Features:');
   console.log('  ✓ Print Template Builder - Customize delivery note layouts');
   console.log('  ✓ Company Profiles - Address, phone, email configured');
-  console.log('  ✓ Default Templates - Pre-configured A4 delivery note format');
+  console.log('  ✓ Print templates - Six professional delivery note layouts per company');
   console.log('  ✓ Sample Delivery Notes - 3 DNs per company for testing');
   console.log('  ✓ Manager Permissions - Full access to settings.manage');
   console.log('\n🚀 Next steps:');

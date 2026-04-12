@@ -1,6 +1,8 @@
 import { appApi } from '../appApi';
 
-interface Supplier {
+import type { PartyListSyncResult, PartyRecordSource } from './customers';
+
+export interface Supplier {
   id: string;
   companyId: string;
   name: string;
@@ -11,6 +13,15 @@ interface Supplier {
   city?: string;
   country?: string;
   isActive: boolean;
+  source?: PartyRecordSource;
+  externalPartyId?: number | null;
+  externalSyncedAt?: string | Date | null;
+  tradeLicenseNumber?: string | null;
+  tradeLicenseAuthority?: string | null;
+  tradeLicenseExpiry?: string | Date | null;
+  trnNumber?: string | null;
+  trnExpiry?: string | Date | null;
+  contactsJson?: unknown;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
@@ -49,18 +60,32 @@ export const suppliersApi = appApi.injectEndpoints({
       ],
     }),
 
-    deleteSupplier: builder.mutation<{ deleted: boolean }, string>({
+    deleteSupplier: builder.mutation<
+      { deleted: boolean; permanent?: boolean; message?: string },
+      string
+    >({
       query: (id) => ({
         url: `/suppliers/${id}`,
         method: 'DELETE',
       }),
-      transformResponse: (r: { data: { deleted: boolean } }) => r.data,
+      transformResponse: (r: { data: { deleted: boolean; permanent?: boolean; message?: string } }) =>
+        r.data,
       invalidatesTags: (result, error, id) => [
         { type: 'Supplier', id },
         { type: 'Supplier', id: 'LIST' },
       ],
     }),
+
+    syncSuppliersFromPartyApi: builder.mutation<PartyListSyncResult, void>({
+      query: () => ({
+        url: '/suppliers/sync',
+        method: 'POST',
+      }),
+      transformResponse: (r: { data: PartyListSyncResult }) => r.data,
+      invalidatesTags: [{ type: 'Supplier', id: 'LIST' }],
+    }),
   }),
+  overrideExisting: true,
 });
 
 export const {
@@ -68,4 +93,5 @@ export const {
   useCreateSupplierMutation,
   useUpdateSupplierMutation,
   useDeleteSupplierMutation,
+  useSyncSuppliersFromPartyApiMutation,
 } = suppliersApi;

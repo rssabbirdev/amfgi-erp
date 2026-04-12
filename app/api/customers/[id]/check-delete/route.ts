@@ -13,7 +13,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   const { id } = await params;
 
-  // Check for linked jobs
+  const customer = await prisma.customer.findFirst({
+    where: { id, companyId: session.user.activeCompanyId },
+    select: { id: true, source: true },
+  });
+  if (!customer) return errorResponse('Customer not found', 404);
+
   const jobs = await prisma.job.findMany({
     where: {
       customerId: id,
@@ -35,8 +40,19 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     },
   });
 
+  const isLocal = customer.source === 'LOCAL';
+  const canHardDelete = isLocal && jobCount === 0;
+  const canDeactivate = isLocal && jobCount > 0;
+
   return successResponse({
-    canDelete: jobCount === 0,
+    source: customer.source,
+    canDelete: isLocal,
+    canHardDelete,
+    canDeactivate,
+    deleteBlockedReason:
+      customer.source === 'PARTY_API_SYNC'
+        ? 'synced_from_party_api'
+        : undefined,
     linkedJobs: jobs,
     linkedJobsCount: jobCount,
   });

@@ -14,12 +14,14 @@ const LineSchema = z.object({
 
 const BatchSchema = z.object({
   type:          z.enum(['STOCK_IN', 'STOCK_OUT']),
-  lines:         z.array(LineSchema).min(1, 'At least one line item required'),
+  lines:         z.array(LineSchema),
   receiptNumber: z.string().max(50).optional().transform((val) => val && val.trim().length > 0 ? val.trim() : undefined),
   jobId:         z.string().optional(),
   supplier:      z.string().max(100).optional(),
+  supplierId:    z.string().min(1).optional(),
   notes:         z.string().max(500).optional(),
   date:          z.string().optional(),
+  isDeliveryNote: z.boolean().optional(),
   existingTransactionIds: z.array(z.string()).optional(),
   billAmount:    z.number().optional(),
   includeTax:    z.boolean().optional(),
@@ -28,7 +30,10 @@ const BatchSchema = z.object({
     materialId: z.string(),
     unitCost: z.number(),
   })).optional(),
-});
+}).refine(
+  (data) => data.lines.length > 0 || data.isDeliveryNote === true,
+  { message: 'At least one line item required, or enable custom items only for delivery notes', path: ['lines'] }
+);
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -40,7 +45,22 @@ export async function POST(req: Request) {
   const parsed = BatchSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  const { type, lines, receiptNumber, jobId, supplier, notes, date, existingTransactionIds, billAmount, includeTax, taxAmount, materialUpdates } = parsed.data;
+  const {
+    type,
+    lines,
+    receiptNumber,
+    jobId,
+    supplier,
+    supplierId,
+    notes,
+    date,
+    isDeliveryNote,
+    existingTransactionIds,
+    billAmount,
+    includeTax,
+    taxAmount,
+    materialUpdates,
+  } = parsed.data;
 
   // Permission check
   if (type === 'STOCK_IN') {
@@ -55,6 +75,14 @@ export async function POST(req: Request) {
 
   const txDate = date ? new Date(date) : new Date();
   const companyId = session.user.activeCompanyId;
+
+  if (supplierId) {
+    const supOk = await prisma.supplier.findFirst({
+      where: { id: supplierId, companyId },
+      select: { id: true },
+    });
+    if (!supOk) return errorResponse('Supplier not found', 422);
+  }
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -138,6 +166,17 @@ export async function POST(req: Request) {
             });
           }
         }
+      }
+
+      // If no lines (custom items only delivery note), skip transaction creation and return early
+      if (lines.length === 0) {
+        return {
+          created: 0,
+          ids: [],
+          billAmount,
+          includeTax,
+          taxAmount,
+        };
       }
 
       // Process each line item
@@ -251,6 +290,7 @@ export async function POST(req: Request) {
               totalCost: fifoResult.totalCost,
               averageCost: fifoResult.averageCost,
               notes: notes || null,
+              isDeliveryNote: isDeliveryNote || false,
               date: txDate,
               performedBy: session.user.id,
             },
@@ -307,6 +347,7 @@ export async function POST(req: Request) {
             quantity: baseQuantity,
             unitCost: line.unitCost || mat.unitCost || 0,
             supplier,
+            supplierId,
             receiptNumber,
             receivedDate: txDate,
             notes,

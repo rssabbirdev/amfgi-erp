@@ -19,6 +19,9 @@ interface DataTableProps<T extends { id: string }> {
   emptyText?:         string;
   searchKeys?:        (keyof T)[];
   onRowContextMenu?:  (row: T, e: React.MouseEvent) => void;
+  onRowDoubleClick?:  (row: T, e: React.MouseEvent) => void;
+  onRowClick?:        (row: T, e: React.MouseEvent) => void;
+  selectedRowId?:     string | null;
 }
 
 export default function DataTable<T extends { id: string }>({
@@ -28,6 +31,9 @@ export default function DataTable<T extends { id: string }>({
   emptyText = 'No records found.',
   searchKeys = [],
   onRowContextMenu,
+  onRowDoubleClick,
+  onRowClick,
+  selectedRowId,
 }: DataTableProps<T>) {
   const [search,    setSearch]    = useState('');
   const [sortKey,   setSortKey]   = useState<string | null>(null);
@@ -110,11 +116,20 @@ export default function DataTable<T extends { id: string }>({
                 </td>
               </tr>
             ) : (
-              sorted.map((row) => (
+              sorted.map((row) => {
+                const isSelected = selectedRowId === row.id;
+                const rowInteractive = !!(onRowContextMenu || onRowDoubleClick || onRowClick);
+                return (
                 <tr
                   key={row.id}
-                  className={`border-b border-slate-700/50 hover:bg-slate-800/40 transition-colors ${onRowContextMenu ? 'cursor-pointer' : ''}`}
+                  className={`border-b transition-colors ${
+                    isSelected
+                      ? 'bg-emerald-600/15 border-emerald-500/40 hover:bg-emerald-600/20'
+                      : 'border-slate-700/50 hover:bg-slate-800/40'
+                  } ${rowInteractive ? 'cursor-pointer' : ''}`}
+                  onClick={onRowClick ? (e) => onRowClick(row, e) : undefined}
                   onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(row, e) : undefined}
+                  onDoubleClick={onRowDoubleClick ? (e) => onRowDoubleClick(row, e) : undefined}
                   data-context-menu={onRowContextMenu ? 'true' : undefined}
                 >
                   {columns.map((col) => (
@@ -125,7 +140,8 @@ export default function DataTable<T extends { id: string }>({
                     </td>
                   ))}
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>

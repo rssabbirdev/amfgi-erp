@@ -1,8 +1,9 @@
 'use client';
 
-import Link             from 'next/link';
-import { usePathname }  from 'next/navigation';
-import { useSession }   from 'next-auth/react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { HoverTooltip, useLgUp } from '@/components/ui/HoverTooltip';
 
 interface NavItem {
   href:  string;
@@ -127,7 +128,21 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-export default function Sidebar() {
+type SidebarProps = {
+  /** Close mobile drawer after navigation */
+  onNavigate?: () => void;
+  className?: string;
+  /** lg+ only: narrow rail with icons only */
+  desktopCollapsed?: boolean;
+  onToggleDesktopCollapse?: () => void;
+};
+
+export default function Sidebar({
+  onNavigate,
+  className = '',
+  desktopCollapsed = false,
+  onToggleDesktopCollapse,
+}: SidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const permissions = (session?.user?.permissions ?? []) as string[];
@@ -140,50 +155,156 @@ export default function Sidebar() {
   });
 
   const activeCompanyName = session?.user?.activeCompanyName;
+  const isLgUp = useLgUp();
+  const showIconTooltips = Boolean(desktopCollapsed && isLgUp);
 
   return (
-    <aside className="w-64 min-h-screen bg-slate-900 border-r border-slate-700/50 flex flex-col">
-      {/* Brand */}
-      <div className="px-6 py-5 border-b border-slate-700/50">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">
+    <aside
+      className={[
+        'flex min-h-full shrink-0 flex-col bg-slate-900/95 backdrop-blur-xl supports-backdrop-filter:bg-slate-900/80',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {/* Brand — full on mobile drawer; icon-only rail on lg when collapsed */}
+      <div
+        className={[
+          'border-b border-white/5 px-5 py-4 sm:px-6 sm:py-5',
+          desktopCollapsed ? 'lg:px-2 lg:py-4' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <div
+          className={[
+            'flex items-center gap-3',
+            desktopCollapsed ? 'lg:justify-center lg:gap-0' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-emerald-500 to-emerald-700 shadow-lg shadow-emerald-900/30 ring-1 ring-white/10">
+            <span className="text-sm font-bold text-white">
               {activeCompanyName?.[0]?.toUpperCase() ?? 'A'}
             </span>
           </div>
-          <div>
-            <p className="font-semibold text-white text-sm leading-tight truncate max-w-35">
+          <div
+            className={[
+              'min-w-0',
+              desktopCollapsed ? 'lg:sr-only' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <p className="truncate text-sm font-semibold leading-tight text-white">
               {activeCompanyName ?? 'Select Company'}
             </p>
-            <p className="text-xs text-slate-500 leading-tight">ERP System</p>
+            <p className="text-xs leading-tight text-slate-500">AMFGI ERP</p>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav
+        className={[
+          'flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-2 py-3 sm:px-3 sm:py-4',
+          desktopCollapsed ? 'lg:px-1.5 lg:py-3' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
         {visibleItems.map((item) => {
           const active = pathname.startsWith(item.href);
           return (
-            <Link
+            <HoverTooltip
               key={item.href}
-              href={item.href}
-              className={[
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                active
-                  ? 'bg-emerald-600/20 text-emerald-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800',
-              ].join(' ')}
+              label={item.label}
+              enabled={showIconTooltips}
+              className="w-full"
             >
-              {item.icon}
-              {item.label}
-            </Link>
+              <Link
+                href={item.href}
+                onClick={() => onNavigate?.()}
+                className={[
+                  'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                  desktopCollapsed
+                    ? 'lg:justify-center lg:px-0 lg:py-2.5'
+                    : '',
+                  active
+                    ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25'
+                    : 'text-slate-400 hover:bg-white/6 hover:text-slate-100',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              >
+                <span className={['shrink-0', active ? 'text-emerald-400' : ''].filter(Boolean).join(' ')}>
+                  {item.icon}
+                </span>
+                <span
+                  className={[
+                    'truncate',
+                    desktopCollapsed ? 'lg:sr-only' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  {item.label}
+                </span>
+              </Link>
+            </HoverTooltip>
           );
         })}
       </nav>
 
+      {/* Desktop collapse toggle */}
+      {onToggleDesktopCollapse && (
+        <div className="hidden shrink-0 border-t border-white/5 px-2 py-2 lg:block">
+          <HoverTooltip
+            label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            enabled={isLgUp}
+            className="w-full"
+          >
+            <button
+              type="button"
+              onClick={onToggleDesktopCollapse}
+              className="flex w-full items-center justify-center rounded-xl p-2 text-slate-400 transition-colors hover:bg-white/6 hover:text-white"
+              aria-expanded={!desktopCollapsed}
+              aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <svg
+                className={[
+                  'h-5 w-5 transition-transform duration-200 motion-reduce:transition-none',
+                  desktopCollapsed ? 'rotate-180' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                />
+              </svg>
+            </button>
+          </HoverTooltip>
+        </div>
+      )}
+
       {/* Footer */}
-      <div className="px-3 py-4 border-t border-slate-700/50 text-xs text-slate-600 text-center">
+      <div
+        className={[
+          'border-t border-white/5 px-3 py-3 text-center text-[11px] text-slate-600 sm:py-4',
+          desktopCollapsed ? 'lg:hidden' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
         Almuraqib FGI © {new Date().getFullYear()}
       </div>
     </aside>

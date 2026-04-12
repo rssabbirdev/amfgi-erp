@@ -1,6 +1,8 @@
 import { appApi } from '../appApi';
 
-interface Customer {
+export type PartyRecordSource = 'LOCAL' | 'PARTY_API_SYNC';
+
+export interface Customer {
   id: string;
   companyId: string;
   name: string;
@@ -9,9 +11,25 @@ interface Customer {
   email?: string;
   address?: string;
   isActive: boolean;
+  source?: PartyRecordSource;
+  externalPartyId?: number | null;
+  externalSyncedAt?: string | Date | null;
+  tradeLicenseNumber?: string | null;
+  tradeLicenseAuthority?: string | null;
+  tradeLicenseExpiry?: string | Date | null;
+  trnNumber?: string | null;
+  trnExpiry?: string | Date | null;
+  contactsJson?: unknown;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
+
+export type PartyListSyncResult = {
+  ok: boolean;
+  totalFromApi: number;
+  created: number;
+  updated: number;
+};
 
 export const customersApi = appApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -47,18 +65,32 @@ export const customersApi = appApi.injectEndpoints({
       ],
     }),
 
-    deleteCustomer: builder.mutation<{ deleted: boolean }, string>({
+    deleteCustomer: builder.mutation<
+      { deleted: boolean; permanent?: boolean; message?: string },
+      string
+    >({
       query: (id) => ({
         url: `/customers/${id}`,
         method: 'DELETE',
       }),
-      transformResponse: (r: { deleted: boolean }) => r,
+      transformResponse: (r: { data: { deleted: boolean; permanent?: boolean; message?: string } }) =>
+        r.data,
       invalidatesTags: (result, error, id) => [
         { type: 'Customer', id },
         { type: 'Customer', id: 'LIST' },
       ],
     }),
+
+    syncCustomersFromPartyApi: builder.mutation<PartyListSyncResult, void>({
+      query: () => ({
+        url: '/customers/sync',
+        method: 'POST',
+      }),
+      transformResponse: (r: { data: PartyListSyncResult }) => r.data,
+      invalidatesTags: [{ type: 'Customer', id: 'LIST' }],
+    }),
   }),
+  overrideExisting: true,
 });
 
 export const {
@@ -66,4 +98,5 @@ export const {
   useCreateCustomerMutation,
   useUpdateCustomerMutation,
   useDeleteCustomerMutation,
+  useSyncCustomersFromPartyApiMutation,
 } = customersApi;

@@ -1,15 +1,18 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { applyPartialPartyFieldsToUpdate, partyListPartyFieldsSchema } from '@/lib/partyListRecordPayload';
 import { z } from 'zod';
 
-const UpdateSchema = z.object({
-  name:          z.string().min(1).max(100).optional(),
-  contactPerson: z.string().max(100).optional(),
-  phone:         z.string().max(30).optional(),
-  email:         z.string().email().optional().or(z.literal('')),
-  address:       z.string().max(300).optional(),
-});
+const UpdateSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    contactPerson: z.string().max(100).optional(),
+    phone: z.string().max(30).optional(),
+    email: z.union([z.string().email(), z.literal('')]).optional(),
+    address: z.string().max(500).optional(),
+  })
+  .merge(partyListPartyFieldsSchema.partial());
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -41,17 +44,24 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { id } = await params;
-  const body = await req.json();
+  const body = (await req.json()) as Record<string, unknown>;
   const parsed = UpdateSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
   try {
     const updateData: Record<string, unknown> = {};
-    if (parsed.data.name !== undefined) updateData.name = parsed.data.name;
-    if (parsed.data.contactPerson !== undefined) updateData.contactPerson = parsed.data.contactPerson;
-    if (parsed.data.phone !== undefined) updateData.phone = parsed.data.phone;
-    if (parsed.data.email !== undefined) updateData.email = parsed.data.email || null;
-    if (parsed.data.address !== undefined) updateData.address = parsed.data.address;
+    const d = parsed.data;
+    if (d.name !== undefined) updateData.name = d.name;
+    if (d.contactPerson !== undefined) updateData.contactPerson = d.contactPerson?.trim() || null;
+    if (d.phone !== undefined) updateData.phone = d.phone?.trim() || null;
+    if (d.email !== undefined) updateData.email = d.email?.trim() ? d.email.trim() : null;
+    if (d.address !== undefined) updateData.address = d.address?.trim() || null;
+    applyPartialPartyFieldsToUpdate(d, body, updateData);
+
+    const existing = await prisma.customer.findFirst({
+      where: { id, companyId: session.user.activeCompanyId },
+    });
+    if (!existing) return errorResponse('Customer not found', 404);
 
     const updated = await prisma.customer.update({
       where: { id },
@@ -80,10 +90,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { id } = await params;
-  const { hardDelete } = await req.json().catch(() => ({ hardDelete: false }));
 
   try {
-    // Check for linked jobs
+    const customer = await prisma.customer.findFirst({
+      where: { id, companyId: session.user.activeCompanyId },
+    });
+    if (!customer) return errorResponse('Customer not found', 404);
+
+    if (customer.source === 'PARTY_API_SYNC') {
+      return errorResponse(
+        'Customers synced from the party lists API cannot be removed from here. Deactivate the record instead.',
+        403
+      );
+    }
+
     const jobCount = await prisma.job.count({
       where: {
         customerId: id,
@@ -91,27 +111,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       },
     });
 
-    if (jobCount > 0 && !hardDelete) {
-      return errorResponse(
-        `Cannot delete: ${jobCount} job(s) linked to this customer. Deactivate instead or use hard delete if you're certain.`,
-        400
-      );
-    }
-
-    if (hardDelete) {
-      // Permanently delete (only if no jobs OR user explicitly confirmed)
-      await prisma.customer.delete({
-        where: { id },
-      });
-      return successResponse({ deleted: true, permanent: true });
-    } else {
-      // Soft delete (deactivate)
-      const customer = await prisma.customer.update({
+    if (jobCount > 0) {
+      await prisma.customer.update({
         where: { id },
         data: { isActive: false },
       });
-      return successResponse({ deleted: true, permanent: false, message: 'Customer deactivated' });
+      return successResponse({
+        deleted: true,
+        permanent: false,
+        message: `Customer has ${jobCount} job(s); marked inactive instead of deleting.`,
+      });
     }
+
+    await prisma.customer.delete({ where: { id } });
+    return successResponse({ deleted: true, permanent: true });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to delete customer';
     if (errorMsg.includes('not found')) {

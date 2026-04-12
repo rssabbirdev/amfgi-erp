@@ -1,5 +1,5 @@
 import { formatDate, formatCurrency } from './formatters';
-import type { FieldElement, ItemType } from '@/lib/types/printTemplate';
+import type { ItemType } from '@/lib/types/documentTemplate';
 
 export interface TemplateDataContext {
   company: {
@@ -17,6 +17,7 @@ export interface TemplateDataContext {
     notes: string;
     totalCost: number;
     quantity: number;
+    signedCopyUrl: string;
   };
   material: {
     name: string;
@@ -29,6 +30,16 @@ export interface TemplateDataContext {
     site?: string;
     lpoNumber?: string;
     quotationNumber?: string;
+    projectName?: string;
+    projectDetails?: string;
+    jobWorkValue?: number;
+  } | null;
+  customer: {
+    name: string;
+    contactPerson?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
   } | null;
   customItems: Array<{
     name: string;
@@ -66,6 +77,7 @@ export interface GoodsReceiptContext {
 export interface PackingSlipContext {
   company: TemplateDataContext['company'];
   job: TemplateDataContext['job'];
+  customer: TemplateDataContext['customer'];
   customItems: TemplateDataContext['customItems'];
   today: string;
 }
@@ -128,37 +140,145 @@ function parseCustomItems(notes?: string): Array<{
   if (!notes) return [];
 
   const itemsMatch = notes.match(
-    /--- DELIVERY NOTE ITEMS \(For Printing\) ---\n([\s\S]*?)(?:---|$)/
+    /--- DELIVERY NOTE ITEMS \(For Printing\) ---\r?\n([\s\S]*?)(?=\r?\n---|\r?\n$|$)/
   );
   if (!itemsMatch) return [];
 
   const itemsText = itemsMatch[1];
   const items: Array<{ name: string; description: string; qty: string; unit: string }> = [];
 
-  const lines = itemsText.split('\n').filter((l) => l.trim());
+  const lines = itemsText.split(/\r?\n/).filter((l) => l.trim());
   for (const line of lines) {
-    // Format: • {name} - {description} | {qty} {unit}
-    const bulletMatch = line.match(
-      /^•\s*([^-]+)\s*-\s*([^|]+)\s*\|\s*([^\s]+)\s*(.+?)$/
-    );
-    if (bulletMatch) {
-      items.push({
-        name: bulletMatch[1].trim(),
-        description: bulletMatch[2].trim(),
-        qty: bulletMatch[3].trim(),
-        unit: bulletMatch[4].trim(),
-      });
+    // Same as dispatch/delivery-note save: `• name | qty unit` or `• name - description | qty unit`
+    const bullet = line.match(/^•\s*(.+)$/);
+    if (!bullet) continue;
+    const rest = bullet[1].trim();
+    const pipeIdx = rest.indexOf('|');
+    if (pipeIdx < 0) continue;
+    const left = rest.slice(0, pipeIdx).trim();
+    const right = rest.slice(pipeIdx + 1).trim();
+    const qtyUnit = right.match(/^(\S+)\s+(.+)$/);
+    if (!qtyUnit) continue;
+    const qty = qtyUnit[1].trim();
+    const unit = qtyUnit[2].trim();
+    const dashIdx = left.indexOf(' - ');
+    let name: string;
+    let description: string;
+    if (dashIdx >= 0) {
+      name = left.slice(0, dashIdx).trim();
+      description = left.slice(dashIdx + 3).trim();
+    } else {
+      name = left;
+      description = '';
     }
+    items.push({ name, description, qty, unit });
   }
 
   return items;
+}
+
+/** One table row per STOCK_OUT line that has a material (dispatch lines are not stored in notes). */
+function stockOutMaterialTableRows(transactions: any[]): Array<{
+  name: string;
+  description: string;
+  qty: string;
+  unit: string;
+}> {
+  return transactions
+    .filter((t) => t?.type === 'STOCK_OUT' && t.material)
+    .map((t) => ({
+      name: String(t.material?.name ?? ''),
+      description: '',
+      qty: String(t.quantity ?? ''),
+      unit: String(t.material?.unit ?? ''),
+    }));
+}
+
+function deliveryNoteTableRowsFromNotesAndTransactions(
+  notes: string | undefined,
+  stockOutTransactions: any[]
+): Array<{ name: string; description: string; qty: string; unit: string }> {
+  return [...parseCustomItems(notes), ...stockOutMaterialTableRows(stockOutTransactions)];
+}
+
+/**
+ * Build preview/print context for a full delivery note (one or more STOCK_OUT lines sharing the same note block).
+ */
+export function buildDeliveryNoteTemplateData(
+  stockOutTransactions: any[],
+  company: any
+): TemplateDataContext {
+  const txs = stockOutTransactions.filter((t) => t?.type === 'STOCK_OUT');
+  if (txs.length === 0) {
+    return buildTemplateData(stockOutTransactions[0] ?? { notes: '', date: new Date() }, company);
+  }
+  const first = txs[0];
+  const customItems = deliveryNoteTableRowsFromNotesAndTransactions(first.notes, txs);
+  const totalCost = txs.reduce((s, t) => s + (Number(t.totalCost) || 0), 0);
+  const totalQty = txs.reduce((s, t) => s + (Number(t.quantity) || 0), 0);
+  const withMat = txs.find((t) => t.material);
+
+  return {
+    company: {
+      name: company?.name ?? '',
+      address: company?.address ?? '',
+      phone: company?.phone ?? '',
+      email: company?.email ?? '',
+      letterheadUrl: company?.letterheadUrl ?? '',
+      slug: company?.slug,
+      description: company?.description,
+    },
+    dn: {
+      number: parseDeliveryNoteNumber(first.notes),
+      date: formatDate(first.date),
+      notes: (first.notes ?? '').split('--- DELIVERY NOTE')[0].trim(),
+      totalCost,
+      quantity: totalQty,
+      signedCopyUrl: first.signedCopyUrl ?? '',
+    },
+    material: withMat?.material
+      ? {
+          name: withMat.material.name ?? '',
+          unit: withMat.material.unit ?? '',
+          unitCost: withMat.material.unitCost ?? 0,
+        }
+      : null,
+    job: first.job
+      ? {
+          jobNumber: first.job.jobNumber ?? '',
+          description: first.job.description ?? '',
+          site: first.job.site,
+          lpoNumber: first.job.lpoNumber,
+          quotationNumber: first.job.quotationNumber,
+          projectName: first.job.projectName,
+          projectDetails: first.job.projectDetails,
+          jobWorkValue: first.job.jobWorkValue,
+        }
+      : null,
+    customer: first.job?.customer
+      ? {
+          name: first.job.customer.name ?? '',
+          contactPerson: first.job.customer.contactPerson ?? undefined,
+          phone: first.job.customer.phone ?? undefined,
+          email: first.job.customer.email ?? undefined,
+          address: first.job.customer.address ?? undefined,
+        }
+      : null,
+    customItems,
+    today: formatDate(new Date().toISOString()),
+  };
 }
 
 export function buildTemplateData(
   transaction: any, // Transaction from API
   company: any      // Company from API
 ): TemplateDataContext {
-  const customItems = parseCustomItems(transaction.notes);
+  const stockOutSlice =
+    transaction?.type === 'STOCK_OUT' ? [transaction] : [];
+  const customItems = deliveryNoteTableRowsFromNotesAndTransactions(
+    transaction.notes,
+    stockOutSlice
+  );
 
   return {
     company: {
@@ -176,6 +296,7 @@ export function buildTemplateData(
       notes: (transaction.notes ?? '').split('--- DELIVERY NOTE')[0].trim(),
       totalCost: transaction.totalCost ?? 0,
       quantity: transaction.quantity ?? 0,
+      signedCopyUrl: transaction.signedCopyUrl ?? '',
     },
     material: transaction.material
       ? {
@@ -191,6 +312,18 @@ export function buildTemplateData(
           site: transaction.job.site,
           lpoNumber: transaction.job.lpoNumber,
           quotationNumber: transaction.job.quotationNumber,
+          projectName: transaction.job.projectName,
+          projectDetails: transaction.job.projectDetails,
+          jobWorkValue: transaction.job.jobWorkValue,
+        }
+      : null,
+    customer: transaction.job?.customer
+      ? {
+          name: transaction.job.customer.name ?? '',
+          contactPerson: transaction.job.customer.contactPerson ?? undefined,
+          phone: transaction.job.customer.phone ?? undefined,
+          email: transaction.job.customer.email ?? undefined,
+          address: transaction.job.customer.address ?? undefined,
         }
       : null,
     customItems,
@@ -203,20 +336,21 @@ export function resolveField(
   data: AnyTemplateDataContext
 ): string {
   const parts = field.split('.');
-  let current: any = data;
+  let current: unknown = data;
 
   for (const part of parts) {
     if (current === null || current === undefined) return '';
-    current = current[part];
+    current = (current as Record<string, unknown>)[part];
   }
 
   if (current === null || current === undefined) return '';
+  if (typeof current === 'number' && Number.isFinite(current)) return String(current);
   return String(current);
 }
 
 export function formatValue(
   value: string | number,
-  format?: FieldElement['format']
+  format?: 'date' | 'currency' | 'number' | 'text'
 ): string {
   if (!format || format === 'text') return String(value);
 
@@ -242,20 +376,21 @@ export function formatValue(
 
 export const MOCK_PREVIEW_DATA: TemplateDataContext = {
   company: {
-    name: 'AMFGI Company LLC',
-    address: 'P.O. Box 12345, Dubai, UAE',
-    phone: '+971 4 123 4567',
-    email: 'info@amfgi.ae',
+    name: 'Almuraqib Fiber Glass Industry LLC',
+    address: 'P.O. Box 123456, Dubai, UAE — Jebel Ali Industrial Area 1',
+    phone: '+971 4 885 1234',
+    email: 'info@almuraqib.ae',
     letterheadUrl: '',
     slug: 'amfgi',
-    description: 'Fiberglass & Steel Workshop',
+    description: 'Fiberglass fabrication and moulding',
   },
   dn: {
-    number: '0042',
+    number: 'DN-2026-0042',
     date: new Date().toLocaleDateString('en-AE', { day: '2-digit', month: 'short', year: 'numeric' }),
     notes: 'Delivery for Phase 1 project. Items packed and ready.',
     totalCost: 5250,
     quantity: 3,
+    signedCopyUrl: '',
   },
   material: {
     name: 'Steel Pipe 2"',
@@ -268,6 +403,16 @@ export const MOCK_PREVIEW_DATA: TemplateDataContext = {
     site: 'Dubai Industrial Zone',
     lpoNumber: 'LPO-9876',
     quotationNumber: 'QTN-5432',
+    projectName: 'Tower B Fit-out',
+    projectDetails: 'Floors 3–5 MEP supports',
+    jobWorkValue: 125000,
+  },
+  customer: {
+    name: 'Acme Contracting LLC',
+    contactPerson: 'Sara Al-Mazrouei',
+    phone: '+971 50 111 2233',
+    email: 'procurement@acme.ae',
+    address: 'Business Bay, Dubai',
   },
   customItems: [
     {
@@ -322,6 +467,7 @@ export const MOCK_GRN_DATA: GoodsReceiptContext = {
 export const MOCK_PACKING_SLIP_DATA: PackingSlipContext = {
   company: MOCK_PREVIEW_DATA.company,
   job: MOCK_PREVIEW_DATA.job,
+  customer: MOCK_PREVIEW_DATA.customer,
   customItems: MOCK_PREVIEW_DATA.customItems,
   today: MOCK_PREVIEW_DATA.today,
 };
@@ -382,5 +528,7 @@ export function getMockData(itemType: ItemType): AnyTemplateDataContext {
       return MOCK_PACKING_SLIP_DATA;
     case 'material-label':
       return MOCK_MATERIAL_LABEL_DATA;
+    default:
+      return MOCK_PREVIEW_DATA;
   }
 }

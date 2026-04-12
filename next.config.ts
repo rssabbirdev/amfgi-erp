@@ -7,6 +7,16 @@ const nextConfig: NextConfig = {
   productionBrowserSourceMaps: false,
   // Use Turbopack configuration (Next.js 16 default)
   turbopack: {},
+  // Allow Google Drive images via lh3.googleusercontent.com
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+        pathname: '/**',
+      },
+    ],
+  },
 };
 
 export default nextConfig;

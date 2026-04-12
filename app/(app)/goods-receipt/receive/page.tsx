@@ -211,6 +211,7 @@ export default function ReceiveStockPage() {
         type: 'STOCK_IN',
         receiptNumber,
         supplier: getSupplierName(supplierId) || undefined,
+        supplierId: supplierId || undefined,
         notes: notes || undefined,
         date,
         billAmount,

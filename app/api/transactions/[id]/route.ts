@@ -2,6 +2,65 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user) return errorResponse('Unauthorized', 401);
+  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_out')) {
+    return errorResponse('Forbidden', 403);
+  }
+
+  if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+
+  const { id } = await params;
+  const companyId = session.user.activeCompanyId;
+
+  try {
+    const txn = await prisma.transaction.findUnique({
+      where: { id },
+      include: {
+        material: { select: { id: true, name: true, unit: true, currentStock: true, unitCost: true } },
+        job: {
+          select: {
+            id: true,
+            jobNumber: true,
+            description: true,
+            site: true,
+            lpoNumber: true,
+            quotationNumber: true,
+            projectName: true,
+            projectDetails: true,
+            jobWorkValue: true,
+            customerId: true,
+            customer: {
+              select: {
+                name: true,
+                contactPerson: true,
+                phone: true,
+                email: true,
+                address: true,
+              },
+            },
+          },
+        },
+        batchesUsed: true,
+      },
+    });
+
+    if (!txn) {
+      return errorResponse('Transaction not found', 404);
+    }
+
+    if (txn.companyId !== companyId) {
+      return errorResponse('Unauthorized', 403);
+    }
+
+    return successResponse(txn);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to fetch transaction';
+    return errorResponse(message, 500);
+  }
+}
+
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);

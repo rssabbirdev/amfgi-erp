@@ -110,6 +110,7 @@ model StockBatch {
   unitCost          Float
   totalCost         Float
   supplier          String?
+  supplierId        String?
   receiptNumber     String?
   receivedDate      DateTime
   expiryDate        DateTime?
@@ -118,12 +119,14 @@ model StockBatch {
   updatedAt         DateTime           @updatedAt
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   material          Material           @relation(fields: [materialId], references: [id])
+  supplierRef       Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   transactionLinks  TransactionBatch[]
 
   @@unique([companyId, batchNumber])
   @@index([companyId, materialId, receivedDate])
   @@index([companyId, materialId, quantityAvailable])
   @@index([receiptNumber])
+  @@index([supplierId])
   @@index([materialId], map: "StockBatch_materialId_fkey")
 }
 
@@ -209,40 +212,65 @@ model Job {
 }
 
 model Customer {
-  id            String   @id @default(cuid())
-  companyId     String
-  name          String
-  contactPerson String?
-  phone         String?
-  email         String?
-  address       String?  @db.Text
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  jobs          Job[]
+  id                    String            @id @default(cuid())
+  companyId             String
+  name                  String
+  contactPerson         String?
+  phone                 String?
+  email                 String?
+  address               String?           @db.Text
+  isActive              Boolean           @default(true)
+  /// Created in AMFGI vs imported from external party-lists API
+  source                PartyRecordSource @default(LOCAL)
+  /// Remote party id from Accounts Helper (clients.php id) when source = PARTY_API_SYNC
+  externalPartyId       Int?
+  externalSyncedAt      DateTime?
+  tradeLicenseNumber    String?
+  tradeLicenseAuthority String?           @db.VarChar(255)
+  tradeLicenseExpiry    DateTime?
+  trnNumber             String?
+  trnExpiry             DateTime?
+  contactsJson          Json?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobs                  Job[]
 
-  @@unique([companyId, name])
+  @@unique([companyId, externalPartyId])
+  @@index([companyId, name])
   @@index([companyId, isActive])
+  @@index([companyId, source])
 }
 
 model Supplier {
-  id            String   @id @default(cuid())
-  companyId     String
-  name          String
-  contactPerson String?
-  email         String?
-  phone         String?
-  address       String?  @db.Text
-  city          String?
-  country       String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                    String            @id @default(cuid())
+  companyId             String
+  name                  String
+  contactPerson         String?
+  email                 String?
+  phone                 String?
+  address               String?           @db.Text
+  city                  String?
+  country               String?
+  isActive              Boolean           @default(true)
+  source                PartyRecordSource @default(LOCAL)
+  externalPartyId       Int?
+  externalSyncedAt      DateTime?
+  tradeLicenseNumber    String?
+  tradeLicenseAuthority String?           @db.VarChar(255)
+  tradeLicenseExpiry    DateTime?
+  trnNumber             String?
+  trnExpiry             DateTime?
+  contactsJson          Json?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  stockBatches          StockBatch[]
 
-  @@unique([companyId, name])
+  @@unique([companyId, externalPartyId])
+  @@index([companyId, name])
   @@index([companyId, isActive])
+  @@index([companyId, source])
 }
 
 model Unit {
@@ -336,4 +364,9 @@ enum MaterialLogAction {
 enum PriceSource {
   manual
   bill
+}
+
+enum PartyRecordSource {
+  LOCAL
+  PARTY_API_SYNC
 }

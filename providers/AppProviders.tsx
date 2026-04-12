@@ -4,6 +4,7 @@ import { Toaster }         from 'react-hot-toast';
 import ReduxProvider        from './ReduxProvider';
 import SessionProvider      from './SessionProvider';
 import { ContextMenuProvider } from './ContextMenuProvider';
+import DoubleClickSelectionGuard from './DoubleClickSelectionGuard';
 import type { Session }    from 'next-auth';
 
 export default function AppProviders({
@@ -17,6 +18,7 @@ export default function AppProviders({
     <SessionProvider session={session}>
       <ReduxProvider>
         <ContextMenuProvider>
+          <DoubleClickSelectionGuard />
           {children}
           <Toaster
             position="top-right"
