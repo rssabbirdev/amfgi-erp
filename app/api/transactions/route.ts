@@ -1,15 +1,17 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { resolveQuantityToBase } from '@/lib/utils/materialUomDb';
 import { z } from 'zod';
 
 const TransactionSchema = z.object({
   type: z.enum(['STOCK_IN', 'STOCK_OUT', 'RETURN', 'TRANSFER_IN', 'TRANSFER_OUT']),
   materialId: z.string().min(1),
   quantity: z.number().min(0.001),
+  quantityUomId: z.string().optional(),
   jobId: z.string().optional(),
   parentTransactionId: z.string().optional(),
-  notes: z.string().max(500).optional(),
+  notes: z.string().max(20000).optional(),
   date: z.string().optional(),
 });
 
@@ -87,7 +89,7 @@ export async function POST(req: Request) {
   const parsed = TransactionSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  const { type, materialId, quantity, jobId, parentTransactionId, notes, date } = parsed.data;
+  const { type, materialId, quantity, quantityUomId, jobId, parentTransactionId, notes, date } = parsed.data;
 
   // Permission check per transaction type
   const permMap: Record<string, string> = {
@@ -111,14 +113,15 @@ export async function POST(req: Request) {
     const txDate = date ? new Date(date) : new Date();
 
     const result = await prisma.$transaction(async (tx) => {
-      const delta = type === 'STOCK_IN' ? quantity : type === 'STOCK_OUT' ? -quantity : quantity; // RETURN adds back
+      const qtyBase = await resolveQuantityToBase(tx, materialId, quantity, quantityUomId);
+      const delta = type === 'STOCK_IN' ? qtyBase : type === 'STOCK_OUT' ? -qtyBase : qtyBase; // RETURN adds back
 
       if (type === 'STOCK_OUT') {
         const mat = await tx.material.findUnique({
           where: { id: materialId },
         });
         if (!mat) throw new Error('Material not found');
-        if (mat.currentStock < quantity) {
+        if (mat.currentStock < qtyBase) {
           throw new Error(`Insufficient stock. Available: ${mat.currentStock} ${mat.unit}`);
         }
       }
@@ -139,7 +142,7 @@ export async function POST(req: Request) {
           companyId,
           type,
           materialId,
-          quantity,
+          quantity: qtyBase,
           jobId: jobId || null,
           parentTransactionId: parentTransactionId || null,
           notes: notes || null,

@@ -1,8 +1,9 @@
-'use client';
+﻿'use client';
 
 import { useState, useCallback, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
@@ -33,6 +34,20 @@ import {
   type Warehouse,
 } from '@/store/hooks';
 import { NEW_PRINT_TEMPLATE_SESSION_KEY } from '@/lib/utils/printTemplateSession';
+import {
+  readCompanyDocumentTemplates,
+  writeCompanyDocumentTemplates,
+} from '@/lib/utils/companyPrintTemplates';
+import { createWorkScheduleTemplateDraft } from '@/lib/utils/documentDefaults';
+
+const SETTINGS_TABS = [
+  { id: 'units', label: 'Units', description: 'Material measurement labels' },
+  { id: 'categories', label: 'Categories', description: 'Material master groupings' },
+  { id: 'warehouses', label: 'Warehouses', description: 'Stock holding locations' },
+  { id: 'company', label: 'Company', description: 'Business profile and sync setup' },
+  { id: 'template', label: 'Print formats', description: 'Document layouts and defaults' },
+  { id: 'api', label: 'API & Credentials', description: 'Integration keys and audit logs' },
+] as const;
 
 function SettingsPageContent() {
   const { data: session } = useSession();
@@ -46,16 +61,113 @@ function SettingsPageContent() {
   const canManage = isSA || perms.includes('settings.manage');
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'units' | 'categories' | 'warehouses' | 'company' | 'template'>('units');
+  const [activeTab, setActiveTab] = useState<'units' | 'categories' | 'warehouses' | 'company' | 'template' | 'api'>('units');
 
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab === 'template') setActiveTab('template');
+    if (tab === 'api') setActiveTab('api');
   }, [searchParams]);
 
   // Company Profile state
-  const [companyData, setCompanyData] = useState<any>(null);
-  const [companyForm, setCompanyForm] = useState({ address: '', phone: '', email: '' });
+  const [companyData, setCompanyData] = useState<Record<string, unknown> | null>(null);
+  const [companyForm, setCompanyForm] = useState({
+    address: '',
+    phone: '',
+    email: '',
+    externalCompanyId: '',
+    jobSourceMode: 'HYBRID' as 'HYBRID' | 'EXTERNAL_ONLY',
+  });
+  const [driveStatus, setDriveStatus] = useState<{
+    connected: boolean;
+    connectedAt: string | null;
+    connectedEmail: string | null;
+    rootFolderConfigured: boolean;
+    oauthClientConfigured: boolean;
+    companyName?: string;
+  } | null>(null);
+  const [driveStatusLoading, setDriveStatusLoading] = useState(false);
+  const [driveDisconnecting, setDriveDisconnecting] = useState(false);
+
+  // API & Credentials state
+  const [apiCredentials, setApiCredentials] = useState<Array<{
+    id: string;
+    label: string;
+    keyPrefix: string;
+    allowedDomains?: string[];
+    createdAt: string;
+    lastUsedAt: string | null;
+    revokedAt: string | null;
+  }>>([]);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiLabel, setApiLabel] = useState('');
+  const [apiAllowedDomainsCreate, setApiAllowedDomainsCreate] = useState('');
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [playgroundKey, setPlaygroundKey] = useState('');
+  const [playgroundOrigin, setPlaygroundOrigin] = useState('');
+  const [playgroundCompanyExternalId, setPlaygroundCompanyExternalId] = useState('');
+  const [playgroundIdempotencyKey, setPlaygroundIdempotencyKey] = useState('');
+  const [playgroundPayload, setPlaygroundPayload] = useState(
+    JSON.stringify(
+      {
+        job: {
+          externalJobId: 'PM-JOB-001',
+          jobNumber: 'JOB-2026-001',
+          customerExternalId: 10001,
+          customerName: 'Demo Customer',
+          description: 'Synced from PM',
+          site: 'Demo Site',
+          projectName: 'Demo Project',
+          projectDetails: 'Phase 1',
+          status: 'ACTIVE',
+          startDate: new Date().toISOString().slice(0, 10),
+          quotationNumber: 'QTN-001',
+          lpoNumber: 'LPO-001',
+          lpoValue: 10000,
+          contactPerson: 'John Smith',
+          contacts: [
+            {
+              label: 'site',
+              name: 'John Smith',
+              number: '+971500000000',
+              email: 'john@example.com',
+              designation: 'Site Engineer',
+            },
+          ],
+          salesPerson: 'Ali',
+        },
+      },
+      null,
+      2
+    )
+  );
+  const [playgroundResponse, setPlaygroundResponse] = useState('');
+  const [playgroundLoading, setPlaygroundLoading] = useState(false);
+  const [integrationLogs, setIntegrationLogs] = useState<Array<{
+    id: string;
+    status: string;
+    entityKey: string | null;
+    errorMessage: string | null;
+    createdAt: string;
+    httpStatus?: number | null;
+    idempotencyKey?: string | null;
+    requestBody?: unknown;
+    responseBody?: unknown;
+  }>>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsNextCursor, setLogsNextCursor] = useState<string | null>(null);
+  const [retryingLogId, setRetryingLogId] = useState<string | null>(null);
+  const [logFilterStatus, setLogFilterStatus] = useState('');
+  const [logFilterFrom, setLogFilterFrom] = useState('');
+  const [logFilterTo, setLogFilterTo] = useState('');
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
+  const [domainModal, setDomainModal] = useState<{
+    open: boolean;
+    id: string | null;
+    label: string;
+    text: string;
+  }>({ open: false, id: null, label: '', text: '' });
+  const [domainModalSaving, setDomainModalSaving] = useState(false);
 
   // Template Management state
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
@@ -106,6 +218,18 @@ function SettingsPageContent() {
     linkedCount: 0,
   });
 
+  const extractMutationErrorMessage = (error: unknown, fallback: string) => {
+    if (error && typeof error === 'object' && 'data' in error) {
+      const data = (error as { data?: unknown }).data;
+      if (data && typeof data === 'object' && 'error' in data) {
+        const message = (data as { error?: unknown }).error;
+        if (typeof message === 'string' && message.trim()) return message;
+      }
+    }
+    if (error instanceof Error && error.message.trim()) return error.message;
+    return fallback;
+  };
+
   // Load company profile data
   useEffect(() => {
     if (!session?.user?.activeCompanyId) return;
@@ -120,10 +244,12 @@ function SettingsPageContent() {
             address: company.address || '',
             phone: company.phone || '',
             email: company.email || '',
+            externalCompanyId: company.externalCompanyId || '',
+            jobSourceMode: company.jobSourceMode || 'HYBRID',
           });
-          // Load templates (handle legacy single printTemplate)
-          if (company.printTemplates && Array.isArray(company.printTemplates)) {
-            setTemplates(company.printTemplates);
+          const parsedTemplates = readCompanyDocumentTemplates(company.printTemplates);
+          if (parsedTemplates.length > 0) {
+            setTemplates(parsedTemplates);
           } else if (company.printTemplate) {
             // Legacy migration: convert single template to array
             setTemplates([company.printTemplate]);
@@ -138,7 +264,104 @@ function SettingsPageContent() {
     loadCompanyData();
   }, [session?.user?.activeCompanyId]);
 
-  // ─── TEMPLATE HANDLERS ────────────────────────────────────────────────────────
+  const loadDriveStatus = useCallback(async () => {
+    setDriveStatusLoading(true);
+    try {
+      const res = await fetch('/api/settings/google-drive/status', { cache: 'no-store' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to load Google Drive status');
+      setDriveStatus(json.data);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load Google Drive status');
+      setDriveStatus(null);
+    } finally {
+      setDriveStatusLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'company') return;
+    void loadDriveStatus();
+  }, [activeTab, loadDriveStatus]);
+
+  useEffect(() => {
+    const driveResult = searchParams.get('googleDrive');
+    const driveMessage = searchParams.get('googleDriveMessage');
+    if (!driveResult) return;
+    if (driveResult === 'connected') {
+      toast.success(driveMessage || 'Google Drive connected');
+      void loadDriveStatus();
+    } else if (driveResult === 'error') {
+      toast.error(driveMessage || 'Google Drive connection failed');
+    }
+  }, [searchParams, loadDriveStatus]);
+
+  const loadApiCredentials = useCallback(async () => {
+    setApiLoading(true);
+    try {
+      const res = await fetch('/api/settings/api-credentials', { cache: 'no-store' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to load credentials');
+      setApiCredentials(json.data ?? []);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load credentials');
+      setApiCredentials([]);
+    } finally {
+      setApiLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'api') return;
+    void loadApiCredentials();
+  }, [activeTab, loadApiCredentials]);
+
+  const loadIntegrationLogs = useCallback(
+    async (opts?: { append?: boolean; cursor?: string | null }) => {
+      const append = opts?.append ?? false;
+      const pageCursor = append ? opts?.cursor ?? null : null;
+      if (append && !pageCursor) return;
+      setLogsLoading(true);
+      try {
+        const sp = new URLSearchParams();
+        sp.set('limit', '50');
+        if (logFilterStatus) sp.set('status', logFilterStatus);
+        if (logFilterFrom) sp.set('from', logFilterFrom);
+        if (logFilterTo) sp.set('to', logFilterTo);
+        if (pageCursor) sp.set('cursor', pageCursor);
+        const res = await fetch(`/api/settings/integration-logs?${sp.toString()}`, { cache: 'no-store' });
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json.error || 'Failed to load integration logs');
+        const payload = json.data as { items?: typeof integrationLogs; nextCursor?: string | null } | typeof integrationLogs;
+        const items = Array.isArray(payload) ? payload : (payload.items ?? []);
+        const nextCursor = Array.isArray(payload) ? null : (payload.nextCursor ?? null);
+        if (append) {
+          setIntegrationLogs((prev) => [...prev, ...items]);
+        } else {
+          setIntegrationLogs(items);
+          setSelectedLogId(null);
+        }
+        setLogsNextCursor(nextCursor);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to load integration logs');
+        if (!append) {
+          setIntegrationLogs([]);
+          setLogsNextCursor(null);
+          setSelectedLogId(null);
+        }
+      } finally {
+        setLogsLoading(false);
+      }
+    },
+    [logFilterStatus, logFilterFrom, logFilterTo]
+  );
+
+  useEffect(() => {
+    if (activeTab !== 'api') return;
+    void loadIntegrationLogs();
+  }, [activeTab, loadIntegrationLogs]);
+
+  // â”€â”€â”€ TEMPLATE HANDLERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleTemplateDelete = async (index: number) => {
     if (!session?.user?.activeCompanyId) return;
@@ -150,16 +373,25 @@ function SettingsPageContent() {
       const res = await fetch(`/api/companies/${session.user.activeCompanyId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ printTemplates: newTemplates }),
+        body: JSON.stringify({
+          printTemplates: writeCompanyDocumentTemplates(companyData?.printTemplates, newTemplates),
+        }),
       });
 
       if (res.ok) {
         setTemplates(newTemplates);
+        setCompanyData((prev: unknown) => {
+          const current = prev && typeof prev === 'object' ? (prev as Record<string, unknown>) : {};
+          return {
+            ...current,
+            printTemplates: writeCompanyDocumentTemplates(current.printTemplates, newTemplates),
+          };
+        });
         toast.success('Template deleted');
       } else {
         toast.error('Failed to delete template');
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete template');
     } finally {
       setTplSaving(false);
@@ -182,16 +414,25 @@ function SettingsPageContent() {
       const res = await fetch(`/api/companies/${session.user.activeCompanyId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ printTemplates: newTemplates }),
+        body: JSON.stringify({
+          printTemplates: writeCompanyDocumentTemplates(companyData?.printTemplates, newTemplates),
+        }),
       });
 
       if (res.ok) {
         setTemplates(newTemplates);
+        setCompanyData((prev: unknown) => {
+          const current = prev && typeof prev === 'object' ? (prev as Record<string, unknown>) : {};
+          return {
+            ...current,
+            printTemplates: writeCompanyDocumentTemplates(current.printTemplates, newTemplates),
+          };
+        });
         toast.success('Template duplicated');
       } else {
         toast.error('Failed to duplicate template');
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to duplicate template');
     } finally {
       setTplSaving(false);
@@ -211,34 +452,194 @@ function SettingsPageContent() {
       const res = await fetch(`/api/companies/${session.user.activeCompanyId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ printTemplates: newTemplates }),
+        body: JSON.stringify({
+          printTemplates: writeCompanyDocumentTemplates(companyData?.printTemplates, newTemplates),
+        }),
       });
 
       if (res.ok) {
         setTemplates(newTemplates);
+        setCompanyData((prev: unknown) => {
+          const current = prev && typeof prev === 'object' ? (prev as Record<string, unknown>) : {};
+          return {
+            ...current,
+            printTemplates: writeCompanyDocumentTemplates(current.printTemplates, newTemplates),
+          };
+        });
         toast.success('Default template set');
       } else {
         toast.error('Failed to set default');
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to set default');
     } finally {
       setTplSaving(false);
     }
   };
 
-  if (!canManage) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <div className="text-center py-12">
-          <p className="text-slate-400">You do not have permission to manage settings.</p>
-        </div>
-      </div>
-    );
-  }
+  const handleCreateApiCredential = async () => {
+    if (!apiLabel.trim()) {
+      toast.error('Credential label is required');
+      return;
+    }
+    const allowedDomains = apiAllowedDomainsCreate
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    try {
+      const res = await fetch('/api/settings/api-credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label: apiLabel.trim(),
+          ...(allowedDomains.length > 0 ? { allowedDomains } : {}),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to generate API key');
+      setNewApiKey(json.data?.key || null);
+      setApiLabel('');
+      setApiAllowedDomainsCreate('');
+      toast.success('API key generated');
+      await loadApiCredentials();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to generate API key');
+    }
+  };
 
-  // ─── UNITS HANDLERS ───────────────────────────────────────────────────────────
+  const copyNewApiKey = async () => {
+    if (!newApiKey) return;
+    try {
+      await navigator.clipboard.writeText(newApiKey);
+      toast.success('API key copied');
+    } catch {
+      toast.error('Could not copy to clipboard');
+    }
+  };
+
+  const openDomainModal = (cred: (typeof apiCredentials)[number]) => {
+    setDomainModal({
+      open: true,
+      id: cred.id,
+      label: cred.label,
+      text: (cred.allowedDomains ?? []).join('\n'),
+    });
+  };
+
+  const saveDomainModal = async () => {
+    if (!domainModal.id) return;
+    const allowedDomains = domainModal.text
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    setDomainModalSaving(true);
+    try {
+      const res = await fetch(`/api/settings/api-credentials/${domainModal.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowedDomains }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to update domains');
+      toast.success('Allowed domains updated');
+      setDomainModal({ open: false, id: null, label: '', text: '' });
+      await loadApiCredentials();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update domains');
+    } finally {
+      setDomainModalSaving(false);
+    }
+  };
+
+  const handleRevokeApiCredential = async (id: string) => {
+    if (!window.confirm('Revoke this API key? External sync using this key will stop immediately.')) return;
+    try {
+      const res = await fetch(`/api/settings/api-credentials/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to revoke');
+      toast.success('Credential revoked');
+      await loadApiCredentials();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to revoke credential');
+    }
+  };
+
+  const runIntegrationPlayground = async () => {
+    if (!playgroundKey.trim()) {
+      toast.error('Enter API key');
+      return;
+    }
+    if (!playgroundCompanyExternalId.trim()) {
+      toast.error('Enter company external ID');
+      return;
+    }
+    setPlaygroundLoading(true);
+    try {
+      const parsed = JSON.parse(playgroundPayload || '{}');
+      const reqBody = {
+        companyExternalId: playgroundCompanyExternalId.trim(),
+        ...parsed,
+      };
+      const bodyStr = JSON.stringify(reqBody);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-api-key': playgroundKey.trim(),
+      };
+      if (playgroundIdempotencyKey.trim()) {
+        headers['x-idempotency-key'] = playgroundIdempotencyKey.trim();
+      }
+      if (playgroundOrigin.trim()) {
+        headers['Origin'] = playgroundOrigin.trim();
+      }
+      const res = await fetch('/api/integrations/jobs/upsert', {
+        method: 'POST',
+        headers,
+        body: bodyStr,
+      });
+      const json = await res.json();
+      setPlaygroundResponse(JSON.stringify({ status: res.status, ...json }, null, 2));
+      if (res.ok && json.success) {
+        toast.success('Playground request succeeded');
+        await loadApiCredentials();
+        await loadIntegrationLogs();
+      } else {
+        toast.error(json.error || 'Playground request failed');
+        await loadIntegrationLogs();
+      }
+    } catch (err) {
+      setPlaygroundResponse(
+        JSON.stringify(
+          {
+            error: err instanceof Error ? err.message : 'Invalid JSON payload',
+          },
+          null,
+          2
+        )
+      );
+      toast.error('Invalid payload JSON');
+    } finally {
+      setPlaygroundLoading(false);
+    }
+  };
+
+  const retryIntegrationLog = async (logId: string) => {
+    setRetryingLogId(logId);
+    try {
+      const res = await fetch(`/api/settings/integration-logs/${logId}/retry`, { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Retry failed');
+      toast.success('Retry succeeded');
+      await loadIntegrationLogs();
+      await loadApiCredentials();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Retry failed');
+      await loadIntegrationLogs();
+    } finally {
+      setRetryingLogId(null);
+    }
+  };
+
+  // â”€â”€â”€ UNITS HANDLERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleUnitContextMenu = useCallback((unit: Unit, e: React.MouseEvent) => {
     e.preventDefault();
@@ -291,8 +692,8 @@ function SettingsPageContent() {
       }
       setUnitModal({ open: false, item: null });
       setUnitForm({ name: '' });
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Operation failed');
+    } catch (err: unknown) {
+      toast.error(extractMutationErrorMessage(err, 'Operation failed'));
     }
   };
 
@@ -302,8 +703,8 @@ function SettingsPageContent() {
       await deleteUnit(unitDeleteModal.item.id).unwrap();
       toast.success('Unit deleted successfully');
       setUnitDeleteModal({ open: false, item: null, linkedCount: 0 });
-    } catch (err: any) {
-      const error = err?.data?.error ?? 'Failed to delete unit';
+    } catch (err: unknown) {
+      const error = extractMutationErrorMessage(err, 'Failed to delete unit');
       if (error.includes('material')) {
         setUnitDeleteModal((prev) => ({
           ...prev,
@@ -316,7 +717,7 @@ function SettingsPageContent() {
     }
   };
 
-  // ─── CATEGORIES HANDLERS ───────────────────────────────────────────────────────
+  // â”€â”€â”€ CATEGORIES HANDLERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleCategoryContextMenu = useCallback((category: Category, e: React.MouseEvent) => {
     e.preventDefault();
@@ -369,8 +770,8 @@ function SettingsPageContent() {
       }
       setCategoryModal({ open: false, item: null });
       setCategoryForm({ name: '' });
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Operation failed');
+    } catch (err: unknown) {
+      toast.error(extractMutationErrorMessage(err, 'Operation failed'));
     }
   };
 
@@ -380,8 +781,8 @@ function SettingsPageContent() {
       await deleteCategory(categoryDeleteModal.item.id).unwrap();
       toast.success('Category deleted successfully');
       setCategoryDeleteModal({ open: false, item: null, linkedCount: 0 });
-    } catch (err: any) {
-      const error = err?.data?.error ?? 'Failed to delete category';
+    } catch (err: unknown) {
+      const error = extractMutationErrorMessage(err, 'Failed to delete category');
       if (error.includes('material')) {
         setCategoryDeleteModal((prev) => ({
           ...prev,
@@ -394,7 +795,7 @@ function SettingsPageContent() {
     }
   };
 
-  // ─── WAREHOUSES HANDLERS ───────────────────────────────────────────────────────
+  // â”€â”€â”€ WAREHOUSES HANDLERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleWarehouseContextMenu = useCallback((warehouse: Warehouse, e: React.MouseEvent) => {
     e.preventDefault();
@@ -454,8 +855,8 @@ function SettingsPageContent() {
       }
       setWarehouseModal({ open: false, item: null });
       setWarehouseForm({ name: '', location: '' });
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Operation failed');
+    } catch (err: unknown) {
+      toast.error(extractMutationErrorMessage(err, 'Operation failed'));
     }
   };
 
@@ -465,8 +866,8 @@ function SettingsPageContent() {
       await deleteWarehouse(warehouseDeleteModal.item.id).unwrap();
       toast.success('Warehouse deleted successfully');
       setWarehouseDeleteModal({ open: false, item: null, linkedCount: 0 });
-    } catch (err: any) {
-      const error = err?.data?.error ?? 'Failed to delete warehouse';
+    } catch (err: unknown) {
+      const error = extractMutationErrorMessage(err, 'Failed to delete warehouse');
       if (error.includes('material')) {
         setWarehouseDeleteModal((prev) => ({
           ...prev,
@@ -479,7 +880,7 @@ function SettingsPageContent() {
     }
   };
 
-  // ─── TABLE COLUMNS ────────────────────────────────────────────────────────────
+  // â”€â”€â”€ TABLE COLUMNS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const unitColumns: Column<Unit>[] = [
     {
@@ -509,44 +910,76 @@ function SettingsPageContent() {
     {
       key: 'location',
       header: 'Location',
-      render: (warehouse) => warehouse.location || '—',
+      render: (warehouse) => warehouse.location || '-',
     },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Settings</h1>
-          <p className="text-slate-400 text-sm mt-1">Manage master data for your company</p>
+      {!canManage ? (
+        <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-6 py-12 text-center">
+          <h1 className="text-2xl font-semibold text-white">Settings</h1>
+          <p className="mt-3 text-sm text-slate-400">You do not have permission to manage settings.</p>
         </div>
-      </div>
+      ) : (
+        <>
+      <section className="rounded-3xl border border-slate-700 bg-slate-900/70 p-6 shadow-sm">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300/80">Administration</p>
+            <h1 className="mt-2 text-3xl font-semibold text-white">Settings workspace</h1>
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              Manage company master data, document layouts, and integration controls from one shared workspace.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[28rem] xl:grid-cols-4">
+            <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Units</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{units.length}</p>
+              <p className="mt-1 text-xs text-slate-500">Material measurement labels</p>
+            </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Categories</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{categories.length}</p>
+              <p className="mt-1 text-xs text-slate-500">Master data groupings</p>
+            </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Warehouses</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{warehouses.length}</p>
+              <p className="mt-1 text-xs text-slate-500">Stock locations</p>
+            </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Print formats</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{templates.length}</p>
+              <p className="mt-1 text-xs text-slate-500">Saved document layouts</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      {/* Tab bar */}
-      <div className="flex gap-2 border-b border-slate-700">
-        {[
-          { id: 'units', label: 'Units' },
-          { id: 'categories', label: 'Categories' },
-          { id: 'warehouses', label: 'Warehouses' },
-          { id: 'company', label: 'Company Profile' },
-          { id: 'template', label: 'Print Template' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => {
-              setActiveTab(tab.id as typeof activeTab);
-            }}
-            className={`px-4 py-3 border-b-2 transition-colors ${
-              activeTab === tab.id
-                ? 'border-emerald-500 text-white'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-            disabled={tab.id === 'coming'}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {SETTINGS_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id as typeof activeTab)}
+              className={`rounded-2xl border px-4 py-4 text-left transition ${
+                activeTab === tab.id
+                  ? 'border-emerald-500/40 bg-emerald-500/10'
+                  : 'border-slate-700 bg-slate-950/40 hover:border-slate-600 hover:bg-slate-800/60'
+              }`}
+            >
+              <p className={`text-sm font-medium ${activeTab === tab.id ? 'text-white' : 'text-slate-200'}`}>
+                {tab.label}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">{tab.description}</p>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-5">
 
       {/* Units Tab */}
       {activeTab === 'units' && (
@@ -557,6 +990,10 @@ function SettingsPageContent() {
               + Add Unit
             </Button>
           </div>
+          <p className="text-sm text-slate-400 -mt-2 mb-2">
+            Create labels like kg, drum, pallet here. On each material, set the <span className="text-slate-300">base unit</span>{' '}
+            (stock unit), then add conversions (e.g. 1 drum = 190 kg, 1 pallet = 6 drums) under Materials / edit item.
+          </p>
           {unitsFetching && units.length === 0 ? (
             <div className="overflow-x-auto rounded-xl border border-slate-700">
               <table className="w-full">
@@ -661,7 +1098,7 @@ function SettingsPageContent() {
                     const err = await res.json();
                     toast.error(err.error || 'Failed to save');
                   }
-                } catch (err) {
+                } catch {
                   toast.error('Error saving company information');
                 }
               }}
@@ -699,6 +1136,43 @@ function SettingsPageContent() {
                   />
                 </div>
               </div>
+              {isSA && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                      External Company ID (for Project Management sync)
+                    </label>
+                    <input
+                      type="text"
+                      value={companyForm.externalCompanyId}
+                      onChange={(e) => setCompanyForm({ ...companyForm, externalCompanyId: e.target.value })}
+                      placeholder="e.g. PM-COMPANY-001"
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                      Parent Job Source Mode
+                    </label>
+                    <select
+                      value={companyForm.jobSourceMode}
+                      onChange={(e) =>
+                        setCompanyForm({
+                          ...companyForm,
+                          jobSourceMode: e.target.value as 'HYBRID' | 'EXTERNAL_ONLY',
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    >
+                      <option value="HYBRID">Hybrid (local + external parent jobs)</option>
+                      <option value="EXTERNAL_ONLY">External only (block local parent jobs)</option>
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Variations remain local in both modes.
+                    </p>
+                  </div>
+                </>
+              )}
               <div className="flex gap-3 pt-2 border-t border-slate-700">
                 <Button type="submit" fullWidth>
                   Save Information
@@ -710,9 +1184,403 @@ function SettingsPageContent() {
           <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-4 text-sm text-slate-400">
             <p>
               Letterhead images are set per print template: open{' '}
-              <span className="text-slate-300">Settings → Print Templates → Edit</span>, select the{' '}
+              <span className="text-slate-300">Settings / Print formats / Edit</span>, select the{' '}
               <span className="text-slate-300">Letterhead</span> block, then paste an image URL or upload.
             </p>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Google Drive connection</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Connect a personal Google Drive account from inside the app. The refresh token is stored for the active company,
+                  and uploads are organized into nested folders under your root Drive folder.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void loadDriveStatus()}
+                  disabled={driveStatusLoading}
+                >
+                  Refresh
+                </Button>
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={() => {
+                    window.location.href = '/api/settings/google-drive/oauth/start';
+                  }}
+                >
+                  Connect Google Drive
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Status</p>
+                <p className="mt-2 text-sm font-medium text-white">
+                  {driveStatusLoading ? 'Checking...' : driveStatus?.connected ? 'Connected' : 'Not connected'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Account</p>
+                <p className="mt-2 text-sm font-medium text-white">
+                  {driveStatus?.connectedEmail || '-'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Root folder</p>
+                <p className="mt-2 text-sm font-medium text-white">
+                  {driveStatus?.rootFolderConfigured ? 'Configured' : 'Missing .env value'}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-4 text-sm text-slate-300 space-y-2">
+              <p>
+                Upload structure:
+                <span className="text-slate-400"> Users / User Name - User ID</span> and
+                <span className="text-slate-400"> Employees / Employee Name - Employee ID</span>
+              </p>
+              <p>
+                Media URLs are saved directly in database fields using the
+                <code className="mx-1 text-emerald-400">lh3.googleusercontent.com</code>
+                viewer format for easier access.
+              </p>
+              {!driveStatus?.oauthClientConfigured && (
+                <p className="text-amber-300">
+                  GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is missing.
+                </p>
+              )}
+            </div>
+
+            {driveStatus?.connected && (
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={driveDisconnecting}
+                  onClick={async () => {
+                    if (!window.confirm('Disconnect Google Drive for this company? Existing uploaded files will stay in Drive.')) return;
+                    setDriveDisconnecting(true);
+                    try {
+                      const res = await fetch('/api/settings/google-drive/status', { method: 'DELETE' });
+                      const json = await res.json();
+                      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to disconnect');
+                      toast.success('Google Drive disconnected');
+                      await loadDriveStatus();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : 'Failed to disconnect');
+                    } finally {
+                      setDriveDisconnecting(false);
+                    }
+                  }}
+                >
+                  Disconnect
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* API & Credentials Tab */}
+      {activeTab === 'api' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 space-y-4">
+            <h2 className="text-lg font-semibold text-white">Integration API Key</h2>
+            <p className="text-sm text-slate-400">
+              Generate a key for your external Project Management system to upsert parent jobs. Keys only apply to{' '}
+              <code className="text-emerald-400/90">/api/integrations/*</code> - not the rest of the ERP (those routes still
+              need a normal signed-in user).
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                value={apiLabel}
+                onChange={(e) => setApiLabel(e.target.value)}
+                placeholder="Credential label (e.g. PM production)"
+                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <Button onClick={handleCreateApiCredential}>Generate Key</Button>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                Allowed domains (optional)
+              </label>
+              <textarea
+                value={apiAllowedDomainsCreate}
+                onChange={(e) => setApiAllowedDomainsCreate(e.target.value)}
+                rows={3}
+                placeholder={'One hostname per line or comma-separated, e.g.\npartner.com\napp.partner.com'}
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-xs font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                If set, requests must send <code className="text-slate-400">Origin</code> or{' '}
+                <code className="text-slate-400">Referer</code> matching these hosts. Leave empty for no restriction.
+              </p>
+            </div>
+            {newApiKey && (
+              <div className="rounded-lg border border-amber-600/60 bg-amber-950/30 p-3 space-y-2">
+                <p className="text-xs text-amber-200">Copy now: this key will not be shown again.</p>
+                <code className="block break-all text-amber-100 text-sm">{newApiKey}</code>
+                <Button size="sm" variant="ghost" onClick={() => void copyNewApiKey()}>
+                  Copy API key
+                </Button>
+              </div>
+            )}
+            <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-3 text-xs text-slate-400 space-y-2">
+              <p>
+                Use header <code>x-api-key: &lt;your_key&gt;</code> (or <code>Authorization: Bearer ...</code>) and call{' '}
+                <code>POST /api/integrations/jobs/upsert</code>. See <code>API-job-sync.md</code> for the JSON schema.
+              </p>
+              <p>
+                Public route catalog and examples:{' '}
+                <Link href="/docs/api" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2">
+                  /docs/api
+                </Link>
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6">
+            <h3 className="text-white font-medium mb-3">Existing credentials</h3>
+            <div className="space-y-2">
+              {apiLoading ? (
+                <p className="text-sm text-slate-400">Loading credentials...</p>
+              ) : apiCredentials.length === 0 ? (
+                <p className="text-sm text-slate-400">No API credentials created yet.</p>
+              ) : (
+                apiCredentials.map((cred) => (
+                  <div
+                    key={cred.id}
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-slate-700 bg-slate-800/50 p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm text-white">{cred.label}</p>
+                      <p className="text-xs text-slate-400">
+                        Prefix: <code>{cred.keyPrefix}</code> | Last used:{' '}
+                        {cred.lastUsedAt ? new Date(cred.lastUsedAt).toLocaleString() : 'Never'}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Domains:{' '}
+                        {cred.allowedDomains && cred.allowedDomains.length > 0
+                          ? cred.allowedDomains.join(', ')
+                          : 'any (no allowlist)'}
+                      </p>
+                    </div>
+                    {cred.revokedAt ? (
+                      <Badge label="Revoked" variant="red" />
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <Button size="sm" variant="ghost" onClick={() => openDomainModal(cred)}>
+                          Domains
+                        </Button>
+                        <Button size="sm" variant="danger" onClick={() => handleRevokeApiCredential(cred.id)}>
+                          Revoke
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 space-y-3">
+            <h3 className="text-white font-medium">Integration Playground</h3>
+            <p className="text-xs text-slate-400">
+              Quick local test for <code>POST /api/integrations/jobs/upsert</code>.
+            </p>
+            <input
+              value={playgroundKey}
+              onChange={(e) => setPlaygroundKey(e.target.value)}
+              placeholder="API key (amfgi_...)"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+            />
+            <input
+              value={playgroundOrigin}
+              onChange={(e) => setPlaygroundOrigin(e.target.value)}
+              placeholder="Origin header (optional - e.g. https://partner.com if credential has allowed domains)"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+            />
+            <input
+              value={playgroundCompanyExternalId}
+              onChange={(e) => setPlaygroundCompanyExternalId(e.target.value)}
+              placeholder="Company external ID"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+            />
+            <input
+              value={playgroundIdempotencyKey}
+              onChange={(e) => setPlaygroundIdempotencyKey(e.target.value)}
+              placeholder="Idempotency key (optional, recommended)"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+            />
+            <textarea
+              value={playgroundPayload}
+              onChange={(e) => setPlaygroundPayload(e.target.value)}
+              rows={12}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-xs font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+            />
+            <div className="flex gap-2">
+              <Button onClick={runIntegrationPlayground} loading={playgroundLoading}>
+                Run Test
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setPlaygroundResponse('')}
+                disabled={!playgroundResponse}
+              >
+                Clear Response
+              </Button>
+            </div>
+            <textarea
+              value={playgroundResponse}
+              readOnly
+              rows={10}
+              placeholder="Response appears here..."
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-emerald-300 text-xs font-mono"
+            />
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-medium">Recent Integration Logs</h3>
+              <Button size="sm" variant="ghost" onClick={() => loadIntegrationLogs()} disabled={logsLoading}>
+                Refresh
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <select
+                value={logFilterStatus}
+                onChange={(e) => setLogFilterStatus(e.target.value)}
+                className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm"
+              >
+                <option value="">All statuses</option>
+                <option value="success">success</option>
+                <option value="error">error</option>
+                <option value="validation_error">validation_error</option>
+                <option value="forbidden">forbidden</option>
+                <option value="retry_success">retry_success</option>
+                <option value="retry_error">retry_error</option>
+              </select>
+              <input
+                type="datetime-local"
+                value={logFilterFrom}
+                onChange={(e) => setLogFilterFrom(e.target.value)}
+                className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm"
+              />
+              <input
+                type="datetime-local"
+                value={logFilterTo}
+                onChange={(e) => setLogFilterTo(e.target.value)}
+                className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm"
+              />
+              <Button size="sm" variant="secondary" onClick={() => loadIntegrationLogs()} disabled={logsLoading}>
+                Apply Filters
+              </Button>
+            </div>
+            {logsLoading ? (
+              <p className="text-sm text-slate-400">Loading logs...</p>
+            ) : integrationLogs.length === 0 ? (
+              <p className="text-sm text-slate-400">No integration logs yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {integrationLogs.map((log) => (
+                  <div key={log.id} className="rounded border border-slate-700 bg-slate-800/50 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs text-slate-300">
+                        {new Date(log.createdAt).toLocaleString()} | {log.status.toUpperCase()} | {log.entityKey || '-'} | HTTP {log.httpStatus ?? '-'}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => setSelectedLogId(log.id)}>
+                          Details
+                        </Button>
+                        {log.status !== 'success' && log.status !== 'retry_success' ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => retryIntegrationLog(log.id)}
+                            loading={retryingLogId === log.id}
+                          >
+                            Retry
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                    {log.errorMessage ? (
+                      <p className="text-xs text-red-300 mt-1 break-all">{log.errorMessage}</p>
+                    ) : null}
+                  </div>
+                ))}
+                {logsNextCursor ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="mt-2"
+                    onClick={() => void loadIntegrationLogs({ append: true, cursor: logsNextCursor })}
+                    disabled={logsLoading}
+                  >
+                    Load more
+                  </Button>
+                ) : null}
+              </div>
+            )}
+            {selectedLogId ? (
+              (() => {
+                const log = integrationLogs.find((x) => x.id === selectedLogId);
+                if (!log) return null;
+                return (
+                  <div className="rounded-lg border border-slate-700 bg-slate-950 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <p className="text-sm text-white">Log Details</p>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            const blob = new Blob([JSON.stringify(log, null, 2)], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `integration-log-${log.id}.json`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                        >
+                          Download JSON
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setSelectedLogId(null)}>
+                          Close
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-400">Idempotency: {log.idempotencyKey || '-'}</p>
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Request</p>
+                      <textarea
+                        value={JSON.stringify(log.requestBody ?? null, null, 2)}
+                        readOnly
+                        rows={8}
+                        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-emerald-300 text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Response</p>
+                      <textarea
+                        value={JSON.stringify(log.responseBody ?? null, null, 2)}
+                        readOnly
+                        rows={8}
+                        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-emerald-300 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                );
+              })()
+            ) : null}
           </div>
         </div>
       )}
@@ -720,9 +1588,13 @@ function SettingsPageContent() {
       {/* Print Template Tab */}
       {activeTab === 'template' && (
         <div className="space-y-4">
-          {/* Template Manager */}
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">Print Templates</h2>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Print formats</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Create, edit, and assign default document layouts for delivery notes and other print outputs.
+              </p>
+            </div>
             <Button
               size="sm"
               onClick={() => setNewTplModal(true)}
@@ -733,16 +1605,16 @@ function SettingsPageContent() {
           </div>
 
           {templates.length === 0 ? (
-            <div className="text-center py-12 bg-slate-800/50 rounded-lg border border-slate-700">
-              <p className="text-slate-400 mb-4">No templates yet. Create one to get started.</p>
+            <div className="rounded-2xl border border-slate-700 bg-slate-950/40 py-12 text-center">
+              <p className="mb-4 text-slate-400">No print formats saved yet.</p>
               <Button onClick={() => setNewTplModal(true)}>+ New Template</Button>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {templates.map((tpl, idx) => (
                 <div
                   key={tpl.id || `tpl-${idx}`}
-                  className="flex items-center justify-between p-4 bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600 transition"
+                  className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-950/40 p-4 transition hover:border-slate-600"
                   onContextMenu={(e) => {
                     e.preventDefault();
                     const options: ContextMenuOption[] = [
@@ -780,11 +1652,11 @@ function SettingsPageContent() {
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium text-white">{tpl.name}</h3>
                       <Badge
-                        label={tpl.isDefault ? '★ Default' : getItemTypeLabel(String(tpl.itemType))}
+                        label={tpl.isDefault ? 'Default' : getItemTypeLabel(String(tpl.itemType))}
                         variant={tpl.isDefault ? 'green' : 'gray'}
                       />
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">{tpl.itemType}</p>
+                    <p className="mt-1 text-xs text-slate-400">{tpl.itemType}</p>
                   </div>
                   <Button
                     size="sm"
@@ -805,7 +1677,46 @@ function SettingsPageContent() {
         </div>
       )}
 
-      {/* ──────────────────── MODALS ──────────────────────────────────── */}
+      </div>
+        </>
+      )}
+
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ MODALS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+
+      <Modal
+        isOpen={domainModal.open}
+        onClose={() => {
+          if (domainModalSaving) return;
+          setDomainModal({ open: false, id: null, label: '', text: '' });
+        }}
+        title={domainModal.label ? `Allowed domains - ${domainModal.label}` : 'Allowed domains'}
+        size="lg"
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              disabled={domainModalSaving}
+              onClick={() => setDomainModal({ open: false, id: null, label: '', text: '' })}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void saveDomainModal()} loading={domainModalSaving}>
+              Save
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-400 mb-3">
+          One hostname per line or comma-separated. Save empty to remove the allowlist (requests allowed from any origin
+          that can reach the API).
+        </p>
+        <textarea
+          value={domainModal.text}
+          onChange={(e) => setDomainModal((m) => ({ ...m, text: e.target.value }))}
+          rows={8}
+          className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-xs font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+        />
+      </Modal>
 
       {/* New Template Modal */}
       <Modal
@@ -826,16 +1737,19 @@ function SettingsPageContent() {
             const kind =
               newTplForm.customItemKind.trim().replace(/\s+/g, '-') || newTplForm.itemType;
             // Create and immediately open editor
-            const newTemplate: DocumentTemplate = {
-              id: `template-${Date.now()}`,
-              name: newTplForm.name,
-              itemType: kind as ItemType,
-              isDefault: false,
-              pageMargins: { top: 10, right: 12, bottom: 10, left: 12 },
-              sections: [],
-              canvasMode: true,
-              canvasRects: [],
-            };
+            const newTemplate: DocumentTemplate =
+              kind === 'work-schedule'
+                ? createWorkScheduleTemplateDraft(`template-${Date.now()}`, newTplForm.name)
+                : {
+                    id: `template-${Date.now()}`,
+                    name: newTplForm.name,
+                    itemType: kind as ItemType,
+                    isDefault: false,
+                    pageMargins: { top: 10, right: 12, bottom: 10, left: 12 },
+                    sections: [],
+                    canvasMode: true,
+                    canvasRects: [],
+                  };
             try {
               sessionStorage.setItem(
                 NEW_PRINT_TEMPLATE_SESSION_KEY,
@@ -893,7 +1807,7 @@ function SettingsPageContent() {
               type="text"
               value={newTplForm.customItemKind}
               onChange={(e) => setNewTplForm({ ...newTplForm, customItemKind: e.target.value })}
-              placeholder="Custom kind (optional)…"
+              placeholder="Custom kind (optional)..."
               className="w-full mt-2 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -1064,7 +1978,7 @@ function SettingsPageContent() {
             {unitDeleteModal.linkedCount > 0 && (
               <div className="bg-red-950/30 border border-red-900 rounded-lg p-4 mb-6">
                 <p className="text-sm text-red-300">
-                  ⚠️ {unitDeleteModal.linkedCount} material{unitDeleteModal.linkedCount !== 1 ? 's' : ''} {unitDeleteModal.linkedCount === 1 ? 'uses' : 'use'} this unit.
+                  Warning: {unitDeleteModal.linkedCount} material{unitDeleteModal.linkedCount !== 1 ? 's' : ''} {unitDeleteModal.linkedCount === 1 ? 'uses' : 'use'} this unit.
                 </p>
               </div>
             )}
@@ -1102,7 +2016,7 @@ function SettingsPageContent() {
             {categoryDeleteModal.linkedCount > 0 && (
               <div className="bg-red-950/30 border border-red-900 rounded-lg p-4 mb-6">
                 <p className="text-sm text-red-300">
-                  ⚠️ {categoryDeleteModal.linkedCount} material{categoryDeleteModal.linkedCount !== 1 ? 's' : ''} {categoryDeleteModal.linkedCount === 1 ? 'uses' : 'use'} this category.
+                  Warning: {categoryDeleteModal.linkedCount} material{categoryDeleteModal.linkedCount !== 1 ? 's' : ''} {categoryDeleteModal.linkedCount === 1 ? 'uses' : 'use'} this category.
                 </p>
               </div>
             )}
@@ -1140,7 +2054,7 @@ function SettingsPageContent() {
             {warehouseDeleteModal.linkedCount > 0 && (
               <div className="bg-red-950/30 border border-red-900 rounded-lg p-4 mb-6">
                 <p className="text-sm text-red-300">
-                  ⚠️ {warehouseDeleteModal.linkedCount} material{warehouseDeleteModal.linkedCount !== 1 ? 's' : ''} {warehouseDeleteModal.linkedCount === 1 ? 'uses' : 'use'} this warehouse.
+                  Warning: {warehouseDeleteModal.linkedCount} material{warehouseDeleteModal.linkedCount !== 1 ? 's' : ''} {warehouseDeleteModal.linkedCount === 1 ? 'uses' : 'use'} this warehouse.
                 </p>
               </div>
             )}
@@ -1168,7 +2082,7 @@ function SettingsPageContent() {
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<div className="text-slate-400 p-6">Loading settings…</div>}>
+    <Suspense fallback={<div className="text-slate-400 p-6">Loading settings...</div>}>
       <SettingsPageContent />
     </Suspense>
   );

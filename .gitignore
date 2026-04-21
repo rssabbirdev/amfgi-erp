@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# commit graph outputs, ignore the extraction cache
+graphify-out/cache/

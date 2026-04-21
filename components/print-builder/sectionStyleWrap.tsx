@@ -44,6 +44,8 @@ export function wrapSectionChrome(
     lineHeight: s.lineHeight !== undefined ? s.lineHeight : undefined,
     textAlign: s.textAlign,
     opacity: s.opacity !== undefined ? s.opacity : undefined,
+    WebkitPrintColorAdjust: 'exact',
+    printColorAdjust: 'exact',
   };
 
   return <div style={style}>{children}</div>;

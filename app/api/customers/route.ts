@@ -31,7 +31,6 @@ export async function GET() {
   const customers = await prisma.customer.findMany({
     where: {
       companyId: session.user.activeCompanyId,
-      isActive: true,
     },
     orderBy: { name: 'asc' },
   });

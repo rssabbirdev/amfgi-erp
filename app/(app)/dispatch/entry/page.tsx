@@ -19,9 +19,18 @@ import {
   useGetCompaniesQuery,
   useGetCrossCompanyMaterialsQuery,
   useTransferStockMutation,
+  type MaterialUomDto,
 } from '@/store/hooks';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+/** Convert entered quantity to base UOM amount (stock is stored in base units). */
+function qtyInBase(uoms: MaterialUomDto[] | undefined, quantityUomId: string, qty: number): number {
+  if (!uoms?.length || !quantityUomId?.trim()) return qty;
+  const u = uoms.find((x) => x.id === quantityUomId);
+  if (!u) return qty;
+  return qty * u.factorToBase;
+}
 
 interface Line {
   id:       string;
@@ -29,6 +38,7 @@ interface Line {
   materialId: string;
   dispatchQty: string;
   returnQty:   string;
+  quantityUomId: string;
   originalDispatchQty?: number; // Track original qty for editing validation
   sourceCompanyId?:   string;   // undefined = own company; '' = toggled but unpicked
   sourceCompanyName?: string;
@@ -45,6 +55,26 @@ interface CrossCompanyMaterial {
   unit: string;
   currentStock: number;
   isActive: boolean;
+  materialUoms?: MaterialUomDto[];
+}
+
+function parseJobContacts(value: unknown): Array<{ name: string; number?: string; email?: string; designation?: string; label?: string }> {
+  if (!Array.isArray(value)) return [];
+  const contacts: Array<{ name: string; number?: string; email?: string; designation?: string; label?: string }> = [];
+  for (const row of value) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    const name = typeof r.name === 'string' ? r.name.trim() : '';
+    if (!name) continue;
+    contacts.push({
+      name,
+      number: typeof r.number === 'string' ? r.number.trim() : undefined,
+      email: typeof r.email === 'string' ? r.email.trim() : undefined,
+      designation: typeof r.designation === 'string' ? r.designation.trim() : undefined,
+      label: typeof r.label === 'string' ? r.label.trim() : undefined,
+    });
+  }
+  return contacts;
 }
 
 // Sub-component to avoid conditional hook calls
@@ -100,6 +130,7 @@ export default function DispatchMaterialsPage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     },
     {
       id: generateId(),
@@ -107,6 +138,7 @@ export default function DispatchMaterialsPage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     },
     {
       id: generateId(),
@@ -114,6 +146,7 @@ export default function DispatchMaterialsPage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     },
     {
       id: generateId(),
@@ -121,6 +154,7 @@ export default function DispatchMaterialsPage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     },
     {
       id: generateId(),
@@ -128,6 +162,7 @@ export default function DispatchMaterialsPage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     },
   ]);
   const [selectedJob,  setSelectedJob]  = useState('');
@@ -172,6 +207,7 @@ export default function DispatchMaterialsPage() {
           materialId: '',
           dispatchQty: '',
           returnQty: '',
+          quantityUomId: '',
         }))
       );
       setNotes('');
@@ -188,6 +224,7 @@ export default function DispatchMaterialsPage() {
           materialId: line.materialId,
           dispatchQty: line.quantity.toString(),
           returnQty: line.returnQty ? line.returnQty.toString() : '',
+          quantityUomId: '',
           originalDispatchQty: line.quantity,
         }));
 
@@ -201,6 +238,7 @@ export default function DispatchMaterialsPage() {
                   materialId: '',
                   dispatchQty: '',
                   returnQty: '',
+                  quantityUomId: '',
                 })),
               ]
             : newLines;
@@ -215,6 +253,7 @@ export default function DispatchMaterialsPage() {
             materialId: '',
             dispatchQty: '',
             returnQty: '',
+            quantityUomId: '',
           }))
         );
         setNotes('');
@@ -257,6 +296,7 @@ export default function DispatchMaterialsPage() {
         materialId: '',
         dispatchQty: '',
         returnQty: '',
+        quantityUomId: '',
       }))
     );
     setNotes('');
@@ -272,6 +312,11 @@ export default function DispatchMaterialsPage() {
 
   const getMaterial = (id: string) => materials.find((m) => m.id === id);
   const getJob = (id: string) => jobs.find((j) => j.id === id);
+  const selectedJobRecord = getJob(selectedJob);
+  const selectedJobContacts = parseJobContacts(selectedJobRecord?.contactsJson);
+  const selectedPrimaryContactName = selectedJobRecord?.contactPerson?.trim() || selectedJobContacts[0]?.name || '';
+  const selectedPrimaryContact =
+    selectedJobContacts.find((c) => c.name === selectedPrimaryContactName) ?? selectedJobContacts[0];
 
   // Get material from correct source (own company or cross-company)
   const getEffectiveMaterial = (line: Line) => {
@@ -291,6 +336,7 @@ export default function DispatchMaterialsPage() {
       materialId:    '',
       dispatchQty:   '',
       returnQty:     '',
+      quantityUomId: '',
     }]);
   };
 
@@ -300,7 +346,15 @@ export default function DispatchMaterialsPage() {
 
   const updateLine = (id: string, field: keyof Line, value: string) => {
     setLines((prev) =>
-      prev.map((l) => l.id === id ? { ...l, [field]: value } : l)
+      prev.map((l) =>
+        l.id === id
+          ? {
+              ...l,
+              [field]: value,
+              ...(field === 'materialId' ? { quantityUomId: '' } : {}),
+            }
+          : l
+      )
     );
   };
 
@@ -347,6 +401,7 @@ export default function DispatchMaterialsPage() {
         lines: linesToSubmit.map((l) => ({
           materialId: l.materialId,
           quantity: parseFloat(l.dispatchQty),
+          quantityUomId: l.quantityUomId.trim() || undefined,
           returnQty: l.returnQty ? parseFloat(l.returnQty) : undefined,
         })),
       }).unwrap();
@@ -376,6 +431,7 @@ export default function DispatchMaterialsPage() {
           destinationCompanyId: session!.user!.activeCompanyId!,
           materialId:           line.materialId,
           quantity:             parseFloat(line.dispatchQty),
+          quantityUomId:        line.quantityUomId.trim() || undefined,
           notes:                `Cross-company sourcing for dispatch`,
           date,
         }).unwrap();
@@ -462,29 +518,37 @@ export default function DispatchMaterialsPage() {
         return;
       }
 
-      // Sixth check: Sufficient stock
+      // Sixth check: Sufficient stock (compare in base UOM)
+      const baseQty = qtyInBase(mat.materialUoms, line.quantityUomId, qty);
       const originalQty = line.originalDispatchQty ? parseFloat(String(line.originalDispatchQty)) : 0;
       if (isNaN(originalQty)) {
         const availableStock = currentStock;
-        if (availableStock < qty) {
-          toast.error(`Insufficient stock for ${mat.name}. Requested: ${qty.toFixed(3)} ${mat.unit}, Available: ${availableStock.toFixed(3)} ${mat.unit}`);
+        if (availableStock < baseQty) {
+          toast.error(
+            `Insufficient stock for ${mat.name}. Requested: ${baseQty.toFixed(3)} ${mat.unit} (from entry), Available: ${availableStock.toFixed(3)} ${mat.unit}`
+          );
           return;
         }
       } else {
         const availableStock = currentStock + originalQty;
-        if (availableStock < qty) {
-          toast.error(`Insufficient stock for ${mat.name}. Requested: ${qty.toFixed(3)} ${mat.unit}, Available: ${availableStock.toFixed(3)} ${mat.unit}`);
+        if (availableStock < baseQty) {
+          toast.error(
+            `Insufficient stock for ${mat.name}. Requested: ${baseQty.toFixed(3)} ${mat.unit} (from entry), Available: ${availableStock.toFixed(3)} ${mat.unit}`
+          );
           return;
         }
       }
 
       if (ret > 0) {
+        const retBase = qtyInBase(mat.materialUoms, line.quantityUomId, ret);
         const jobMatSummary = jobMaterials.find((jm: any) => jm.materialId === line.materialId);
         if (jobMatSummary) {
-          const totalReturnAfter = jobMatSummary.returned + ret;
+          const totalReturnAfter = jobMatSummary.returned + retBase;
           if (totalReturnAfter > jobMatSummary.dispatched) {
             const maxCanReturn = jobMatSummary.dispatched - jobMatSummary.returned;
-            toast.error(`Cannot return ${ret} ${mat.unit} of ${mat.name}. Only ${maxCanReturn.toFixed(3)} ${mat.unit} can be returned for this job (Total dispatched: ${jobMatSummary.dispatched.toFixed(3)}, Already returned: ${jobMatSummary.returned.toFixed(3)})`);
+            toast.error(
+              `Cannot return ${retBase.toFixed(3)} ${mat.unit} (from return entry) for ${mat.name}. Only ${maxCanReturn.toFixed(3)} ${mat.unit} can be returned for this job (Total dispatched: ${jobMatSummary.dispatched.toFixed(3)}, Already returned: ${jobMatSummary.returned.toFixed(3)})`
+            );
             return;
           }
         }
@@ -512,18 +576,24 @@ export default function DispatchMaterialsPage() {
         return;
       }
 
-      if (ccStock < qty) {
-        toast.error(`Insufficient stock for ${ccMat.name} at ${line.sourceCompanyName}. Requested: ${qty.toFixed(3)}, Available: ${ccStock.toFixed(3)} ${ccMat.unit}`);
+      const ccBaseQty = qtyInBase(ccMat.materialUoms, line.quantityUomId, qty);
+      if (ccStock < ccBaseQty) {
+        toast.error(
+          `Insufficient stock for ${ccMat.name} at ${line.sourceCompanyName}. Requested: ${ccBaseQty.toFixed(3)} ${ccMat.unit} (from entry), Available: ${ccStock.toFixed(3)} ${ccMat.unit}`
+        );
         return;
       }
       const ret = line.returnQty ? parseFloat(line.returnQty) : 0;
       if (ret > 0) {
+        const retBase = qtyInBase(ccMat.materialUoms, line.quantityUomId, ret);
         const jobMatSummary = jobMaterials.find((jm: any) => jm.materialId === line.materialId);
         if (jobMatSummary) {
-          const totalReturnAfter = jobMatSummary.returned + ret;
+          const totalReturnAfter = jobMatSummary.returned + retBase;
           if (totalReturnAfter > jobMatSummary.dispatched) {
             const maxCanReturn = jobMatSummary.dispatched - jobMatSummary.returned;
-            toast.error(`Cannot return ${ret} ${ccMat.unit} of ${ccMat.name}. Only ${maxCanReturn.toFixed(3)} ${ccMat.unit} can be returned for this job`);
+            toast.error(
+              `Cannot return ${retBase.toFixed(3)} ${ccMat.unit} (from return entry) for ${ccMat.name}. Only ${maxCanReturn.toFixed(3)} ${ccMat.unit} can be returned for this job`
+            );
             return;
           }
         }
@@ -652,6 +722,21 @@ export default function DispatchMaterialsPage() {
               />
             </div>
           </div>
+          {selectedJob && (
+            <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Job Contact</p>
+              <p className="text-sm text-white mt-0.5">{selectedPrimaryContactName || 'No contact assigned'}</p>
+              {selectedPrimaryContact?.designation && (
+                <p className="text-xs text-slate-400 mt-0.5">{selectedPrimaryContact.designation}</p>
+              )}
+              {selectedPrimaryContact?.number && (
+                <p className="text-xs text-slate-400 mt-0.5">{selectedPrimaryContact.number}</p>
+              )}
+              {selectedPrimaryContact?.email && (
+                <p className="text-xs text-slate-400 mt-0.5 break-all">{selectedPrimaryContact.email}</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Table */}
@@ -661,7 +746,7 @@ export default function DispatchMaterialsPage() {
               <tr className="bg-slate-800 border-b border-slate-700">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide w-8">#</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide min-w-[220px]">Material</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide w-20">Unit</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide min-w-[128px]">UOM</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-28">In Stock</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Dispatch Qty *</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Return Qty</th>
@@ -769,8 +854,23 @@ export default function DispatchMaterialsPage() {
                         </div>
                       </td>
 
-                      <td className="px-3 py-2 text-center text-slate-400 text-xs min-w-[90px]">
-                        {mat?.unit ?? '—'}
+                      <td className="px-3 py-2 text-center text-slate-400 text-xs min-w-[120px]">
+                        {mat?.materialUoms && mat.materialUoms.length > 0 ? (
+                          <select
+                            value={line.quantityUomId}
+                            onChange={(e) => updateLine(line.id, 'quantityUomId', e.target.value)}
+                            className="w-full max-w-44 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs"
+                          >
+                            {mat.materialUoms.map((u: MaterialUomDto) => (
+                              <option key={u.id} value={u.isBase ? '' : u.id}>
+                                {u.unitName}
+                                {u.isBase ? ' (base)' : ` (=${u.factorToBase} ${mat.unit})`}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span>{mat?.unit ?? '—'}</span>
+                        )}
                       </td>
 
                       <td className="px-3 py-2 text-right text-emerald-400 font-mono text-sm">

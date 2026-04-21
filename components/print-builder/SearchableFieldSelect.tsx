@@ -1,6 +1,6 @@
-'use client';
+﻿'use client';
 
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useId } from 'react';
 import { getFieldsForItemType, type FieldDef } from '@/lib/utils/itemTypeFields';
 
 export interface SearchableFieldSelectProps {
@@ -9,7 +9,7 @@ export interface SearchableFieldSelectProps {
   onChange: (path: string) => void;
   label?: string;
   placeholder?: string;
-  /** Row keys for tables, etc. — listed first in the dropdown */
+  /** Row keys for tables, etc. - listed first in the dropdown */
   extraOptions?: FieldDef[];
   allowEmpty?: boolean;
   /** Smaller text for dense panels (e.g. page chrome) */
@@ -32,20 +32,18 @@ export function SearchableFieldSelect({
   value,
   onChange,
   label,
-  placeholder = 'Search or pick a field…',
+  placeholder = 'Search or pick a field...',
   extraOptions,
   allowEmpty = true,
   dense = false,
 }: SearchableFieldSelectProps) {
   const baseFields = useMemo(() => getFieldsForItemType(itemType), [itemType]);
-  const allFields = useMemo(
-    () => mergeFieldDefs(baseFields, extraOptions),
-    [baseFields, extraOptions]
-  );
+  const allFields = useMemo(() => mergeFieldDefs(baseFields, extraOptions), [baseFields, extraOptions]);
 
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -61,12 +59,8 @@ export function SearchableFieldSelect({
   const displayText = useMemo(() => {
     if (!value) return '';
     const hit = allFields.find((f) => f.path === value);
-    return hit ? `${hit.label} · ${hit.path}` : value;
+    return hit ? `${hit.label} | ${hit.path}` : value;
   }, [value, allFields]);
-
-  useEffect(() => {
-    if (!open) setQ('');
-  }, [open]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -79,9 +73,11 @@ export function SearchableFieldSelect({
   }, [open]);
 
   const inputCls = dense
-    ? 'w-full px-2 py-1.5 text-[11px] bg-slate-800 border border-slate-600 rounded text-white placeholder:text-slate-600'
-    : 'w-full px-2 py-1.5 text-xs bg-slate-800 border border-slate-600 rounded text-white placeholder:text-slate-500';
-  const labelCls = dense ? 'block text-[10px] text-slate-400 mb-1' : 'block text-xs text-slate-400 mb-1';
+    ? 'w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-[11px] text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500'
+    : 'w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500';
+  const labelCls = dense
+    ? 'mb-1 block text-[10px] text-slate-600 dark:text-slate-400'
+    : 'mb-1 block text-xs text-slate-600 dark:text-slate-400';
 
   return (
     <div ref={wrapRef} className="relative">
@@ -90,6 +86,7 @@ export function SearchableFieldSelect({
         <input
           type="text"
           role="combobox"
+          aria-controls={listboxId}
           aria-expanded={open}
           value={open ? q : displayText}
           onChange={(e) => {
@@ -107,28 +104,33 @@ export function SearchableFieldSelect({
           type="button"
           aria-label="Toggle field list"
           onClick={() => setOpen((o) => !o)}
-          className="shrink-0 px-2 rounded border border-slate-600 bg-slate-800 text-slate-400 hover:text-white text-xs"
+          onMouseDown={() => {
+            if (open) setQ('');
+          }}
+          className="shrink-0 rounded border border-slate-300 bg-white px-2 text-xs text-slate-500 hover:text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-white"
         >
-          ▾
+          v
         </button>
       </div>
       {open && (
         <ul
-          className="absolute z-[100] mt-1 w-full max-h-52 overflow-y-auto rounded border border-slate-600 bg-slate-900 shadow-xl py-1"
+          id={listboxId}
+          className="absolute z-[100] mt-1 max-h-52 w-full overflow-y-auto rounded border border-slate-300 bg-white py-1 shadow-xl dark:border-slate-600 dark:bg-slate-900"
           role="listbox"
         >
           {allowEmpty && (
             <li>
               <button
                 type="button"
-                className="w-full text-left px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-800"
+                className="w-full px-2 py-1.5 text-left text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   onChange('');
+                  setQ('');
                   setOpen(false);
                 }}
               >
-                — None —
+                - None -
               </button>
             </li>
           )}
@@ -136,16 +138,17 @@ export function SearchableFieldSelect({
             <li key={f.path}>
               <button
                 type="button"
-                className="w-full text-left px-2 py-1.5 text-xs hover:bg-slate-800 border-b border-slate-800/80 last:border-0"
+                className="w-full border-b border-slate-200 px-2 py-1.5 text-left text-xs hover:bg-slate-100 last:border-0 dark:border-slate-800/80 dark:hover:bg-slate-800"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   onChange(f.path);
+                  setQ('');
                   setOpen(false);
                 }}
               >
-                <span className="text-slate-200 font-medium block truncate">{f.label}</span>
-                <code className="text-[10px] text-cyan-400/90 break-all">{f.path}</code>
-                <span className="text-[9px] text-slate-600 block">{f.category}</span>
+                <span className="block truncate font-medium text-slate-800 dark:text-slate-200">{f.label}</span>
+                <code className="break-all text-[10px] text-cyan-600 dark:text-cyan-400/90">{f.path}</code>
+                <span className="block text-[9px] text-slate-500 dark:text-slate-500">{f.category}</span>
               </button>
             </li>
           ))}
@@ -153,14 +156,15 @@ export function SearchableFieldSelect({
             <li>
               <button
                 type="button"
-                className="w-full text-left px-2 py-1.5 text-xs text-amber-400/90 hover:bg-slate-800"
+                className="w-full px-2 py-1.5 text-left text-xs text-amber-700 hover:bg-slate-100 dark:text-amber-400/90 dark:hover:bg-slate-800"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   onChange(q.trim());
+                  setQ('');
                   setOpen(false);
                 }}
               >
-                Use custom path: <code className="text-cyan-400">{q.trim()}</code>
+                Use custom path: <code className="text-cyan-600 dark:text-cyan-400">{q.trim()}</code>
               </button>
             </li>
           )}

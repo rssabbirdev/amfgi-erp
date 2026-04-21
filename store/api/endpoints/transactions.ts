@@ -38,6 +38,7 @@ interface TransferPayload {
   sourceCompanyId?: string;
   materialId: string;
   quantity: number;
+  quantityUomId?: string;
   destinationCompanyId: string;
   notes?: string;
   date?: string;

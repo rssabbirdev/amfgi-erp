@@ -1,6 +1,7 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 import type {
   DocumentTemplate,
@@ -25,9 +26,11 @@ import {
   getMockData,
   type AnyTemplateDataContext,
   type TemplateDataContext,
+  type WorkScheduleContext,
 } from '@/lib/utils/templateData';
 import { formatDate } from '@/lib/utils/formatters';
 import { getItemTypeLabel } from '@/lib/utils/itemTypeFields';
+import { WORK_SCHEDULE_PREVIEW_SESSION_KEY } from '@/lib/utils/printTemplateSession';
 import {
   ensureCanvasRects,
   resolveCanvasRectsForSections,
@@ -40,6 +43,7 @@ import {
   reorderCanvasRectZ,
 } from '@/lib/utils/canvasLayout';
 import { migrateLegacyDocumentSections } from '@/lib/utils/migrateDocumentSections';
+import { useTheme } from '@/providers/ThemeProvider';
 
 /** Print layout is always freeform canvas (absolute rects per block). */
 const CANVAS_MODE = true;
@@ -172,9 +176,67 @@ type DispatchPreviewEntry = {
   materialsCount: number;
 };
 
+type SchedulePreviewOption = {
+  id: string;
+  workDate: string;
+  status: string;
+  title?: string | null;
+};
+
+type SchedulePreviewDetail = {
+  id: string;
+  workDate: string;
+  status: string;
+  notes?: string | null;
+  assignments?: Array<{
+    label?: string | null;
+    locationType?: 'SITE_JOB' | 'FACTORY' | 'OTHER' | null;
+    factoryCode?: string | null;
+    jobNumberSnapshot?: string | null;
+    projectDetailsSnapshot?: string | null;
+    targetQty?: number | string | null;
+    clientNameSnapshot?: string | null;
+    shiftStart?: string | null;
+    shiftEnd?: string | null;
+    breakWindow?: string | null;
+    remarks?: string | null;
+    job?: {
+      jobNumber?: string | null;
+      site?: string | null;
+      description?: string | null;
+      projectDetails?: string | null;
+      customer?: { name?: string | null } | null;
+    } | null;
+    teamLeader?: { fullName?: string | null } | null;
+    driver1?: { fullName?: string | null } | null;
+    driver2?: { fullName?: string | null } | null;
+    members?: Array<{
+      role?: 'WORKER' | 'HELPER' | 'TEAM_LEADER' | null;
+      employee?: { fullName?: string | null } | null;
+    }> | null;
+  }> | null;
+  driverLogs?: Array<{
+    driver?: { fullName?: string | null } | null;
+    routeText?: string | null;
+  }> | null;
+};
+
 type RightPanel = 'properties' | 'data';
 
-/** Layout / editor tools — labels live in the top bar; body shows in the left column */
+function formatScheduleTimeForPrint(raw: string | null | undefined): string {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return value;
+  const hour24 = Number(match[1]);
+  const minute = match[2];
+  if (!Number.isFinite(hour24) || hour24 < 0 || hour24 > 23) return value;
+  const suffix = hour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${minute} ${suffix}`;
+}
+
+/** Layout / editor tools â€” labels live in the top bar; body shows in the left column */
 type LeftNavTool =
   | 'preview-data'
   | 'preview-workspace'
@@ -201,12 +263,27 @@ function NavChip({
       onClick={onClick}
       className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
         active
-          ? 'border-sky-500 bg-sky-950/70 text-sky-100 shadow-[0_0_0_1px_rgba(14,165,233,0.25)]'
-          : 'border-slate-600 bg-slate-800/90 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
+          ? 'border-sky-300 bg-sky-50 text-sky-700 shadow-[0_0_0_1px_rgba(125,211,252,0.4)] dark:border-sky-500 dark:bg-sky-950/70 dark:text-sky-100 dark:shadow-[0_0_0_1px_rgba(14,165,233,0.25)]'
+          : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800/90 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-800'
       }`}
     >
       {children}
     </button>
+  );
+}
+
+function SmallStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+      <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</span>
+      <span className="font-semibold text-slate-800 dark:text-slate-100">{value}</span>
+    </div>
   );
 }
 
@@ -219,6 +296,8 @@ export function TemplateBuilder({
   companySnapshot,
   onDirtyChange,
 }: TemplateBuilderProps) {
+  const { data: session } = useSession();
+  const { theme, toggle } = useTheme();
   const [sections, setSections] = useState<DocumentSection[]>(() =>
     migrateLegacyDocumentSections(template.sections ?? [])
   );
@@ -227,6 +306,7 @@ export function TemplateBuilder({
   const [canvasRects, setCanvasRects] = useState<SectionCanvasRect[]>(() =>
     resolveCanvasRectsForSections(
       template.pageMargins ?? DEFAULT_PAGE_MARGINS,
+      template.pageStyle,
       template.sections ?? [],
       template.canvasMode,
       template.canvasRects
@@ -275,8 +355,22 @@ export function TemplateBuilder({
   const [dnEntriesLoading, setDnEntriesLoading] = useState(false);
   const [dnEntriesError, setDnEntriesError] = useState<string | null>(null);
   const [dnSelectedEntryId, setDnSelectedEntryId] = useState('');
+  const [schedulePreviewOptions, setSchedulePreviewOptions] = useState<SchedulePreviewOption[]>([]);
+  const [schedulePreviewLoading, setSchedulePreviewLoading] = useState(false);
+  const [schedulePreviewError, setSchedulePreviewError] = useState<string | null>(null);
+  const [selectedSchedulePreviewId, setSelectedSchedulePreviewId] = useState('');
+  const [schedulePreviewDetailLoading, setSchedulePreviewDetailLoading] = useState(false);
   const [liveTxnLoading, setLiveTxnLoading] = useState(false);
   const [livePreviewBase, setLivePreviewBase] = useState<TemplateDataContext | null>(null);
+  const [workSchedulePreviewBase, setWorkSchedulePreviewBase] = useState<WorkScheduleContext | null>(null);
+  /** DB-backed profile URLs â€” session/JWT can omit long Drive URLs; preview must match /profile. */
+  const [profileForPreview, setProfileForPreview] = useState<{
+    name: string;
+    image: string;
+    signatureUrl: string;
+    imageDriveId: string;
+    signatureDriveId: string;
+  } | null>(null);
 
   const [savedLayoutKey, setSavedLayoutKey] = useState(() => {
     const m = template.pageMargins ?? DEFAULT_PAGE_MARGINS;
@@ -285,10 +379,219 @@ export function TemplateBuilder({
       m,
       template.pageStyle,
       CANVAS_MODE,
-      resolveCanvasRectsForSections(m, secs, template.canvasMode, template.canvasRects),
+      resolveCanvasRectsForSections(m, template.pageStyle, secs, template.canvasMode, template.canvasRects),
       secs
     );
   });
+
+  const reloadWorkSchedulePreview = useCallback(() => {
+    try {
+      const raw = sessionStorage.getItem(WORK_SCHEDULE_PREVIEW_SESSION_KEY);
+      if (!raw) {
+        setWorkSchedulePreviewBase(null);
+        return;
+      }
+      const parsed = JSON.parse(raw) as { previewData?: WorkScheduleContext };
+      setWorkSchedulePreviewBase(parsed?.previewData ?? null);
+    } catch {
+      setWorkSchedulePreviewBase(null);
+    }
+  }, []);
+
+  const buildWorkSchedulePreviewFromApi = useCallback(
+      (schedule: SchedulePreviewDetail): WorkScheduleContext => {
+        const assignments = schedule.assignments ?? [];
+        const previewGroups = assignments.map((assignment, index) => {
+          const memberRows = assignment.members ?? [];
+          const workerRows = memberRows
+            .map((member) => member.employee?.fullName?.trim() ?? '')
+            .filter(Boolean);
+          const numberedWorkerRows = workerRows.map((name, index) => `${index + 1}. ${name}`);
+          const workerNames = workerRows.join(', ');
+          const workerBlocks = memberRows.some((member) => member.role === 'TEAM_LEADER')
+            ? (() => {
+                const rows: Array<{ kind: 'subteam' | 'leader' | 'worker' | 'spacer'; text: string }> = [];
+                let subteamIndex = -1;
+                let peopleIndex = 0;
+                for (const member of memberRows) {
+                  const name = member.employee?.fullName?.trim() ?? '';
+                  if (!name) continue;
+                  if (member.role === 'TEAM_LEADER') {
+                    if (rows.length > 0) rows.push({ kind: 'spacer', text: '' });
+                    subteamIndex += 1;
+                    peopleIndex = 0;
+                    rows.push({ kind: 'subteam', text: `Sub-team ${String.fromCharCode(65 + Math.max(subteamIndex, 0))}` });
+                    peopleIndex += 1;
+                    rows.push({ kind: 'leader', text: `${peopleIndex}. ${name}` });
+                  } else {
+                    peopleIndex += 1;
+                    rows.push({ kind: 'worker', text: `${peopleIndex}. ${name}` });
+                  }
+                }
+                return rows;
+              })()
+            : workerRows.map((name, workerIndex) => ({
+                kind: workerIndex === 0 ? ('leader' as const) : ('worker' as const),
+                text: `${workerIndex + 1}. ${name}`,
+              }));
+          const workerDisplay = workerBlocks.map((row) => row.text).filter(Boolean).join('\n');
+          const driverNames = [assignment.driver1?.fullName, assignment.driver2?.fullName]
+            .map((name) => String(name ?? '').trim())
+            .filter(Boolean)
+            .join(' / ');
+        const breakWindow = String(assignment.breakWindow ?? '').trim();
+        const breakMatch = breakWindow.match(/^(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})$/);
+        const dutyStart = formatScheduleTimeForPrint(String(assignment.shiftStart ?? '').trim());
+        const dutyEnd = formatScheduleTimeForPrint(String(assignment.shiftEnd ?? '').trim());
+        const breakStart = formatScheduleTimeForPrint(breakMatch?.[1] ?? '');
+        const breakEnd = formatScheduleTimeForPrint(breakMatch?.[2] ?? '');
+        const jobNumber =
+          assignment.locationType === 'SITE_JOB'
+            ? String(assignment.job?.jobNumber ?? assignment.jobNumberSnapshot ?? '').trim()
+            : String(assignment.factoryCode ?? assignment.jobNumberSnapshot ?? '').trim();
+        const customerName = String(
+          assignment.job?.customer?.name ?? assignment.clientNameSnapshot ?? ''
+        ).trim();
+        const workProcessDetails = String(
+          assignment.projectDetailsSnapshot ??
+            assignment.job?.description ??
+            ''
+        ).trim();
+        const projectDetails = String(assignment.job?.projectDetails ?? '').trim();
+          const siteName = String(assignment.job?.site ?? '').trim();
+          const targetQty = String(assignment.targetQty ?? '').trim();
+          return {
+            label: String(assignment.label ?? `Group ${index + 1}`).trim() || `Group ${index + 1}`,
+          locationLabel:
+            assignment.locationType === 'SITE_JOB'
+              ? 'Site job'
+              : assignment.locationType === 'FACTORY'
+                ? 'Factory'
+                : 'Other',
+          siteName,
+          locationDisplay:
+            assignment.locationType === 'SITE_JOB'
+              ? siteName || 'Site'
+              : assignment.locationType === 'FACTORY'
+                ? 'Factory'
+                : 'Other',
+          locationBadgeVariant:
+            assignment.locationType === 'SITE_JOB'
+              ? 'site'
+              : assignment.locationType === 'FACTORY'
+                ? 'factory'
+                : 'other' as 'site' | 'factory' | 'other',
+          jobNumber,
+          customerName,
+            projectDetails,
+            workProcessDetails,
+            targetQty,
+            teamLeaderName: String(assignment.teamLeader?.fullName ?? '').trim(),
+            driverNames,
+            workerNames,
+            workerDisplay,
+            workerRows: numberedWorkerRows,
+            workerStructuredRows: workerBlocks.map((row) => row.text),
+            workerBlocks,
+            workerCount: workerRows.length,
+          dutyStart,
+          dutyEnd,
+          breakStart,
+          breakEnd,
+          dutyRange: dutyStart && dutyEnd ? `${dutyStart} - ${dutyEnd}` : '',
+          breakRange: breakStart && breakEnd ? `${breakStart} - ${breakEnd}` : '',
+          remarks: String(assignment.remarks ?? '').trim(),
+        };
+      });
+
+      const primaryJob = previewGroups.find((group) => group.jobNumber.trim()) ?? previewGroups[0] ?? {
+        jobNumber: '',
+        customerName: '',
+        projectDetails: '',
+        workProcessDetails: '',
+        locationLabel: '',
+      };
+
+      const driverTrips = (schedule.driverLogs ?? []).map((log) => ({
+        driverName: String(log.driver?.fullName ?? '').trim(),
+        tripOrder: String(log.routeText ?? '').trim(),
+      }));
+
+      return {
+        company: {
+          name: session?.user?.activeCompanyName ?? '',
+          address: '',
+          phone: '',
+          email: '',
+          letterheadUrl: '',
+        },
+        job: {
+          jobNumber: primaryJob.jobNumber,
+          customerName: primaryJob.customerName,
+          projectDetails: primaryJob.projectDetails,
+          workProcessDetails: primaryJob.workProcessDetails,
+          locationLabel: primaryJob.locationLabel,
+        },
+        schedule: {
+          title: 'Daily Work Schedule',
+          workDate: schedule.workDate,
+          workDateLabel: formatDate(schedule.workDate),
+          status: schedule.status,
+          groupCount: previewGroups.length,
+          assignedWorkerCount: previewGroups.reduce((sum, group) => sum + group.workerCount, 0),
+          groupsWithTiming: previewGroups.filter((group) => group.dutyStart && group.dutyEnd).length,
+          driverCount: driverTrips.length,
+          driverTripSummary: `${driverTrips.length} active driver${driverTrips.length === 1 ? '' : 's'} listed`,
+          notes: String(schedule.notes ?? '').trim(),
+          remarksSummary: previewGroups.map((group) => group.remarks).filter(Boolean).join(' | '),
+        },
+        scheduleGroups: previewGroups,
+        driverTrips,
+        today: formatDate(new Date().toISOString()),
+      };
+    },
+    [session?.user?.activeCompanyName]
+  );
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setProfileForPreview(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/user/profile', { cache: 'no-store' });
+        const json = await res.json();
+        if (cancelled || !res.ok || !json.success || !json.data) return;
+        const u = json.data as {
+          name?: string;
+          image?: string | null;
+          signatureUrl?: string | null;
+          imageDriveId?: string | null;
+          signatureDriveId?: string | null;
+        };
+        setProfileForPreview({
+          name: u.name ?? '',
+          image: (u.image ?? '').trim(),
+          signatureUrl: (u.signatureUrl ?? '').trim(),
+          imageDriveId: (u.imageDriveId ?? '').trim(),
+          signatureDriveId: (u.signatureDriveId ?? '').trim(),
+        });
+      } catch {
+        if (!cancelled) setProfileForPreview(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    session?.user?.id,
+    session?.user?.image,
+    session?.user?.signatureUrl,
+    session?.user?.imageDriveId,
+    session?.user?.signatureDriveId,
+  ]);
 
   useEffect(() => {
     if (template.itemType !== 'delivery-note' || !companyId) {
@@ -322,7 +625,7 @@ export function TemplateBuilder({
             const ids = (e.transactionIds as string[] | undefined) ?? [];
             return {
               entryId: String(e.entryId ?? e.id ?? ''),
-              jobNumber: String(e.jobNumber ?? '—'),
+              jobNumber: String(e.jobNumber ?? '-'),
               dispatchDate,
               transactionIds: ids,
               materialsCount: Number(e.materialsCount ?? 0),
@@ -350,6 +653,81 @@ export function TemplateBuilder({
       setLeftTool((t) => (t === 'preview-data' ? 'section-order' : t));
     }
   }, [template.itemType]);
+
+  useEffect(() => {
+    if (template.itemType !== 'work-schedule') {
+      setWorkSchedulePreviewBase(null);
+      return;
+    }
+    reloadWorkSchedulePreview();
+  }, [template.itemType, template.id, reloadWorkSchedulePreview]);
+
+  useEffect(() => {
+    if (template.itemType !== 'work-schedule' || !companyId) {
+      setSchedulePreviewOptions([]);
+      setSchedulePreviewError(null);
+      return;
+    }
+    let cancelled = false;
+    setSchedulePreviewLoading(true);
+    setSchedulePreviewError(null);
+    fetch('/api/hr/schedule')
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        if (!json.success || !Array.isArray(json.data)) {
+          setSchedulePreviewError(json.error || 'Could not load schedules');
+          setSchedulePreviewOptions([]);
+          return;
+        }
+        const options = json.data
+          .map((row: Record<string, unknown>) => ({
+            id: String(row.id ?? ''),
+            workDate: String(row.workDate ?? ''),
+            status: String(row.status ?? ''),
+            title: row.title == null ? null : String(row.title),
+          }))
+          .filter((row: SchedulePreviewOption) => row.id && row.workDate);
+        setSchedulePreviewOptions(options);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSchedulePreviewError('Failed to load schedules');
+          setSchedulePreviewOptions([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSchedulePreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [template.itemType, companyId]);
+
+  useEffect(() => {
+    if (!selectedSchedulePreviewId || template.itemType !== 'work-schedule') return;
+    let cancelled = false;
+    setSchedulePreviewDetailLoading(true);
+    fetch(`/api/hr/schedule/${selectedSchedulePreviewId}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        if (!json.success || !json.data) {
+          toast.error(json.error || 'Could not load that schedule');
+          return;
+        }
+        setWorkSchedulePreviewBase(buildWorkSchedulePreviewFromApi(json.data as SchedulePreviewDetail));
+      })
+      .catch(() => {
+        if (!cancelled) toast.error('Failed to load that schedule');
+      })
+      .finally(() => {
+        if (!cancelled) setSchedulePreviewDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSchedulePreviewId, template.itemType, buildWorkSchedulePreviewFromApi]);
 
   useEffect(() => {
     if (!dnSelectedEntryId || template.itemType !== 'delivery-note') {
@@ -395,7 +773,7 @@ export function TemplateBuilder({
     setSections(secs);
     setMargins(m);
     setPageStyle(template.pageStyle);
-    setCanvasRects(resolveCanvasRectsForSections(m, secs, template.canvasMode, template.canvasRects));
+    setCanvasRects(resolveCanvasRectsForSections(m, template.pageStyle, secs, template.canvasMode, template.canvasRects));
     setSelectedIdx(null);
     setSectionOrderSelection([]);
     setDnSelectedEntryId('');
@@ -410,7 +788,7 @@ export function TemplateBuilder({
         m,
         template.pageStyle,
         CANVAS_MODE,
-        resolveCanvasRectsForSections(m, secs, template.canvasMode, template.canvasRects),
+        resolveCanvasRectsForSections(m, template.pageStyle, secs, template.canvasMode, template.canvasRects),
         secs
       )
     );
@@ -578,7 +956,7 @@ export function TemplateBuilder({
   const saveCheckpoint = useCallback(() => {
     const name = window.prompt('Checkpoint label (optional):', '');
     if (name === null) return;
-    const label = name.trim() || `Checkpoint · ${new Date().toLocaleString()}`;
+    const label = name.trim() || `Checkpoint | ${new Date().toLocaleString()}`;
     pushLayoutVersion(label, 'checkpoint');
     toast.success('Checkpoint saved to history');
   }, [pushLayoutVersion]);
@@ -644,8 +1022,8 @@ export function TemplateBuilder({
       if (k !== 'ArrowUp' && k !== 'ArrowDown' && k !== 'ArrowLeft' && k !== 'ArrowRight') return;
       e.preventDefault();
       const stepMm = e.shiftKey ? 2 : 0.5;
-      const cw = contentWidthMm(margins);
-      const ch = contentHeightMm(margins);
+      const cw = contentWidthMm(margins, pageStyle);
+      const ch = contentHeightMm(margins, pageStyle);
       let dx = 0;
       let dy = 0;
       if (k === 'ArrowLeft') dx = -stepMm;
@@ -671,7 +1049,7 @@ export function TemplateBuilder({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedIdx, margins, sections]);
+  }, [selectedIdx, margins, pageStyle, sections]);
 
   useEffect(() => {
     try {
@@ -773,6 +1151,17 @@ export function TemplateBuilder({
   ]);
 
   const previewData = useMemo(() => {
+    const userSlice = {
+      user: {
+        name: profileForPreview?.name ?? session?.user?.name ?? '',
+        image: profileForPreview?.image ?? session?.user?.image ?? '',
+        signatureUrl: profileForPreview?.signatureUrl ?? session?.user?.signatureUrl ?? '',
+        imageDriveId:
+          profileForPreview?.imageDriveId ?? session?.user?.imageDriveId ?? '',
+        signatureDriveId:
+          profileForPreview?.signatureDriveId ?? session?.user?.signatureDriveId ?? '',
+      },
+    };
     const mockData = getMockData(template.itemType);
     const letter = letterheadUrl || mockData.company?.letterheadUrl || '';
     if (template.itemType === 'delivery-note' && dnSelectedEntryId && livePreviewBase) {
@@ -782,6 +1171,17 @@ export function TemplateBuilder({
           ...livePreviewBase.company,
           letterheadUrl: letter || livePreviewBase.company.letterheadUrl,
         },
+        ...userSlice,
+      } as AnyTemplateDataContext;
+    }
+    if (template.itemType === 'work-schedule' && workSchedulePreviewBase) {
+      return {
+        ...workSchedulePreviewBase,
+        company: {
+          ...workSchedulePreviewBase.company,
+          letterheadUrl: letter || workSchedulePreviewBase.company.letterheadUrl,
+        },
+        ...userSlice,
       } as AnyTemplateDataContext;
     }
     return {
@@ -790,8 +1190,21 @@ export function TemplateBuilder({
         ...mockData.company,
         letterheadUrl: letter,
       },
+      ...userSlice,
     } as AnyTemplateDataContext;
-  }, [template.itemType, dnSelectedEntryId, livePreviewBase, letterheadUrl]);
+  }, [
+    template.itemType,
+    dnSelectedEntryId,
+    livePreviewBase,
+    workSchedulePreviewBase,
+    letterheadUrl,
+    session?.user?.name,
+    session?.user?.image,
+    session?.user?.signatureUrl,
+    session?.user?.imageDriveId,
+    session?.user?.signatureDriveId,
+    profileForPreview,
+  ]);
 
   const previewTemplate: DocumentTemplate = {
     ...template,
@@ -863,7 +1276,7 @@ export function TemplateBuilder({
         return next;
       });
       setCanvasRects((r) => {
-        const cw = contentWidthMm(margins);
+        const cw = contentWidthMm(margins, pageStyle);
         const h = estimateSectionHeightMm(newSection, cw);
         const y = r.length ? r[r.length - 1].yMm + r[r.length - 1].heightMm + 2 : 0;
         const maxZ = r.reduce((m, rr, i) => Math.max(m, rr.zIndex ?? i), -1);
@@ -874,8 +1287,42 @@ export function TemplateBuilder({
       });
       setRightPanel('properties');
     },
-    [margins]
+    [margins, pageStyle]
   );
+
+  const addContactBlock = useCallback(() => {
+    const contactSection: DocumentSection = {
+      type: 'field-row',
+      customBlockName: 'Job Contact',
+      bordered: true,
+      layout: 'grid',
+      gridColumns: 1,
+      cells: [
+        { label: 'Contact', field: 'job.contactPerson', width: 100, bold: true, fontSize: 10 },
+        { label: 'Phone', field: 'job.contactPhone', width: 100, fontSize: 9 },
+        { label: 'Email', field: 'job.contactEmail', width: 100, fontSize: 9 },
+      ],
+    };
+
+    setSections((prev) => {
+      const next = [...prev, contactSection];
+      const ni = next.length - 1;
+      setSelectedIdx(ni);
+      setSectionOrderSelection([ni]);
+      return next;
+    });
+    setCanvasRects((r) => {
+      const cw = contentWidthMm(margins, pageStyle);
+      const h = estimateSectionHeightMm(contactSection, cw);
+      const y = r.length ? r[r.length - 1].yMm + r[r.length - 1].heightMm + 2 : 0;
+      const maxZ = r.reduce((m, rr, i) => Math.max(m, rr.zIndex ?? i), -1);
+      return materializeCanvasZOrder([
+        ...r,
+        { xMm: 0, yMm: y, widthMm: cw, heightMm: h, zIndex: maxZ + 1 },
+      ]);
+    });
+    setRightPanel('properties');
+  }, [margins, pageStyle]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -895,7 +1342,7 @@ export function TemplateBuilder({
         dateStyle: 'short',
         timeStyle: 'short',
       });
-      pushLayoutVersion(`Saved · ${ts}`, 'saved');
+      pushLayoutVersion(`Saved | ${ts}`, 'saved');
     } catch {
       /* parent shows toast */
     } finally {
@@ -955,7 +1402,7 @@ export function TemplateBuilder({
   const duplicateSelectedSection = useCallback(() => {
     if (selectedIdx === null) return;
     const idx = selectedIdx;
-    const ch = contentHeightMm(margins);
+    const ch = contentHeightMm(margins, pageStyle);
     setSections((prev) => {
       if (idx >= prev.length) return prev;
       const dupSec = JSON.parse(JSON.stringify(prev[idx])) as DocumentSection;
@@ -977,7 +1424,7 @@ export function TemplateBuilder({
     setSelectedIdx(idx + 1);
     setSectionOrderSelection([idx + 1]);
     setRightPanel('properties');
-  }, [selectedIdx, margins]);
+  }, [selectedIdx, margins, pageStyle]);
 
   const newSectionGroupId = () =>
     typeof crypto !== 'undefined' && crypto.randomUUID
@@ -1052,211 +1499,325 @@ export function TemplateBuilder({
   }, [selectedIdx, removeSection]);
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-slate-950 text-white">
-      <header className="shrink-0 border-b border-slate-700 bg-slate-900" data-hist={histTick}>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-2 py-2 sm:px-3">
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="min-w-28 px-3 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-600 rounded text-white"
-            >
-              {saving ? 'Saving…' : 'Save template'}
-            </button>
-            {onClose && (
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white">
+      <header
+        className="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-slate-800 dark:bg-slate-950/95 dark:supports-[backdrop-filter]:bg-slate-950/80"
+        data-hist={histTick}
+      >
+        <div className="space-y-2 px-4 py-2.5 sm:px-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-300/80">
+                  Print Builder
+                </p>
+                <span className="hidden text-slate-300 dark:text-slate-700 sm:inline">/</span>
+                <h1 className="min-w-0 truncate text-sm font-semibold text-slate-900 dark:text-white">
+                  {template.name}
+                </h1>
+                {dirty && (
+                  <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                    Unsaved
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                onClick={requestClose}
-                className="shrink-0 rounded bg-slate-700 px-3 py-2 text-xs hover:bg-slate-600"
+                onClick={toggle}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               >
-                Back
+                {theme === 'dark' ? (
+                  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+                    />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+                    />
+                  </svg>
+                )}
+                <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
               </button>
-            )}
-            <button
-              type="button"
-              title="Undo (Ctrl+Z)"
-              onClick={undo}
-              disabled={historyPast.current.length === 0}
-              className="shrink-0 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              Undo
-            </button>
-            <button
-              type="button"
-              title="Redo (Ctrl+Shift+Z)"
-              onClick={redo}
-              disabled={historyFuture.current.length === 0}
-              className="shrink-0 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              Redo
-            </button>
-            <button
-              type="button"
-              title="Save a restore point (also kept in this browser)"
-              onClick={saveCheckpoint}
-              className="shrink-0 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700"
-            >
-              Checkpoint
-            </button>
-            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[10px] text-slate-400">
-              <input
-                type="checkbox"
-                checked={showRuler}
-                onChange={(e) => setShowRuler(e.target.checked)}
-                className="rounded border-slate-600"
-              />
-              Ruler
-            </label>
-            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[10px] text-slate-400">
-              <input
-                type="checkbox"
-                checked={showSectionOutlines}
-                onChange={(e) => setShowSectionOutlines(e.target.checked)}
-                className="rounded border-slate-600"
-              />
-              Section outlines
-            </label>
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={requestClose}
+                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Close
+                </button>
+              )}
+              <button
+                type="button"
+                title="Undo (Ctrl+Z)"
+                onClick={undo}
+                disabled={historyPast.current.length === 0}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                title="Redo (Ctrl+Shift+Z)"
+                onClick={redo}
+                disabled={historyFuture.current.length === 0}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Redo
+              </button>
+              <button
+                type="button"
+                title="Save a restore point (also kept in this browser)"
+                onClick={saveCheckpoint}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Checkpoint
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="min-w-28 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
 
-          <nav
-            className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overflow-y-hidden py-0.5 [scrollbar-width:thin]"
-            aria-label="Layout tools"
-          >
-            <span className="shrink-0 pl-1 text-[9px] font-bold uppercase tracking-wide text-slate-600">
-              Layout
-            </span>
-            {template.itemType === 'delivery-note' && (
-              <NavChip
-                active={leftTool === 'preview-data'}
-                onClick={() => setLeftTool('preview-data')}
-                title="Pick a real delivery note for preview data"
-              >
-                Preview data
-              </NavChip>
-            )}
-            <NavChip
-              active={leftTool === 'preview-workspace'}
-              onClick={() => setLeftTool('preview-workspace')}
-              title="Editor canvas color (not printed)"
+          <div className="flex flex-wrap items-center gap-2">
+            <nav
+              className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overflow-y-hidden rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 [scrollbar-width:thin] dark:border-slate-800 dark:bg-slate-950/60"
+              aria-label="Layout tools"
             >
-              Workspace
-            </NavChip>
-            <NavChip
-              active={leftTool === 'canvas'}
-              onClick={() => setLeftTool('canvas')}
-              title="Snap, resize limits, and canvas shortcuts"
-            >
-              Layout
-            </NavChip>
-            <NavChip
-              active={leftTool === 'page-chrome'}
-              onClick={() => setLeftTool('page-chrome')}
-              title="Margins, page background, watermark"
-            >
-              Page / WM
-            </NavChip>
-            <NavChip
-              active={leftTool === 'version-history'}
-              onClick={() => setLeftTool('version-history')}
-              title="Saved checkpoints and restore points for this template"
-            >
-              Versions
-            </NavChip>
-            <NavChip
-              active={leftTool === 'section-order'}
-              onClick={() => setLeftTool('section-order')}
-              title="Layers: reorder blocks; click a row to edit on the right (like Canva’s stack)"
-            >
-              Blocks
-            </NavChip>
-          </nav>
-
-          <div
-            className="flex w-full min-w-0 shrink-0 flex-col justify-center sm:ml-auto sm:w-auto sm:max-w-40 sm:border-l sm:border-slate-800 sm:pl-3 lg:max-w-56 sm:text-right"
-            title={template.name}
-          >
-            <p className="truncate text-[10px] text-slate-400">{template.name}</p>
-            <div className="flex items-center gap-2 sm:justify-end">
-              <p className="truncate text-[9px] text-slate-600">
-                {getItemTypeLabel(String(template.itemType))}
-              </p>
-              {dirty && (
-                <span className="shrink-0 text-[9px] font-medium text-amber-500/90">Unsaved</span>
+              {(template.itemType === 'delivery-note' || template.itemType === 'work-schedule') && (
+                <NavChip
+                  active={leftTool === 'preview-data'}
+                  onClick={() => setLeftTool('preview-data')}
+                  title={
+                    template.itemType === 'delivery-note'
+                      ? 'Pick a real delivery note for preview data'
+                      : 'Choose schedule preview data'
+                  }
+                >
+                  Preview data
+                </NavChip>
               )}
+              <NavChip
+                active={leftTool === 'preview-workspace'}
+                onClick={() => setLeftTool('preview-workspace')}
+                title="Editor canvas color (not printed)"
+              >
+                Workspace
+              </NavChip>
+              <NavChip
+                active={leftTool === 'canvas'}
+                onClick={() => setLeftTool('canvas')}
+                title="Snap, resize limits, and canvas shortcuts"
+              >
+                Layout
+              </NavChip>
+              <NavChip
+                active={leftTool === 'page-chrome'}
+                onClick={() => setLeftTool('page-chrome')}
+                title="Margins, page background, watermark"
+              >
+                Page style
+              </NavChip>
+              <NavChip
+                active={leftTool === 'version-history'}
+                onClick={() => setLeftTool('version-history')}
+                title="Saved checkpoints and restore points for this template"
+              >
+                Versions
+              </NavChip>
+              <NavChip
+                active={leftTool === 'section-order'}
+                onClick={() => setLeftTool('section-order')}
+                title="Reorder blocks and choose which one to edit"
+              >
+                Blocks
+              </NavChip>
+            </nav>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <SmallStat label="Type" value={getItemTypeLabel(String(template.itemType))} />
+              <SmallStat label="Blocks" value={sections.length} />
+              <SmallStat label="Zoom" value={`${Math.round(previewScale * 100)}%`} />
+              <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={showRuler}
+                  onChange={(e) => setShowRuler(e.target.checked)}
+                  className="rounded border-slate-400 dark:border-slate-600"
+                />
+                Ruler
+              </label>
+              <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={showSectionOutlines}
+                  onChange={(e) => setShowSectionOutlines(e.target.checked)}
+                  className="rounded border-slate-400 dark:border-slate-600"
+                />
+                Outlines
+              </label>
             </div>
           </div>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-row">
-        <div className="allow-text-select flex h-full min-h-0 w-72 shrink-0 flex-col border-r border-slate-700 bg-slate-900">
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-3">
-            {leftTool === 'preview-data' && template.itemType === 'delivery-note' && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+        <div className="allow-text-select flex h-full min-h-0 w-[21rem] shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 xl:w-[22rem]">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
+            {leftTool === 'preview-data' &&
+              (template.itemType === 'delivery-note' || template.itemType === 'work-schedule') && (
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
                   Preview data
                 </p>
-                <p className="text-[9px] leading-relaxed text-slate-600">
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
                   Pick a real delivery note to preview fields in the document.
                 </p>
                 {!companyId && (
                   <p className="text-[10px] text-amber-500/90">Active company required to load entries.</p>
                 )}
-                {companyId && (
+                {template.itemType === 'delivery-note' && companyId && (
                   <>
-                    <label className="block text-[10px] text-slate-500">Delivery entry</label>
+                    <label className="block text-[10px] font-medium text-slate-600 dark:text-slate-400">Delivery entry</label>
                     <select
                       value={dnSelectedEntryId}
                       onChange={(e) => setDnSelectedEntryId(e.target.value)}
-                      className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs text-white"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                       disabled={dnEntriesLoading}
                     >
                       <option value="">Sample / mock data</option>
                       {dnEntries.map((ent) => {
-                        const d = ent.dispatchDate ? formatDate(ent.dispatchDate) : '—';
+                        const d = ent.dispatchDate ? formatDate(ent.dispatchDate) : '-';
                         return (
                           <option key={ent.entryId} value={ent.entryId}>
-                            {ent.jobNumber} · {d}
+                            {ent.jobNumber} | {d}
                             {ent.materialsCount > 1 ? ` (${ent.materialsCount} lines)` : ''}
                           </option>
                         );
                       })}
                     </select>
-                    {dnEntriesLoading && <p className="text-[10px] text-slate-500">Loading entries…</p>}
+                    {dnEntriesLoading && <p className="text-[10px] text-slate-500 dark:text-slate-500">Loading entries...</p>}
                     {dnEntriesError && <p className="text-[10px] text-red-400">{dnEntriesError}</p>}
                     {!dnEntriesLoading &&
                       dnEntries.length === 0 &&
                       companyId &&
                       !dnEntriesError && (
-                        <p className="text-[10px] text-slate-600">No delivery notes found yet.</p>
+                        <p className="text-[10px] text-slate-600 dark:text-slate-500">No delivery notes found yet.</p>
                       )}
                     {liveTxnLoading && dnSelectedEntryId && (
-                      <p className="text-[10px] text-slate-500">Loading transactions…</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-500">Loading transactions...</p>
                     )}
                     {dnSelectedEntryId && !liveTxnLoading && !livePreviewBase && (
-                      <p className="text-[10px] text-slate-600">Could not load that delivery note.</p>
+                      <p className="text-[10px] text-slate-600 dark:text-slate-500">Could not load that delivery note.</p>
                     )}
                   </>
+                )}
+                {template.itemType === 'work-schedule' && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-slate-600 dark:text-slate-400">
+                      Test this template with the current draft, sample data, or an older saved schedule.
+                    </p>
+                    <label className="block text-[10px] font-medium text-slate-600 dark:text-slate-400">
+                      Previous schedule
+                    </label>
+                    <select
+                      value={selectedSchedulePreviewId}
+                      onChange={(e) => setSelectedSchedulePreviewId(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                      disabled={schedulePreviewLoading}
+                    >
+                      <option value="">Current draft / sample data</option>
+                      {schedulePreviewOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {formatDate(option.workDate)} | {option.status}
+                          {option.title ? ` | ${option.title}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {schedulePreviewLoading && (
+                      <p className="text-[10px] text-slate-500 dark:text-slate-500">Loading schedules...</p>
+                    )}
+                    {schedulePreviewError && <p className="text-[10px] text-red-400">{schedulePreviewError}</p>}
+                    {!schedulePreviewLoading &&
+                      !schedulePreviewError &&
+                      schedulePreviewOptions.length === 0 &&
+                      companyId && (
+                        <p className="text-[10px] text-slate-600 dark:text-slate-500">No schedules found yet.</p>
+                      )}
+                    {schedulePreviewDetailLoading && selectedSchedulePreviewId && (
+                      <p className="text-[10px] text-slate-500 dark:text-slate-500">Loading schedule preview...</p>
+                    )}
+                    {workSchedulePreviewBase ? (
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                        <p>
+                          {workSchedulePreviewBase.schedule.workDateLabel} | {workSchedulePreviewBase.schedule.groupCount} groups | {workSchedulePreviewBase.schedule.assignedWorkerCount} workers
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-600 dark:text-slate-500">
+                        No live schedule preview found. The builder is showing sample data.
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSchedulePreviewId('');
+                          reloadWorkSchedulePreview();
+                        }}
+                        className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        Use current schedule draft
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSchedulePreviewId('');
+                          sessionStorage.removeItem(WORK_SCHEDULE_PREVIEW_SESSION_KEY);
+                          setWorkSchedulePreviewBase(null);
+                        }}
+                        className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        Use sample data
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
 
             {leftTool === 'preview-workspace' && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
                   Preview workspace
                 </p>
-                <p className="text-[9px] leading-relaxed text-slate-600">
-                  Color behind the page in this editor only — not printed.
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+                  Color behind the page in this editor only - not printed.
                 </p>
-                <label className="block text-[10px] text-slate-500">Background</label>
+                <label className="block text-[10px] font-medium text-slate-600 dark:text-slate-400">Background</label>
                 <select
                   value={previewWsMode}
                   onChange={(e) =>
                     setPreviewWsMode(e.target.value as 'default' | 'transparent' | 'custom')
                   }
-                  className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs text-white"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                 >
                   <option value="default">Default gray</option>
                   <option value="transparent">Transparent</option>
@@ -1268,52 +1829,52 @@ export function TemplateBuilder({
                       type="color"
                       value={previewWsColor.match(/^#[0-9a-fA-F]{6}$/) ? previewWsColor : '#64748b'}
                       onChange={(e) => setPreviewWsColor(e.target.value)}
-                      className="h-8 w-12 cursor-pointer rounded border border-slate-600 bg-slate-800"
+                      className="h-10 w-14 cursor-pointer rounded-xl border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900"
                     />
                     <input
                       type="text"
                       value={previewWsColor}
                       onChange={(e) => setPreviewWsColor(e.target.value)}
-                      className="flex-1 rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-[11px] text-white"
+                      className="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-[11px] text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                       placeholder="#64748b"
                     />
                   </div>
                 )}
-                <p className="text-[9px] leading-relaxed text-slate-600">
+                <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-500">
                   Stored in this browser only.
                 </p>
               </div>
             )}
 
             {leftTool === 'canvas' && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
                   Block layout
                 </p>
-                <p className="text-[9px] leading-relaxed text-slate-600">
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
                   Each block has its own frame on the page. Drag to move, use the green handle to resize.
                   Arrow keys nudge the selected block (Shift = 2&nbsp;mm).
                 </p>
-                <div className="space-y-2 border-t border-slate-800 pt-2">
-                  <p className="text-[9px] leading-relaxed text-slate-600">
+                <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+                  <p className="text-[10px] leading-relaxed text-slate-600 dark:text-slate-400">
                     Same options as the preview bar: snap to margins and neighbors; allow shrinking below
                     measured content (clip inside the cell).
                   </p>
-                  <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-300">
+                  <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
                     <input
                       type="checkbox"
                       checked={snapEnabled}
                       onChange={(e) => setSnapEnabled(e.target.checked)}
-                      className="rounded border-slate-600"
+                      className="rounded border-slate-400 dark:border-slate-600"
                     />
                     Snap while move / resize
                   </label>
-                  <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-300">
+                  <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
                     <input
                       type="checkbox"
                       checked={allowShrinkBelowContent}
                       onChange={(e) => setAllowShrinkBelowContent(e.target.checked)}
-                      className="rounded border-slate-600"
+                      className="rounded border-slate-400 dark:border-slate-600"
                     />
                     Allow resize smaller than content
                   </label>
@@ -1322,8 +1883,8 @@ export function TemplateBuilder({
             )}
 
             {leftTool === 'page-chrome' && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
                   Page & watermark
                 </p>
                 <PageChromeEditor
@@ -1332,25 +1893,26 @@ export function TemplateBuilder({
                   onChange={setPageStyle}
                   pageMargins={margins}
                   onMarginsChange={setMargins}
+                  companyId={companyId}
                 />
               </div>
             )}
 
             {leftTool === 'version-history' && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
                   Layout versions ({layoutVersions.length})
                 </p>
-                <p className="text-[9px] leading-relaxed text-slate-600">
-                  Each successful <span className="text-slate-400">Save</span> and manual{' '}
-                  <span className="text-slate-400">Checkpoint</span> stores a copy in this browser. Restore
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+                  Each successful <span className="text-slate-800 dark:text-slate-300">Save</span> and manual{' '}
+                  <span className="text-slate-800 dark:text-slate-300">Checkpoint</span> stores a copy in this browser. Restore
                   replaces the current layout (Undo/Redo resets).
                 </p>
                 <div className="flex gap-1">
                   <button
                     type="button"
                     onClick={saveCheckpoint}
-                    className="flex-1 rounded border border-slate-600 bg-slate-800 py-1.5 text-[10px] text-slate-300 hover:bg-slate-700"
+                    className="flex-1 rounded-xl border border-slate-300 bg-white py-2 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     New checkpoint
                   </button>
@@ -1358,27 +1920,27 @@ export function TemplateBuilder({
                     type="button"
                     onClick={clearLayoutVersions}
                     disabled={layoutVersions.length === 0}
-                    className="rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-[10px] text-slate-500 hover:text-red-300 disabled:opacity-30"
+                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[10px] font-medium text-slate-500 hover:text-red-500 disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-red-300"
                   >
                     Clear all
                   </button>
                 </div>
                 {layoutVersions.length === 0 ? (
-                  <p className="text-[10px] text-slate-600">No versions yet — save or add a checkpoint.</p>
+                  <p className="text-[10px] text-slate-600 dark:text-slate-500">No versions yet - save or add a checkpoint.</p>
                 ) : (
                   <ul className="max-h-[min(420px,50vh)] space-y-1 overflow-y-auto pr-0.5">
                     {layoutVersions.map((v) => (
                       <li
                         key={v.id}
-                        className="rounded border border-slate-800 bg-slate-900/80 px-2 py-1.5 text-[10px]"
+                        className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[10px] shadow-sm dark:border-slate-800 dark:bg-slate-900/80"
                       >
                         <div className="flex items-start justify-between gap-1">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium text-slate-200" title={v.label}>
+                            <p className="truncate font-medium text-slate-900 dark:text-slate-200" title={v.label}>
                               {v.label}
                             </p>
-                            <p className="text-[9px] text-slate-600">
-                              {v.kind === 'saved' ? 'Saved' : 'Checkpoint'} ·{' '}
+                            <p className="text-[9px] text-slate-500 dark:text-slate-500">
+                              {v.kind === 'saved' ? 'Saved' : 'Checkpoint'} |{' '}
                               {new Date(v.at).toLocaleString(undefined, {
                                 dateStyle: 'short',
                                 timeStyle: 'short',
@@ -1389,14 +1951,14 @@ export function TemplateBuilder({
                             <button
                               type="button"
                               onClick={() => restoreLayoutVersion(v)}
-                              className="rounded bg-sky-700 px-1.5 py-0.5 text-[9px] text-white hover:bg-sky-600"
+                              className="rounded-lg bg-sky-600 px-2 py-1 text-[9px] font-medium text-white hover:bg-sky-500"
                             >
                               Restore
                             </button>
                             <button
                               type="button"
                               onClick={() => removeLayoutVersion(v.id)}
-                              className="rounded px-1.5 py-0.5 text-[9px] text-slate-500 hover:text-red-400"
+                              className="rounded px-1.5 py-0.5 text-[9px] text-slate-500 hover:text-red-500 dark:hover:text-red-400"
                               title="Remove from list"
                             >
                               Remove
@@ -1411,13 +1973,13 @@ export function TemplateBuilder({
             )}
 
             {leftTool === 'section-order' && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                  Section order ({sections.length})
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
+                  Block order ({sections.length})
                 </p>
-                <p className="text-[9px] leading-relaxed text-slate-600">
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
                   Drag to reorder. Click a row for properties.{' '}
-                  <span className="text-slate-400">Ctrl/Cmd+click</span> to multi-select, then Group.
+                  <span className="text-slate-800 dark:text-slate-300">Ctrl/Cmd+click</span> to multi-select, then Group.
                   Locked blocks hide the dashed page outline; grouped blocks move together on the page.
                 </p>
                 <div className="flex flex-wrap gap-1">
@@ -1425,7 +1987,7 @@ export function TemplateBuilder({
                     type="button"
                     onClick={groupSelectedSections}
                     disabled={sectionOrderSelection.length < 2}
-                    className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-[9px] text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                     title="Assign one group id to all selected blocks (canvas: move together)"
                   >
                     Group
@@ -1436,7 +1998,7 @@ export function TemplateBuilder({
                     disabled={
                       !sectionOrderSelection.some((i) => Boolean(sections[i]?.groupId))
                     }
-                    className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-[9px] text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     Ungroup
                   </button>
@@ -1444,7 +2006,7 @@ export function TemplateBuilder({
                     type="button"
                     onClick={toggleLockSelected}
                     disabled={selectedIdx === null}
-                    className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-[9px] text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                     title="Lock or unlock the primary selected block (last single-click)"
                   >
                     {selectedIdx !== null && isSectionLocked(sections[selectedIdx]) ? 'Unlock' : 'Lock'}
@@ -1453,7 +2015,7 @@ export function TemplateBuilder({
                     type="button"
                     onClick={lockGroupOfPrimary}
                     disabled={selectedIdx === null || !sections[selectedIdx]?.groupId}
-                    className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-[9px] text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                     title="Lock every block in the primary block's group"
                   >
                     Lock group
@@ -1462,13 +2024,13 @@ export function TemplateBuilder({
                     type="button"
                     onClick={unlockGroupOfPrimary}
                     disabled={selectedIdx === null || !sections[selectedIdx]?.groupId}
-                    className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-[9px] text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     Unlock group
                   </button>
                 </div>
                 {sectionOrderSelection.length > 1 && (
-                  <p className="text-[9px] text-violet-400/90">{sectionOrderSelection.length} selected</p>
+                  <p className="text-[10px] font-medium text-violet-600 dark:text-violet-400/90">{sectionOrderSelection.length} selected</p>
                 )}
                 <div className="space-y-1 pb-2">
                   {sections.map((sec, idx) => (
@@ -1512,17 +2074,17 @@ export function TemplateBuilder({
                             ? 'border-violet-500/70 bg-violet-950/35 text-violet-100'
                             : orderHoverIdx === idx
                               ? 'border-sky-500/60 bg-sky-950/40 text-sky-100'
-                              : 'border-slate-800 text-slate-300 hover:bg-slate-800'
+                              : 'border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800'
                       }`}
                     >
                       <span
                         className={`h-2 w-2 shrink-0 rounded-full ${
-                          sec.groupId ? 'bg-violet-400' : 'bg-slate-700'
+                          sec.groupId ? 'bg-violet-400' : 'bg-slate-300 dark:bg-slate-700'
                         }`}
                         title={sec.groupId ? 'In canvas group' : 'Ungrouped'}
                         aria-hidden
                       />
-                      <span className="w-5 shrink-0 text-center text-slate-500">{idx + 1}</span>
+                      <span className="w-5 shrink-0 text-center text-slate-500 dark:text-slate-500">{idx + 1}</span>
                       <span
                         className="flex min-w-0 flex-1 items-baseline gap-1 truncate text-left"
                         title={getSectionOrderLabel(sec)}
@@ -1532,8 +2094,8 @@ export function TemplateBuilder({
                           if (d.kind === 'split') {
                             return (
                               <>
-                                <span className="shrink-0 font-medium text-slate-400">{d.base}</span>
-                                <span className="shrink-0 text-slate-500">-</span>
+                                <span className="shrink-0 font-medium text-slate-500 dark:text-slate-400">{d.base}</span>
+                                <span className="shrink-0 text-slate-400 dark:text-slate-500">-</span>
                                 <span className="min-w-0 truncate">{d.suffix}</span>
                               </>
                             );
@@ -1542,21 +2104,21 @@ export function TemplateBuilder({
                         })()}
                       </span>
                       {isSectionLocked(sec) && (
-                        <span className="shrink-0 text-[10px] text-amber-500/90" title="Locked">
-                          🔒
+                        <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300" title="Locked">
+                          Locked
                         </span>
                       )}
-                      <div className="flex shrink-0 gap-0.5">
+                      <div className="flex shrink-0 gap-1">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             updateSection(idx, { ...sec, locked: !sec.locked });
                           }}
-                          className="px-1 text-[10px] text-slate-500 hover:text-amber-300"
+                          className="rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-200 hover:text-amber-700 dark:hover:bg-slate-800 dark:hover:text-amber-300"
                           title={isSectionLocked(sec) ? 'Unlock' : 'Lock'}
                         >
-                          {isSectionLocked(sec) ? '🔓' : '🔒'}
+                          {isSectionLocked(sec) ? 'Unlock' : 'Lock'}
                         </button>
                         <button
                           type="button"
@@ -1565,9 +2127,9 @@ export function TemplateBuilder({
                             moveSection(idx, -1);
                           }}
                           disabled={idx === 0}
-                          className="px-1 text-[10px] text-slate-500 hover:text-white disabled:opacity-20"
+                          className="rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-20 dark:hover:bg-slate-800 dark:hover:text-white"
                         >
-                          ▲
+                          Up
                         </button>
                         <button
                           type="button"
@@ -1576,9 +2138,9 @@ export function TemplateBuilder({
                             moveSection(idx, 1);
                           }}
                           disabled={idx === sections.length - 1}
-                          className="px-1 text-[10px] text-slate-500 hover:text-white disabled:opacity-20"
+                          className="rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-20 dark:hover:bg-slate-800 dark:hover:text-white"
                         >
-                          ▼
+                          Down
                         </button>
                         <button
                           type="button"
@@ -1586,9 +2148,9 @@ export function TemplateBuilder({
                             e.stopPropagation();
                             removeSection(idx);
                           }}
-                          className="px-1 text-[10px] text-red-500 hover:text-red-300"
+                          className="rounded px-1.5 py-0.5 text-[10px] font-medium text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-500 dark:hover:bg-red-500/10 dark:hover:text-red-300"
                         >
-                          ×
+                          Remove
                         </button>
                       </div>
                     </div>
@@ -1598,17 +2160,27 @@ export function TemplateBuilder({
             )}
           </div>
 
-          <div className="shrink-0 border-t border-slate-700 bg-slate-900/95 p-2">
-            <p className="mb-1.5 px-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/95">
+            <p className="mb-2 px-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
               Add block
             </p>
-            <div className="grid max-h-36 grid-cols-3 gap-1 overflow-y-auto overflow-x-hidden">
+            {(template.itemType === 'delivery-note' || template.itemType === 'packing-slip') && (
+              <button
+                type="button"
+                onClick={addContactBlock}
+                className="mb-3 w-full rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-[11px] font-semibold text-sky-700 hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200 dark:hover:bg-sky-500/20"
+                title="Quick insert: job contact section"
+              >
+                + Contact block
+              </button>
+            )}
+            <div className="grid max-h-40 grid-cols-3 gap-2 overflow-y-auto overflow-x-hidden">
               {SECTION_PALETTE.map((item) => (
                 <button
                   key={item.type}
                   type="button"
                   onClick={() => addSection(item.type)}
-                  className="flex flex-col items-center gap-0.5 rounded bg-slate-800 p-1.5 text-center text-slate-400 transition hover:bg-slate-700 hover:text-white"
+                  className="flex flex-col items-center gap-1 rounded-xl border border-slate-200 bg-white p-2 text-center text-slate-600 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
                   title={item.description}
                 >
                   <span className="text-sm leading-none">{item.icon}</span>
@@ -1621,10 +2193,32 @@ export function TemplateBuilder({
 
         <div
           className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
-            previewWsMode === 'transparent' ? 'bg-slate-950' : 'bg-slate-800'
+            previewWsMode === 'transparent'
+              ? 'bg-transparent'
+              : 'bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.18),_transparent_55%),linear-gradient(to_bottom,_#e2e8f0,_#cbd5e1)] dark:bg-slate-800'
           }`}
         >
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div className="shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
+                  Preview canvas
+                </p>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  Position blocks visually, then fine-tune fields and layout settings from the side panels.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                  {getItemTypeLabel(String(template.itemType))}
+                </span>
+                <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                  {selectedSection ? getSectionOrderLabel(selectedSection) : 'No block selected'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
             <CanvasPreview
               template={previewTemplate}
               data={previewData}
@@ -1647,44 +2241,44 @@ export function TemplateBuilder({
             />
           </div>
           <div
-            className="flex shrink-0 flex-col gap-2 border-t border-slate-700 bg-slate-900/95 px-3 py-2"
-            title="Preview zoom (editor only — not print scale)"
+            className="flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"
+            title="Preview zoom (editor only - not print scale)"
           >
             <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-500">
                   Layout
                 </span>
-                <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-400">
+                <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
                   <input
                     type="checkbox"
                     checked={snapEnabled}
                     onChange={(e) => setSnapEnabled(e.target.checked)}
-                    className="rounded border-slate-600"
+                    className="rounded border-slate-400 dark:border-slate-600"
                   />
                   Snap
                 </label>
                 <label
-                  className="flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-400"
+                  className="flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400"
                   title="Off: width/height stop at measured content in the preview"
                 >
                   <input
                     type="checkbox"
                     checked={allowShrinkBelowContent}
                     onChange={(e) => setAllowShrinkBelowContent(e.target.checked)}
-                    className="rounded border-slate-600"
+                    className="rounded border-slate-400 dark:border-slate-600"
                   />
                   Shrink below content
                 </label>
                 {selectedIdx !== null && (
                   <>
-                    <span className="hidden h-3 w-px bg-slate-700 sm:inline" aria-hidden />
+                    <span className="hidden h-3 w-px bg-slate-300 dark:bg-slate-700 sm:inline" aria-hidden />
                     <button
                       type="button"
                       onClick={bringCanvasForward}
                       disabled={
                         selectedIdx !== null && isSectionLocked(sections[selectedIdx])
                       }
-                      className="rounded border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                       title="Bring forward (stacking)"
                     >
                       Forward
@@ -1695,7 +2289,7 @@ export function TemplateBuilder({
                       disabled={
                         selectedIdx !== null && isSectionLocked(sections[selectedIdx])
                       }
-                      className="rounded border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                       title="Send backward (stacking)"
                     >
                       Back
@@ -1703,14 +2297,14 @@ export function TemplateBuilder({
                     <button
                       type="button"
                       onClick={duplicateSelectedSection}
-                      className="rounded border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-700"
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                     >
                       Duplicate
                     </button>
                     <button
                       type="button"
                       onClick={deleteSelectedSection}
-                      className="rounded border border-red-900/60 bg-slate-800 px-2 py-0.5 text-[10px] text-red-400 hover:bg-slate-700"
+                      className="rounded-lg border border-red-200 bg-white px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:bg-slate-800 dark:text-red-400 dark:hover:bg-slate-700"
                     >
                       Delete
                     </button>
@@ -1718,15 +2312,15 @@ export function TemplateBuilder({
                 )}
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-500">
                 Zoom
               </span>
               <button
                 type="button"
-                className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700"
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 onClick={() => setPreviewScale((s) => Math.max(1, Math.round((s - 0.2) * 100) / 100))}
               >
-                −
+                -
               </button>
               <input
                 type="range"
@@ -1739,41 +2333,41 @@ export function TemplateBuilder({
               />
               <button
                 type="button"
-                className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700"
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 onClick={() => setPreviewScale((s) => Math.min(4, Math.round((s + 0.2) * 100) / 100))}
               >
                 +
               </button>
-              <span className="w-12 text-right font-mono text-[10px] text-slate-400">
+              <span className="w-12 text-right font-mono text-[10px] text-slate-500 dark:text-slate-400">
                 {Math.round(previewScale * 100)}%
               </span>
             </div>
           </div>
         </div>
 
-        <div className="allow-text-select flex h-full min-h-0 w-80 shrink-0 flex-col border-l border-slate-700 bg-slate-900">
-          <div className="flex shrink-0 border-b border-slate-700">
+        <div className="allow-text-select flex h-full min-h-0 w-[21rem] shrink-0 flex-col border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 xl:w-[22rem]">
+          <div className="flex shrink-0 border-b border-slate-200 dark:border-slate-700">
             <button
               type="button"
               onClick={() => setRightPanel('properties')}
-              className={`flex-1 py-2.5 text-xs font-medium ${
+              className={`flex-1 py-3 text-xs font-semibold ${
                 rightPanel === 'properties'
-                  ? 'border-b-2 border-emerald-500 bg-slate-900 text-emerald-400'
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'border-b-2 border-emerald-500 bg-slate-50 text-emerald-700 dark:bg-slate-900 dark:text-emerald-400'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300'
               }`}
             >
-              Block properties
+              Block settings
             </button>
             <button
               type="button"
               onClick={() => setRightPanel('data')}
-              className={`flex-1 py-2.5 text-xs font-medium ${
+              className={`flex-1 py-3 text-xs font-semibold ${
                 rightPanel === 'data'
-                  ? 'border-b-2 border-emerald-500 bg-slate-900 text-emerald-400'
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'border-b-2 border-emerald-500 bg-slate-50 text-emerald-700 dark:bg-slate-900 dark:text-emerald-400'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300'
               }`}
             >
-              Data dictionary
+              Data fields
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -1789,21 +2383,21 @@ export function TemplateBuilder({
                   CANVAS_MODE && selectedIdx != null ? canvasRects[selectedIdx] ?? null : null
                 }
                 canvasRectIndex={CANVAS_MODE ? selectedIdx : null}
-                contentWidthMm={CANVAS_MODE ? contentWidthMm(margins) : undefined}
-                contentHeightMm={CANVAS_MODE ? contentHeightMm(margins) : undefined}
+                contentWidthMm={CANVAS_MODE ? contentWidthMm(margins, pageStyle) : undefined}
+                contentHeightMm={CANVAS_MODE ? contentHeightMm(margins, pageStyle) : undefined}
                 onCanvasRectChange={(idx, rect) =>
                   setCanvasRects((prev) => prev.map((r, i) => (i === idx ? { ...rect } : r)))
                 }
                 onChange={(updated) => updateSection(selectedIdx!, updated)}
               />
             ) : (
-              <div className="px-2 py-10 text-center text-xs leading-relaxed text-slate-500">
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-xs leading-relaxed text-slate-500 dark:border-slate-700 dark:bg-slate-950/40">
                 <p className="mb-2">
-                  Click a block on the page, or choose one under <span className="text-slate-400">Blocks</span>{' '}
+                  Click a block on the page, or choose one under <span className="text-slate-700 dark:text-slate-400">Blocks</span>{' '}
                   on the left.
                 </p>
-                <p className="text-slate-600">
-                  Select a block on the page, then use <span className="text-slate-400">Layout</span> for snap
+                <p className="text-slate-600 dark:text-slate-500">
+                  Select a block on the page, then use <span className="text-slate-700 dark:text-slate-400">Layout</span> for snap
                   options or drag and resize in the preview.
                 </p>
               </div>

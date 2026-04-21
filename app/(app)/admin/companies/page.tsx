@@ -18,6 +18,7 @@ type Company = {
   name: string;
   slug: string;
   description?: string;
+  externalCompanyId?: string | null;
   isActive: boolean;
   createdAt?: string | Date;
   updatedAt?: string | Date;
@@ -32,11 +33,13 @@ export default function AdminCompaniesPage() {
   const [editing, setEditing] = useState<Company | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [externalCompanyId, setExternalCompanyId] = useState('');
 
   const openCreate = () => {
     setEditing(null);
     setName('');
     setDescription('');
+    setExternalCompanyId('');
     setModal(true);
   };
 
@@ -44,12 +47,13 @@ export default function AdminCompaniesPage() {
     setEditing(c);
     setName(c.name);
     setDescription(c.description ?? '');
+    setExternalCompanyId(c.externalCompanyId ?? '');
     setModal(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const body = { name, description };
+    const body = { name, description, externalCompanyId };
 
     try {
       if (editing) {
@@ -173,6 +177,15 @@ export default function AdminCompaniesPage() {
               rows={3}
               placeholder="Optional description"
               className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">External Company ID</label>
+            <input
+              value={externalCompanyId}
+              onChange={(e) => setExternalCompanyId(e.target.value)}
+              placeholder="Used by external Project Management sync"
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
             />
           </div>
           <div className="flex gap-3 pt-2">

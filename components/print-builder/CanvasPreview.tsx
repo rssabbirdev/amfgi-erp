@@ -6,6 +6,7 @@ import { getCanvasMoveIndicesForSection, isSectionLocked } from '@/lib/types/doc
 import type { AnyTemplateDataContext } from '@/lib/utils/templateData';
 import { DocumentRenderer } from './DocumentRenderer';
 import {
+  getPageDimensionsMm,
   contentWidthMm,
   contentHeightMm,
   clampRectToContent,
@@ -115,13 +116,14 @@ export function CanvasPreview({
     rects.length === template.sections.length &&
     template.sections.length > 0;
 
-  const cw = contentWidthMm(m);
-  const ch = contentHeightMm(m);
+  const pageDims = getPageDimensionsMm(template.pageStyle);
+  const cw = contentWidthMm(m, template.pageStyle);
+  const ch = contentHeightMm(m, template.pageStyle);
 
   const marginLeftPx = m.left * scale;
   const marginTopPx = m.top * scale;
-  const pageW = 210 * scale;
-  const pageH = 297 * scale;
+  const pageW = pageDims.widthMm * scale;
+  const pageH = pageDims.heightMm * scale;
 
   const rectsRef = useRef(rects);
   useEffect(() => {
@@ -489,7 +491,7 @@ export function CanvasPreview({
                   selectedIdx === idx && !isSectionLocked(template.sections[idx])
                     ? 'move'
                     : 'pointer',
-                pointerEvents: 'auto',
+                pointerEvents: isSectionLocked(template.sections[idx]) ? 'none' : 'auto',
                 zIndex: canvasOverlayZ(idx, r),
               }}
             >
@@ -526,6 +528,7 @@ export function CanvasPreview({
                 width: '100%',
                 height: `${bounds.height}px`,
                 ...overlayChrome(idx, true),
+                pointerEvents: isSectionLocked(template.sections[idx]) ? 'none' : 'auto',
                 zIndex:
                   orderHoverIdx === idx && selectedIdx !== idx
                     ? 12
@@ -580,7 +583,7 @@ export function CanvasPreview({
       style={{
         position: 'relative',
         overflow: 'auto',
-        backgroundColor: outerBg,
+        // backgroundColor: outerBg,
         alignItems: 'flex-start',
         padding: '20px',
       }}
@@ -588,18 +591,21 @@ export function CanvasPreview({
       {showRuler ? (
         <div className="flex flex-col" style={{ paddingLeft: RULER_GUTTER }}>
           <div className="flex" style={{ height: RULER_GUTTER }}>
-            <div style={{ width: RULER_GUTTER }} className="shrink-0 bg-slate-800/90" />
             <div
-              className="relative shrink-0 border border-slate-600 bg-slate-800/90"
+              style={{ width: RULER_GUTTER }}
+              className="shrink-0 bg-slate-200/90 dark:bg-slate-800/90"
+            />
+            <div
+              className="relative shrink-0 border border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90"
               style={{
                 width: pageW,
                 backgroundImage: `repeating-linear-gradient(90deg, #64748b 0, #64748b 1px, transparent 1px, transparent ${tickPx}px)`,
               }}
             >
-              {Array.from({ length: Math.floor(210 / tickMm) + 1 }, (_, i) => (
+              {Array.from({ length: Math.floor(pageDims.widthMm / tickMm) + 1 }, (_, i) => (
                 <span
                   key={i}
-                  className="absolute bottom-0 text-[8px] text-slate-500"
+                  className="absolute bottom-0 text-[8px] text-slate-600 dark:text-slate-500"
                   style={{ left: i * tickPx + 1 }}
                 >
                   {i * tickMm === 0 ? '' : i % 5 === 0 ? `${i * tickMm}` : ''}
@@ -609,17 +615,17 @@ export function CanvasPreview({
           </div>
           <div className="flex">
             <div
-              className="relative shrink-0 border border-slate-600 border-t-0 bg-slate-800/90"
+              className="relative shrink-0 border border-slate-300 border-t-0 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90"
               style={{
                 width: RULER_GUTTER,
                 height: pageH,
                 backgroundImage: `repeating-linear-gradient(180deg, #64748b 0, #64748b 1px, transparent 1px, transparent ${tickPx}px)`,
               }}
             >
-              {Array.from({ length: Math.floor(297 / tickMm) + 1 }, (_, i) => (
+              {Array.from({ length: Math.floor(pageDims.heightMm / tickMm) + 1 }, (_, i) => (
                 <span
                   key={i}
-                  className="absolute right-0.5 text-[8px] text-slate-500"
+                  className="absolute right-0.5 text-[8px] text-slate-600 dark:text-slate-500"
                   style={{ top: i * tickPx }}
                 >
                   {i * tickMm === 0 ? '' : i % 5 === 0 ? `${i * tickMm}` : ''}

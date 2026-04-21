@@ -7,6 +7,7 @@
 
 import type { DocumentTemplate } from '../lib/types/documentTemplate';
 import { buildCanvasRectsFromSections } from '../lib/utils/canvasLayout';
+import { createWorkScheduleTemplateDraft } from '../lib/utils/documentDefaults';
 
 /** Top-of-page banner image (company letterhead field + fallback). */
 function seedBannerImage(heightMm: number, opacity: number) {
@@ -95,6 +96,15 @@ const companySeedPrintTemplatesRaw = [
       {
         type: 'field-row',
         cells: [
+          { label: 'Contact', field: 'job.contactPerson', width: 40, fontSize: 8, color: '#334155' },
+          { label: 'Phone', field: 'job.contactPhone', width: 30, fontSize: 8, color: '#334155' },
+          { label: 'Email', field: 'job.contactEmail', width: 30, align: 'right', fontSize: 8, color: '#475569' },
+        ],
+        bordered: false,
+      },
+      {
+        type: 'field-row',
+        cells: [
           { label: 'Scope', field: 'job.description', width: 58, fontSize: 8, color: '#334155' },
           { label: 'Quotation', field: 'job.quotationNumber', width: 42, align: 'right', fontSize: 8, color: '#475569' },
         ],
@@ -147,6 +157,7 @@ const companySeedPrintTemplatesRaw = [
           { label: 'Received (Customer)' },
         ],
         lineHeight: 16,
+        pageAnchor: 'bottom' as const,
       },
     ],
   },
@@ -214,6 +225,15 @@ const companySeedPrintTemplatesRaw = [
         ],
         bordered: false,
       },
+      {
+        type: 'field-row',
+        cells: [
+          { label: 'Contact', field: 'job.contactPerson', width: 40, fontSize: 8, color: '#134e4a' },
+          { label: 'Phone', field: 'job.contactPhone', width: 30, fontSize: 8, color: '#115e59' },
+          { label: 'Email', field: 'job.contactEmail', width: 30, align: 'right', fontSize: 8, color: '#64748b' },
+        ],
+        bordered: false,
+      },
       { type: 'spacer', height: 3 },
       {
         type: 'table',
@@ -246,6 +266,7 @@ const companySeedPrintTemplatesRaw = [
         type: 'signatures',
         items: [{ label: 'Prepared' }, { label: 'Delivered' }, { label: 'Received' }],
         lineHeight: 22,
+        pageAnchor: 'bottom' as const,
       },
     ],
   },
@@ -303,6 +324,15 @@ const companySeedPrintTemplatesRaw = [
           { label: 'Job ref.', field: 'job.jobNumber', width: 35, bold: true, fontSize: 10 },
           { label: 'LPO', field: 'job.lpoNumber', width: 30, fontSize: 10 },
           { label: 'Quotation', field: 'job.quotationNumber', width: 35, align: 'right', fontSize: 9 },
+        ],
+        bordered: false,
+      },
+      {
+        type: 'field-row',
+        cells: [
+          { label: 'Contact', field: 'job.contactPerson', width: 40, fontSize: 9, color: '#57534e' },
+          { label: 'Phone', field: 'job.contactPhone', width: 30, fontSize: 9, color: '#57534e' },
+          { label: 'Email', field: 'job.contactEmail', width: 30, align: 'right', fontSize: 9, color: '#78716c' },
         ],
         bordered: false,
       },
@@ -391,6 +421,15 @@ const companySeedPrintTemplatesRaw = [
           { label: 'Site', field: 'job.site' },
           { label: 'Phone', field: 'customer.phone' },
         ],
+      },
+      {
+        type: 'field-row',
+        cells: [
+          { label: 'Contact', field: 'job.contactPerson', width: 40, fontSize: 8, color: '#0c4a6e' },
+          { label: 'Phone', field: 'job.contactPhone', width: 30, fontSize: 8, color: '#0c4a6e' },
+          { label: 'Email', field: 'job.contactEmail', width: 30, align: 'right', fontSize: 8, color: '#64748b' },
+        ],
+        bordered: false,
       },
       { type: 'spacer', height: 2 },
       {
@@ -493,6 +532,15 @@ const companySeedPrintTemplatesRaw = [
         ],
         bordered: false,
       },
+      {
+        type: 'field-row',
+        cells: [
+          { label: 'Contact', field: 'job.contactPerson', width: 40, fontSize: 8, color: '#5b21b6' },
+          { label: 'Phone', field: 'job.contactPhone', width: 30, fontSize: 8, color: '#5b21b6' },
+          { label: 'Email', field: 'job.contactEmail', width: 30, align: 'right', fontSize: 8, color: '#6b7280' },
+        ],
+        bordered: false,
+      },
       { type: 'spacer', height: 2 },
       {
         type: 'table',
@@ -574,6 +622,15 @@ const companySeedPrintTemplatesRaw = [
           { label: 'Site', field: 'job.site' },
         ],
       },
+      {
+        type: 'field-row',
+        cells: [
+          { label: 'Contact', field: 'job.contactPerson', width: 40, fontSize: 9, color: '#404040' },
+          { label: 'Phone', field: 'job.contactPhone', width: 30, fontSize: 9, color: '#404040' },
+          { label: 'Email', field: 'job.contactEmail', width: 30, align: 'right', fontSize: 9, color: '#525252' },
+        ],
+        bordered: false,
+      },
       { type: 'spacer', height: 2 },
       {
         type: 'field-row',
@@ -615,6 +672,338 @@ const companySeedPrintTemplatesRaw = [
       },
     ],
   },
+
+  (() => {
+    const template = createWorkScheduleTemplateDraft(
+      'default-work-schedule',
+      'Daily Work Schedule - Color Matrix'
+    );
+    template.isDefault = true;
+    template.pageMargins = { top: 7, right: 7, bottom: 8, left: 7 };
+    template.pageStyle = {
+      ...template.pageStyle,
+      pageOrientation: 'landscape',
+      bodyFontFamily: "'Segoe UI', Arial, sans-serif",
+      pageBackgroundColor: '#f8fafc',
+    };
+    template.sections = [
+      seedBannerImage(18, 0.1),
+      {
+        type: 'heading',
+        text: 'DAILY WORK SCHEDULE',
+        fontSize: 15,
+        align: 'center',
+        bold: true,
+        color: '#0f172a',
+      },
+      {
+        type: 'field-row',
+        bordered: true,
+        minHeight: 10,
+        cells: [
+          { label: 'Date', field: 'schedule.workDateLabel', width: 20, bold: true, fontSize: 8.5, color: '#0f172a' },
+          { label: 'Status', field: 'schedule.status', width: 14, fontSize: 8.2, color: '#1d4ed8' },
+          { label: 'Teams', field: 'schedule.groupCount', width: 10, align: 'center', fontSize: 8.2, color: '#0f172a' },
+          { label: 'Workers', field: 'schedule.assignedWorkerCount', width: 12, align: 'center', fontSize: 8.2, color: '#0f172a' },
+          { label: 'Trips', field: 'schedule.driverTripSummary', width: 18, fontSize: 8.2, color: '#7c2d12' },
+          { label: 'Primary Job', field: 'job.jobNumber', width: 12, fontSize: 8.2, color: '#0f172a' },
+          { label: 'Primary Location', field: 'job.locationLabel', width: 14, align: 'right', fontSize: 8.2, color: '#0f172a' },
+        ],
+      },
+      {
+        type: 'table',
+        dataSource: 'scheduleGroups',
+        layoutMode: 'group-columns',
+        fontSize: 6.9,
+        showBorders: true,
+        headerBg: '#0f172a',
+        headerColor: '#ffffff',
+        headerFontWeight: 'bold',
+        headerFontStyle: 'normal',
+        repeatHeaderOnNewPage: true,
+        minRows: 3,
+        rowPadding: 1.5,
+        rowMinHeightMm: 6.8,
+        columns: [
+          {
+            header: 'Team / Location',
+            field: 'locationDisplay',
+            align: 'left',
+            useGlobalHeaderStyle: false,
+            headerBg: '#0f172a',
+            headerColor: '#ffffff',
+            cellBg: '#e0f2fe',
+            cellColor: '#0c4a6e',
+            fontWeight: 'bold',
+          },
+          { header: 'Job No', field: 'jobNumber', align: 'left', cellBg: '#f8fafc', cellColor: '#0f172a' },
+          { header: 'Customer', field: 'customerName', align: 'left', cellBg: '#ecfeff', cellColor: '#155e75' },
+          { header: 'Work Process Details', field: 'workProcessDetails', align: 'left', cellBg: '#eef2ff', cellColor: '#3730a3' },
+          { header: 'Duty Timing', field: 'dutyRange', align: 'center', cellBg: '#dcfce7', cellColor: '#166534', fontWeight: 'bold' },
+          { header: 'Break Timing', field: 'breakRange', align: 'center', cellBg: '#fef3c7', cellColor: '#92400e' },
+          { header: 'Target Qty', field: 'targetQty', align: 'left', cellBg: '#fae8ff', cellColor: '#7e22ce', fontWeight: 'bold' },
+          { header: 'Team / Sub-team', field: 'workerStructuredRows', align: 'left', cellBg: '#fff7ed', cellColor: '#9a3412' },
+          { header: 'Drivers', field: 'driverNames', align: 'left', cellBg: '#fce7f3', cellColor: '#9d174d' },
+          { header: 'Remarks', field: 'remarks', align: 'left', cellBg: '#f8fafc', cellColor: '#334155', fontStyle: 'italic' },
+        ],
+      },
+      {
+        type: 'field-row',
+        bordered: true,
+        minHeight: 10,
+        cells: [
+          { label: 'Schedule Notes', field: 'schedule.notes', width: 100, fontSize: 8, color: '#334155' },
+        ],
+      },
+      {
+        type: 'heading',
+        text: 'Driver Trip Plan',
+        fontSize: 11,
+        align: 'left',
+        bold: true,
+        color: '#0f172a',
+        pageAnchor: 'bottom',
+      },
+      {
+        type: 'table',
+        dataSource: 'driverTrips',
+        columns: [
+          { header: '#', field: 'slno', width: 8, align: 'center' },
+          { header: 'Driver', field: 'driverName', width: 24, align: 'left' },
+          { header: 'Trip Order / Route', field: 'tripOrder', width: 68, align: 'left' },
+        ],
+        fontSize: 7.8,
+        showBorders: true,
+        headerBg: '#dbeafe',
+        headerColor: '#1e3a8a',
+        repeatHeaderOnNewPage: false,
+        minRows: 3,
+        rowPadding: 1.8,
+        pageAnchor: 'bottom',
+      },
+    ];
+    return template;
+  })(),
+
+  (() => {
+    const template = createWorkScheduleTemplateDraft(
+      'seed-work-schedule-site-focus',
+      'Daily Work Schedule - Crew Board'
+    );
+    template.isDefault = false;
+    template.pageMargins = { top: 7, right: 7, bottom: 7, left: 7 };
+    template.pageStyle = {
+      ...template.pageStyle,
+      pageOrientation: 'landscape',
+      bodyFontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+      pageBackgroundColor: '#f0fdf4',
+    };
+    template.sections = [
+      seedBannerImage(18, 0.08),
+      {
+        type: 'heading',
+        text: 'SITE CREW BOARD',
+        fontSize: 15,
+        align: 'center',
+        bold: true,
+        color: '#14532d',
+      },
+      {
+        type: 'field-row',
+        bordered: false,
+        minHeight: 10,
+        cells: [
+          { label: 'Date', field: 'schedule.workDateLabel', width: 20, bold: true, fontSize: 8.5, color: '#14532d' },
+          { label: 'Status', field: 'schedule.status', width: 14, fontSize: 8.2, color: '#166534' },
+          { label: 'Teams', field: 'schedule.groupCount', width: 10, align: 'center', fontSize: 8.2, color: '#14532d' },
+          { label: 'Workers', field: 'schedule.assignedWorkerCount', width: 12, align: 'center', fontSize: 8.2, color: '#14532d' },
+          { label: 'Customer', field: 'job.customerName', width: 24, fontSize: 8.2, color: '#166534' },
+          { label: 'Primary Job', field: 'job.jobNumber', width: 20, align: 'right', fontSize: 8.2, color: '#166534' },
+        ],
+      },
+      {
+        type: 'table',
+        dataSource: 'scheduleGroups',
+        layoutMode: 'group-columns',
+        fontSize: 6.9,
+        showBorders: true,
+        headerBg: '#14532d',
+        headerColor: '#ffffff',
+        headerFontWeight: 'bold',
+        headerFontStyle: 'normal',
+        repeatHeaderOnNewPage: true,
+        minRows: 3,
+        rowPadding: 1.5,
+        rowMinHeightMm: 6.6,
+        columns: [
+          {
+            header: 'Site / Location',
+            field: 'locationDisplay',
+            align: 'left',
+            useGlobalHeaderStyle: false,
+            headerBg: '#14532d',
+            headerColor: '#ffffff',
+            cellBg: '#dcfce7',
+            cellColor: '#14532d',
+            fontWeight: 'bold',
+          },
+          { header: 'Job No', field: 'jobNumber', align: 'left', cellBg: '#f0fdf4', cellColor: '#14532d' },
+          { header: 'Customer', field: 'customerName', align: 'left', cellBg: '#ecfccb', cellColor: '#3f6212' },
+          { header: 'Work Process Details', field: 'workProcessDetails', align: 'left', cellBg: '#ecfeff', cellColor: '#0f766e' },
+          { header: 'Target Qty', field: 'targetQty', align: 'left', cellBg: '#d1fae5', cellColor: '#065f46', fontWeight: 'bold' },
+          { header: 'Team / Sub-team', field: 'workerBlocks', align: 'left', cellBg: '#fffbeb', cellColor: '#92400e' },
+          { header: 'Drivers', field: 'driverNames', align: 'left', cellBg: '#fef2f2', cellColor: '#991b1b' },
+          { header: 'Duty Timing', field: 'dutyRange', align: 'center', cellBg: '#dbeafe', cellColor: '#1d4ed8' },
+          { header: 'Break Timing', field: 'breakRange', align: 'center', cellBg: '#fef9c3', cellColor: '#a16207' },
+          { header: 'Remarks', field: 'remarks', align: 'left', cellBg: '#f8fafc', cellColor: '#334155' },
+        ],
+      },
+      {
+        type: 'field-row',
+        bordered: true,
+        minHeight: 10,
+        cells: [
+          { label: 'Schedule Notes', field: 'schedule.notes', width: 100, fontSize: 8, color: '#334155' },
+        ],
+      },
+      {
+        type: 'heading',
+        text: 'Transport Plan',
+        fontSize: 11,
+        align: 'left',
+        bold: true,
+        color: '#14532d',
+        pageAnchor: 'bottom',
+      },
+      {
+        type: 'table',
+        dataSource: 'driverTrips',
+        columns: [
+          { header: '#', field: 'slno', width: 8, align: 'center' },
+          { header: 'Driver', field: 'driverName', width: 24, align: 'left' },
+          { header: 'Trip Order / Route', field: 'tripOrder', width: 68, align: 'left' },
+        ],
+        fontSize: 7.5,
+        showBorders: true,
+        headerBg: '#bbf7d0',
+        headerColor: '#14532d',
+        repeatHeaderOnNewPage: false,
+        minRows: 3,
+        rowPadding: 1.8,
+        pageAnchor: 'bottom',
+      },
+    ];
+    return template;
+  })(),
+
+  (() => {
+    const template = createWorkScheduleTemplateDraft(
+      'seed-work-schedule-driver-plan',
+      'Daily Work Schedule - Driver & Notes'
+    );
+    template.isDefault = false;
+    template.pageMargins = { top: 7, right: 7, bottom: 7, left: 7 };
+    template.pageStyle = {
+      ...template.pageStyle,
+      pageOrientation: 'landscape',
+      bodyFontFamily: "'Segoe UI', Arial, sans-serif",
+      pageBackgroundColor: '#fff7ed',
+    };
+    template.sections = [
+      seedBannerImage(18, 0.08),
+      {
+        type: 'heading',
+        text: 'DAILY WORK SCHEDULE & TRANSPORT',
+        fontSize: 15,
+        align: 'center',
+        bold: true,
+        color: '#9a3412',
+      },
+      {
+        type: 'field-row',
+        bordered: true,
+        minHeight: 10,
+        cells: [
+          { label: 'Date', field: 'schedule.workDateLabel', width: 20, bold: true, fontSize: 8.5, color: '#9a3412' },
+          { label: 'Status', field: 'schedule.status', width: 14, fontSize: 8.2, color: '#9a3412' },
+          { label: 'Teams', field: 'schedule.groupCount', width: 10, align: 'center', fontSize: 8.2, color: '#9a3412' },
+          { label: 'Workers', field: 'schedule.assignedWorkerCount', width: 12, align: 'center', fontSize: 8.2, color: '#9a3412' },
+          { label: 'Trips', field: 'schedule.driverTripSummary', width: 16, fontSize: 8.2, color: '#7c2d12' },
+          { label: 'Notes', field: 'schedule.notes', width: 28, fontSize: 8.2, color: '#7c2d12' },
+        ],
+      },
+      {
+        type: 'table',
+        dataSource: 'scheduleGroups',
+        layoutMode: 'group-columns',
+        fontSize: 6.8,
+        showBorders: true,
+        headerBg: '#7c2d12',
+        headerColor: '#ffffff',
+        headerFontWeight: 'bold',
+        headerFontStyle: 'normal',
+        repeatHeaderOnNewPage: true,
+        minRows: 3,
+        rowPadding: 1.5,
+        rowMinHeightMm: 6.6,
+        columns: [
+          {
+            header: 'Location',
+            field: 'locationDisplay',
+            align: 'left',
+            useGlobalHeaderStyle: false,
+            headerBg: '#7c2d12',
+            headerColor: '#ffffff',
+            cellBg: '#ffedd5',
+            cellColor: '#7c2d12',
+            fontWeight: 'bold',
+          },
+          { header: 'Job No', field: 'jobNumber', align: 'left', cellBg: '#fff7ed', cellColor: '#7c2d12' },
+          { header: 'Drivers', field: 'driverNames', align: 'left', cellBg: '#ffedd5', cellColor: '#9a3412', fontWeight: 'bold' },
+          { header: 'Duty Timing', field: 'dutyRange', align: 'center', cellBg: '#dbeafe', cellColor: '#1d4ed8' },
+          { header: 'Target Qty', field: 'targetQty', align: 'left', cellBg: '#fde68a', cellColor: '#92400e', fontWeight: 'bold' },
+          { header: 'Team / Sub-team', field: 'workerStructuredRows', align: 'left', cellBg: '#fef3c7', cellColor: '#92400e' },
+          { header: 'Remarks', field: 'remarks', align: 'left', cellBg: '#fff7ed', cellColor: '#7c2d12', fontStyle: 'italic' },
+        ],
+      },
+      {
+        type: 'field-row',
+        bordered: true,
+        minHeight: 10,
+        cells: [
+          { label: 'Work Process Details', field: 'job.workProcessDetails', width: 60, fontSize: 8, color: '#7c2d12' },
+          { label: 'Schedule Notes', field: 'schedule.notes', width: 40, fontSize: 8, color: '#7c2d12' },
+        ],
+      },
+      {
+        type: 'heading',
+        text: 'Driver Trip Order',
+        fontSize: 11,
+        align: 'left',
+        bold: true,
+        color: '#7c2d12',
+        pageAnchor: 'bottom',
+      },
+      {
+        type: 'table',
+        dataSource: 'driverTrips',
+        columns: [
+          { header: '#', field: 'slno', width: 8, align: 'center' },
+          { header: 'Driver', field: 'driverName', width: 24, align: 'left' },
+          { header: 'Trip Order / Route', field: 'tripOrder', width: 68, align: 'left' },
+        ],
+        fontSize: 8,
+        showBorders: true,
+        headerBg: '#fdba74',
+        headerColor: '#7c2d12',
+        repeatHeaderOnNewPage: false,
+        minRows: 3,
+        rowPadding: 2,
+        pageAnchor: 'bottom',
+      },
+    ];
+    return template;
+  })(),
 ];
 
 export const companySeedPrintTemplates: DocumentTemplate[] = companySeedPrintTemplatesRaw.map((tpl) => {

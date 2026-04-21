@@ -31,6 +31,8 @@ interface Entry {
   jobId: string;
   jobNumber: string;
   jobDescription: string;
+  jobContactPerson?: string;
+  jobContactsJson?: unknown;
   dispatchDate: string;
   totalQuantity: number;
   totalValuation: number;
@@ -41,6 +43,29 @@ interface Entry {
   notes?: string;
   isDeliveryNote?: boolean;
   signedCopyUrl?: string;
+  createdByUserId?: string;
+  createdByName?: string;
+  createdByEmail?: string;
+  createdBySignatureUrl?: string;
+}
+
+function parseJobContacts(value: unknown): Array<{ name: string; number?: string; email?: string; designation?: string; label?: string }> {
+  if (!Array.isArray(value)) return [];
+  const contacts: Array<{ name: string; number?: string; email?: string; designation?: string; label?: string }> = [];
+  for (const row of value) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    const name = typeof r.name === 'string' ? r.name.trim() : '';
+    if (!name) continue;
+    contacts.push({
+      name,
+      number: typeof r.number === 'string' ? r.number.trim() : undefined,
+      email: typeof r.email === 'string' ? r.email.trim() : undefined,
+      designation: typeof r.designation === 'string' ? r.designation.trim() : undefined,
+      label: typeof r.label === 'string' ? r.label.trim() : undefined,
+    });
+  }
+  return contacts;
 }
 
 export default function DispatchPage() {
@@ -153,6 +178,7 @@ export default function DispatchPage() {
     if (!notes) return '';
     return notes
       .replace(/--- DELIVERY NOTE #\d+\n?/g, '')
+      .replace(/--- DELIVERY CONTACT PERSON:[^\n\r]*\r?\n?/g, '')
       .replace(/--- DELIVERY NOTE ITEMS \(For Printing\) ---[\s\S]*?(?=\n--- |$)/g, '')
       .trim();
   };
@@ -471,6 +497,9 @@ export default function DispatchPage() {
         const isDeliveryNote = entry.isDeliveryNote === true;
         const dnNumber = isDeliveryNote ? getDeliveryNoteNumber(entry.notes) : null;
         const customItems = isDeliveryNote ? parseCustomItems(entry.notes) : [];
+        const parsedContacts = parseJobContacts(entry.jobContactsJson);
+        const primaryContact = entry.jobContactPerson?.trim() || parsedContacts[0]?.name || '';
+        const primaryContactRow = parsedContacts.find((c) => c.name === primaryContact) ?? parsedContacts[0];
         const baseNotes = getBaseNotes(entry.notes);
         const customerName = entry.jobDescription || '';
         const dateStr = typeof entry.dispatchDate === 'string'
@@ -547,6 +576,28 @@ export default function DispatchPage() {
                       </span>
                     ) : (
                       <Badge label="Dispatch" variant="gray" />
+                    )}
+                  </div>
+                  <div className="bg-slate-900/60 rounded-lg p-3 border border-slate-700">
+                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Contact Person</p>
+                    <p className="text-sm font-semibold text-white">{primaryContact || '—'}</p>
+                    {(primaryContactRow?.designation || primaryContactRow?.label) && (
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {primaryContactRow?.designation || primaryContactRow?.label}
+                      </p>
+                    )}
+                    {primaryContactRow?.number && (
+                      <p className="text-xs text-slate-400 mt-0.5">{primaryContactRow.number}</p>
+                    )}
+                    {primaryContactRow?.email && (
+                      <p className="text-xs text-slate-400 mt-0.5 break-all">{primaryContactRow.email}</p>
+                    )}
+                  </div>
+                  <div className="bg-slate-900/60 rounded-lg p-3 border border-slate-700">
+                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Created By</p>
+                    <p className="text-sm font-semibold text-white">{entry.createdByName || '—'}</p>
+                    {entry.createdByEmail && (
+                      <p className="text-xs text-slate-400 mt-0.5 break-all">{entry.createdByEmail}</p>
                     )}
                   </div>
                 </div>

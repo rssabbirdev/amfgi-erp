@@ -42,7 +42,10 @@ export {
   useDeleteMaterialMutation,
   useGetCrossCompanyMaterialsQuery,
   useBulkCreateMaterialsMutation,
+  useCreateMaterialUomMutation,
+  useDeleteMaterialUomMutation,
   type Material,
+  type MaterialUomDto,
 } from './api/endpoints/materials';
 
 export {

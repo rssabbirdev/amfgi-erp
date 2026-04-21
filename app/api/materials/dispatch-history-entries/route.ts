@@ -40,6 +40,7 @@ export async function GET(req: Request) {
       id: true,
       companyId: true,
       type: true,
+      performedBy: true,
       materialId: true,
       quantity: true,
       jobId: true,
@@ -49,10 +50,34 @@ export async function GET(req: Request) {
       totalCost: true,
       signedCopyUrl: true,
       material: { select: { id: true, name: true, unit: true, unitCost: true } },
-      job: { select: { id: true, jobNumber: true, description: true } },
+      job: {
+        select: {
+          id: true,
+          jobNumber: true,
+          description: true,
+          contactPerson: true,
+          contactsJson: true,
+        },
+      },
     },
     orderBy: { date: 'asc' },
   });
+
+  const creatorIds = Array.from(
+    new Set(
+      transactions
+        .map((txn) => (typeof txn.performedBy === 'string' ? txn.performedBy.trim() : ''))
+        .filter(Boolean)
+    )
+  );
+
+  const creators = creatorIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: creatorIds } },
+        select: { id: true, name: true, email: true, signatureUrl: true },
+      })
+    : [];
+  const creatorsById = new Map(creators.map((u) => [u.id, u]));
 
   // Group transactions by jobId and calendar day
   // For delivery notes, each submission is a separate entry
@@ -136,6 +161,8 @@ export async function GET(req: Request) {
         jobId: firstTxn.jobId,
         jobNumber: firstTxn.job?.jobNumber ?? 'N/A',
         jobDescription: firstTxn.job?.description ?? '',
+        jobContactPerson: firstTxn.job?.contactPerson ?? undefined,
+        jobContactsJson: firstTxn.job?.contactsJson ?? undefined,
         dispatchDate: firstTxn.date,
         totalQuantity: totalNetQuantity,
         totalValuation,
@@ -146,6 +173,17 @@ export async function GET(req: Request) {
         notes: firstTxn.notes ?? undefined,
         isDeliveryNote: firstTxn.isDeliveryNote ?? false,
         signedCopyUrl: firstTxn.signedCopyUrl ?? undefined,
+        createdByUserId: firstTxn.performedBy ?? undefined,
+        createdByName:
+          (firstTxn.performedBy ? creatorsById.get(firstTxn.performedBy)?.name : undefined) ??
+          firstTxn.performedBy ??
+          undefined,
+        createdByEmail:
+          (firstTxn.performedBy ? creatorsById.get(firstTxn.performedBy)?.email : undefined) ??
+          undefined,
+        createdBySignatureUrl:
+          (firstTxn.performedBy ? creatorsById.get(firstTxn.performedBy)?.signatureUrl : undefined) ??
+          undefined,
       };
     })
   );

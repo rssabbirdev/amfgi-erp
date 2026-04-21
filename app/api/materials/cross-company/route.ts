@@ -1,6 +1,8 @@
 import { auth }   from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { serializeMaterialUoms } from '@/lib/utils/materialUom';
+import type { MaterialUomWithUnit } from '@/lib/utils/materialUom';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -24,9 +26,24 @@ export async function GET(req: Request) {
 
   const materials = await prisma.material.findMany({
     where: { companyId, isActive: true },
-    select: { id: true, name: true, unit: true, currentStock: true, isActive: true },
+    select: {
+      id: true,
+      name: true,
+      unit: true,
+      currentStock: true,
+      isActive: true,
+      materialUoms: {
+        include: { unit: { select: { id: true, name: true } } },
+        orderBy: [{ isBase: 'desc' }, { createdAt: 'asc' }],
+      },
+    },
     orderBy: { name: 'asc' },
   });
 
-  return successResponse(materials);
+  return successResponse(
+    materials.map(({ materialUoms, ...m }) => ({
+      ...m,
+      materialUoms: serializeMaterialUoms(materialUoms as MaterialUomWithUnit[]),
+    }))
+  );
 }

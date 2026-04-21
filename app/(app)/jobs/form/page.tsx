@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
+import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown';
 import toast from 'react-hot-toast';
+import { WORKFORCE_EXPERTISE_OPTIONS } from '@/lib/hr/workforceProfile';
 
 interface Material {
   id: string;
@@ -19,6 +21,13 @@ import {
   useCreateJobMutation,
   useUpdateJobMutation,
 } from '@/store/hooks';
+import {
+  emptyJobContactRow,
+  jobContactsToRows,
+  primaryJobContactPersonFromRows,
+  rowsToJobContactsPayload,
+  type JobContactRow,
+} from '@/lib/jobContactFormUi';
 
 interface FinishedGood {
   materialId: string;
@@ -32,12 +41,21 @@ interface FormData {
   customerId: string;
   description: string;
   site: string;
+  address: string;
+  locationName: string;
+  locationLat: string;
+  locationLng: string;
   status: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED';
   startDate: string;
+  endDate: string;
   quotationNumber: string;
+  quotationDate: string;
   lpoNumber: string;
+  lpoDate: string;
+  lpoValue: string;
   projectName: string;
   projectDetails: string;
+  salesPerson: string;
   jobWorkValue: string;
 }
 
@@ -50,9 +68,13 @@ export default function JobFormPage() {
   const { data: materials = [] } = useGetMaterialsQuery();
   const [createJob, { isLoading: isCreating }] = useCreateJobMutation();
   const [updateJob, { isLoading: isUpdating }] = useUpdateJobMutation();
+  const [jobContacts, setJobContacts] = useState<JobContactRow[]>([emptyJobContactRow()]);
+  const [requiredExpertises, setRequiredExpertises] = useState<string[]>([]);
+  const [expertiseOptions, setExpertiseOptions] = useState<string[]>([]);
   const [finishedGoods, setFinishedGoods] = useState<FinishedGood[]>([]);
   const [materialSearches, setMaterialSearches] = useState<string[]>([]);
   const [openDropdowns, setOpenDropdowns] = useState<boolean[]>([]);
+  const [jobSourceMode, setJobSourceMode] = useState<'HYBRID' | 'EXTERNAL_ONLY'>('HYBRID');
   const dropdownRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const mode = searchParams.get('mode') as 'create' | 'edit' | 'variation' || 'create';
@@ -69,14 +91,63 @@ export default function JobFormPage() {
     customerId: '',
     description: '',
     site: '',
+    address: '',
+    locationName: '',
+    locationLat: '',
+    locationLng: '',
     status: 'ACTIVE',
     startDate: '',
+    endDate: '',
     quotationNumber: '',
+    quotationDate: '',
     lpoNumber: '',
+    lpoDate: '',
+    lpoValue: '',
     projectName: '',
     projectDetails: '',
+    salesPerson: '',
     jobWorkValue: '',
   });
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    if (!session?.user?.activeCompanyId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/companies/${session.user.activeCompanyId}`, { cache: 'no-store' });
+        const json = await res.json();
+        if (!cancelled && res.ok && json?.success) {
+          setJobSourceMode((json.data?.jobSourceMode as 'HYBRID' | 'EXTERNAL_ONLY') || 'HYBRID');
+        }
+      } catch {
+        if (!cancelled) setJobSourceMode('HYBRID');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.activeCompanyId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/hr/expertises', { cache: 'no-store' });
+        const json = await res.json();
+        if (!cancelled && res.ok && json?.success) {
+          setExpertiseOptions((json.data as Array<{ name: string }>).map((x) => x.name));
+        } else if (!cancelled) {
+          setExpertiseOptions([...WORKFORCE_EXPERTISE_OPTIONS]);
+        }
+      } catch {
+        if (!cancelled) setExpertiseOptions([...WORKFORCE_EXPERTISE_OPTIONS]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Handle click outside to close dropdowns
   useEffect(() => {
@@ -103,27 +174,52 @@ export default function JobFormPage() {
         customerId: currentJob.customerId,
         description: currentJob.description || '',
         site: currentJob.site || '',
+        address: (currentJob as any).address || '',
+        locationName: (currentJob as any).locationName || '',
+        locationLat: (currentJob as any).locationLat?.toString() || '',
+        locationLng: (currentJob as any).locationLng?.toString() || '',
         status: currentJob.status,
         startDate: currentJob.startDate ? new Date(currentJob.startDate).toISOString().split('T')[0] : '',
+        endDate: currentJob.endDate ? new Date(currentJob.endDate).toISOString().split('T')[0] : '',
         quotationNumber: (currentJob as any).quotationNumber || '',
+        quotationDate: (currentJob as any).quotationDate
+          ? new Date((currentJob as any).quotationDate).toISOString().split('T')[0]
+          : '',
         lpoNumber: (currentJob as any).lpoNumber || '',
+        lpoDate: (currentJob as any).lpoDate ? new Date((currentJob as any).lpoDate).toISOString().split('T')[0] : '',
+        lpoValue: (currentJob as any).lpoValue?.toString() || '',
         projectName: (currentJob as any).projectName || '',
         projectDetails: (currentJob as any).projectDetails || '',
+        salesPerson: (currentJob as any).salesPerson || '',
         jobWorkValue: (currentJob as any).jobWorkValue || '',
       });
+      setJobContacts(
+        jobContactsToRows((currentJob as any).contactsJson, (currentJob as any).contactPerson)
+      );
       if ((currentJob as any).finishedGoods && Array.isArray((currentJob as any).finishedGoods)) {
         setFinishedGoods((currentJob as any).finishedGoods);
       }
+      setRequiredExpertises(
+        Array.isArray((currentJob as any).requiredExpertises)
+          ? (currentJob as any).requiredExpertises.map((x: unknown) => String(x))
+          : []
+      );
     } else if (mode === 'variation' && parentJob) {
       setForm((prev) => ({
         ...prev,
         customerId: parentJob.customerId,
       }));
+      setRequiredExpertises(
+        Array.isArray((parentJob as any).requiredExpertises)
+          ? (parentJob as any).requiredExpertises.map((x: unknown) => String(x))
+          : []
+      );
     } else if (customerId) {
       setForm((prev) => ({
         ...prev,
         customerId,
       }));
+      setRequiredExpertises([]);
     }
   }, [mode, currentJob, parentJob, customerId]);
 
@@ -135,22 +231,52 @@ export default function JobFormPage() {
     }));
   };
 
+  const updateJobContactRow = (index: number, patch: Partial<JobContactRow>) => {
+    setJobContacts((rows) => {
+      const next = [...rows];
+      next[index] = { ...next[index], ...patch };
+      return next;
+    });
+  };
+
+  const addJobContactRow = () => {
+    setJobContacts((rows) => [...rows, emptyJobContactRow()]);
+  };
+
+  const removeJobContactRow = (index: number) => {
+    setJobContacts((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
+      const contactsPayload = rowsToJobContactsPayload(jobContacts);
+      const contactPerson = primaryJobContactPersonFromRows(jobContacts) || undefined;
       if (mode === 'edit' && currentJob) {
         const data = {
           customerId: form.customerId,
           description: form.description || undefined,
           site: form.site || undefined,
+          address: form.address || undefined,
+          locationName: form.locationName || undefined,
+          locationLat: form.locationLat ? parseFloat(form.locationLat) : undefined,
+          locationLng: form.locationLng ? parseFloat(form.locationLng) : undefined,
           status: form.status,
           startDate: form.startDate || undefined,
+          endDate: form.endDate || undefined,
           quotationNumber: form.quotationNumber || undefined,
+          quotationDate: form.quotationDate || undefined,
           lpoNumber: form.lpoNumber || undefined,
+          lpoDate: form.lpoDate || undefined,
+          lpoValue: form.lpoValue ? parseFloat(form.lpoValue) : undefined,
           projectName: form.projectName || undefined,
           projectDetails: form.projectDetails || undefined,
+          contactPerson,
+          salesPerson: form.salesPerson || undefined,
+          contactsJson: contactsPayload,
           jobWorkValue: form.jobWorkValue ? parseFloat(form.jobWorkValue) : undefined,
+          requiredExpertises,
           finishedGoods: finishedGoods.length > 0 ? finishedGoods.map(fg => ({
             materialId: fg.materialId,
             materialName: fg.materialName,
@@ -175,13 +301,25 @@ export default function JobFormPage() {
           customerId: form.customerId,
           description: form.description || undefined,
           site: form.site || undefined,
+          address: form.address || undefined,
+          locationName: form.locationName || undefined,
+          locationLat: form.locationLat ? parseFloat(form.locationLat) : undefined,
+          locationLng: form.locationLng ? parseFloat(form.locationLng) : undefined,
           status: form.status,
           startDate: form.startDate || todayDate, // Send as string YYYY-MM-DD
+          endDate: form.endDate || undefined,
           quotationNumber: form.quotationNumber || undefined,
+          quotationDate: form.quotationDate || undefined,
           lpoNumber: form.lpoNumber || undefined,
+          lpoDate: form.lpoDate || undefined,
+          lpoValue: form.lpoValue ? parseFloat(form.lpoValue) : undefined,
           projectName: form.projectName || undefined,
           projectDetails: form.projectDetails || undefined,
+          contactPerson,
+          salesPerson: form.salesPerson || undefined,
+          contactsJson: contactsPayload,
           jobWorkValue: form.jobWorkValue ? parseFloat(form.jobWorkValue) : undefined,
+          requiredExpertises,
           finishedGoods: finishedGoods.length > 0 ? finishedGoods.map(fg => ({
             materialId: fg.materialId,
             materialName: fg.materialName,
@@ -219,6 +357,22 @@ export default function JobFormPage() {
           <Button onClick={() => router.back()} className="mt-4">
             Go Back
           </Button>
+        </div>
+      </div>
+    );
+  }
+  if (mode === 'create' && jobSourceMode === 'EXTERNAL_ONLY') {
+    return (
+      <div className="min-h-screen bg-slate-900 p-6">
+        <div className="max-w-2xl mx-auto mt-10 rounded-lg border border-amber-700/50 bg-amber-900/20 p-6">
+          <h2 className="text-lg font-semibold text-amber-100">Parent job creation disabled</h2>
+          <p className="text-sm text-amber-200 mt-2">
+            This company is set to <code>EXTERNAL_ONLY</code> mode. Create parent jobs from Project Management API,
+            then add local variations from the Jobs list context menu.
+          </p>
+          <div className="mt-4">
+            <Button onClick={() => router.push('/jobs')}>Back to Jobs</Button>
+          </div>
         </div>
       </div>
     );
@@ -350,7 +504,7 @@ export default function JobFormPage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Description
+                Work Process Details
               </label>
               <textarea
                 name="description"
@@ -370,6 +524,51 @@ export default function JobFormPage() {
                 onChange={handleChange}
                 className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Address</label>
+              <textarea
+                name="address"
+                value={form.address}
+                onChange={handleChange}
+                rows={2}
+                className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Location Name</label>
+                <input
+                  type="text"
+                  name="locationName"
+                  value={form.locationName}
+                  onChange={handleChange}
+                  placeholder="Map place name"
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Latitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  name="locationLat"
+                  value={form.locationLat}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Longitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  name="locationLng"
+                  value={form.locationLng}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -400,12 +599,39 @@ export default function JobFormPage() {
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  name="endDate"
+                  value={form.endDate}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
             </div>
           </div>
 
           {/* Project & Quotation Information */}
           <div className="bg-slate-800 rounded-lg border border-slate-700 p-6 space-y-4">
             <h2 className="text-lg font-semibold text-white">Project & Quotation</h2>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Required worker expertise
+              </label>
+              <MultiSelectDropdown
+                options={(expertiseOptions.length ? expertiseOptions : [...WORKFORCE_EXPERTISE_OPTIONS]).map((x) => ({
+                  value: x,
+                  label: x,
+                }))}
+                value={requiredExpertises}
+                onChange={setRequiredExpertises}
+                placeholder="Select skills needed for this job..."
+              />
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -420,7 +646,21 @@ export default function JobFormPage() {
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Quotation Date
+                </label>
+                <input
+                  type="date"
+                  name="quotationDate"
+                  value={form.quotationDate}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+            </div>
 
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   LPO Number
@@ -429,6 +669,31 @@ export default function JobFormPage() {
                   type="text"
                   name="lpoNumber"
                   value={form.lpoNumber}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  LPO Date
+                </label>
+                <input
+                  type="date"
+                  name="lpoDate"
+                  value={form.lpoDate}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  LPO Value
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  name="lpoValue"
+                  value={form.lpoValue}
                   onChange={handleChange}
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
@@ -462,6 +727,18 @@ export default function JobFormPage() {
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Sales Person
+                </label>
+                <input
+                  type="text"
+                  name="salesPerson"
+                  value={form.salesPerson}
+                  onChange={handleChange}
+                  className="w-full max-w-md px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
             </div>
 
             <div>
@@ -475,6 +752,79 @@ export default function JobFormPage() {
                 rows={3}
                 className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
               />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-slate-300">Contacts</label>
+                <button
+                  type="button"
+                  onClick={addJobContactRow}
+                  className="text-xs text-emerald-400 hover:text-emerald-300"
+                >
+                  + Add contact
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                Same idea as customers: add rows for site / project contacts. The first <span className="text-slate-400">Name</span>{' '}
+                is saved as the job&apos;s primary contact person for print templates and summaries.
+              </p>
+              <div className="space-y-3">
+                {jobContacts.map((row, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-lg border border-slate-600 bg-slate-900/40 p-3 space-y-2"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Contact {idx + 1}</span>
+                      {jobContacts.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeJobContactRow(idx)}
+                          className="text-xs text-red-400 hover:text-red-300"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        placeholder="Label (e.g. site, billing)"
+                        value={row.label}
+                        onChange={(e) => updateJobContactRow(idx, { label: e.target.value })}
+                        className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                      />
+                      <input
+                        placeholder="Name"
+                        value={row.name}
+                        onChange={(e) => updateJobContactRow(idx, { name: e.target.value })}
+                        className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="email"
+                        placeholder="Email"
+                        value={row.email}
+                        onChange={(e) => updateJobContactRow(idx, { email: e.target.value })}
+                        className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                      />
+                      <input
+                        placeholder="Phone"
+                        value={row.number}
+                        onChange={(e) => updateJobContactRow(idx, { number: e.target.value })}
+                        className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                      />
+                    </div>
+                    <input
+                      placeholder="Designation / role"
+                      value={row.designation}
+                      onChange={(e) => updateJobContactRow(idx, { designation: e.target.value })}
+                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 

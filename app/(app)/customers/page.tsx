@@ -1,10 +1,9 @@
-'use client';
+﻿'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
 import {
@@ -27,30 +26,233 @@ import {
   type PartyContactRow,
 } from '@/lib/partyFormUi';
 
-interface SearchResult {
-  type: 'customer' | 'job';
-  customer?: Customer;
-  job?: Job;
-  companyName?: string;
+type CustomerFilter = 'all' | 'active' | 'inactive';
+type CustomerFormMode = 'create' | 'edit';
+
+const FILTER_OPTIONS: Array<{ value: CustomerFilter; label: string }> = [
+  { value: 'all', label: 'All customers' },
+  { value: 'active', label: 'Active only' },
+  { value: 'inactive', label: 'Inactive only' },
+];
+
+function cx(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(' ');
 }
 
-// Helper function to highlight matching text
-const highlightMatch = (text: string, query: string) => {
-  const parts = text.split(new RegExp(`(${query})`, 'gi'));
-  return parts.map((part, i) =>
-    part.toLowerCase() === query.toLowerCase() ? (
-      <span key={i} className="bg-yellow-400/30 font-semibold text-yellow-200">{part}</span>
-    ) : (
-      part
-    )
+function matchesText(value: string | null | undefined, query: string) {
+  return (value ?? '').toLowerCase().includes(query);
+}
+
+function formatDate(value: string | Date | null | undefined) {
+  if (!value) return 'Not set';
+  const parsed = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(parsed.getTime())) return 'Not set';
+  return parsed.toLocaleDateString();
+}
+
+function compactNumber(value: number) {
+  return new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).format(value);
+}
+
+function extractApiErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'data' in error) {
+    const data = (error as { data?: unknown }).data;
+    if (data && typeof data === 'object' && 'error' in data) {
+      const message = (data as { error?: unknown }).error;
+      if (typeof message === 'string' && message.trim()) return message;
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback;
+}
+
+function customerStatusClasses(isActive: boolean) {
+  return isActive
+    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+    : 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+}
+
+function jobStatusClasses(status: Job['status']) {
+  switch (status) {
+    case 'ACTIVE':
+      return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
+    case 'COMPLETED':
+      return 'border-sky-500/30 bg-sky-500/10 text-sky-300';
+    case 'ON_HOLD':
+      return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+    case 'CANCELLED':
+      return 'border-red-500/30 bg-red-500/10 text-red-400';
+    default:
+      return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
+  }
+}
+
+function prettyJobStatus(status: Job['status']) {
+  return status
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function SummaryCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+}) {
+  return (
+    <div
+      className="rounded-2xl border p-4 shadow-sm"
+      style={{
+        backgroundColor: 'var(--surface-panel-soft)',
+        borderColor: 'var(--border-strong)',
+      }}
+    >
+      <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--foreground-muted)' }}>
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-semibold" style={{ color: 'var(--foreground)' }}>
+        {value}
+      </p>
+      <p className="mt-1 text-xs" style={{ color: 'var(--foreground-muted)' }}>
+        {hint}
+      </p>
+    </div>
   );
-};
+}
+
+function InfoField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--foreground-muted)' }}>
+        {label}
+      </p>
+      <p className="mt-1 text-sm" style={{ color: 'var(--foreground)' }}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function FormField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="space-y-2 text-sm" style={{ color: 'var(--foreground-soft)' }}>
+      <span className="block text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--foreground-muted)' }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function CustomerReadOnlyDetails({ customer }: { customer: Customer }) {
+  const contacts = Array.isArray(customer.contactsJson)
+    ? (customer.contactsJson as Array<Record<string, unknown>>)
+    : [];
+
+  return (
+    <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={cx(
+            'inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em]',
+            customerStatusClasses(customer.isActive),
+          )}
+        >
+          {customer.isActive ? 'Active' : 'Inactive'}
+        </span>
+        {customer.source === 'PARTY_API_SYNC' ? (
+          <span className="inline-flex rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-sky-300">
+            Synced from party API
+          </span>
+        ) : null}
+      </div>
+
+      <div
+        className="grid gap-4 rounded-2xl border p-4 md:grid-cols-2"
+        style={{
+          backgroundColor: 'var(--surface-subtle)',
+          borderColor: 'var(--border-strong)',
+        }}
+      >
+        <InfoField label="Email" value={customer.email || 'Not set'} />
+        <InfoField label="Address" value={customer.address || 'Not set'} />
+        <InfoField label="Trade license number" value={customer.tradeLicenseNumber || 'Not set'} />
+        <InfoField label="Trade license authority" value={customer.tradeLicenseAuthority || 'Not set'} />
+        <InfoField label="Trade license expiry" value={formatDate(customer.tradeLicenseExpiry)} />
+        <InfoField label="TRN number" value={customer.trnNumber || 'Not set'} />
+        <InfoField label="TRN expiry" value={formatDate(customer.trnExpiry)} />
+      </div>
+
+      <div>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+            Contact rows
+          </h3>
+          <p className="text-xs" style={{ color: 'var(--foreground-muted)' }}>
+            {contacts.length} contact{contacts.length === 1 ? '' : 's'}
+          </p>
+        </div>
+
+        {contacts.length === 0 ? (
+          <div
+            className="rounded-2xl border p-4 text-sm"
+            style={{
+              backgroundColor: 'var(--surface-subtle)',
+              borderColor: 'var(--border-strong)',
+              color: 'var(--foreground-muted)',
+            }}
+          >
+            No structured contacts saved for this customer.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {contacts.map((row, index) => (
+              <div
+                key={index}
+                className="rounded-2xl border p-4"
+                style={{
+                  backgroundColor: 'var(--surface-subtle)',
+                  borderColor: 'var(--border-strong)',
+                }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-medium" style={{ color: 'var(--foreground)' }}>
+                    {String(row.contact_name ?? '').trim() || 'Unnamed contact'}
+                  </p>
+                  <span className="text-xs" style={{ color: 'var(--foreground-muted)' }}>
+                    Sort order {String(row.sort_order ?? index)}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <InfoField label="Email" value={String(row.email ?? '').trim() || 'Not set'} />
+                  <InfoField label="Phone" value={String(row.phone ?? '').trim() || 'Not set'} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function CustomersPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const { data: customers = [], isFetching } = useGetCustomersQuery();
-  const { data: jobs = [] } = useGetJobsQuery();
+  const { data: customers = [], isFetching: isFetchingCustomers } = useGetCustomersQuery();
+  const { data: jobs = [], isFetching: isFetchingJobs } = useGetJobsQuery();
   const { openMenu: openContextMenu } = useGlobalContextMenu();
   const [createCustomer, { isLoading: isCreating }] = useCreateCustomerMutation();
   const [updateCustomer, { isLoading: isUpdating }] = useUpdateCustomerMutation();
@@ -66,19 +268,19 @@ export default function CustomersPage() {
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
-  const [modal, setModal] = useState(false);
+  const [filterActive, setFilterActive] = useState<CustomerFilter>('active');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [formMode, setFormMode] = useState<CustomerFormMode>('create');
   const [editing, setEditing] = useState<Customer | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set());
+  const [detailsCustomerId, setDetailsCustomerId] = useState<string | null>(null);
+  const [expandedMainJobs, setExpandedMainJobs] = useState<Set<string>>(new Set());
+  const [partyForm, setPartyForm] = useState<CustomerPartyFormState>(emptyCustomerPartyFormState());
+  const [partyStatus, setPartyStatus] = useState(true);
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     customer: Customer | null;
     loading: boolean;
   }>({ open: false, customer: null, loading: false });
-
   const [deleteJobModal, setDeleteJobModal] = useState<{
     open: boolean;
     job: Job | null;
@@ -87,114 +289,167 @@ export default function CustomersPage() {
     canDelete: boolean;
   }>({ open: false, job: null, loading: false, linkedCount: 0, canDelete: true });
 
-  const [partyForm, setPartyForm] = useState<CustomerPartyFormState>(emptyCustomerPartyFormState());
+  const deferredSearch = useDeferredValue(searchQuery.trim().toLowerCase());
 
-  // Persist selected customer ID in sessionStorage
-  useEffect(() => {
-    const saved = sessionStorage.getItem('selectedCustomerId');
-    if (saved) {
-      setSelectedCustomerId(saved);
-      sessionStorage.removeItem('selectedCustomerId');
+  const rootJobs = useMemo(() => jobs.filter((job) => !job.parentJobId), [jobs]);
+
+  const jobsByCustomer = useMemo(() => {
+    const map = new Map<string, Job[]>();
+    for (const job of jobs) {
+      const current = map.get(job.customerId) ?? [];
+      current.push(job);
+      map.set(job.customerId, current);
     }
-  }, []);
+    return map;
+  }, [jobs]);
 
-  useEffect(() => {
-    if (selectedCustomerId) {
-      sessionStorage.setItem('selectedCustomerId', selectedCustomerId);
+  const childJobsByParent = useMemo(() => {
+    const map = new Map<string, Job[]>();
+    for (const job of jobs) {
+      if (!job.parentJobId) continue;
+      const current = map.get(job.parentJobId) ?? [];
+      current.push(job);
+      map.set(job.parentJobId, current);
     }
-  }, [selectedCustomerId]);
+    return map;
+  }, [jobs]);
 
-  // Filtered customers based on search and active status
+  const customerStatsById = useMemo(() => {
+    const stats = new Map<
+      string,
+      { totalJobs: number; activeJobs: number; variations: number; matchedJobs: number }
+    >();
+
+    for (const customer of customers) {
+      const related = jobsByCustomer.get(customer.id) ?? [];
+      stats.set(customer.id, {
+        totalJobs: related.filter((job) => !job.parentJobId).length,
+        activeJobs: related.filter((job) => !job.parentJobId && job.status === 'ACTIVE').length,
+        variations: related.filter((job) => Boolean(job.parentJobId)).length,
+        matchedJobs: 0,
+      });
+    }
+
+    if (!deferredSearch) return stats;
+
+    for (const customer of customers) {
+      const related = jobsByCustomer.get(customer.id) ?? [];
+      const matchedJobs = related.filter((job) => {
+        return (
+          matchesText(job.jobNumber, deferredSearch) ||
+          matchesText(job.description, deferredSearch) ||
+          matchesText(job.site, deferredSearch) ||
+          matchesText(job.projectName, deferredSearch)
+        );
+      }).length;
+
+      const entry = stats.get(customer.id);
+      if (entry) entry.matchedJobs = matchedJobs;
+    }
+
+    return stats;
+  }, [customers, deferredSearch, jobsByCustomer]);
+
   const filteredCustomers = useMemo(() => {
-    // If there's a search query, use smart search results instead
-    if (searchQuery.trim()) {
-      return [];
-    }
+    return customers
+      .filter((customer) => {
+        if (filterActive === 'active' && !customer.isActive) return false;
+        if (filterActive === 'inactive' && customer.isActive) return false;
 
-    return customers.filter(c => {
-      const matchesFilter = filterActive === 'all' ? true :
-        filterActive === 'active' ? c.isActive : !c.isActive;
-      return matchesFilter;
-    });
-  }, [customers, searchQuery, filterActive]);
+        if (!deferredSearch) return true;
 
-  // Smart search with debounce
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchQuery.trim().length === 0) {
-        setSearchResults([]);
-        setSearchLoading(false);
-        return;
-      }
+        const relatedJobs = jobsByCustomer.get(customer.id) ?? [];
+        const matchesCustomer =
+          matchesText(customer.name, deferredSearch) ||
+          matchesText(customer.contactPerson, deferredSearch) ||
+          matchesText(customer.phone, deferredSearch) ||
+          matchesText(customer.email, deferredSearch) ||
+          matchesText(customer.address, deferredSearch);
 
-      setSearchLoading(true);
-      const query = searchQuery.toLowerCase().trim();
-      const results: SearchResult[] = [];
-
-      // Search jobs by job number
-      const matchingJobs = jobs.filter(job =>
-        job.jobNumber.toLowerCase().includes(query)
-      );
-
-      // Search customers by name
-      const matchingCustomers = customers.filter(c =>
-        c.name.toLowerCase().includes(query)
-      );
-
-      // Add job results with company names
-      matchingJobs.forEach(job => {
-        const customer = customers.find(c => c.id === job.customerId);
-        results.push({
-          type: 'job',
-          job,
-          companyName: customer?.name,
+        const matchesJob = relatedJobs.some((job) => {
+          return (
+            matchesText(job.jobNumber, deferredSearch) ||
+            matchesText(job.description, deferredSearch) ||
+            matchesText(job.site, deferredSearch) ||
+            matchesText(job.projectName, deferredSearch)
+          );
         });
+
+        return matchesCustomer || matchesJob;
+      })
+      .sort((a, b) => {
+        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+        return a.name.localeCompare(b.name);
       });
+  }, [customers, deferredSearch, filterActive, jobsByCustomer]);
 
-      // Add customer results
-      matchingCustomers.forEach(customer => {
-        results.push({
-          type: 'customer',
-          customer,
-        });
-      });
-
-      setSearchResults(results);
-      setSearchLoading(false);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, jobs, customers]);
-
-  const selectedCustomer = selectedCustomerId ? customers.find(c => c.id === selectedCustomerId) : null;
-  const customerJobs = selectedCustomer ? jobs.filter(j => j.customerId === selectedCustomer.id && !j.parentJobId) : [];
-
-  // Get job variations for a parent job
-  const getJobVariations = (parentJobId: string) => {
-    return jobs.filter(j => j.parentJobId === parentJobId);
-  };
-
-  const toggleJobVariations = (jobId: string) => {
-    const newExpanded = new Set(expandedJobs);
-    if (newExpanded.has(jobId)) {
-      newExpanded.delete(jobId);
-    } else {
-      newExpanded.add(jobId);
+  const effectiveSelectedCustomerId = useMemo(() => {
+    if (filteredCustomers.length === 0) return null;
+    if (selectedCustomerId && filteredCustomers.some((customer) => customer.id === selectedCustomerId)) {
+      return selectedCustomerId;
     }
-    setExpandedJobs(newExpanded);
-  };
+    return filteredCustomers[0]?.id ?? null;
+  }, [filteredCustomers, selectedCustomerId]);
+
+  const selectedCustomer = useMemo(
+    () =>
+      effectiveSelectedCustomerId
+        ? customers.find((customer) => customer.id === effectiveSelectedCustomerId) ?? null
+        : null,
+    [customers, effectiveSelectedCustomerId],
+  );
+
+  const detailsCustomer = useMemo(
+    () => (detailsCustomerId ? customers.find((customer) => customer.id === detailsCustomerId) ?? null : null),
+    [customers, detailsCustomerId],
+  );
+
+  const selectedCustomerMainJobs = useMemo(() => {
+    if (!selectedCustomer) return [];
+
+    return (jobsByCustomer.get(selectedCustomer.id) ?? [])
+      .filter((job) => !job.parentJobId)
+      .slice()
+      .sort((a, b) => a.jobNumber.localeCompare(b.jobNumber));
+  }, [jobsByCustomer, selectedCustomer]);
+
+  const selectedCustomerJobCount = useMemo(() => {
+    if (!selectedCustomer) return 0;
+    return (jobsByCustomer.get(selectedCustomer.id) ?? []).length;
+  }, [jobsByCustomer, selectedCustomer]);
+
+  const totals = useMemo(() => {
+    const activeCustomers = customers.filter((customer) => customer.isActive).length;
+    const inactiveCustomers = customers.length - activeCustomers;
+    const activeJobs = rootJobs.filter((job) => job.status === 'ACTIVE').length;
+    const syncedCustomers = customers.filter((customer) => customer.source === 'PARTY_API_SYNC').length;
+
+    return {
+      totalCustomers: customers.length,
+      activeCustomers,
+      inactiveCustomers,
+      activeJobs,
+      syncedCustomers,
+    };
+  }, [customers, rootJobs]);
+
+  const directoryLoading = isFetchingCustomers || isFetchingJobs;
+  const saveLoading = isCreating || isUpdating;
 
   const openCreate = () => {
+    setFormMode('create');
     setEditing(null);
     setPartyForm(emptyCustomerPartyFormState());
-    setModal(true);
-    setMenuOpen(false);
+    setPartyStatus(true);
+    setModalOpen(true);
   };
 
   const handleEditClick = (customer: Customer) => {
+    setFormMode('edit');
     setEditing(customer);
     setPartyForm(customerToPartyFormState(customer));
-    setModal(true);
+    setPartyStatus(customer.isActive);
+    setModalOpen(true);
   };
 
   const updateContactRow = (index: number, patch: Partial<PartyContactRow>) => {
@@ -218,778 +473,868 @@ export default function CustomersPage() {
   const removeContactRow = (index: number) => {
     setPartyForm((prev) => ({
       ...prev,
-      contacts: prev.contacts.filter((_, i) => i !== index).map((c, i) => ({ ...c, sort_order: i })),
+      contacts: prev.contacts.filter((_, i) => i !== index).map((row, i) => ({ ...row, sort_order: i })),
     }));
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (event: React.FormEvent) => {
+    event.preventDefault();
     const data = customerPartyFormToApiBody(partyForm);
 
     try {
       if (editing) {
-        await updateCustomer({ id: editing.id, data }).unwrap();
+        await updateCustomer({ id: editing.id, data: { ...data, isActive: partyStatus } }).unwrap();
         toast.success('Customer updated');
       } else {
-        await createCustomer(data).unwrap();
+        const created = await createCustomer(data).unwrap();
+        setSelectedCustomerId(created.id);
         toast.success('Customer created');
       }
-      setModal(false);
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Save failed');
+      setModalOpen(false);
+    } catch (error: unknown) {
+      toast.error(extractApiErrorMessage(error, 'Failed to save customer'));
     }
   };
 
   const handleDelete = async () => {
     if (!deleteModal.customer) return;
     setDeleteModal((prev) => ({ ...prev, loading: true }));
+
     try {
-      const res = await deleteCustomer(deleteModal.customer.id).unwrap();
-      toast.success(res.message ?? (res.permanent ? 'Customer deleted' : 'Customer deactivated'));
-      if (selectedCustomerId === deleteModal.customer.id) {
-        setSelectedCustomerId(null);
-      }
+      const result = await deleteCustomer(deleteModal.customer.id).unwrap();
+      toast.success(result.message ?? (result.permanent ? 'Customer deleted' : 'Customer marked inactive'));
+      if (selectedCustomerId === deleteModal.customer.id) setSelectedCustomerId(null);
+      if (detailsCustomerId === deleteModal.customer.id) setDetailsCustomerId(null);
       setDeleteModal({ open: false, customer: null, loading: false });
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Failed to delete customer');
+    } catch (error: unknown) {
+      toast.error(extractApiErrorMessage(error, 'Failed to delete customer'));
       setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
   const handleSyncPartyCustomers = async () => {
-    setMenuOpen(false);
     try {
-      const r = await syncPartyCustomers().unwrap();
-      toast.success(
-        `Synced: ${r.created} new, ${r.updated} updated (${r.totalFromApi} from API)`
-      );
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Sync failed — check PARTY_LISTS_API_* env vars');
+      const result = await syncPartyCustomers().unwrap();
+      toast.success(`Synced ${result.created} new and ${result.updated} updated customers`);
+    } catch (error: unknown) {
+      toast.error(extractApiErrorMessage(error, 'Failed to sync party list customers'));
     }
   };
 
-  const handleCustomerContextMenu = (customer: Customer, e: React.MouseEvent) => {
-    e.preventDefault();
-    const options: any[] = [];
-
-    if (canEdit) {
-      options.push({
-        label: 'Edit',
-        action: () => handleEditClick(customer),
-      });
-    }
-
-    options.push({ divider: true });
-    options.push({
-      label: '+ Add Job',
-      action: () => {
-        router.push(`/jobs/form?mode=create&customerId=${customer.id}`);
-      },
-    });
-
-    if (canDelete) {
-      options.push({ divider: true });
-      if (customer.source === 'PARTY_API_SYNC') {
-        options.push({
-          label: 'Delete (synced records cannot be removed)',
-          action: () =>
-            toast.error(
-              'Customers from the party lists API cannot be deleted here. Deactivate via Edit if needed.'
-            ),
-        });
-      } else {
-        options.push({
-          label: 'Delete',
-          action: () => setDeleteModal({ open: true, customer, loading: false }),
-          danger: true,
-        });
-      }
-    }
-
-    if (options.length > 0) {
-      openContextMenu(e.clientX, e.clientY, options);
-    }
+  const openCustomerDetails = (customerId: string) => {
+    setDetailsCustomerId(customerId);
   };
 
-  const handleJobContextMenu = (job: Job, e: React.MouseEvent) => {
-    e.preventDefault();
-    const options: any[] = [];
-
-    if (canEdit) {
-      options.push({
-        label: '✏️ Edit',
-        action: () => {
-          router.push(`/jobs/form?mode=edit&id=${job.id}`);
-        },
-      });
-
-      options.push({ divider: true });
-    }
-
-    options.push({
-      label: '📊 Consumption & Costing',
-      action: () => {
-        router.push(`/jobs/${job.id}/consumption-costing`);
-      },
+  const toggleMainJob = (jobId: string) => {
+    setExpandedMainJobs((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
     });
+  };
 
-    options.push({ divider: true });
-    options.push({
-      label: '+ Create Variation',
-      action: () => {
-        router.push(`/jobs/form?mode=variation&parentJobId=${job.id}&customerId=${selectedCustomer?.id}`);
+  const openCustomerContextMenu = (customer: Customer, event: React.MouseEvent) => {
+    event.preventDefault();
+
+    const options = [
+      {
+        label: 'Open details',
+        action: () => openCustomerDetails(customer.id),
       },
-    });
-
-    if (canDelete) {
-      options.push({ divider: true });
-      options.push({
-        label: 'Delete',
-        action: async () => {
-          try {
-            const res = await fetch(`/api/jobs/${job.id}/check-delete`);
-            const data = await res.json();
-            if (data.data) {
-              setDeleteJobModal({
-                open: true,
-                job,
-                loading: false,
-                linkedCount: data.data.linkedTransactionsCount ?? 0,
-                canDelete: data.data.canDelete ?? false,
-              });
-            }
-          } catch {
-            toast.error('Failed to check job dependencies');
+      canEdit
+        ? {
+            label: 'Edit customer',
+            action: () => handleEditClick(customer),
           }
-        },
-        danger: true,
-      });
-    }
+        : null,
+      canCreate
+        ? {
+            label: 'Create job',
+            action: () => router.push(`/jobs/form?mode=create&customerId=${customer.id}`),
+          }
+        : null,
+      canDelete
+        ? {
+            label:
+              customer.source === 'PARTY_API_SYNC'
+                ? 'Deletion disabled for synced customer'
+                : 'Delete customer',
+            action: () => {
+              if (customer.source === 'PARTY_API_SYNC') {
+                toast.error('Synced customers cannot be deleted here. Use Edit to mark them inactive if needed.');
+                return;
+              }
+              setDeleteModal({ open: true, customer, loading: false });
+            },
+            danger: customer.source !== 'PARTY_API_SYNC',
+          }
+        : null,
+    ].filter(Boolean) as Array<{ label: string; action: () => void; danger?: boolean }>;
 
-    if (options.length > 0) {
-      openContextMenu(e.clientX, e.clientY, options);
-    }
+    openContextMenu(
+      event.clientX,
+      event.clientY,
+      options.flatMap((option, index) => {
+        const item: Array<{ label?: string; action?: () => void; danger?: boolean; divider?: boolean }> = [option];
+        if (index < options.length - 1) item.push({ divider: true });
+        return item;
+      }),
+    );
+  };
+
+  const openJobContextMenu = (job: Job, event: React.MouseEvent) => {
+    event.preventDefault();
+
+    const options = [
+      canEdit
+        ? {
+            label: 'Edit job',
+            action: () => router.push(`/jobs/form?mode=edit&id=${job.id}`),
+          }
+        : null,
+      {
+        label: 'Open costing view',
+        action: () => router.push(`/jobs/${job.id}/consumption-costing`),
+      },
+      canCreate && !job.parentJobId
+        ? {
+            label: 'Create variation',
+            action: () =>
+              router.push(`/jobs/form?mode=variation&parentJobId=${job.id}&customerId=${job.customerId}`),
+          }
+        : null,
+      canDelete
+        ? {
+            label: 'Delete job',
+            action: async () => {
+              try {
+                const response = await fetch(`/api/jobs/${job.id}/check-delete`);
+                const json = await response.json();
+                if (json.data) {
+                  setDeleteJobModal({
+                    open: true,
+                    job,
+                    loading: false,
+                    linkedCount: json.data.linkedTransactionsCount ?? 0,
+                    canDelete: json.data.canDelete ?? false,
+                  });
+                }
+              } catch {
+                toast.error('Failed to check job dependencies');
+              }
+            },
+            danger: true,
+          }
+        : null,
+    ].filter(Boolean) as Array<{ label: string; action: () => void; danger?: boolean }>;
+
+    openContextMenu(
+      event.clientX,
+      event.clientY,
+      options.flatMap((option, index) => {
+        const item: Array<{ label?: string; action?: () => void; danger?: boolean; divider?: boolean }> = [option];
+        if (index < options.length - 1) item.push({ divider: true });
+        return item;
+      }),
+    );
   };
 
   const handleDeleteJob = async () => {
     if (!deleteJobModal.job) return;
     setDeleteJobModal((prev) => ({ ...prev, loading: true }));
+
     try {
       await deleteJob(deleteJobModal.job.id).unwrap();
       toast.success('Job deleted');
       setDeleteJobModal({ open: false, job: null, loading: false, linkedCount: 0, canDelete: true });
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Failed to delete job');
+    } catch (error: unknown) {
+      toast.error(extractApiErrorMessage(error, 'Failed to delete job'));
       setDeleteJobModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
-  const handleJobCardDoubleClick = (job: Job) => {
-    router.push(`/jobs/${job.id}/consumption-costing`);
-  };
-
   return (
-    <div className="h-screen flex flex-col bg-slate-900">
-      {/* Breadcrumb Header */}
-      <div className="bg-slate-800/50 border-b border-slate-700 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-slate-400">Customers</span>
-          {filteredCustomers.length > 0 && (
-            <>
-              <span className="text-slate-500">/</span>
-              <span className="text-slate-300">{filteredCustomers.length} items</span>
-            </>
-          )}
+    <div className="space-y-6">
+      <section
+        className="rounded-3xl border p-6 shadow-sm"
+        style={{
+          backgroundColor: 'var(--surface-panel-soft)',
+          borderColor: 'var(--border-strong)',
+        }}
+      >
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300/80">Master data</p>
+            <h1 className="mt-2 text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>
+              Customer directory
+            </h1>
+            <p className="mt-3 text-sm leading-6" style={{ color: 'var(--foreground-muted)' }}>
+              Manage customer records, review job activity, and keep local and synced party master data in one operational workspace.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[34rem] xl:grid-cols-4">
+            <SummaryCard label="Customers" value={compactNumber(totals.totalCustomers)} hint="Records in this company" />
+            <SummaryCard label="Active" value={compactNumber(totals.activeCustomers)} hint="Ready for ongoing work" />
+            <SummaryCard label="Inactive" value={compactNumber(totals.inactiveCustomers)} hint="Hidden from new activity" />
+            <SummaryCard label="Active Jobs" value={compactNumber(totals.activeJobs)} hint="Across all customers" />
+          </div>
         </div>
-        {/* Three-dot Menu */}
-        <div className="relative">
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="p-1.5 rounded-lg bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10 6a2 2 0 11-4 0 2 2 0 014 0zM10 12a2 2 0 11-4 0 2 2 0 014 0zM10 18a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-50">
-              {canCreate && (
-                <button
-                  onClick={openCreate}
-                  className="w-full px-4 py-2.5 text-left text-sm text-white hover:bg-slate-700 transition-colors flex items-center gap-2 first:rounded-t-lg"
-                >
-                  <span>+</span> Add Customer
-                </button>
-              )}
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={handleSyncPartyCustomers}
-                  disabled={isSyncingParty}
-                  className="w-full px-4 py-2.5 text-left text-sm text-sky-200 hover:bg-slate-700 transition-colors flex items-center gap-2 disabled:opacity-50"
-                >
-                  {isSyncingParty ? 'Syncing…' : '↻ Sync from party API'}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      </section>
 
-      {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden gap-4 p-4">
-        {/* Left Sidebar - Customer/Job List */}
-        <div className="w-80 bg-slate-800 border border-slate-700 rounded-lg overflow-hidden flex flex-col">
-          {/* Search Bar */}
-          <div className="p-4 border-b border-slate-700">
-            <div className="relative">
+      <section
+        className="rounded-2xl border p-5 shadow-sm"
+        style={{
+          backgroundColor: 'var(--surface-panel-soft)',
+          borderColor: 'var(--border-strong)',
+        }}
+      >
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="grid flex-1 gap-4 md:grid-cols-[minmax(0,1.5fr)_14rem]">
+            <FormField label="Search">
               <input
-                type="text"
-                placeholder="Search customers or jobs..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent pr-9"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search by customer, contact, job number, site, or project"
+                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                style={{
+                  backgroundColor: 'var(--input-background)',
+                  color: 'var(--input-foreground)',
+                  borderColor: 'var(--input-border)',
+                }}
               />
-              {searchQuery && (
-                <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSearchResults([]);
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              )}
-            </div>
-            {!searchQuery.trim() && (
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={() => setFilterActive('all')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                    filterActive === 'all'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setFilterActive('active')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                    filterActive === 'active'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  Active
-                </button>
-                <button
-                  onClick={() => setFilterActive('inactive')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                    filterActive === 'inactive'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  Inactive
-                </button>
-              </div>
-            )}
+            </FormField>
+            <FormField label="Status view">
+              <select
+                value={filterActive}
+                onChange={(event) => setFilterActive(event.target.value as CustomerFilter)}
+                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                style={{
+                  backgroundColor: 'var(--input-background)',
+                  color: 'var(--input-foreground)',
+                  borderColor: 'var(--input-border)',
+                }}
+              >
+                {FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
           </div>
 
-          {/* List Content */}
-          <div className="flex-1 overflow-y-auto">
-            {searchQuery.trim() ? (
-              // Search Results
-              <>
-                <div className="p-3 sticky top-0 bg-slate-800 border-b border-slate-700">
-                  <p className="text-xs text-slate-400">
-                    Matching search results ({searchResults.length})
-                  </p>
-                </div>
-                {searchLoading ? (
-                  // Loading skeleton
-                  <div className="space-y-2 p-2">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="p-3 rounded-lg bg-slate-700/30 animate-pulse">
-                        <div className="h-4 bg-slate-600/50 rounded w-3/4"></div>
-                        <div className="h-3 bg-slate-600/50 rounded w-1/2 mt-2"></div>
-                      </div>
-                    ))}
-                  </div>
-                ) : searchResults.length === 0 ? (
-                  <div className="p-4 text-center text-slate-400 text-sm">No results found</div>
-                ) : (
-                  <div className="space-y-1 p-2">
-                    {searchResults.map((result, idx) => (
-                      <div
-                        key={`${result.type}-${idx}`}
-                        onClick={() => {
-                          if (result.type === 'customer' && result.customer) {
-                            setSelectedCustomerId(result.customer.id);
-                            setSearchQuery('');
-                            setSearchResults([]);
-                          } else if (result.type === 'job' && result.customer) {
-                            // Clicking job result opens the customer profile
-                            setSelectedCustomerId(result.customer.id);
-                            setSearchQuery('');
-                            setSearchResults([]);
-                          }
-                        }}
-                        onContextMenu={(e) => {
-                          if (result.type === 'customer' && result.customer) {
-                            handleCustomerContextMenu(result.customer, e);
-                          }
-                        }}
-                        className={`p-3 rounded-lg cursor-pointer transition-all ${
-                          result.type === 'customer' && result.customer?.id === selectedCustomerId
-                            ? 'bg-emerald-600/20 border border-emerald-500'
-                            : 'bg-slate-700/50 border border-slate-700 hover:border-slate-600'
-                        }`}
-                      >
-                        {result.type === 'customer' && result.customer ? (
-                          <>
-                            <p className="font-semibold text-white text-sm">
-                              {highlightMatch(result.customer.name, searchQuery)}
-                            </p>
-                            <p className="text-xs text-slate-400 mt-1">Customer</p>
-                          </>
-                        ) : (
-                          <>
-                            <p className="font-semibold text-white text-sm">{result.companyName}</p>
-                            <p className="text-xs text-slate-400 mt-1">
-                              {highlightMatch(result.job?.jobNumber || '', searchQuery)}
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : (
-              // Regular customer list (simplified - just names)
-              <>
-                {isFetching && filteredCustomers.length === 0 ? (
-                  <div className="p-4 text-center text-slate-400 text-sm">Loading...</div>
-                ) : filteredCustomers.length === 0 ? (
-                  <div className="p-4 text-center text-slate-400 text-sm">No customers found</div>
-                ) : (
-                  <div className="space-y-1 p-2">
-                    {filteredCustomers.map((customer) => (
-                      <div
-                        key={customer.id}
-                        onClick={() => setSelectedCustomerId(customer.id)}
-                        onContextMenu={(e) => handleCustomerContextMenu(customer, e)}
-                        className={`p-3 rounded-lg cursor-pointer transition-all ${
-                          selectedCustomerId === customer.id
-                            ? 'bg-emerald-600/20 border border-emerald-500'
-                            : 'bg-slate-700/50 border border-slate-700 hover:border-slate-600'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1">
-                          <p className="font-semibold text-white text-sm truncate">{customer.name}</p>
-                          {customer.source === 'PARTY_API_SYNC' && (
-                            <Badge label="Synced" variant="blue" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--foreground-muted)' }}>
+                Synced records
+              </p>
+              <p className="mt-1 text-sm" style={{ color: 'var(--foreground-soft)' }}>
+                {compactNumber(totals.syncedCustomers)} customer{totals.syncedCustomers === 1 ? '' : 's'} from party API
+              </p>
+            </div>
+            {canEdit ? (
+              <Button type="button" variant="outline" onClick={handleSyncPartyCustomers} loading={isSyncingParty}>
+                Sync customers
+              </Button>
+            ) : null}
+            {canCreate ? (
+              <Button type="button" onClick={openCreate}>
+                Add customer
+              </Button>
+            ) : null}
           </div>
         </div>
+      </section>
 
-        {/* Right Panel - Customer Details */}
-        <div className="flex-1 bg-slate-800 border border-slate-700 rounded-lg overflow-hidden flex flex-col">
-          {!selectedCustomer ? (
-            <div className="flex items-center justify-center h-full text-slate-400">
-              <div className="text-center">
-                <p className="text-lg mb-2">👋 Select a customer to get started</p>
-                <p className="text-sm">Choose from the list on the left or create a new customer</p>
+      <div className="grid gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
+        <section
+          className="overflow-hidden rounded-2xl border shadow-sm"
+          style={{
+            backgroundColor: 'var(--surface-panel-soft)',
+            borderColor: 'var(--border-strong)',
+          }}
+        >
+          <div className="border-b px-5 py-4" style={{ borderColor: 'var(--border-strong)' }}>
+            <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+              Customer list
+            </h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--foreground-muted)' }}>
+              Select a customer to review details and jobs. Double-click for the full record.
+            </p>
+          </div>
+
+          {directoryLoading ? (
+            <div className="space-y-3 px-5 py-5">
+              {Array.from({ length: 7 }).map((_, index) => (
+                <div key={index} className="h-20 animate-pulse rounded-2xl bg-white/5" />
+              ))}
+            </div>
+          ) : filteredCustomers.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <h3 className="text-base font-semibold" style={{ color: 'var(--foreground)' }}>
+                No customers found
+              </h3>
+              <p className="mt-2 text-sm" style={{ color: 'var(--foreground-muted)' }}>
+                Adjust the search or status view, or create a new customer record.
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-[70vh] overflow-y-auto p-3">
+              <div className="space-y-2">
+                {filteredCustomers.map((customer) => {
+                  const stats = customerStatsById.get(customer.id) ?? {
+                    totalJobs: 0,
+                    activeJobs: 0,
+                    variations: 0,
+                    matchedJobs: 0,
+                  };
+                  const selected = customer.id === effectiveSelectedCustomerId;
+
+                  return (
+                    <button
+                      key={customer.id}
+                      type="button"
+                      onClick={() => setSelectedCustomerId(customer.id)}
+                      onDoubleClick={() => openCustomerDetails(customer.id)}
+                      onContextMenu={(event) => openCustomerContextMenu(customer, event)}
+                      className={cx(
+                        'w-full rounded-2xl border px-4 py-3 text-left transition-colors',
+                        selected ? 'border-emerald-500/35 bg-emerald-500/10' : 'hover:bg-white/5',
+                      )}
+                      style={{
+                        borderColor: selected ? undefined : 'var(--border-strong)',
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold" style={{ color: 'var(--foreground)' }}>
+                            {customer.name}
+                          </p>
+                          <p className="mt-1 truncate text-xs" style={{ color: 'var(--foreground-muted)' }}>
+                            {customer.contactPerson || customer.email || customer.phone || 'No primary contact saved'}
+                          </p>
+                        </div>
+                        <span
+                          className={cx(
+                            'inline-flex shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em]',
+                            customerStatusClasses(customer.isActive),
+                          )}
+                        >
+                          {customer.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--foreground-muted)' }}>
+                        <span>{stats.totalJobs} main job{stats.totalJobs === 1 ? '' : 's'}</span>
+                        <span>{stats.variations} variation{stats.variations === 1 ? '' : 's'}</span>
+                        <span>{stats.activeJobs} active</span>
+                        {customer.source === 'PARTY_API_SYNC' ? (
+                          <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-sky-300">
+                            Synced
+                          </span>
+                        ) : null}
+                        {deferredSearch && stats.matchedJobs > 0 ? (
+                          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-300">
+                            {stats.matchedJobs} job match{stats.matchedJobs === 1 ? '' : 'es'}
+                          </span>
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-6">
+          {!selectedCustomer ? (
+            <div
+              className="rounded-2xl border px-6 py-14 text-center shadow-sm"
+              style={{
+                backgroundColor: 'var(--surface-panel-soft)',
+                borderColor: 'var(--border-strong)',
+              }}
+            >
+              <h2 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                Select a customer
+              </h2>
+              <p className="mt-2 text-sm" style={{ color: 'var(--foreground-muted)' }}>
+                Choose a customer from the left to review contacts, compliance details, and linked jobs.
+              </p>
             </div>
           ) : (
             <>
-              {/* Customer Header */}
-              <div className="bg-slate-700/50 border-b border-slate-700 p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
+              <section
+                className="rounded-2xl border p-6 shadow-sm"
+                style={{
+                  backgroundColor: 'var(--surface-panel-soft)',
+                  borderColor: 'var(--border-strong)',
+                }}
+              >
+                <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-2xl font-bold text-white">{selectedCustomer.name}</h2>
-                      {selectedCustomer.source === 'PARTY_API_SYNC' && (
-                        <Badge label="Synced from party API" variant="blue" />
-                      )}
-                    </div>
-                    {selectedCustomer.address && (
-                      <p className="text-sm text-slate-400 mt-1">📍 {selectedCustomer.address}</p>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    {canEdit && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleEditClick(selectedCustomer)}
-                      >
-                        ✏️ Edit
-                      </Button>
-                    )}
-                    {canCreate && (
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          router.push(`/jobs/form?mode=create&customerId=${selectedCustomer.id}`)
-                        }
-                      >
-                        + Job
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Party API–aligned fields */}
-                <div className="grid grid-cols-2 gap-4">
-                  {selectedCustomer.email && (
-                    <div>
-                      <p className="text-xs text-slate-400">email</p>
-                      <p className="text-sm text-white break-all">{selectedCustomer.email}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-xs text-slate-400">Status</p>
-                    <Badge
-                      label={selectedCustomer.isActive ? 'Active' : 'Inactive'}
-                      variant={selectedCustomer.isActive ? 'green' : 'gray'}
-                    />
-                  </div>
-                  {selectedCustomer.tradeLicenseNumber && (
-                    <div>
-                      <p className="text-xs text-slate-400">trade_license_number</p>
-                      <p className="text-sm text-white">{selectedCustomer.tradeLicenseNumber}</p>
-                    </div>
-                  )}
-                  {selectedCustomer.tradeLicenseAuthority && (
-                    <div>
-                      <p className="text-xs text-slate-400">trade_license_authority</p>
-                      <p className="text-sm text-white">{selectedCustomer.tradeLicenseAuthority}</p>
-                    </div>
-                  )}
-                  {selectedCustomer.tradeLicenseExpiry && (
-                    <div>
-                      <p className="text-xs text-slate-400">trade_license_expiry</p>
-                      <p className="text-sm text-white">
-                        {new Date(selectedCustomer.tradeLicenseExpiry).toLocaleDateString()}
-                      </p>
-                    </div>
-                  )}
-                  {selectedCustomer.trnNumber && (
-                    <div>
-                      <p className="text-xs text-slate-400">trn_number</p>
-                      <p className="text-sm text-white">{selectedCustomer.trnNumber}</p>
-                    </div>
-                  )}
-                  {selectedCustomer.trnExpiry && (
-                    <div>
-                      <p className="text-xs text-slate-400">trn_expiry</p>
-                      <p className="text-sm text-white">
-                        {new Date(selectedCustomer.trnExpiry).toLocaleDateString()}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {Array.isArray(selectedCustomer.contactsJson) &&
-                  selectedCustomer.contactsJson.length > 0 && (
-                    <div className="mt-4 border-t border-slate-600 pt-4">
-                      <p className="text-xs font-medium text-slate-400 mb-2">contacts</p>
-                      <div className="space-y-2">
-                        {(selectedCustomer.contactsJson as Record<string, unknown>[]).map(
-                          (row, idx) => (
-                            <div
-                              key={idx}
-                              className="rounded-lg bg-slate-900/50 border border-slate-600/50 px-3 py-2 text-sm"
-                            >
-                              <p className="text-white font-medium">
-                                {String(row.contact_name ?? '')}
-                                <span className="text-slate-500 font-normal text-xs ml-2">
-                                  sort_order {String(row.sort_order ?? idx)}
-                                </span>
-                              </p>
-                              <div className="text-slate-400 text-xs mt-1 flex flex-wrap gap-x-4">
-                                {row.email != null && String(row.email) !== '' && (
-                                  <span>email: {String(row.email)}</span>
-                                )}
-                                {row.phone != null && String(row.phone) !== '' && (
-                                  <span>phone: {String(row.phone)}</span>
-                                )}
-                              </div>
-                            </div>
-                          )
+                      <span
+                        className={cx(
+                          'inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em]',
+                          customerStatusClasses(selectedCustomer.isActive),
                         )}
-                      </div>
+                      >
+                        {selectedCustomer.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                      {selectedCustomer.source === 'PARTY_API_SYNC' ? (
+                        <span className="inline-flex rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-sky-300">
+                          Synced
+                        </span>
+                      ) : null}
                     </div>
-                  )}
-
-                {!Array.isArray(selectedCustomer.contactsJson) ||
-                (selectedCustomer.contactsJson as unknown[]).length === 0 ? (
-                  <div className="grid grid-cols-2 gap-4 mt-2">
-                    {selectedCustomer.contactPerson && (
-                      <div>
-                        <p className="text-xs text-slate-400">Primary contact (legacy)</p>
-                        <p className="text-sm text-white">{selectedCustomer.contactPerson}</p>
-                      </div>
-                    )}
-                    {selectedCustomer.phone && (
-                      <div>
-                        <p className="text-xs text-slate-400">phone</p>
-                        <p className="text-sm text-white">{selectedCustomer.phone}</p>
-                      </div>
-                    )}
+                    <h2 className="mt-3 truncate text-3xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                      {selectedCustomer.name}
+                    </h2>
+                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm" style={{ color: 'var(--foreground-muted)' }}>
+                      <span>{compactNumber(customerStatsById.get(selectedCustomer.id)?.totalJobs ?? 0)} main jobs</span>
+                      <span>{compactNumber(customerStatsById.get(selectedCustomer.id)?.variations ?? 0)} variations</span>
+                      <span>{selectedCustomer.contactPerson || selectedCustomer.email || selectedCustomer.phone || 'No primary contact saved'}</span>
+                    </div>
                   </div>
-                ) : null}
-              </div>
 
-              {/* Jobs Section */}
-              <div className="flex-1 overflow-y-auto p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Active Jobs ({customerJobs.length})</h3>
+                  <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+                    <Button type="button" variant="outline" onClick={() => openCustomerDetails(selectedCustomer.id)}>
+                      View details
+                    </Button>
+                    {canEdit ? (
+                      <Button type="button" variant="secondary" onClick={() => handleEditClick(selectedCustomer)}>
+                        Edit
+                      </Button>
+                    ) : null}
+                    {canCreate ? (
+                      <Button
+                        type="button"
+                        onClick={() => router.push(`/jobs/form?mode=create&customerId=${selectedCustomer.id}`)}
+                      >
+                        Create job
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
 
-                {customerJobs.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400">
-                    <p className="text-sm">No active jobs for this customer</p>
+              <section
+                className="overflow-hidden rounded-2xl border shadow-sm"
+                style={{
+                  backgroundColor: 'var(--surface-panel-soft)',
+                  borderColor: 'var(--border-strong)',
+                }}
+              >
+                <div
+                  className="flex flex-col gap-3 border-b px-5 py-4 md:flex-row md:items-center md:justify-between"
+                  style={{ borderColor: 'var(--border-strong)' }}
+                >
+                  <div>
+                    <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                      Jobs workspace
+                    </h3>
+                    <p className="mt-1 text-sm" style={{ color: 'var(--foreground-muted)' }}>
+                      Double-click a row to open costing. Right-click a row for edit, variation, or delete actions.
+                    </p>
+                  </div>
+                  <p className="text-sm" style={{ color: 'var(--foreground-soft)' }}>
+                    {selectedCustomerJobCount} job row{selectedCustomerJobCount === 1 ? '' : 's'} linked to this customer
+                  </p>
+                </div>
+
+                {selectedCustomerMainJobs.length === 0 ? (
+                  <div className="px-6 py-12 text-center">
+                    <h4 className="text-base font-semibold" style={{ color: 'var(--foreground)' }}>
+                      No jobs linked yet
+                    </h4>
+                    <p className="mt-2 text-sm" style={{ color: 'var(--foreground-muted)' }}>
+                      Create the first job for this customer to start dispatch, costing, and site activity tracking.
+                    </p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {customerJobs.map((job) => {
-                      const variations = getJobVariations(job.id);
-                      const isExpanded = expandedJobs.has(job.id);
+                  <div className="space-y-3 p-4">
+                    {selectedCustomerMainJobs.map((job) => {
+                      const variations = childJobsByParent.get(job.id) ?? [];
+                      const expanded = expandedMainJobs.has(job.id);
 
                       return (
-                        <div key={job.id}>
-                          {/* Parent Job Card */}
+                        <div
+                          key={job.id}
+                          className="overflow-hidden rounded-2xl border"
+                          style={{
+                            backgroundColor: 'var(--surface-subtle)',
+                            borderColor: 'var(--border-strong)',
+                          }}
+                        >
                           <div
+                            className="flex cursor-pointer items-start justify-between gap-4 px-5 py-4 transition-colors hover:bg-white/5"
                             onClick={() => {
-                              if (variations.length > 0) {
-                                toggleJobVariations(job.id);
-                              }
+                              if (variations.length > 0) toggleMainJob(job.id);
                             }}
-                            onDoubleClick={() => handleJobCardDoubleClick(job)}
-                            onContextMenu={(e) => handleJobContextMenu(job, e)}
-                            className="p-4 bg-slate-700/50 border border-slate-700 rounded-lg hover:border-slate-600 cursor-pointer transition-colors select-none group relative"
+                            onDoubleClick={() => router.push(`/jobs/${job.id}/consumption-costing`)}
+                            onContextMenu={(event) => openJobContextMenu(job, event)}
                           >
-                            {variations.length > 0 && (
-                              <div className="absolute left-2 top-1/2 -translate-y-1/2">
-                                <svg
-                                  className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                                  fill="currentColor"
-                                  viewBox="0 0 20 20"
-                                >
-                                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                                </svg>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-3">
+                                {variations.length > 0 ? (
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded-md border text-xs"
+                                    style={{ borderColor: 'var(--border-strong)', color: 'var(--foreground-soft)' }}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      toggleMainJob(job.id);
+                                    }}
+                                  >
+                                    <svg
+                                      className={cx('h-3.5 w-3.5 transition-transform', expanded ? 'rotate-90' : '')}
+                                      viewBox="0 0 20 20"
+                                      fill="currentColor"
+                                      aria-hidden="true"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  </button>
+                                ) : (
+                                  <span className="inline-block h-6 w-6" />
+                                )}
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium" style={{ color: 'var(--foreground)' }}>
+                                    {job.jobNumber}
+                                  </p>
+                                  <p className="mt-1 truncate text-sm" style={{ color: 'var(--foreground-muted)' }}>
+                                    {job.site || job.description || 'No site or description added'}
+                                  </p>
+                                </div>
                               </div>
-                            )}
-                            <div className="flex items-start justify-between gap-3 mb-2 pl-6">
-                              <div className="flex-1">
-                                <p className="font-semibold text-white">{job.jobNumber}</p>
-                                <p className="text-xs text-slate-400 mt-1">{job.description}</p>
-                              </div>
-                              <Badge label={job.status} variant="blue" />
                             </div>
-                            {job.site && (
-                              <p className="text-xs text-slate-400 pl-6">📍 {job.site}</p>
-                            )}
+
+                            <div className="flex flex-wrap items-center gap-3">
+                              {variations.length > 0 ? (
+                                <span className="text-xs" style={{ color: 'var(--foreground-muted)' }}>
+                                  {variations.length} variation{variations.length === 1 ? '' : 's'}
+                                </span>
+                              ) : null}
+                              <span
+                                className={cx(
+                                  'inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em]',
+                                  jobStatusClasses(job.status),
+                                )}
+                              >
+                                {prettyJobStatus(job.status)}
+                              </span>
+                            </div>
                           </div>
 
-                          {/* Job Variations */}
-                          {isExpanded && variations.length > 0 && (
-                            <div className="space-y-2 mt-2 ml-4 pl-2 border-l border-slate-700">
-                              {variations.map((variation) => (
-                                <div
-                                  key={variation.id}
-                                  onClick={() => {
-                                    // Single-click: just show selected effect
-                                  }}
-                                  onDoubleClick={() => handleJobCardDoubleClick(variation)}
-                                  onContextMenu={(e) => handleJobContextMenu(variation, e)}
-                                  className="p-3 bg-slate-700/30 border border-slate-700/50 rounded-lg hover:border-slate-600 cursor-pointer transition-colors"
-                                >
-                                  <div className="flex items-start justify-between gap-3 mb-2">
-                                    <div className="flex-1">
-                                      <p className="font-semibold text-white text-sm">{variation.jobNumber}</p>
-                                      <p className="text-xs text-slate-400 mt-1">{variation.description}</p>
+                          {expanded && variations.length > 0 ? (
+                            <div className="border-t px-5 py-3" style={{ borderColor: 'var(--border-strong)' }}>
+                              <div className="space-y-2">
+                                {variations
+                                  .slice()
+                                  .sort((a, b) => a.jobNumber.localeCompare(b.jobNumber))
+                                  .map((variation) => (
+                                    <div
+                                      key={variation.id}
+                                      className="flex cursor-pointer items-start justify-between gap-4 rounded-xl border px-4 py-3 transition-colors hover:bg-white/5"
+                                      style={{
+                                        backgroundColor: 'var(--surface-panel-soft)',
+                                        borderColor: 'var(--border-strong)',
+                                      }}
+                                      onDoubleClick={() =>
+                                        router.push(`/jobs/${variation.id}/consumption-costing`)
+                                      }
+                                      onContextMenu={(event) => openJobContextMenu(variation, event)}
+                                    >
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                          {variation.jobNumber}
+                                        </p>
+                                        <p className="mt-1 truncate text-xs" style={{ color: 'var(--foreground-muted)' }}>
+                                          {variation.site || variation.description || 'No site or description added'}
+                                        </p>
+                                      </div>
+                                      <span
+                                        className={cx(
+                                          'inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em]',
+                                          jobStatusClasses(variation.status),
+                                        )}
+                                      >
+                                        {prettyJobStatus(variation.status)}
+                                      </span>
                                     </div>
-                                    <Badge label={variation.status} variant="blue" />
-                                  </div>
-                                  {variation.site && (
-                                    <p className="text-xs text-slate-400">📍 {variation.site}</p>
-                                  )}
-                                </div>
-                              ))}
+                                  ))}
+                              </div>
                             </div>
-                          )}
+                          ) : null}
                         </div>
                       );
                     })}
                   </div>
                 )}
-              </div>
+              </section>
             </>
           )}
-        </div>
+        </section>
       </div>
 
-      {/* Edit/Create Modal */}
       <Modal
-        isOpen={modal}
-        onClose={() => setModal(false)}
-        title={editing ? 'Edit Customer' : 'Add Customer'}
+        isOpen={Boolean(detailsCustomer)}
+        onClose={() => setDetailsCustomerId(null)}
+        title={detailsCustomer?.name ?? 'Customer details'}
+        size="lg"
+        actions={
+          detailsCustomer && canEdit ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                handleEditClick(detailsCustomer);
+                setDetailsCustomerId(null);
+              }}
+            >
+              Edit customer
+            </Button>
+          ) : undefined
+        }
+      >
+        {detailsCustomer ? <CustomerReadOnlyDetails customer={detailsCustomer} /> : null}
+      </Modal>
+
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={formMode === 'edit' ? 'Edit customer' : 'Create customer'}
+        size="lg"
         actions={
           <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={() => setModal(false)} size="sm">
+            <Button type="button" variant="ghost" onClick={() => setModalOpen(false)} size="sm">
               Cancel
             </Button>
-            <Button type="submit" form="customer-form" loading={isCreating || isUpdating} size="sm">
-              {editing ? 'Update' : 'Create'}
+            <Button type="submit" form="customer-form" loading={saveLoading} size="sm">
+              {formMode === 'edit' ? 'Save changes' : 'Create customer'}
             </Button>
           </div>
         }
       >
-        <form id="customer-form" onSubmit={handleSave} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-          <p className="text-xs text-slate-500">
-            Field names match the party lists API (see API-party-lists.md). Primary phone / contact name
-            are taken from the first row in <code className="text-slate-400">contacts</code> when present.
-          </p>
+        <form id="customer-form" onSubmit={handleSave} className="max-h-[75vh] space-y-6 overflow-y-auto pr-1">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">name *</label>
-            <input
-              required
-              value={partyForm.name}
-              onChange={(e) => setPartyForm((p) => ({ ...p, name: e.target.value }))}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-            />
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+              Core record
+            </h3>
+            <p className="mt-1 text-sm" style={{ color: 'var(--foreground-muted)' }}>
+              Keep customer data aligned with the party lists structure so local and synced records stay consistent.
+            </p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">email</label>
-            <input
-              type="email"
-              value={partyForm.email}
-              onChange={(e) => setPartyForm((p) => ({ ...p, email: e.target.value }))}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">trade_license_number</label>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Customer name">
+              <input
+                required
+                value={partyForm.name}
+                onChange={(event) => setPartyForm((prev) => ({ ...prev, name: event.target.value }))}
+                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                style={{
+                  backgroundColor: 'var(--input-background)',
+                  color: 'var(--input-foreground)',
+                  borderColor: 'var(--input-border)',
+                }}
+              />
+            </FormField>
+            <FormField label="Email">
+              <input
+                type="email"
+                value={partyForm.email}
+                onChange={(event) => setPartyForm((prev) => ({ ...prev, email: event.target.value }))}
+                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                style={{
+                  backgroundColor: 'var(--input-background)',
+                  color: 'var(--input-foreground)',
+                  borderColor: 'var(--input-border)',
+                }}
+              />
+            </FormField>
+            <FormField label="Trade license number">
               <input
                 value={partyForm.trade_license_number}
-                onChange={(e) =>
-                  setPartyForm((p) => ({ ...p, trade_license_number: e.target.value }))
+                onChange={(event) =>
+                  setPartyForm((prev) => ({ ...prev, trade_license_number: event.target.value }))
                 }
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                style={{
+                  backgroundColor: 'var(--input-background)',
+                  color: 'var(--input-foreground)',
+                  borderColor: 'var(--input-border)',
+                }}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">trade_license_authority</label>
+            </FormField>
+            <FormField label="Trade license authority">
               <input
                 value={partyForm.trade_license_authority}
-                onChange={(e) =>
-                  setPartyForm((p) => ({ ...p, trade_license_authority: e.target.value }))
+                onChange={(event) =>
+                  setPartyForm((prev) => ({ ...prev, trade_license_authority: event.target.value }))
                 }
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                style={{
+                  backgroundColor: 'var(--input-background)',
+                  color: 'var(--input-foreground)',
+                  borderColor: 'var(--input-border)',
+                }}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">trade_license_expiry</label>
+            </FormField>
+            <FormField label="Trade license expiry">
               <input
                 type="date"
                 value={partyForm.trade_license_expiry}
-                onChange={(e) =>
-                  setPartyForm((p) => ({ ...p, trade_license_expiry: e.target.value }))
+                onChange={(event) =>
+                  setPartyForm((prev) => ({ ...prev, trade_license_expiry: event.target.value }))
                 }
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                style={{
+                  backgroundColor: 'var(--input-background)',
+                  color: 'var(--input-foreground)',
+                  borderColor: 'var(--input-border)',
+                }}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">trn_number</label>
+            </FormField>
+            <FormField label="TRN number">
               <input
                 value={partyForm.trn_number}
-                onChange={(e) => setPartyForm((p) => ({ ...p, trn_number: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                onChange={(event) => setPartyForm((prev) => ({ ...prev, trn_number: event.target.value }))}
+                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                style={{
+                  backgroundColor: 'var(--input-background)',
+                  color: 'var(--input-foreground)',
+                  borderColor: 'var(--input-border)',
+                }}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">trn_expiry</label>
+            </FormField>
+            <FormField label="TRN expiry">
               <input
                 type="date"
                 value={partyForm.trn_expiry}
-                onChange={(e) => setPartyForm((p) => ({ ...p, trn_expiry: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                onChange={(event) => setPartyForm((prev) => ({ ...prev, trn_expiry: event.target.value }))}
+                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                style={{
+                  backgroundColor: 'var(--input-background)',
+                  color: 'var(--input-foreground)',
+                  borderColor: 'var(--input-border)',
+                }}
               />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">address (AMFGI only)</label>
-            <textarea
-              value={partyForm.address}
-              onChange={(e) => setPartyForm((p) => ({ ...p, address: e.target.value }))}
-              rows={2}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
-            />
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-slate-300">contacts</label>
-              <button
-                type="button"
-                onClick={addContactRow}
-                className="text-xs text-emerald-400 hover:text-emerald-300"
-              >
-                + Add contact
-              </button>
-            </div>
-            <div className="space-y-3">
-              {partyForm.contacts.map((row, idx) => (
-                <div
-                  key={idx}
-                  className="rounded-lg border border-slate-600 bg-slate-900/40 p-3 space-y-2"
+            </FormField>
+            {formMode === 'edit' ? (
+              <FormField label="Record status">
+                <select
+                  value={partyStatus ? 'active' : 'inactive'}
+                  onChange={(event) => setPartyStatus(event.target.value === 'active')}
+                  className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                  style={{
+                    backgroundColor: 'var(--input-background)',
+                    color: 'var(--input-foreground)',
+                    borderColor: 'var(--input-border)',
+                  }}
                 >
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-500">sort_order {idx}</span>
-                    {partyForm.contacts.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeContactRow(idx)}
-                        className="text-xs text-red-400 hover:text-red-300"
-                      >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </FormField>
+            ) : null}
+          </div>
+
+          <FormField label="Address">
+            <textarea
+              rows={3}
+              value={partyForm.address}
+              onChange={(event) => setPartyForm((prev) => ({ ...prev, address: event.target.value }))}
+              className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+              style={{
+                backgroundColor: 'var(--input-background)',
+                color: 'var(--input-foreground)',
+                borderColor: 'var(--input-border)',
+              }}
+            />
+          </FormField>
+
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                  Contact rows
+                </h3>
+                <p className="mt-1 text-sm" style={{ color: 'var(--foreground-muted)' }}>
+                  The first populated row becomes the legacy primary contact and phone value.
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={addContactRow}>
+                Add contact
+              </Button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {partyForm.contacts.map((row, index) => (
+                <div
+                  key={index}
+                  className="rounded-2xl border p-4"
+                  style={{
+                    backgroundColor: 'var(--surface-subtle)',
+                    borderColor: 'var(--border-strong)',
+                  }}
+                >
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--foreground-muted)' }}>
+                      Contact {index + 1}
+                    </p>
+                    {partyForm.contacts.length > 1 ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => removeContactRow(index)}>
                         Remove
-                      </button>
-                    )}
+                      </Button>
+                    ) : null}
                   </div>
-                  <input
-                    placeholder="contact_name"
-                    value={row.contact_name}
-                    onChange={(e) => updateContactRow(idx, { contact_name: e.target.value })}
-                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="email"
-                      placeholder="email"
-                      value={row.email}
-                      onChange={(e) => updateContactRow(idx, { email: e.target.value })}
-                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
-                    />
-                    <input
-                      placeholder="phone"
-                      value={row.phone}
-                      onChange={(e) => updateContactRow(idx, { phone: e.target.value })}
-                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
-                    />
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <FormField label="Contact name">
+                      <input
+                        value={row.contact_name}
+                        onChange={(event) => updateContactRow(index, { contact_name: event.target.value })}
+                        className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                        style={{
+                          backgroundColor: 'var(--input-background)',
+                          color: 'var(--input-foreground)',
+                          borderColor: 'var(--input-border)',
+                        }}
+                      />
+                    </FormField>
+                    <FormField label="Email">
+                      <input
+                        type="email"
+                        value={row.email}
+                        onChange={(event) => updateContactRow(index, { email: event.target.value })}
+                        className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                        style={{
+                          backgroundColor: 'var(--input-background)',
+                          color: 'var(--input-foreground)',
+                          borderColor: 'var(--input-border)',
+                        }}
+                      />
+                    </FormField>
+                    <FormField label="Phone">
+                      <input
+                        value={row.phone}
+                        onChange={(event) => updateContactRow(index, { phone: event.target.value })}
+                        className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none ring-emerald-500/30 transition focus:ring-2"
+                        style={{
+                          backgroundColor: 'var(--input-background)',
+                          color: 'var(--input-foreground)',
+                          borderColor: 'var(--input-border)',
+                        }}
+                      />
+                    </FormField>
                   </div>
                 </div>
               ))}
@@ -998,95 +1343,82 @@ export default function CustomersPage() {
         </form>
       </Modal>
 
-      {/* Delete Customer Modal */}
-      {deleteModal.open && deleteModal.customer && (
+      {deleteModal.open && deleteModal.customer ? (
         <>
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setDeleteModal({ open: false, customer: null, loading: false })} />
           <div
-            className="fixed inset-0 bg-black/50 z-40"
-            onClick={() => setDeleteModal({ open: false, customer: null, loading: false })}
-          />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-md shadow-2xl">
-            <h2 className="text-lg font-semibold text-white mb-2">Delete Customer</h2>
-            <p className="text-slate-300 text-sm mb-6">
-              Remove <strong>{deleteModal.customer.name}</strong>? If this customer has jobs, they will
-              be kept and the customer will only be marked inactive.
+            className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-6 shadow-2xl"
+            style={{
+              backgroundColor: 'var(--surface-panel)',
+              borderColor: 'var(--border-strong)',
+            }}
+          >
+            <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+              Delete customer
+            </h2>
+            <p className="mt-2 text-sm leading-6" style={{ color: 'var(--foreground-soft)' }}>
+              Remove <strong>{deleteModal.customer.name}</strong>? If this customer already has jobs, the record will stay in the system and only be marked inactive.
             </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setDeleteModal({ open: false, customer: null, loading: false })}
-                disabled={deleteModal.loading}
-                className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 text-sm font-medium"
-              >
+            <div className="mt-6 flex justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={() => setDeleteModal({ open: false, customer: null, loading: false })}>
                 Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleteModal.loading}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500 text-sm font-medium"
-              >
-                Delete
-              </button>
+              </Button>
+              <Button type="button" variant="danger" onClick={handleDelete} loading={deleteModal.loading || isDeleting}>
+                Delete customer
+              </Button>
             </div>
           </div>
         </>
-      )}
+      ) : null}
 
-      {/* Delete Job Modal */}
-      {deleteJobModal.open && deleteJobModal.job && (
+      {deleteJobModal.open && deleteJobModal.job ? (
         <>
           <div
-            className="fixed inset-0 bg-black/50 z-40"
-            onClick={() => setDeleteJobModal({ open: false, job: null, loading: false, linkedCount: 0, canDelete: true })}
+            className="fixed inset-0 z-40 bg-black/50"
+            onClick={() =>
+              setDeleteJobModal({ open: false, job: null, loading: false, linkedCount: 0, canDelete: true })
+            }
           />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-md shadow-2xl">
-            <h2 className="text-lg font-semibold text-white mb-2">
-              Delete {deleteJobModal.job.parentJobId ? 'Job Variation' : 'Job'}?
+          <div
+            className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-6 shadow-2xl"
+            style={{
+              backgroundColor: 'var(--surface-panel)',
+              borderColor: 'var(--border-strong)',
+            }}
+          >
+            <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+              Delete {deleteJobModal.job.parentJobId ? 'variation' : 'job'}
             </h2>
 
             {deleteJobModal.canDelete ? (
-              <>
-                <p className="text-slate-300 text-sm mb-6">
-                  Delete <strong>{deleteJobModal.job.jobNumber}</strong>?
-                </p>
-                <p className="text-slate-400 text-xs mb-4">
-                  {deleteJobModal.job.parentJobId ? 'This variation will be permanently removed.' : 'This job and all its variations will be permanently removed.'}
-                </p>
-              </>
+              <p className="mt-2 text-sm leading-6" style={{ color: 'var(--foreground-soft)' }}>
+                Delete <strong>{deleteJobModal.job.jobNumber}</strong>? This action removes the selected record permanently.
+              </p>
             ) : (
-              <>
-                <p className="text-slate-300 text-sm mb-4">
-                  Cannot delete <strong>{deleteJobModal.job.jobNumber}</strong>
-                </p>
-                <div className="bg-red-600/15 border border-red-500/30 rounded-lg p-3 mb-6">
-                  <p className="text-sm text-red-300 font-medium mb-2">This job has linked data:</p>
-                  <p className="text-sm text-red-300">
-                    {deleteJobModal.linkedCount} transaction{deleteJobModal.linkedCount !== 1 ? 's' : ''} using this job
-                  </p>
-                </div>
-              </>
+              <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+                This job cannot be deleted because {deleteJobModal.linkedCount} transaction{deleteJobModal.linkedCount === 1 ? '' : 's'} already reference it.
+              </div>
             )}
 
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setDeleteJobModal({ open: false, job: null, loading: false, linkedCount: 0, canDelete: true })}
-                disabled={deleteJobModal.loading}
-                className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 text-sm font-medium"
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() =>
+                  setDeleteJobModal({ open: false, job: null, loading: false, linkedCount: 0, canDelete: true })
+                }
               >
                 {deleteJobModal.canDelete ? 'Cancel' : 'Close'}
-              </button>
-              {deleteJobModal.canDelete && (
-                <button
-                  onClick={handleDeleteJob}
-                  disabled={deleteJobModal.loading}
-                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500 text-sm font-medium"
-                >
-                  {deleteJobModal.loading ? 'Deleting...' : 'Delete'}
-                </button>
-              )}
+              </Button>
+              {deleteJobModal.canDelete ? (
+                <Button type="button" variant="danger" onClick={handleDeleteJob} loading={deleteJobModal.loading || isDeletingJob}>
+                  Delete job
+                </Button>
+              ) : null}
             </div>
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 }

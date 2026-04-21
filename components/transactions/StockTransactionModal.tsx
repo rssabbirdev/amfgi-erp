@@ -5,7 +5,27 @@ import Modal                      from '@/components/ui/Modal';
 import { Button }                 from '@/components/ui/Button';
 import toast                      from 'react-hot-toast';
 
-interface Material { id: string; name: string; unit: string; currentStock: number }
+interface MaterialUomRow {
+  id: string;
+  unitName: string;
+  isBase: boolean;
+  factorToBase: number;
+}
+
+interface Material {
+  id: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  materialUoms?: MaterialUomRow[];
+}
+
+function qtyInBase(uoms: MaterialUomRow[] | undefined, quantityUomId: string, qty: number): number {
+  if (!uoms?.length || !quantityUomId.trim()) return qty;
+  const u = uoms.find((x) => x.id === quantityUomId);
+  if (!u) return qty;
+  return qty * u.factorToBase;
+}
 interface Job      { id: string; jobNumber: string; description: string }
 
 interface JobMaterialSummary {
@@ -31,6 +51,7 @@ export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode
   const [materialId,     setMaterialId]     = useState('');
   const [jobId,          setJobId]          = useState(preselectedJobId ?? '');
   const [quantity,       setQuantity]       = useState('');
+  const [quantityUomId,  setQuantityUomId]  = useState('');
   const [notes,          setNotes]          = useState('');
   const [date,           setDate]           = useState(new Date().toISOString().split('T')[0]);
   const [loading,        setLoading]        = useState(false);
@@ -63,8 +84,10 @@ export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode
     e.preventDefault();
     const qty = parseFloat(quantity);
     if (isNaN(qty) || qty <= 0) { toast.error('Invalid quantity'); return; }
-    if (mode === 'RETURN' && qty > availableToReturn) {
-      toast.error(`Max returnable: ${availableToReturn}`);
+    const mat = materials.find((m) => m.id === materialId);
+    const qtyBase = qtyInBase(mat?.materialUoms, quantityUomId, qty);
+    if (mode === 'RETURN' && qtyBase > availableToReturn) {
+      toast.error(`Max returnable: ${availableToReturn} ${mat?.unit ?? ''} (base)`);
       return;
     }
 
@@ -77,6 +100,7 @@ export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode
           type:       mode,
           materialId,
           quantity:   qty,
+          quantityUomId: quantityUomId.trim() || undefined,
           jobId:      mode === 'STOCK_IN' ? null : jobId,
           notes,
           date,
@@ -103,7 +127,7 @@ export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode
 
   const handleClose = () => {
     setMaterialId(''); setJobId(preselectedJobId ?? '');
-    setQuantity(''); setNotes('');
+    setQuantity(''); setQuantityUomId(''); setNotes('');
     setDate(new Date().toISOString().split('T')[0]);
     onClose();
   };
@@ -146,7 +170,10 @@ export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode
           <select
             required
             value={materialId}
-            onChange={(e) => setMaterialId(e.target.value)}
+            onChange={(e) => {
+              setMaterialId(e.target.value);
+              setQuantityUomId('');
+            }}
             className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
           >
             <option value="">Select material...</option>
@@ -163,6 +190,25 @@ export default function StockTransactionModal({ isOpen, onClose, onSuccess, mode
             </p>
           )}
         </div>
+
+        {materialId && materials.find((m) => m.id === materialId)?.materialUoms &&
+          (materials.find((m) => m.id === materialId)!.materialUoms ?? []).length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Unit of measure</label>
+            <select
+              value={quantityUomId}
+              onChange={(e) => setQuantityUomId(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
+            >
+              {(materials.find((m) => m.id === materialId)!.materialUoms ?? []).map((u) => (
+                <option key={u.id} value={u.isBase ? '' : u.id}>
+                  {u.unitName}
+                  {u.isBase ? ' (base)' : ` (=${u.factorToBase} base)`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Quantity */}
         <div>

@@ -1,6 +1,8 @@
 import { auth }              from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { serializeMaterialUoms } from '@/lib/utils/materialUom';
+import type { MaterialUomWithUnit } from '@/lib/utils/materialUom';
 import { z }                 from 'zod';
 
 const UpdateSchema = z.object({
@@ -27,13 +29,23 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const { id } = await params;
   const material = await prisma.material.findUnique({
     where: { id },
+    include: {
+      materialUoms: {
+        include: { unit: { select: { id: true, name: true } } },
+        orderBy: [{ isBase: 'desc' }, { createdAt: 'asc' }],
+      },
+    },
   });
 
   if (!material || material.companyId !== session.user.activeCompanyId) {
     return errorResponse('Material not found', 404);
   }
 
-  return successResponse(material);
+  const { materialUoms, ...rest } = material;
+  return successResponse({
+    ...rest,
+    materialUoms: serializeMaterialUoms(materialUoms as MaterialUomWithUnit[]),
+  });
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -69,12 +81,71 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (duplicate) return errorResponse('Material with this name already exists', 409);
   }
 
-  const updated = await prisma.material.update({
-    where: { id },
-    data: parsed.data,
-  });
+  const companyId = session.user.activeCompanyId;
 
-  return successResponse(updated);
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.material.update({
+        where: { id },
+        data: parsed.data,
+      });
+
+      if (parsed.data.unit !== undefined) {
+        const name = parsed.data.unit.trim();
+        const unitRow = await tx.unit.findUnique({
+          where: { companyId_name: { companyId, name } },
+        });
+        if (unitRow) {
+          const base = await tx.materialUom.findFirst({
+            where: { materialId: id, isBase: true },
+          });
+          if (base) {
+            const taken = await tx.materialUom.findFirst({
+              where: { materialId: id, unitId: unitRow.id, NOT: { id: base.id } },
+            });
+            if (taken) {
+              throw new Error(
+                'That unit is already used as a packaging UOM for this material. Remove or change the derived UOM first.'
+              );
+            }
+            await tx.materialUom.update({
+              where: { id: base.id },
+              data: { unitId: unitRow.id },
+            });
+          } else {
+            await tx.materialUom.create({
+              data: {
+                companyId,
+                materialId: id,
+                unitId: unitRow.id,
+                isBase: true,
+                parentUomId: null,
+                factorToParent: 1,
+              },
+            });
+          }
+        }
+      }
+    });
+  } catch (e: unknown) {
+    return errorResponse(e instanceof Error ? e.message : 'Update failed', 400);
+  }
+
+  const out = await prisma.material.findUnique({
+    where: { id },
+    include: {
+      materialUoms: {
+        include: { unit: { select: { id: true, name: true } } },
+        orderBy: [{ isBase: 'desc' }, { createdAt: 'asc' }],
+      },
+    },
+  });
+  if (!out) return errorResponse('Material not found', 404);
+  const { materialUoms, ...rest } = out;
+  return successResponse({
+    ...rest,
+    materialUoms: serializeMaterialUoms(materialUoms as MaterialUomWithUnit[]),
+  });
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {

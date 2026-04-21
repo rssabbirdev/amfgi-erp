@@ -43,6 +43,25 @@ export const P = {
 
   // Settings
   SETTINGS_MANAGE: 'settings.manage',
+
+  // HR / Workforce
+  HR_EMPLOYEE_VIEW: 'hr.employee.view',
+  HR_EMPLOYEE_EDIT: 'hr.employee.edit',
+  HR_DOCUMENT_VIEW: 'hr.document.view',
+  HR_DOCUMENT_EDIT: 'hr.document.edit',
+  HR_SCHEDULE_VIEW: 'hr.schedule.view',
+  HR_SCHEDULE_EDIT: 'hr.schedule.edit',
+  HR_SCHEDULE_PUBLISH: 'hr.schedule.publish',
+  HR_ATTENDANCE_VIEW: 'hr.attendance.view',
+  HR_ATTENDANCE_EDIT: 'hr.attendance.edit',
+  HR_ATTENDANCE_APPROVE: 'hr.attendance.approve',
+  HR_SETTINGS_DOC_TYPES: 'hr.settings.document_types',
+
+  // Employee self-service (linked User.linkedEmployeeId)
+  SELF_EMPLOYEE_VIEW: 'self.employee.view',
+  SELF_EMPLOYEE_DOCUMENTS: 'self.employee.documents',
+  SELF_EMPLOYEE_SCHEDULE: 'self.employee.schedule',
+  SELF_EMPLOYEE_ATTENDANCE: 'self.employee.attendance',
 } as const;
 
 export type Permission = (typeof P)[keyof typeof P];
@@ -60,6 +79,11 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.REPORT_VIEW,
     P.USER_VIEW,
     P.SETTINGS_MANAGE,
+    P.HR_EMPLOYEE_VIEW, P.HR_EMPLOYEE_EDIT,
+    P.HR_DOCUMENT_VIEW, P.HR_DOCUMENT_EDIT,
+    P.HR_SCHEDULE_VIEW, P.HR_SCHEDULE_EDIT, P.HR_SCHEDULE_PUBLISH,
+    P.HR_ATTENDANCE_VIEW, P.HR_ATTENDANCE_EDIT, P.HR_ATTENDANCE_APPROVE,
+    P.HR_SETTINGS_DOC_TYPES,
   ],
 
   store_keeper: [
@@ -138,6 +162,49 @@ export const PERMISSION_GROUPS: Array<{
       { key: P.COMPANY_VIEW,   label: 'View'   },
       { key: P.COMPANY_CREATE, label: 'Create' },
       { key: P.COMPANY_EDIT,   label: 'Edit'   },
+    ],
+  },
+  {
+    group: 'HR — Employees',
+    perms: [
+      { key: P.HR_EMPLOYEE_VIEW, label: 'View' },
+      { key: P.HR_EMPLOYEE_EDIT, label: 'Edit' },
+    ],
+  },
+  {
+    group: 'HR — Documents',
+    perms: [
+      { key: P.HR_DOCUMENT_VIEW, label: 'View' },
+      { key: P.HR_DOCUMENT_EDIT, label: 'Edit' },
+    ],
+  },
+  {
+    group: 'HR — Schedule',
+    perms: [
+      { key: P.HR_SCHEDULE_VIEW, label: 'View' },
+      { key: P.HR_SCHEDULE_EDIT, label: 'Edit' },
+      { key: P.HR_SCHEDULE_PUBLISH, label: 'Publish / lock' },
+    ],
+  },
+  {
+    group: 'HR — Attendance',
+    perms: [
+      { key: P.HR_ATTENDANCE_VIEW, label: 'View' },
+      { key: P.HR_ATTENDANCE_EDIT, label: 'Edit' },
+      { key: P.HR_ATTENDANCE_APPROVE, label: 'Approve' },
+    ],
+  },
+  {
+    group: 'HR — Settings',
+    perms: [{ key: P.HR_SETTINGS_DOC_TYPES, label: 'Document types' }],
+  },
+  {
+    group: 'Employee self-service',
+    perms: [
+      { key: P.SELF_EMPLOYEE_VIEW, label: 'View own profile' },
+      { key: P.SELF_EMPLOYEE_DOCUMENTS, label: 'View own documents' },
+      { key: P.SELF_EMPLOYEE_SCHEDULE, label: 'View own schedule' },
+      { key: P.SELF_EMPLOYEE_ATTENDANCE, label: 'View own attendance' },
     ],
   },
 ];

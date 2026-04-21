@@ -10,6 +10,8 @@ import {
   useGetMaterialByIdQuery,
   useUpdateMaterialMutation,
   useCreateMaterialMutation,
+  useCreateMaterialUomMutation,
+  useDeleteMaterialUomMutation,
   useGetUnitsQuery,
   useCreateUnitMutation,
   useGetCategoriesQuery,
@@ -20,25 +22,8 @@ import {
   useGetPriceLogsQuery,
   useCreateMaterialLogMutation,
   useCreatePriceLogMutation,
+  type Material,
 } from '@/store/hooks';
-
-interface Material {
-  id: string;
-  companyId: string;
-  name: string;
-  description?: string;
-  unit: string;
-  category: string;
-  warehouse: string;
-  stockType: string;
-  externalItemName: string;
-  currentStock: number;
-  reorderLevel?: number;
-  unitCost?: number;
-  isActive: boolean;
-  createdAt?: string | Date;
-  updatedAt?: string | Date;
-}
 
 export default function MaterialDetailPage() {
   const params = useParams();
@@ -56,6 +41,8 @@ export default function MaterialDetailPage() {
 
   const [updateMaterial, { isLoading: isUpdating }] = useUpdateMaterialMutation();
   const [createMaterial, { isLoading: isCreating }] = useCreateMaterialMutation();
+  const [createMaterialUom] = useCreateMaterialUomMutation();
+  const [deleteMaterialUom] = useDeleteMaterialUomMutation();
   const [createUnit] = useCreateUnitMutation();
   const [createCategory] = useCreateCategoryMutation();
   const [createWarehouse] = useCreateWarehouseMutation();
@@ -82,6 +69,9 @@ export default function MaterialDetailPage() {
   const [unitCost, setUnitCost] = useState('');
   const [currentStock, setCurrentStock] = useState('0');
 
+  const [deriveUnitId, setDeriveUnitId] = useState('');
+  const [deriveParentId, setDeriveParentId] = useState('');
+  const [deriveFactor, setDeriveFactor] = useState('');
 
   // Update form when material loads (edit mode)
   useEffect(() => {
@@ -322,9 +312,11 @@ export default function MaterialDetailPage() {
                 />
               </div>
 
-              {/* Unit */}
+              {/* Base unit */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Unit {isCreateMode && '*'}</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  Base unit (stock) {isCreateMode && '*'}
+                </label>
                 <div className="flex gap-2">
                   <select
                     required={isCreateMode}
@@ -343,6 +335,10 @@ export default function MaterialDetailPage() {
                     + New
                   </Button>
                 </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Inventory and transactions store quantities in this unit. Add drum/pallet (etc.) on the UOM panel after
+                  save.
+                </p>
               </div>
 
               {/* Stock Type */}
@@ -485,6 +481,180 @@ export default function MaterialDetailPage() {
             </div>
           </div>
         </div>
+
+        {!isCreateMode && material && (
+          <div className="bg-slate-800 rounded-lg border border-slate-700 p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-white">Units of measure (billing / dispatch)</h3>
+            <p className="text-sm text-slate-400">
+              Example: base <span className="text-slate-300">kg</span> → add <span className="text-slate-300">drum</span>{' '}
+              with parent base and factor <span className="text-slate-300">190</span> (1 drum = 190 kg) → add{' '}
+              <span className="text-slate-300">pallet</span> with parent drum and factor <span className="text-slate-300">6</span>{' '}
+              (1 pallet = 1140 kg).
+            </p>
+
+            {(!material.materialUoms || material.materialUoms.length === 0) && (
+              <div className="rounded-lg border border-amber-600/40 bg-amber-950/20 p-3 text-sm text-amber-100/90">
+                No UOM chain yet.{' '}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="ml-2"
+                  onClick={async () => {
+                    const u = units.find((x) => x.name === unit.trim());
+                    if (!u) {
+                      toast.error('Select a base unit above that exists in Settings → Units');
+                      return;
+                    }
+                    try {
+                      await createMaterialUom({
+                        materialId: material.id,
+                        body: { mode: 'base', unitId: u.id },
+                      }).unwrap();
+                      toast.success('Base UOM created');
+                    } catch (err: any) {
+                      toast.error(err?.data?.error ?? 'Failed to create base UOM');
+                    }
+                  }}
+                >
+                  Create base UOM from &quot;{unit || '…'}&quot;
+                </Button>
+              </div>
+            )}
+
+            {material.materialUoms && material.materialUoms.length > 0 && (
+              <div className="overflow-x-auto rounded border border-slate-600">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-900 text-slate-400 text-xs uppercase">
+                    <tr>
+                      <th className="px-3 py-2">Unit</th>
+                      <th className="px-3 py-2">Role</th>
+                      <th className="px-3 py-2">Parent</th>
+                      <th className="px-3 py-2">Factor</th>
+                      <th className="px-3 py-2">= base ({material.unit})</th>
+                      <th className="px-3 py-2 w-24"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {material.materialUoms.map((row) => {
+                      const parent = material.materialUoms!.find((p) => p.id === row.parentUomId);
+                      return (
+                        <tr key={row.id} className="border-t border-slate-700">
+                          <td className="px-3 py-2 text-white">{row.unitName}</td>
+                          <td className="px-3 py-2 text-slate-300">{row.isBase ? 'Base' : 'Derived'}</td>
+                          <td className="px-3 py-2 text-slate-400">{parent?.unitName ?? '—'}</td>
+                          <td className="px-3 py-2 font-mono text-slate-300">{row.factorToParent}</td>
+                          <td className="px-3 py-2 font-mono text-emerald-300/90">{row.factorToBase}</td>
+                          <td className="px-3 py-2">
+                            {!row.isBase && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={async () => {
+                                  if (!window.confirm(`Remove UOM “${row.unitName}”?`)) return;
+                                  try {
+                                    await deleteMaterialUom({ materialId: material.id, uomId: row.id }).unwrap();
+                                    toast.success('UOM removed');
+                                  } catch (err: any) {
+                                    toast.error(err?.data?.error ?? 'Failed to remove');
+                                  }
+                                }}
+                              >
+                                Remove
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {material.materialUoms?.some((x) => x.isBase) && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end border-t border-slate-700 pt-4">
+                <div className="md:col-span-1">
+                  <label className="block text-xs text-slate-400 mb-1">Packaging unit</label>
+                  <select
+                    value={deriveUnitId}
+                    onChange={(e) => setDeriveUnitId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm"
+                  >
+                    <option value="">— Select —</option>
+                    {units
+                      .filter((u) => !material.materialUoms?.some((m) => m.unitId === u.id))
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="md:col-span-1">
+                  <label className="block text-xs text-slate-400 mb-1">Parent UOM</label>
+                  <select
+                    value={deriveParentId}
+                    onChange={(e) => setDeriveParentId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm"
+                  >
+                    <option value="">— Select —</option>
+                    {material.materialUoms?.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.unitName}
+                        {u.isBase ? ' (base)' : ` (=${u.factorToBase} ${material.unit})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">1 new unit = × parent</label>
+                  <input
+                    type="number"
+                    min="0.0001"
+                    step="any"
+                    value={deriveFactor}
+                    onChange={(e) => setDeriveFactor(e.target.value)}
+                    placeholder="e.g. 190 or 6"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <Button
+                    type="button"
+                    onClick={async () => {
+                      const f = parseFloat(deriveFactor);
+                      if (!deriveUnitId || !deriveParentId || !f || f <= 0) {
+                        toast.error('Select unit, parent, and a positive factor');
+                        return;
+                      }
+                      try {
+                        await createMaterialUom({
+                          materialId: material.id,
+                          body: {
+                            mode: 'derived',
+                            unitId: deriveUnitId,
+                            parentUomId: deriveParentId,
+                            factorToParent: f,
+                          },
+                        }).unwrap();
+                        setDeriveUnitId('');
+                        setDeriveParentId('');
+                        setDeriveFactor('');
+                        toast.success('UOM added');
+                      } catch (err: any) {
+                        toast.error(err?.data?.error ?? 'Failed to add UOM');
+                      }
+                    }}
+                  >
+                    Add conversion
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Edit History (Edit mode only) */}
         {!isCreateMode && (

@@ -1,12 +1,17 @@
-import NextAuth, { type DefaultSession, type NextAuthConfig } from 'next-auth';
+﻿import NextAuth, { type DefaultSession, type NextAuthConfig } from 'next-auth';
 import Google      from 'next-auth/providers/google';
 import Credentials from 'next-auth/providers/credentials';
-import { prisma } from '@/lib/db/prisma';
 import bcrypt      from 'bcryptjs';
 import type { Permission } from '@/lib/permissions';
 import { ALL_PERMISSIONS } from '@/lib/permissions';
+import { convertGoogleDriveUrl } from '@/lib/utils/googleDriveUrl';
 
-// ── Session / JWT type augmentation ──────────────────────────────────────────
+async function getPrisma() {
+  const mod = await import('@/lib/db/prisma');
+  return mod.prisma;
+}
+
+// â”€â”€ Session / JWT type augmentation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 declare module 'next-auth' {
   interface Session {
     user: {
@@ -17,6 +22,13 @@ declare module 'next-auth' {
       activeCompanyName: string | null;
       permissions:       Permission[];
       allowedCompanyIds: string[];
+      /** Signature image URL for print templates */
+      signatureUrl:      string | null;
+      /** Google Drive file ids kept for cleanup/backward compatibility */
+      imageDriveId:      string | null;
+      signatureDriveId:  string | null;
+      /** HR employee self-service link (same company scope as active company) */
+      linkedEmployeeId:  string | null;
     } & DefaultSession['user'];
   }
   interface User {
@@ -26,15 +38,20 @@ declare module 'next-auth' {
     activeCompanyName: string | null;
     permissions:       Permission[];
     allowedCompanyIds: string[];
+    signatureUrl?:     string | null;
+    imageDriveId?:     string | null;
+    signatureDriveId?: string | null;
+    linkedEmployeeId?: string | null;
   }
 }
 
-// ── Resolve permissions for a user+company combination ───────────────────────
+// â”€â”€ Resolve permissions for a user+company combination â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function resolvePermissions(
   userId: string,
   companyId: string | null
 ): Promise<Permission[]> {
   if (!companyId) return [];
+  const prisma = await getPrisma();
 
   // Get user's access to this company
   const access = await prisma.userCompanyAccess.findUnique({
@@ -72,10 +89,22 @@ const config: NextAuthConfig = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
+        const prisma = await getPrisma();
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email as string },
-          include: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            password: true,
+            image: true,
+            imageDriveId: true,
+            signatureUrl: true,
+            signatureDriveId: true,
+            isSuperAdmin: true,
+            activeCompanyId: true,
+            linkedEmployeeId: true,
             companyAccess: {
               include: { company: true },
             },
@@ -104,17 +133,26 @@ const config: NextAuthConfig = {
         const permissions    = await resolvePermissions(userId, companyId);
         const allowedCompanyIds = user.companyAccess.map((a) => a.companyId);
 
+        const profileImg = user.image?.trim() ? convertGoogleDriveUrl(user.image.trim()) : null;
+        const sigImg = user.signatureUrl?.trim()
+          ? convertGoogleDriveUrl(user.signatureUrl.trim())
+          : null;
+
         return {
           id:                userId,
           name:              user.name,
           email:             user.email,
-          image:             user.image ?? null,
+          image:             profileImg,
+          signatureUrl:      sigImg,
+          imageDriveId:      user.imageDriveId ?? null,
+          signatureDriveId:  user.signatureDriveId ?? null,
           isSuperAdmin:      user.isSuperAdmin,
           activeCompanyId:   companyId,
           activeCompanySlug,
           activeCompanyName,
           permissions,
           allowedCompanyIds,
+          linkedEmployeeId: user.linkedEmployeeId ?? null,
         };
       },
     }),
@@ -123,6 +161,7 @@ const config: NextAuthConfig = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === 'google') {
+        const prisma = await getPrisma();
         const dbUser = await prisma.user.findUnique({
           where: { email: user.email ?? '' },
           include: {
@@ -130,6 +169,7 @@ const config: NextAuthConfig = {
               include: { company: true },
             },
           },
+          // linkedEmployeeId is on User root
         });
 
         if (!dbUser || !dbUser.isActive) return '/login?error=NotRegistered';
@@ -157,6 +197,7 @@ const config: NextAuthConfig = {
         user.activeCompanyName = activeCompanyName;
         user.permissions       = permissions;
         user.allowedCompanyIds = allowedCompanyIds;
+        user.linkedEmployeeId  = dbUser.linkedEmployeeId ?? null;
       }
       return true;
     },
@@ -165,19 +206,65 @@ const config: NextAuthConfig = {
     async jwt({ token, user, trigger, session }: any) {
       if (user) {
         token.sub                 = user.id;
+        token.name                = user.name;
         token.isSuperAdmin        = user.isSuperAdmin;
         token.activeCompanyId     = user.activeCompanyId;
         token.activeCompanySlug   = user.activeCompanySlug;
         token.activeCompanyName   = user.activeCompanyName;
         token.permissions         = user.permissions;
         token.allowedCompanyIds   = user.allowedCompanyIds;
+        token.picture             = user.image ?? token.picture;
+        token.signatureUrl        = user.signatureUrl ?? null;
+        token.imageDriveId        = user.imageDriveId ?? null;
+        token.signatureDriveId    = user.signatureDriveId ?? null;
+        token.linkedEmployeeId    = user.linkedEmployeeId ?? null;
       }
-      // Company switch — client calls update({ activeCompanyId, ... })
+      if (token.sub && !token.profileLoaded) {
+        const prisma = await getPrisma();
+        const u = await prisma.user.findUnique({
+          where: { id: token.sub as string },
+          select: {
+            image: true,
+            imageDriveId: true,
+            signatureUrl: true,
+            signatureDriveId: true,
+            linkedEmployeeId: true,
+          },
+        });
+        if (u) {
+          token.linkedEmployeeId   = u.linkedEmployeeId ?? null;
+          token.imageDriveId     = u.imageDriveId ?? null;
+          token.signatureDriveId = u.signatureDriveId ?? null;
+          token.picture =
+            (u.image?.trim() ? convertGoogleDriveUrl(u.image.trim()) : null) ??
+            token.picture;
+          token.signatureUrl =
+            (u.signatureUrl?.trim() ? convertGoogleDriveUrl(u.signatureUrl.trim()) : null) ??
+            null;
+        }
+        token.profileLoaded = true;
+      }
+      // Company switch â€” client calls update({ activeCompanyId, ... })
       if (trigger === 'update' && session?.activeCompanyId !== undefined) {
         token.activeCompanyId   = session.activeCompanyId;
         token.activeCompanySlug = session.activeCompanySlug;
         token.activeCompanyName = session.activeCompanyName;
         token.permissions       = session.permissions;
+      }
+      if (trigger === 'update' && token.sub) {
+        const prisma = await getPrisma();
+        const linkRow = await prisma.user.findUnique({
+          where: { id: token.sub as string },
+          select: { linkedEmployeeId: true },
+        });
+        token.linkedEmployeeId = linkRow?.linkedEmployeeId ?? token.linkedEmployeeId ?? null;
+      }
+      if (trigger === 'update' && session) {
+        if (session.image !== undefined) token.picture = session.image;
+        if (session.signatureUrl !== undefined) token.signatureUrl = session.signatureUrl;
+        if (session.name !== undefined) token.name = session.name;
+        if (session.imageDriveId !== undefined) token.imageDriveId = session.imageDriveId;
+        if (session.signatureDriveId !== undefined) token.signatureDriveId = session.signatureDriveId;
       }
       return token;
     },
@@ -191,6 +278,12 @@ const config: NextAuthConfig = {
       session.user.activeCompanyName = token.activeCompanyName ?? null;
       session.user.permissions       = token.permissions ?? [];
       session.user.allowedCompanyIds = token.allowedCompanyIds ?? [];
+      session.user.image             = token.picture ?? session.user.image;
+      session.user.signatureUrl      = token.signatureUrl ?? null;
+      session.user.imageDriveId      = token.imageDriveId ?? null;
+      session.user.signatureDriveId  = token.signatureDriveId ?? null;
+      session.user.linkedEmployeeId  = token.linkedEmployeeId ?? null;
+      if (token.name) session.user.name = token.name;
       return session;
     },
   },

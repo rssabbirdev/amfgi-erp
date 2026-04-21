@@ -19,16 +19,37 @@
  *   // Throws inside the callback → automatic rollback.
  */
 import { PrismaClient } from '@prisma/client';
+import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 
 declare global {
-  // eslint-disable-next-line no-var
   var _prisma: PrismaClient | undefined;
+}
+
+const prismaLog =
+  process.env.NODE_ENV === 'development' ? (['error', 'warn'] as const) : (['error'] as const);
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is not set.');
+}
+
+const prismaAdapter = new PrismaMariaDb(databaseUrl);
+
+// After `prisma generate`, Next dev can still hold a pre-generate client on `global._prisma` (no `mediaAsset`).
+const existingPrisma: PrismaClient | undefined = global._prisma;
+if (
+  process.env.NODE_ENV !== 'production' &&
+  existingPrisma &&
+  !('mediaAsset' in (existingPrisma as PrismaClient & Record<string, unknown>))
+) {
+  global._prisma = undefined;
 }
 
 export const prisma =
   global._prisma ??
   new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    log: [...prismaLog],
+    adapter: prismaAdapter,
   });
 
 if (process.env.NODE_ENV !== 'production') {

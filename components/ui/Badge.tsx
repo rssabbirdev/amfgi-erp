@@ -26,6 +26,9 @@ export function StatusBadge({ status }: { status: string }) {
     STOCK_IN:  { label: 'Stock In',   variant: 'green'  },
     STOCK_OUT: { label: 'Dispatched', variant: 'orange' },
     RETURN:    { label: 'Return',     variant: 'blue'   },
+    ON_LEAVE:  { label: 'On leave',   variant: 'yellow' },
+    SUSPENDED: { label: 'Suspended',  variant: 'orange' },
+    EXITED:    { label: 'Exited',     variant: 'gray'   },
   };
   const cfg = map[status] ?? { label: status, variant: 'gray' as BadgeVariant };
   return <Badge label={cfg.label} variant={cfg.variant} />;

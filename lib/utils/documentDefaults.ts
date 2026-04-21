@@ -145,3 +145,113 @@ export const DEFAULT_DELIVERY_NOTE: DocumentTemplate = (() => {
 })();
 
 export const DEFAULT_TEMPLATES: DocumentTemplate[] = [DEFAULT_DELIVERY_NOTE];
+
+export function createWorkScheduleTemplateDraft(
+  id: string,
+  name = 'Work Schedule PDF'
+): DocumentTemplate {
+  const base: DocumentTemplate = {
+    id,
+    name,
+    itemType: 'work-schedule',
+    isDefault: false,
+    pageMargins: { top: 8, right: 8, bottom: 8, left: 8 },
+    pageStyle: {
+      pageOrientation: 'landscape',
+      bodyFontFamily: 'Arial, Helvetica, sans-serif',
+    },
+    sections: [
+      {
+        type: 'image',
+        heightMm: 18,
+        source: 'field',
+        field: 'company.letterheadUrl',
+        objectFit: 'contain',
+        objectPosition: 'center',
+        opacity: 1,
+        align: 'center',
+        layout: 'fill',
+        useCompanyLetterheadFallback: true,
+        marginBottomMm: 2,
+        pageAnchor: 'top',
+      },
+      {
+        type: 'heading',
+        text: 'DAILY WORK SCHEDULE',
+        fontSize: 15,
+        align: 'center',
+        bold: true,
+        color: '#0f172a',
+      },
+      {
+        type: 'field-row',
+        cells: [
+          { label: 'Date', field: 'schedule.workDateLabel', width: 30, bold: true, fontSize: 9 },
+          { label: 'Status', field: 'schedule.status', width: 16, fontSize: 9 },
+          { label: 'Groups', field: 'schedule.groupCount', width: 12, align: 'center', fontSize: 9 },
+          { label: 'Workers', field: 'schedule.assignedWorkerCount', width: 12, align: 'center', fontSize: 9 },
+          { label: 'Driver trips', field: 'schedule.driverTripSummary', width: 18, fontSize: 8 },
+          { label: 'Remarks', field: 'schedule.remarksSummary', width: 12, align: 'right', fontSize: 8 },
+        ],
+        bordered: true,
+        minHeight: 10,
+      },
+      {
+        type: 'table',
+        dataSource: 'scheduleGroups',
+        layoutMode: 'group-columns',
+        columns: [
+          { header: 'Work location', field: 'locationDisplay', align: 'left' },
+          { header: 'Job No', field: 'jobNumber', align: 'left' },
+          { header: 'Customer', field: 'customerName', align: 'left' },
+          { header: 'Project details', field: 'projectDetails', align: 'left' },
+          { header: 'Team leader', field: 'teamLeaderName', align: 'left' },
+          { header: 'Drivers', field: 'driverNames', align: 'left' },
+            { header: 'Assigned workers', field: 'workerBlocks', align: 'left' },
+          { header: 'Duty timing', field: 'dutyRange', align: 'center' },
+          { header: 'Break timing', field: 'breakRange', align: 'center' },
+          { header: 'Remarks', field: 'remarks', align: 'left' },
+        ],
+        fontSize: 7,
+        showBorders: true,
+        headerBg: '#0f172a',
+        headerColor: '#ffffff',
+        repeatHeaderOnNewPage: true,
+        minRows: 3,
+        rowPadding: 2,
+      },
+      {
+        type: 'heading',
+        text: 'Driver Trip Plan',
+        fontSize: 11,
+        align: 'left',
+        bold: true,
+        color: '#0f172a',
+        pageAnchor: 'bottom',
+      },
+      {
+        type: 'table',
+        dataSource: 'driverTrips',
+        columns: [
+          { header: '#', field: 'slno', width: 8, align: 'center' },
+          { header: 'Driver', field: 'driverName', width: 28, align: 'left' },
+          { header: 'Trip Order / Route', field: 'tripOrder', width: 64, align: 'left' },
+        ],
+        fontSize: 8,
+        showBorders: true,
+        headerBg: '#e2e8f0',
+        headerColor: '#0f172a',
+        repeatHeaderOnNewPage: false,
+        minRows: 3,
+        rowPadding: 2,
+        pageAnchor: 'bottom',
+      },
+    ],
+    canvasMode: true,
+    canvasRects: [],
+  };
+  return {
+    ...base,
+    canvasRects: buildCanvasRectsFromSections(base),
+  };
+}

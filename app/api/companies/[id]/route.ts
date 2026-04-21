@@ -1,6 +1,7 @@
 import { auth }            from '@/auth';
 import { prisma }          from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { normalizeCompanyPrintTemplateShape } from '@/lib/utils/companyPrintTemplates';
 import { z }               from 'zod';
 
 const UpdateSchema = z.object({
@@ -10,7 +11,9 @@ const UpdateSchema = z.object({
   address:        z.string().max(500).optional(),
   phone:          z.string().max(50).optional(),
   email:          z.string().email().optional().or(z.literal('')),
-  printTemplates: z.array(z.any()).optional(),  // JSON array; structural validation done client-side
+  printTemplates: z.any().optional(),
+  externalCompanyId: z.string().max(120).optional().or(z.literal('')),
+  jobSourceMode: z.enum(['HYBRID', 'EXTERNAL_ONLY']).optional(),
 });
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,7 +24,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const company = await prisma.company.findUnique({ where: { id } });
   if (!company) return errorResponse('Company not found', 404);
 
-  return successResponse(company);
+  return successResponse(normalizeCompanyPrintTemplateShape(company as Record<string, unknown>));
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -61,6 +64,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (parsed.data.phone !== undefined) update.phone = parsed.data.phone;
   if (parsed.data.email !== undefined) update.email = parsed.data.email;
   if (parsed.data.printTemplates !== undefined) update.printTemplates = parsed.data.printTemplates;
+  if (isSA && parsed.data.externalCompanyId !== undefined) {
+    update.externalCompanyId = parsed.data.externalCompanyId || null;
+  }
+  if (isSA && parsed.data.jobSourceMode !== undefined) {
+    update.jobSourceMode = parsed.data.jobSourceMode;
+  }
 
   const company = await prisma.company.update({
     where: { id },
@@ -68,5 +77,5 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   });
 
   if (!company) return errorResponse('Company not found', 404);
-  return successResponse(company);
+  return successResponse(normalizeCompanyPrintTemplateShape(company as Record<string, unknown>));
 }

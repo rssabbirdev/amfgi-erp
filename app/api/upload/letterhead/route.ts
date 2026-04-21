@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     // Delete old file from Drive if it exists
     if (company?.letterheadDriveId) {
       try {
-        await deleteFromDrive(company.letterheadDriveId);
+        await deleteFromDrive(company.letterheadDriveId, companyId);
       } catch (err) {
         // Log but don't fail if deletion fails
         console.error('Failed to delete old letterhead from Drive:', err);
@@ -60,18 +60,25 @@ export async function POST(req: Request) {
     }
 
     // Upload new file to Drive
-    const { id, webViewLink } = await uploadToDrive(
+    const { id, viewerUrl } = await uploadToDrive(
       buffer,
       `letterhead-${companyId}.jpg`,
       file.type,
-      folderId,
+      {
+        companyId,
+        rootFolderId: folderId,
+        folderPath: [
+          { key: 'drive-folder:company-root', name: 'Company' },
+          { key: 'drive-folder:company:letterhead', name: 'Letterhead' },
+        ],
+      },
     );
 
     // Update company with new URL and Drive ID
     const updated = await prisma.company.update({
       where: { id: companyId },
       data: {
-        letterheadUrl: webViewLink,
+        letterheadUrl: viewerUrl,
         letterheadDriveId: id,
       },
       select: { id: true, letterheadUrl: true, name: true },

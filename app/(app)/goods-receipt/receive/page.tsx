@@ -14,14 +14,6 @@ import {
   useDeleteReceiptEntryMutation,
 } from '@/store/hooks';
 
-interface Material {
-  _id: string;
-  name: string;
-  unit: string;
-  currentStock: number;
-  unitCost?: number;
-}
-
 interface Supplier {
   id: string;
   label: string;
@@ -31,6 +23,7 @@ interface LineItem {
   id: string;
   materialId: string;
   quantity: string;
+  quantityUomId: string;
   unitCost: string;
 }
 
@@ -39,7 +32,7 @@ function uid() {
 }
 
 function emptyLine(): LineItem {
-  return { id: uid(), materialId: '', quantity: '', unitCost: '' };
+  return { id: uid(), materialId: '', quantity: '', quantityUomId: '', unitCost: '' };
 }
 
 export default function ReceiveStockPage() {
@@ -99,6 +92,7 @@ export default function ReceiveStockPage() {
                 id: `line-${idx}`,
                 materialId: line.materialId || '',
                 quantity: String(line.quantity || ''),
+                quantityUomId: '',
                 unitCost: String(line.unitCost || ''),
               }));
               setLines(loadedLines);
@@ -140,10 +134,13 @@ export default function ReceiveStockPage() {
         if (l.id !== id) return l;
         const updated = { ...l, [field]: value };
         // Auto-fill unit cost from material master when material is selected
-        if (field === 'materialId' && value) {
-          const mat = materialsData.find((m) => m.id === value);
-          if (mat?.unitCost !== undefined) {
-            updated.unitCost = String(mat.unitCost);
+        if (field === 'materialId') {
+          updated.quantityUomId = '';
+          if (value) {
+            const mat = materialsData.find((m) => m.id === value);
+            if (mat?.unitCost !== undefined) {
+              updated.unitCost = String(mat.unitCost);
+            }
           }
         }
         return updated;
@@ -220,14 +217,16 @@ export default function ReceiveStockPage() {
         lines: validLines.map((l) => ({
           materialId: l.materialId,
           quantity: parseFloat(l.quantity),
+          quantityUomId: l.quantityUomId.trim() || undefined,
           unitCost: l.unitCost ? parseFloat(l.unitCost) : undefined,
         })),
-        // Update material unit costs
+        // Update material unit costs (stored per base UOM; converted server-side if quantityUomId set)
         materialUpdates: validLines
           .filter((l) => l.unitCost)
           .map((l) => ({
             materialId: l.materialId,
             unitCost: parseFloat(l.unitCost),
+            quantityUomId: l.quantityUomId.trim() || undefined,
           })),
       }).unwrap();
 
@@ -340,10 +339,13 @@ export default function ReceiveStockPage() {
               <tr className="bg-slate-800 border-b border-slate-700">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide w-8">#</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide min-w-[220px]">Material</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide w-20">Unit</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide min-w-[128px]">UOM</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-28">Stock</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Qty *</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Unit Cost (AED)</th>
+                <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-36">
+                  Unit cost (AED)
+                  <span className="block font-normal normal-case text-slate-500">per UOM selected</span>
+                </th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Total</th>
                 <th className="px-2 py-3 w-20"></th>
               </tr>
@@ -384,8 +386,23 @@ export default function ReceiveStockPage() {
                       {isDup && <p className="text-red-400 text-xs mt-0.5">Duplicate — merge rows</p>}
                     </td>
 
-                    <td className="px-3 py-2 text-center text-slate-400 text-xs font-medium min-w-[90px]">
-                      {mat?.unit ?? '—'}
+                    <td className="px-3 py-2 text-center text-slate-400 text-xs min-w-[120px]">
+                      {mat?.materialUoms && mat.materialUoms.length > 0 ? (
+                        <select
+                          value={line.quantityUomId}
+                          onChange={(e) => updateLine(line.id, 'quantityUomId', e.target.value)}
+                          className="w-full max-w-44 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs"
+                        >
+                          {mat.materialUoms.map((u) => (
+                            <option key={u.id} value={u.isBase ? '' : u.id}>
+                              {u.unitName}
+                              {u.isBase ? ' (base)' : ` (=${u.factorToBase} ${mat.unit})`}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="font-medium">{mat?.unit ?? '—'}</span>
+                      )}
                     </td>
 
                     <td className="px-3 py-2 text-right font-mono text-sm">

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { HoverTooltip, useLgUp } from '@/components/ui/HoverTooltip';
+import { isEmployeeSelfServiceUser } from '@/lib/auth/selfService';
 
 interface NavItem {
   href:  string;
@@ -13,6 +14,8 @@ interface NavItem {
   perm?: string;
   /** Super admin only */
   adminOnly?: boolean;
+  /** Shown only when the user is linked to an employee (self-service) */
+  linkedEmployeeOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -80,6 +83,24 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    href: '/hr', label: 'HR', perm: 'hr.employee.view',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/me', label: 'My HR', linkedEmployeeOnly: true,
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+          d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
     href: '/reports/job-consumption', label: 'Reports', perm: 'report.view',
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,6 +117,21 @@ const NAV_ITEMS: NavItem[] = [
           d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
           d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/settings/media',
+    label: 'Media library',
+    perm: 'settings.manage',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.5}
+          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+        />
       </svg>
     ),
   },
@@ -148,8 +184,45 @@ export default function Sidebar({
   const permissions = (session?.user?.permissions ?? []) as string[];
   const isSuperAdmin = session?.user?.isSuperAdmin ?? false;
 
-  const visibleItems = NAV_ITEMS.filter((item) => {
+  const linkedEmployeeId = (session?.user as { linkedEmployeeId?: string | null } | undefined)?.linkedEmployeeId;
+  const selfServiceOnly = isEmployeeSelfServiceUser(session?.user);
+
+  const selfServiceItems: NavItem[] = [
+    {
+      href: '/me/profile',
+      label: 'My Profile',
+      linkedEmployeeOnly: true,
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+          />
+        </svg>
+      ),
+    },
+    {
+      href: '/me/attendance',
+      label: 'My Attendance',
+      linkedEmployeeOnly: true,
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z"
+          />
+        </svg>
+      ),
+    },
+  ];
+
+  const visibleItems = (selfServiceOnly ? selfServiceItems : NAV_ITEMS).filter((item) => {
     if (item.adminOnly) return isSuperAdmin;
+    if (item.linkedEmployeeOnly) return Boolean(linkedEmployeeId);
     if (item.perm)      return isSuperAdmin || permissions.includes(item.perm);
     return true;
   });
@@ -198,9 +271,11 @@ export default function Sidebar({
               .join(' ')}
           >
             <p className="truncate text-sm font-semibold leading-tight text-white">
-              {activeCompanyName ?? 'Select Company'}
+              {selfServiceOnly ? 'Employee Portal' : activeCompanyName ?? 'Select Company'}
             </p>
-            <p className="text-xs leading-tight text-slate-500">AMFGI ERP</p>
+            <p className="text-xs leading-tight text-slate-500">
+              {selfServiceOnly ? 'Self service' : 'AMFGI ERP'}
+            </p>
           </div>
         </div>
       </div>
@@ -295,8 +370,6 @@ export default function Sidebar({
           </HoverTooltip>
         </div>
       )}
-
-      {/* Footer */}
       <div
         className={[
           'border-t border-white/5 px-3 py-3 text-center text-[11px] text-slate-600 sm:py-4',

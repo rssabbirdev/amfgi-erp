@@ -2,51 +2,52 @@
  * Seed script — Prisma MySQL version
  * Bootstraps the shared database with comprehensive test data:
  *   • Companies: AMFGI, K&M (with profiles: address, phone, email)
- *   • Company Print Templates: Six delivery note layouts — all freeform canvas with stacked rects (one default)
+ *   • Company Print Templates: Delivery note + work schedule layouts ready for print builder and daily schedule printing
  *   • Roles: Admin, Manager (with settings.manage), Store Keeper (with permissions)
  *   • Users: Super Admin, AMFGI Manager, Store Keeper
  *   • Per-company: Units, Categories, Warehouses
  *   • Per-company: Materials with stock batches, logs, transactions (STOCK_IN)
- *   • Per-company: Customers, Suppliers, Jobs (with variations)
+ *   • Per-company: Customers, Suppliers, Jobs (with variations, contactsJson + contactPerson, LPO/quotation demo)
+ *   • Companies: externalCompanyId (SEED-AMFGI / SEED-KM) for integration playground smoke tests
  *   • Per-company: Sample dispatch entries and 3+ delivery notes (STOCK_OUT)
  *   • Delivery Notes: Structured with dynamic fields for template rendering
+ *   • HR Workforce: typed employee profiles (driver, office staff, hybrid, worker)
+ *   • Employee self-service demo logins linked to seeded employees
+ *   • Schedule notes + driver trip plan demo data
  *
  * Features:
- *   - Print template builder ready (templates pre-configured)
- *   - Delivery note printing with company letterhead support
+ *   - Print template builder ready (delivery note + work schedule templates pre-configured)
+ *   - Delivery note and work schedule printing with company letterhead support
  *   - FIFO stock consumption tracking with batch costing
  *   - Job variations for complex projects
  *
  * Run with: npx tsx scripts/seed.ts
  */
 
-import { PrismaClient } from '@prisma/client';
+import 'dotenv/config';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
+import { ensureDefaultEmployeeDocumentTypes } from '../lib/hr/defaultDocumentTypes';
+import { DEFAULT_EMPLOYEE_TYPE_SETTINGS } from '../lib/hr/employeeTypeSettings';
+import { buildWorkforceProfileExtension, type WorkforceEmployeeType } from '../lib/hr/workforceProfile';
+import { ALL_PERMISSIONS, ROLE_PRESETS } from '../lib/permissions';
 import { parsePartyListDateInput } from '../lib/partyListsApi';
 import { companySeedPrintTemplates } from './seed-print-templates';
 
-const prisma = new PrismaClient();
+const databaseUrl = process.env.DATABASE_URL;
 
-const ALL_PERMISSIONS = [
-  'company.view', 'company.create', 'company.edit',
-  'user.view', 'user.create', 'user.edit', 'user.delete',
-  'role.manage',
-  'material.view', 'material.create', 'material.edit', 'material.delete',
-  'job.view', 'job.create', 'job.edit',
-  'customer.view', 'customer.create', 'customer.edit', 'customer.delete',
-  'transaction.stock_in', 'transaction.stock_out', 'transaction.return', 'transaction.transfer',
-  'report.view',
-];
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is not set for the seed script.');
+}
 
-const MANAGER_PERMISSIONS = [
-  'material.view', 'material.create', 'material.edit',
-  'job.view', 'job.create', 'job.edit',
-  'customer.view', 'customer.create', 'customer.edit',
-  'transaction.stock_in', 'transaction.stock_out', 'transaction.return', 'transaction.transfer',
-  'report.view',
-  'user.view',
-  'settings.manage',
-];
+const prisma = new PrismaClient({
+  adapter: new PrismaMariaDb(databaseUrl),
+  log: ['error', 'warn'],
+});
+
+const MANAGER_PERMISSIONS = ROLE_PRESETS.manager;
 
 const STORE_KEEPER_PERMISSIONS = [
   'material.view',
@@ -104,14 +105,81 @@ interface SupplierDef {
   contacts?: PartyContactSeed[];
 }
 
+/** Same shape as job form / PM sync `contactsJson` (label, name, number, email, designation) */
+interface JobContactSeed {
+  label?: string;
+  name: string;
+  email?: string | null;
+  number?: string | null;
+  designation?: string | null;
+}
+
 interface JobDef {
   jobNumber: string;
   description?: string;
   site?: string;
+  /** Stored on `Job.contactPerson` (first contact name used if omitted) */
+  contactPerson?: string;
+  salesPerson?: string;
+  address?: string;
+  projectName?: string;
+  projectDetails?: string;
+  quotationNumber?: string;
+  lpoNumber?: string;
+  lpoValue?: number;
+  contacts?: JobContactSeed[];
   variations?: Array<{
     suffix: string;
     description?: string;
   }>;
+}
+
+function jobContactsToJson(contacts: JobContactSeed[] | undefined): object {
+  if (!contacts?.length) return [] as object;
+  const rows = contacts.map((c) => {
+    const o: Record<string, string> = { name: c.name.trim() };
+    if (c.label?.trim()) o.label = c.label.trim();
+    if (c.email?.trim()) o.email = c.email.trim();
+    if (c.number?.trim()) o.number = c.number.trim();
+    if (c.designation?.trim()) o.designation = c.designation.trim();
+    return o;
+  });
+  return JSON.parse(JSON.stringify(rows)) as object;
+}
+
+function primaryJobContactPersonFromSeed(j: JobDef): string | null {
+  if (j.contactPerson?.trim()) return j.contactPerson.trim();
+  const first = j.contacts?.find((c) => c.name?.trim());
+  return first?.name?.trim() || null;
+}
+
+function buildJobUpsertPayload(
+  j: JobDef,
+  customerId: string,
+  extras: { parentJobId?: string | null; jobNumberOverride?: string; isVariation?: boolean }
+) {
+  const jobNumber = extras.jobNumberOverride ?? j.jobNumber;
+  const isVar = extras.isVariation ?? false;
+  const contactsJson = isVar ? jobContactsToJson(undefined) : jobContactsToJson(j.contacts);
+  return {
+    jobNumber,
+    customerId,
+    description: j.description || '',
+    site: j.site ?? null,
+    address: isVar ? null : j.address?.trim() || null,
+    status: 'ACTIVE' as const,
+    contactPerson: isVar ? null : primaryJobContactPersonFromSeed(j),
+    salesPerson: isVar ? null : j.salesPerson?.trim() || null,
+    contactsJson,
+    projectName: isVar ? null : j.projectName?.trim() || null,
+    projectDetails: isVar ? null : j.projectDetails?.trim() || null,
+    quotationNumber: isVar ? null : j.quotationNumber?.trim() || null,
+    lpoNumber: isVar ? null : j.lpoNumber?.trim() || null,
+    lpoValue: isVar ? null : (j.lpoValue ?? null),
+    parentJobId: extras.parentJobId ?? null,
+    createdBy: 'System Seed',
+    createdAt: new Date(),
+  };
 }
 
 async function seedCompanyData(
@@ -176,6 +244,10 @@ async function seedCompanyData(
   // Create units
   const unitNames = new Set<string>();
   materials.forEach((m) => unitNames.add(m.unit));
+  if (companyName === 'AMFGI') {
+    unitNames.add('drum');
+    unitNames.add('pallet');
+  }
 
   const createdUnits: Record<string, string> = {};
   for (const unitName of unitNames) {
@@ -280,6 +352,73 @@ async function seedCompanyData(
     });
   }
 
+  // Material UOM: base row per material + AMFGI Acetone drum/pallet demo chain
+  for (const m of materials) {
+    const mid = createdMaterials[m.name];
+    const unitRow = await prisma.unit.findUnique({
+      where: { companyId_name: { companyId, name: m.unit } },
+    });
+    if (mid && unitRow) {
+      const hasBase = await prisma.materialUom.findFirst({
+        where: { materialId: mid, isBase: true },
+      });
+      if (!hasBase) {
+        await prisma.materialUom.create({
+          data: {
+            companyId,
+            materialId: mid,
+            unitId: unitRow.id,
+            isBase: true,
+            parentUomId: null,
+            factorToParent: 1,
+          },
+        });
+      }
+    }
+  }
+
+  if (companyName === 'AMFGI') {
+    const acetoneId = createdMaterials['Acetone'];
+    if (acetoneId) {
+      const base = await prisma.materialUom.findFirst({
+        where: { materialId: acetoneId, isBase: true },
+      });
+      const drumU = await prisma.unit.findUnique({
+        where: { companyId_name: { companyId, name: 'drum' } },
+      });
+      const palletU = await prisma.unit.findUnique({
+        where: { companyId_name: { companyId, name: 'pallet' } },
+      });
+      if (base && drumU && palletU) {
+        const existingDrum = await prisma.materialUom.findFirst({
+          where: { materialId: acetoneId, unitId: drumU.id },
+        });
+        if (!existingDrum) {
+          const drum = await prisma.materialUom.create({
+            data: {
+              companyId,
+              materialId: acetoneId,
+              unitId: drumU.id,
+              isBase: false,
+              parentUomId: base.id,
+              factorToParent: 190,
+            },
+          });
+          await prisma.materialUom.create({
+            data: {
+              companyId,
+              materialId: acetoneId,
+              unitId: palletU.id,
+              isBase: false,
+              parentUomId: drum.id,
+              factorToParent: 6,
+            },
+          });
+        }
+      }
+    }
+  }
+
   // Create suppliers
   for (const s of suppliers) {
     const existing = await prisma.supplier.findFirst({
@@ -335,19 +474,26 @@ async function seedCompanyData(
   let firstJobId: string | null = null;
   if (firstCustomerId) {
     for (const j of jobs) {
-      // Create main job
+      const mainPayload = buildJobUpsertPayload(j, firstCustomerId, {});
       const mainJob = await prisma.job.upsert({
         where: { companyId_jobNumber: { companyId, jobNumber: j.jobNumber } },
-        update: { status: 'ACTIVE' },
+        update: {
+          status: 'ACTIVE',
+          description: mainPayload.description,
+          site: mainPayload.site,
+          address: mainPayload.address,
+          contactPerson: mainPayload.contactPerson,
+          salesPerson: mainPayload.salesPerson,
+          contactsJson: mainPayload.contactsJson,
+          projectName: mainPayload.projectName,
+          projectDetails: mainPayload.projectDetails,
+          quotationNumber: mainPayload.quotationNumber,
+          lpoNumber: mainPayload.lpoNumber,
+          lpoValue: mainPayload.lpoValue,
+        },
         create: {
           companyId,
-          jobNumber: j.jobNumber,
-          customerId: firstCustomerId,
-          description: j.description || '',
-          site: j.site,
-          status: 'ACTIVE',
-          createdAt: new Date(),
-          createdBy: 'System Seed',
+          ...mainPayload,
         },
       });
 
@@ -357,19 +503,29 @@ async function seedCompanyData(
       if (j.variations && j.variations.length > 0) {
         for (const variation of j.variations) {
           const variationNumber = `${j.jobNumber}-${variation.suffix}`;
+          const varPayload = buildJobUpsertPayload(
+            {
+              ...j,
+              description: variation.description || `${j.description} - ${variation.suffix}`,
+            },
+            firstCustomerId,
+            {
+              jobNumberOverride: variationNumber,
+              parentJobId: mainJob.id,
+              isVariation: true,
+            }
+          );
           await prisma.job.upsert({
             where: { companyId_jobNumber: { companyId, jobNumber: variationNumber } },
-            update: { status: 'ACTIVE' },
+            update: {
+              status: 'ACTIVE',
+              description: varPayload.description,
+              site: varPayload.site,
+              parentJobId: mainJob.id,
+            },
             create: {
               companyId,
-              jobNumber: variationNumber,
-              customerId: firstCustomerId,
-              description: variation.description || `${j.description} - ${variation.suffix}`,
-              site: j.site,
-              status: 'ACTIVE',
-              parentJobId: mainJob.id,
-              createdAt: new Date(),
-              createdBy: 'System Seed',
+              ...varPayload,
             },
           });
         }
@@ -405,7 +561,15 @@ async function seedCompanyData(
       const dnDate = new Date(Date.now() - (5 - dnNum) * 24 * 60 * 60 * 1000);
       const dnQuantity = 10 + dnNum * 5;
 
-      let dnNotes = `--- DELIVERY NOTE #${dnNum}\n--- DELIVERY NOTE ITEMS (For Printing) ---\n`;
+      const seedContactName =
+        jobs[0]?.contactPerson?.trim() ||
+        jobs[0]?.contacts?.find((c) => c.name?.trim())?.name?.trim() ||
+        '';
+      let dnNotes = `--- DELIVERY NOTE #${dnNum}`;
+      if (seedContactName) {
+        dnNotes += `\n--- DELIVERY CONTACT PERSON: ${seedContactName}`;
+      }
+      dnNotes += `\n--- DELIVERY NOTE ITEMS (For Printing) ---\n`;
 
       if (companyName === 'AMFGI') {
         dnNotes += `• ${materials[0].name} | ${dnQuantity}kg\n`;
@@ -438,15 +602,435 @@ async function seedCompanyData(
   );
 }
 
+function atTime(dateOnly: Date, hhmm: string): Date {
+  const [h, m] = hhmm.split(':').map((x) => Number(x));
+  return new Date(
+    dateOnly.getFullYear(),
+    dateOnly.getMonth(),
+    dateOnly.getDate(),
+    Number.isFinite(h) ? h : 0,
+    Number.isFinite(m) ? m : 0,
+    0,
+    0
+  );
+}
+
+function isMissingWorkScheduleNotesColumn(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2022' &&
+    String(error.meta?.column ?? '').toLowerCase().includes('notes')
+  );
+}
+
+async function upsertWorkScheduleCompat(args: {
+  companyId: string;
+  workDate: Date;
+  title: string;
+  notes: string | null;
+  createdById: string;
+}) {
+  const withNotes = {
+    where: { companyId_workDate: { companyId: args.companyId, workDate: args.workDate } },
+    update: {
+      title: args.title,
+      notes: args.notes,
+      status: 'PUBLISHED' as const,
+      publishedAt: new Date(),
+      createdById: args.createdById,
+    },
+    create: {
+      companyId: args.companyId,
+      workDate: args.workDate,
+      title: args.title,
+      notes: args.notes,
+      status: 'PUBLISHED' as const,
+      publishedAt: new Date(),
+      createdById: args.createdById,
+    },
+  };
+
+  try {
+    return await prisma.workSchedule.upsert(withNotes as never);
+  } catch (error) {
+    if (!isMissingWorkScheduleNotesColumn(error)) throw error;
+    const existingRows = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id
+      FROM WorkSchedule
+      WHERE companyId = ${args.companyId} AND workDate = ${args.workDate}
+      LIMIT 1
+    `;
+    const publishedAt = new Date();
+
+    if (existingRows[0]?.id) {
+      await prisma.$executeRaw`
+        UPDATE WorkSchedule
+        SET
+          title = ${args.title},
+          status = ${'PUBLISHED'},
+          publishedAt = ${publishedAt},
+          createdById = ${args.createdById},
+          updatedAt = NOW()
+        WHERE id = ${existingRows[0].id}
+      `;
+      return { id: existingRows[0].id };
+    }
+
+    const scheduleId = randomUUID();
+    await prisma.$executeRaw`
+      INSERT INTO WorkSchedule (
+        id,
+        companyId,
+        workDate,
+        title,
+        status,
+        publishedAt,
+        createdById,
+        createdAt,
+        updatedAt
+      )
+      VALUES (
+        ${scheduleId},
+        ${args.companyId},
+        ${args.workDate},
+        ${args.title},
+        ${'PUBLISHED'},
+        ${publishedAt},
+        ${args.createdById},
+        NOW(),
+        NOW()
+      )
+    `;
+
+    return { id: scheduleId };
+  }
+}
+
+async function seedHrWorkforceDemo(
+  companyId: string,
+  createdById: string,
+  employeeSelfRoleId: string,
+  emailDomain: string,
+) {
+  console.log('\nSeeding HR workforce demo data…');
+
+  const employeeTypeSequence: WorkforceEmployeeType[] = [
+    'DRIVER', 'DRIVER', 'DRIVER', 'DRIVER', 'DRIVER', 'DRIVER',
+    'OFFICE_STAFF', 'OFFICE_STAFF', 'OFFICE_STAFF', 'OFFICE_STAFF', 'OFFICE_STAFF', 'OFFICE_STAFF',
+    'HYBRID_STAFF', 'HYBRID_STAFF', 'HYBRID_STAFF', 'HYBRID_STAFF', 'HYBRID_STAFF', 'HYBRID_STAFF',
+    'LABOUR_WORKER', 'LABOUR_WORKER', 'LABOUR_WORKER', 'LABOUR_WORKER', 'LABOUR_WORKER', 'LABOUR_WORKER',
+    'LABOUR_WORKER', 'LABOUR_WORKER', 'LABOUR_WORKER', 'LABOUR_WORKER', 'LABOUR_WORKER', 'LABOUR_WORKER',
+  ];
+  const firstNames = [
+    'Ahmed', 'Ali', 'Hassan', 'Omar', 'Yousef', 'Khalid', 'Nasser', 'Saeed', 'Salman', 'Fahad',
+    'Rahim', 'Karim', 'Imran', 'Bilal', 'Tariq', 'Javed', 'Rashid', 'Majid', 'Amir', 'Farhan',
+    'Sameer', 'Hamza', 'Irfan', 'Shahid', 'Nawaz', 'Rehan', 'Anas', 'Waqar', 'Adnan', 'Sajid',
+  ];
+  const lastNames = [
+    'Khan', 'Hussain', 'Rahman', 'Qureshi', 'Ansari', 'Iqbal', 'Shaikh', 'Mirza', 'Nadeem', 'Saleem',
+  ];
+
+  for (let i = 1; i <= 30; i++) {
+    const f = firstNames[(i - 1) % firstNames.length];
+    const l = lastNames[(i - 1) % lastNames.length];
+    const fullName = `${f} ${l}`;
+    const preferredName = f;
+    const code = `EMP${String(i).padStart(3, '0')}`;
+    const employeeType = employeeTypeSequence[i - 1] ?? 'LABOUR_WORKER';
+    const designation =
+      employeeType === 'DRIVER'
+        ? 'Driver'
+        : employeeType === 'OFFICE_STAFF'
+          ? 'Office Staff'
+          : employeeType === 'HYBRID_STAFF'
+            ? 'Hybrid Staff'
+            : i % 5 === 0
+              ? 'Team Lead'
+              : i % 2 === 0
+                ? 'Skilled Worker'
+                : 'Worker';
+    const department =
+      employeeType === 'DRIVER'
+        ? 'Transport'
+        : employeeType === 'OFFICE_STAFF'
+          ? 'Administration'
+          : employeeType === 'HYBRID_STAFF'
+            ? 'Operations'
+            : i % 3 === 0
+              ? 'Lamination'
+              : i % 3 === 1
+                ? 'Production'
+                : 'Site Ops';
+    const expertises =
+      employeeType === 'DRIVER'
+        ? ['Driving']
+        : employeeType === 'OFFICE_STAFF'
+          ? ['Quality Inspection']
+          : employeeType === 'HYBRID_STAFF'
+            ? ['Installation', 'Quality Inspection']
+            : i % 4 === 0
+              ? ['Lamination', 'Assembly']
+              : i % 4 === 1
+                ? ['Moulding', 'Finishing']
+                : i % 4 === 2
+                  ? ['Gelcoat', 'Assembly']
+                  : ['Installation', 'Scaffolding'];
+    await prisma.employee.upsert({
+      where: { companyId_employeeCode: { companyId, employeeCode: code } },
+      update: {
+        fullName,
+        preferredName,
+        department,
+        designation,
+        status: 'ACTIVE',
+        profileExtension: buildWorkforceProfileExtension({
+          employeeType,
+          visaHolding: i % 7 === 0 ? 'SELF_OWN' : i % 11 === 0 ? 'NO_VISA' : 'COMPANY_PROVIDED',
+          expertises,
+        }) as Prisma.InputJsonValue,
+      },
+      create: {
+        companyId,
+        employeeCode: code,
+        fullName,
+        preferredName,
+        email: `employee${i}@${emailDomain}`,
+        phone: `+97150000${String(i).padStart(4, '0')}`,
+        department,
+        designation,
+        employmentType: 'Full-time',
+        hireDate: new Date(2024, (i % 12), ((i % 27) + 1)),
+        status: 'ACTIVE',
+        portalEnabled: i <= 8,
+        nationality: i % 5 === 0 ? 'India' : i % 5 === 1 ? 'Pakistan' : i % 5 === 2 ? 'Bangladesh' : i % 5 === 3 ? 'Nepal' : 'UAE',
+        profileExtension: buildWorkforceProfileExtension({
+          employeeType,
+          visaHolding: i % 7 === 0 ? 'SELF_OWN' : i % 11 === 0 ? 'NO_VISA' : 'COMPANY_PROVIDED',
+          expertises,
+        }) as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  const employees = await prisma.employee.findMany({
+    where: { companyId, status: 'ACTIVE' },
+    orderBy: { employeeCode: 'asc' },
+    take: 30,
+  });
+  const drivers = employees.filter((employee) => {
+    const workforce = (employee.profileExtension as Record<string, unknown> | null)?.workforce as Record<string, unknown> | undefined;
+    return String(workforce?.employeeType ?? '').toUpperCase() === 'DRIVER';
+  });
+  const schedulableEmployees = employees.filter((employee) => {
+    const workforce = (employee.profileExtension as Record<string, unknown> | null)?.workforce as Record<string, unknown> | undefined;
+    const employeeType = String(workforce?.employeeType ?? '').toUpperCase();
+    return employeeType === 'LABOUR_WORKER' || employeeType === 'HYBRID_STAFF';
+  });
+  const jobs = await prisma.job.findMany({
+    where: { companyId, status: 'ACTIVE' },
+    orderBy: { jobNumber: 'asc' },
+    take: 8,
+  });
+  if (!jobs.length || !employees.length) {
+    console.log('  ! Skipped schedule/attendance demo (missing jobs/employees)');
+    return;
+  }
+
+  const portalEmployees = employees.filter((employee) => employee.portalEnabled).slice(0, 4);
+  const employeePortalHash = await bcrypt.hash('Employee@1234', 12);
+  for (const employee of portalEmployees) {
+    const email = `me.${employee.employeeCode.toLowerCase()}@${emailDomain}`;
+    await prisma.user.upsert({
+      where: { email },
+      update: {
+        name: employee.preferredName || employee.fullName,
+        password: employeePortalHash,
+        isSuperAdmin: false,
+        isActive: true,
+        activeCompanyId: companyId,
+        linkedEmployeeId: employee.id,
+      },
+      create: {
+        name: employee.preferredName || employee.fullName,
+        email,
+        password: employeePortalHash,
+        isSuperAdmin: false,
+        isActive: true,
+        activeCompanyId: companyId,
+        linkedEmployeeId: employee.id,
+        companyAccess: {
+          create: {
+            companyId,
+            roleId: employeeSelfRoleId,
+          },
+        },
+      },
+    });
+  }
+
+  // Create several published schedules (recent 6 days)
+  for (let day = 0; day < 6; day++) {
+    const workDate = new Date();
+    workDate.setDate(workDate.getDate() - day);
+    workDate.setHours(0, 0, 0, 0);
+
+    const schedule = await upsertWorkScheduleCompat({
+      companyId,
+      workDate,
+      title: `Daily Workforce Plan D-${day}`,
+      notes:
+        day % 2 === 0
+          ? 'General notes: prioritize site safety briefing before deployment.'
+          : 'General notes: align transport and factory dispatch before 8 AM.',
+      createdById,
+    });
+
+    // Refresh assignment/attendance for deterministic seed
+    await prisma.attendanceEntry.deleteMany({
+      where: { companyId, workDate },
+    });
+    await prisma.workAssignment.deleteMany({
+      where: { workScheduleId: schedule.id },
+    });
+
+    const groupSize = 6;
+    const assignmentMap = new Map<string, string>();
+
+    for (let g = 0; g < 5; g++) {
+      const start = g * groupSize;
+      const teamMembers = schedulableEmployees.slice(start, start + groupSize);
+      if (!teamMembers.length) continue;
+      const dayDrivers = drivers.slice(g % Math.max(drivers.length, 1), (g % Math.max(drivers.length, 1)) + 2);
+      const driver1 = dayDrivers[0] ?? null;
+      const driver2 = dayDrivers[1] ?? null;
+
+      const job = jobs[g % jobs.length];
+      const isFactory = g % 2 === 1;
+      const dutyStart = g % 2 === 0 ? '08:00' : '08:30';
+      const dutyEnd = g % 2 === 0 ? '17:00' : '17:30';
+      const brk = g % 2 === 0 ? '12:00 - 12:30' : '12:30 - 13:00';
+
+      const assignment = await prisma.workAssignment.create({
+        data: {
+          workScheduleId: schedule.id,
+          columnIndex: g + 1,
+          label: `Team#${g + 1}`,
+          locationType: isFactory ? 'FACTORY' : 'SITE_JOB',
+          jobId: job.id,
+          factoryCode: isFactory ? job.jobNumber : null,
+          factoryLabel: isFactory ? 'Factory Line' : null,
+          jobNumberSnapshot: job.jobNumber,
+          teamLeaderEmployeeId: teamMembers[0]?.id ?? null,
+          driver1EmployeeId: driver1?.id ?? null,
+          driver2EmployeeId: driver2?.id ?? null,
+          shiftStart: dutyStart,
+          shiftEnd: dutyEnd,
+          breakWindow: brk,
+          targetQty: isFactory ? 120 + g * 15 : 8 + g * 2,
+          unit: isFactory ? 'pcs' : 'jobs',
+          remarks: isFactory ? 'Factory batch production' : 'Site deployment',
+        },
+      });
+
+      for (let m = 0; m < teamMembers.length; m++) {
+        const emp = teamMembers[m];
+        await prisma.workAssignmentMember.create({
+          data: {
+            workAssignmentId: assignment.id,
+            employeeId: emp.id,
+            role: m === 0 ? 'TEAM_LEADER' : 'WORKER',
+            slot: m + 1,
+          },
+        });
+        assignmentMap.set(emp.id, assignment.id);
+      }
+
+      if (driver1) {
+        await prisma.driverRunLog.create({
+          data: {
+            workScheduleId: schedule.id,
+            driverEmployeeId: driver1.id,
+            routeText: isFactory ? `Trip 1 - Factory line support for ${job.jobNumber}` : `Trip 1 - Site team drop for ${job.jobNumber}`,
+            sequence: g * 2,
+          },
+        });
+      }
+      if (driver2) {
+        await prisma.driverRunLog.create({
+          data: {
+            workScheduleId: schedule.id,
+            driverEmployeeId: driver2.id,
+            routeText: isFactory ? `Trip 2 - Material shuttle for ${job.jobNumber}` : `Trip 2 - Recovery / standby for ${job.jobNumber}`,
+            sequence: g * 2 + 1,
+          },
+        });
+      }
+    }
+
+    for (let i = 0; i < schedulableEmployees.length; i++) {
+      const emp = schedulableEmployees[i];
+      const assignmentId = assignmentMap.get(emp.id) ?? null;
+      const absent = (i + day) % 11 === 0;
+      const halfDay = !absent && (i + day) % 13 === 0;
+      const checkIn = absent ? null : atTime(workDate, halfDay ? '09:30' : '08:00');
+      const checkOut = absent ? null : atTime(workDate, halfDay ? '13:00' : '17:00');
+      await prisma.attendanceEntry.createMany({
+        data: [
+          {
+            companyId,
+            employeeId: emp.id,
+            workDate,
+            workAssignmentId: assignmentId,
+            expectedShiftStart: atTime(workDate, '08:00'),
+            expectedShiftEnd: atTime(workDate, '17:00'),
+            checkInAt: checkIn,
+            checkOutAt: checkOut,
+            status: absent ? 'ABSENT' : halfDay ? 'HALF_DAY' : 'PRESENT',
+            workflowStatus: 'APPROVED',
+            source: 'SCHEDULE_BOILERPLATE',
+            lateMinutes: absent ? 0 : halfDay ? 30 : 0,
+            earlyLeaveMinutes: absent ? 0 : halfDay ? 240 : 0,
+            overtimeMinutes: absent ? 0 : i % 7 === 0 ? 30 : 0,
+            approvedById: createdById,
+            approvedAt: new Date(),
+          },
+        ],
+      });
+    }
+  }
+
+  console.log('  ✓ 30 employees seeded with workforce profiles');
+  console.log('    - 6 drivers');
+  console.log('    - 6 office staff');
+  console.log('    - 6 hybrid staff');
+  console.log('    - 12 labour / worker');
+  console.log('  ✓ 4 employee self-service logins linked to employees');
+  console.log('  ✓ 6 schedules with schedule-level notes and driver trip logs');
+  console.log('  ✓ Attendance entries generated for schedulable employees');
+}
+
 async function seed() {
   console.log('🌱 Starting Prisma seed…\n');
 
   // ── Delete old data (clean slate) ────────────────────────────────────────────
   console.log('Clearing old data…');
+  await prisma.user.updateMany({ data: { linkedEmployeeId: null } });
+  await prisma.attendanceEntry.deleteMany({});
+  await prisma.workAssignmentMember.deleteMany({});
+  await prisma.driverRunLog.deleteMany({});
+  await prisma.scheduleAbsence.deleteMany({});
+  await prisma.workAssignment.deleteMany({});
+  await prisma.workSchedule.deleteMany({});
+  await prisma.employeeDocument.deleteMany({});
+  await prisma.visaPeriod.deleteMany({});
+  await prisma.employee.deleteMany({});
+  await prisma.employeeDocumentType.deleteMany({});
   await prisma.transactionBatch.deleteMany({});
   await prisma.transaction.deleteMany({});
   await prisma.priceLog.deleteMany({});
   await prisma.materialLog.deleteMany({});
+  await prisma.materialUom.updateMany({ data: { parentUomId: null } });
+  await prisma.materialUom.deleteMany({});
   await prisma.stockBatch.deleteMany({});
   await prisma.job.deleteMany({});
   await prisma.supplier.deleteMany({});
@@ -467,12 +1051,15 @@ async function seed() {
     data: {
       name: 'Almuraqib Fiber Glass Industry LLC',
       slug: 'amfgi',
+      externalCompanyId: 'SEED-AMFGI',
+      jobSourceMode: 'HYBRID',
       description: 'Fiberglass fabrication and moulding',
       address: 'P.O. Box 123456, Dubai, UAE\nJebel Ali Industrial Area 1\nDubai, United Arab Emirates',
       phone: '+971 4 885 1234',
       email: 'info@almuraqib.ae',
       isActive: true,
-      printTemplates: companySeedPrintTemplates,
+      hrEmployeeTypeSettings: DEFAULT_EMPLOYEE_TYPE_SETTINGS as unknown as Prisma.InputJsonValue,
+      printTemplates: companySeedPrintTemplates as unknown as Prisma.InputJsonValue,
     },
   });
 
@@ -480,17 +1067,24 @@ async function seed() {
     data: {
       name: 'K&M Industries',
       slug: 'km',
+      externalCompanyId: 'SEED-KM',
+      jobSourceMode: 'HYBRID',
       description: 'Steel fabrication and structural work',
       address: 'P.O. Box 654321, Abu Dhabi, UAE\nIndustrial Zone 3\nAbu Dhabi, United Arab Emirates',
       phone: '+971 2 555 8888',
       email: 'info@kandm.ae',
       isActive: true,
-      printTemplates: companySeedPrintTemplates,
+      hrEmployeeTypeSettings: DEFAULT_EMPLOYEE_TYPE_SETTINGS as unknown as Prisma.InputJsonValue,
+      printTemplates: companySeedPrintTemplates as unknown as Prisma.InputJsonValue,
     },
   });
 
   console.log(`  ✓ ${amfgi.name}`);
   console.log(`  ✓ ${km.name}`);
+
+  await ensureDefaultEmployeeDocumentTypes(prisma, amfgi.id);
+  await ensureDefaultEmployeeDocumentTypes(prisma, km.id);
+  console.log('  ✓ Default HR document types (both companies)');
 
   // ── Roles ───────────────────────────────────────────────────────────────────
   console.log('\nCreating roles…');
@@ -521,9 +1115,24 @@ async function seed() {
     },
   });
 
+  const employeeSelfRole = await prisma.role.create({
+    data: {
+      name: 'Employee (self-service)',
+      slug: 'employee-self',
+      permissions: [
+        'self.employee.view',
+        'self.employee.documents',
+        'self.employee.schedule',
+        'self.employee.attendance',
+      ],
+      isSystem: true,
+    },
+  });
+
   console.log(`  ✓ ${adminRole.name}`);
   console.log(`  ✓ ${managerRole.name}`);
   console.log(`  ✓ ${skRole.name}`);
+  console.log(`  ✓ ${employeeSelfRole.name}`);
 
   // ── Users ───────────────────────────────────────────────────────────────────
   console.log('\nCreating users…');
@@ -560,6 +1169,24 @@ async function seed() {
     },
   });
   console.log(`  ✓ AMFGI Manager: ${mgr.email}`);
+
+  const kmMgr = await prisma.user.create({
+    data: {
+      name: 'K&M Manager',
+      email: 'manager@kandm.com',
+      password: mgrHash,
+      isSuperAdmin: false,
+      isActive: true,
+      activeCompanyId: km.id,
+      companyAccess: {
+        create: {
+          companyId: km.id,
+          roleId: managerRole.id,
+        },
+      },
+    },
+  });
+  console.log(`  ✓ K&M Manager: ${kmMgr.email}`);
 
   // AMFGI Store Keeper
   const skHash = await bcrypt.hash('Store@1234', 12);
@@ -636,8 +1263,8 @@ async function seed() {
       },
       {
         name: 'Acetone',
-        description: 'Acetone solvent for cleaning',
-        unit: 'liter',
+        description: 'Acetone solvent for cleaning (demo UOM: kg base, drum=190 kg, pallet=6 drums)',
+        unit: 'kg',
         category: 'Solvent',
         warehouse: 'Chemical Store',
         stockType: 'Consumable',
@@ -702,6 +1329,29 @@ async function seed() {
         jobNumber: 'JOB-2024-001',
         description: 'Fiberglass tank fabrication',
         site: 'Jebel Ali Port',
+        address: 'Gate 4, Jebel Ali Free Zone South',
+        projectName: 'Gulf Marine Tank Retrofit',
+        projectDetails: 'Multi-phase fabrication; see variations for scope splits.',
+        quotationNumber: 'QTN-SEED-AMFGI-001',
+        lpoNumber: 'LPO-SEED-AMFGI-001',
+        lpoValue: 485_000,
+        contactPerson: 'Ahmed Al-Mazrouei',
+        salesPerson: 'Omar Hassan',
+        contacts: [
+          {
+            label: 'site',
+            name: 'Ahmed Al-Mazrouei',
+            number: '+971 50 111 2233',
+            email: 'ahmed.site@example.com',
+            designation: 'Site Supervisor',
+          },
+          {
+            label: 'billing',
+            name: 'Sara Khalil',
+            email: 'billing@gulfmarine.ae',
+            designation: 'Accounts',
+          },
+        ],
         variations: [
           { suffix: 'v1', description: 'Phase 1 - Foundation and base structure' },
           { suffix: 'v2', description: 'Phase 2 - Walls and reinforcement' },
@@ -712,6 +1362,20 @@ async function seed() {
         jobNumber: 'JOB-2024-002',
         description: 'Marine hull repair',
         site: 'Mina Rashid',
+        quotationNumber: 'QTN-SEED-AMFGI-002',
+        lpoNumber: 'LPO-SEED-AMFGI-002',
+        lpoValue: 128_000,
+        contactPerson: 'James Porter',
+        salesPerson: 'Layla Ahmad',
+        contacts: [
+          {
+            label: 'site',
+            name: 'James Porter',
+            number: '+971 55 000 1001',
+            email: 'j.porter@example.com',
+            designation: 'Vessel liaison',
+          },
+        ],
         variations: [
           { suffix: 'assessment', description: 'Initial damage assessment' },
           { suffix: 'repair', description: 'Repair and restoration work' },
@@ -817,6 +1481,28 @@ async function seed() {
         jobNumber: 'JOB-2024-101',
         description: 'Steel structure fabrication',
         site: 'Business Bay',
+        address: 'Bay Square, Building 12',
+        projectName: 'Al Fardan canopy works',
+        quotationNumber: 'QTN-SEED-KM-101',
+        lpoNumber: 'LPO-SEED-KM-101',
+        lpoValue: 310_000,
+        contactPerson: 'Faisal Rahman',
+        salesPerson: 'Nadia Saleh',
+        contacts: [
+          {
+            label: 'site',
+            name: 'Faisal Rahman',
+            number: '+971 52 444 8899',
+            email: 'f.rahman@example.com',
+            designation: 'Project Engineer',
+          },
+          {
+            label: 'PMC',
+            name: 'Rita Dsouza',
+            number: '+971 4 201 0000',
+            designation: 'Clerk of works',
+          },
+        ],
         variations: [
           { suffix: 'stage1', description: 'Cutting and preparation' },
           { suffix: 'stage2', description: 'Welding and assembly' },
@@ -825,24 +1511,34 @@ async function seed() {
     ]
   );
 
+  // HR demo data for workforce module (both companies)
+  await seedHrWorkforceDemo(amfgi.id, mgr.id, employeeSelfRole.id, 'amfgi.com');
+  await seedHrWorkforceDemo(km.id, kmMgr.id, employeeSelfRole.id, 'kandm.com');
+
   console.log('\n✅ Seed complete!');
   console.log('─────────────────────────────────────────────────────');
   console.log('Login credentials:');
   console.log('  Super Admin:   admin@almuraqib.com     / Admin@1234');
   console.log('  AMFGI Manager: manager@amfgi.com       / Manager@1234');
+  console.log('  K&M Manager:   manager@kandm.com       / Manager@1234');
   console.log('  Store Keeper:  storekeeper@amfgi.com   / Store@1234');
+  console.log('  Employee Demo: me.emp001@amfgi.com     / Employee@1234');
   console.log('─────────────────────────────────────────────────────');
   console.log('\n📋 New Features:');
-  console.log('  ✓ Print Template Builder - Customize delivery note layouts');
+  console.log('  ✓ Print Template Builder - Customize delivery note and work schedule layouts');
   console.log('  ✓ Company Profiles - Address, phone, email configured');
-  console.log('  ✓ Print templates - Six professional delivery note layouts per company');
+  console.log('  ✓ Print templates - Delivery note set plus 3 seeded schedule print formats per company');
   console.log('  ✓ Sample Delivery Notes - 3 DNs per company for testing');
+  console.log('  ✓ Schedule printing - Landscape A4 work schedule formats ready for Print / Download');
+  console.log('  ✓ Workforce employee types - Driver, Office Staff, Hybrid Staff, Labour / Worker');
+  console.log('  ✓ Employee self-service - Linked portal users seeded for /me profile and attendance');
+  console.log('  ✓ Schedule notes + driver trips - Ready for schedule page and print builder fields');
   console.log('  ✓ Manager Permissions - Full access to settings.manage');
   console.log('\n🚀 Next steps:');
   console.log('  1. Log in as AMFGI Manager');
   console.log('  2. Go to Settings → Print Template');
-  console.log('  3. Customize the delivery note format');
-  console.log('  4. Go to Dispatch to print delivery notes');
+  console.log('  3. Review the seeded delivery note and work schedule formats');
+  console.log('  4. Go to HR → Schedule or Dispatch to print with those templates');
   console.log('─────────────────────────────────────────────────────');
 
   await prisma.$disconnect();

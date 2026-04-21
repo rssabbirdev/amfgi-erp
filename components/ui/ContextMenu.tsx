@@ -6,6 +6,7 @@ export interface ContextMenuOption {
   label?: string;
   icon?: React.ReactNode;
   action?: () => void;
+  disabled?: boolean;
   danger?: boolean;
   divider?: boolean;
 }
@@ -59,6 +60,7 @@ export function ContextMenu({ x, y, options, onClose }: Props) {
   }, [x, y]);
 
   const handleOptionClick = (option: ContextMenuOption) => {
+    if (option.disabled) return;
     if (option.action) {
       option.action();
     }
@@ -78,11 +80,16 @@ export function ContextMenu({ x, y, options, onClose }: Props) {
         <div key={idx}>
           {option.divider ? (
             <div className="h-px bg-slate-700 my-1" />
-          ) : option.action ? (
+          ) : option.label ? (
             <button
               onClick={() => handleOptionClick(option)}
-              className={`w-full px-4 py-2 text-sm text-left flex items-center gap-2 hover:bg-slate-700/60 transition-colors ${
-                option.danger ? 'text-red-400 hover:bg-red-950/30' : 'text-slate-300'
+              disabled={option.disabled}
+              className={`w-full px-4 py-2 text-sm text-left flex items-center gap-2 transition-colors ${
+                option.disabled
+                  ? 'cursor-not-allowed opacity-60'
+                  : option.danger
+                    ? 'text-red-400 hover:bg-red-950/30'
+                    : 'text-slate-300 hover:bg-slate-700/60'
               }`}
             >
               {option.icon && <span className="w-4 h-4">{option.icon}</span>}

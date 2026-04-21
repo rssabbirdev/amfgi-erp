@@ -13,6 +13,7 @@ export const KNOWN_ITEM_TYPES = [
   'goods-receipt',
   'packing-slip',
   'material-label',
+  'work-schedule',
 ] as const;
 
 export type KnownItemType = (typeof KNOWN_ITEM_TYPES)[number];
@@ -69,6 +70,16 @@ export interface SectionBuilderMeta {
    * Ignored in flow layout.
    */
   allowMarginBleed?: boolean;
+  /** Print mode: repeat this block on every printed page. */
+  repeatOnEveryPage?: boolean;
+  /** Print repeat position bucket. */
+  repeatRole?: 'header' | 'footer';
+  /**
+   * Non-repeating page anchor:
+   * - top: place once at top of first page content
+   * - bottom: place once at bottom of document flow
+   */
+  pageAnchor?: 'top' | 'bottom';
 }
 
 // ── Section types ──────────────────────────────────────────────────
@@ -99,6 +110,12 @@ export interface FieldRowCell {
   label?: string;     // static label text (e.g. "DATE:")
   field?: string;     // dynamic field path (e.g. "dn.date")
   text?: string;      // static text (if no field)
+  /**
+   * Multi-dynamic inline template, e.g.
+   * `{{job.contactPerson}} / {{job.contactPhone}} / {{job.contactEmail}}`
+   * If provided, this takes precedence over `field` and `text`.
+   */
+  valueTemplate?: string;
   width?: number;     // percentage of row width (auto if missing)
   align?: 'left' | 'center' | 'right';
   bold?: boolean;
@@ -119,17 +136,28 @@ export interface InfoGridItem {
   bold?: boolean;
 }
 
+export type TableDataSource =
+  | 'customItems'
+  | 'batches'
+  | 'items'
+  | 'scheduleGroups'
+  | 'driverTrips';
+
 export interface TableSection {
   type: 'table';
-  dataSource: 'customItems' | 'batches' | 'items';
+  dataSource: TableDataSource;
+  layoutMode?: 'table' | 'group-columns';
   columns: TableColumnDef[];
   fontSize: number;       // pt
   showBorders: boolean;
   headerBg: string;       // CSS color
   headerColor: string;    // text color
+  headerFontWeight?: 'normal' | 'bold';
+  headerFontStyle?: 'normal' | 'italic';
   repeatHeaderOnNewPage: boolean;
   minRows: number;        // minimum empty rows to show
   rowPadding: number;     // mm vertical padding per cell
+  rowMinHeightMm?: number;
 }
 
 export interface TableColumnDef {
@@ -137,6 +165,17 @@ export interface TableColumnDef {
   field: string;    // key on data row, or 'slno' for auto serial number
   width?: number;   // percentage
   align: 'left' | 'center' | 'right';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
+  rowMinHeightMm?: number;
+  useGlobalHeaderStyle?: boolean;
+  headerBg?: string;
+  headerColor?: string;
+  headerFontWeight?: 'normal' | 'bold';
+  headerFontStyle?: 'normal' | 'italic';
+  cellBg?: string;
+  cellColor?: string;
+  fontWeight?: 'normal' | 'bold';
+  fontStyle?: 'normal' | 'italic';
 }
 
 export interface TextSection {
@@ -268,6 +307,9 @@ export interface SectionCanvasRect {
 
 /** Full-page visual options (background + watermark) */
 export interface DocumentPageStyle {
+  pageOrientation?: 'portrait' | 'landscape';
+  /** `single-page` scales the document content down to keep it on one sheet when possible. */
+  contentFitMode?: 'default' | 'single-page';
   /**
    * Solid color behind the whole A4 face (margins + under content). Default in renderer: white.
    * Use `transparent` to let the editor workspace show through in preview.
@@ -428,18 +470,21 @@ export function createDefaultSection(type: DocumentSection['type']): DocumentSec
         type: 'table',
         dataSource: 'customItems',
         columns: [
-          { header: 'SL.NO.', field: 'slno', width: 10, align: 'center' },
-          { header: 'Description', field: 'name', width: 50, align: 'left' },
-          { header: 'Unit', field: 'unit', width: 15, align: 'center' },
-          { header: 'Qty', field: 'qty', width: 25, align: 'right' },
+          { header: 'SL.NO.', field: 'slno', width: 10, align: 'center', verticalAlign: 'top', useGlobalHeaderStyle: true },
+          { header: 'Description', field: 'name', width: 50, align: 'left', verticalAlign: 'top', useGlobalHeaderStyle: true },
+          { header: 'Unit', field: 'unit', width: 15, align: 'center', verticalAlign: 'top', useGlobalHeaderStyle: true },
+          { header: 'Qty', field: 'qty', width: 25, align: 'right', verticalAlign: 'top', useGlobalHeaderStyle: true },
         ],
         fontSize: 10,
         showBorders: true,
         headerBg: '#f0f0f0',
         headerColor: '#000',
+        headerFontWeight: 'bold',
+        headerFontStyle: 'normal',
         repeatHeaderOnNewPage: true,
         minRows: 5,
         rowPadding: 2,
+        rowMinHeightMm: 0,
       };
     case 'text':
       return { type: 'text', content: 'Enter text here', fontSize: 10, align: 'left', bold: false, color: '#000' };

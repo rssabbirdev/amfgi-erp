@@ -7,14 +7,25 @@ const UpdateSchema = z.object({
   customerId:     z.string().min(1).optional(),
   description:    z.string().max(1000).optional(),
   site:           z.string().max(200).optional(),
+  address:        z.string().max(2000).optional(),
+  locationName:   z.string().max(200).optional(),
+  locationLat:    z.number().optional(),
+  locationLng:    z.number().optional(),
   status:         z.enum(['ACTIVE', 'COMPLETED', 'ON_HOLD', 'CANCELLED']).optional(),
   startDate:      z.string().optional(),
   endDate:        z.string().optional(),
   quotationNumber: z.string().max(100).optional(),
+  quotationDate:   z.string().optional(),
   lpoNumber:      z.string().max(100).optional(),
+  lpoDate:         z.string().optional(),
+  lpoValue:        z.number().optional(),
   projectName:    z.string().max(200).optional(),
   projectDetails: z.string().max(2000).optional(),
+  contactPerson:  z.string().max(200).nullable().optional(),
+  contactsJson:   z.array(z.any()).optional(),
+  salesPerson:    z.string().max(200).optional(),
   jobWorkValue:   z.number().positive().optional(),
+  requiredExpertises: z.array(z.string().min(1).max(120)).optional(),
   finishedGoods:  z.array(z.object({
     materialId:   z.string(),
     materialName: z.string(),
@@ -62,32 +73,66 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
   try {
+    const before = await prisma.job.findUnique({
+      where: { id },
+      select: { lpoValue: true },
+    });
     const updateData: Record<string, unknown> = {};
 
     // Only include fields that were explicitly provided
     if (parsed.data.customerId !== undefined) updateData.customerId = parsed.data.customerId;
     if (parsed.data.description !== undefined) updateData.description = parsed.data.description;
     if (parsed.data.site !== undefined) updateData.site = parsed.data.site;
+    if (parsed.data.address !== undefined) updateData.address = parsed.data.address;
+    if (parsed.data.locationName !== undefined) updateData.locationName = parsed.data.locationName;
+    if (parsed.data.locationLat !== undefined) updateData.locationLat = parsed.data.locationLat;
+    if (parsed.data.locationLng !== undefined) updateData.locationLng = parsed.data.locationLng;
     if (parsed.data.status !== undefined) updateData.status = parsed.data.status;
     if (parsed.data.startDate !== undefined) updateData.startDate = parsed.data.startDate ? new Date(`${parsed.data.startDate}T00:00:00Z`) : null;
     if (parsed.data.endDate !== undefined) updateData.endDate = parsed.data.endDate ? new Date(`${parsed.data.endDate}T00:00:00Z`) : null;
     if (parsed.data.quotationNumber !== undefined) updateData.quotationNumber = parsed.data.quotationNumber;
+    if (parsed.data.quotationDate !== undefined) updateData.quotationDate = parsed.data.quotationDate ? new Date(`${parsed.data.quotationDate}T00:00:00Z`) : null;
     if (parsed.data.lpoNumber !== undefined) updateData.lpoNumber = parsed.data.lpoNumber;
+    if (parsed.data.lpoDate !== undefined) updateData.lpoDate = parsed.data.lpoDate ? new Date(`${parsed.data.lpoDate}T00:00:00Z`) : null;
+    if (parsed.data.lpoValue !== undefined) updateData.lpoValue = parsed.data.lpoValue;
     if (parsed.data.projectName !== undefined) updateData.projectName = parsed.data.projectName;
     if (parsed.data.projectDetails !== undefined) updateData.projectDetails = parsed.data.projectDetails;
+    if (parsed.data.contactPerson !== undefined) updateData.contactPerson = parsed.data.contactPerson?.trim() || null;
+    if (parsed.data.contactsJson !== undefined) updateData.contactsJson = parsed.data.contactsJson;
+    if (parsed.data.salesPerson !== undefined) updateData.salesPerson = parsed.data.salesPerson;
     if (parsed.data.jobWorkValue !== undefined) updateData.jobWorkValue = parsed.data.jobWorkValue;
+    if (parsed.data.requiredExpertises !== undefined) {
+      updateData.requiredExpertises =
+        parsed.data.requiredExpertises.length > 0 ? parsed.data.requiredExpertises : [];
+    }
     if (parsed.data.finishedGoods !== undefined) {
       updateData.finishedGoods = (parsed.data.finishedGoods && parsed.data.finishedGoods.length > 0) ? parsed.data.finishedGoods : [];
     }
 
-    const job = await prisma.job.update({
-      where: { id },
-      data: updateData,
-      include: {
-        customer: {
-          select: { id: true, name: true },
+    const job = await prisma.$transaction(async (tx) => {
+      const updated = await tx.job.update({
+        where: { id },
+        data: updateData,
+        include: {
+          customer: {
+            select: { id: true, name: true },
+          },
         },
-      },
+      });
+      if (parsed.data.lpoValue !== undefined && before?.lpoValue !== parsed.data.lpoValue) {
+        await tx.jobLpoValueHistory.create({
+          data: {
+            companyId: session.user.activeCompanyId!,
+            jobId: updated.id,
+            previousValue: before?.lpoValue ?? null,
+            newValue: parsed.data.lpoValue ?? null,
+            changedBy: session.user.id,
+            source: 'manual',
+            note: 'Updated from AMFGI job form',
+          },
+        });
+      }
+      return updated;
     });
     return successResponse(job);
   } catch (err: unknown) {

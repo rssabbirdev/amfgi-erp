@@ -1,241 +1,238 @@
-'use client';
+﻿'use client';
 
+import Link from 'next/link';
+import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { redirect } from 'next/navigation';
-import StatCard from '@/components/ui/StatCard';
-import { StatCardSkeleton } from '@/components/ui/skeleton/StatCardSkeleton';
-import { TableSkeleton } from '@/components/ui/skeleton/TableSkeleton';
-import { useGetStockValuationQuery, useGetConsumptionQuery } from '@/store/hooks';
+import { isEmployeeSelfServiceUser } from '@/lib/auth/selfService';
+import { APP_NAV_ITEMS, filterVisibleNavItems, type AppNavItem } from '@/lib/navigation/appNavigation';
 
-interface Material {
-  id: string;
-  name: string;
-  unit: string;
-  quantity: number;
-  unitCost: number;
-  totalValue: number;
+const CATEGORY_ORDER = [
+  'Operations',
+  'Master Data',
+  'People',
+  'Insights',
+  'Administration',
+] as const satisfies ReadonlyArray<AppNavItem['category']>;
+
+const CATEGORY_COPY: Record<AppNavItem['category'], string> = {
+  Operations: 'Daily work areas for receipts, dispatch, and operational processing.',
+  'Master Data': 'Reference records that support customers, suppliers, jobs, and materials.',
+  People: 'HR, workforce records, and self-service related pages.',
+  Insights: 'Reports and review areas for monitoring business activity.',
+  Administration: 'System setup, access control, media, and company configuration.',
+};
+
+const DASHBOARD_SCROLL_KEY = 'workspace-home-scroll';
+const DASHBOARD_RESTORE_KEY = 'workspace-home-restore';
+
+function sectionCardStyle() {
+  return {
+    backgroundColor: 'var(--surface-panel-soft)',
+    borderColor: 'var(--border-strong)',
+  };
 }
 
-interface Summary {
-  totalStockValue: number;
-  prevMonthConsumptionValue: number;
+function mutedTextStyle() {
+  return { color: 'var(--foreground-muted)' };
 }
 
-interface ConsumptionData {
-  month: number;
-  year: number;
-  totalValue: number;
-  itemCount: number;
-  items: Material[];
+function bodyTextStyle() {
+  return { color: 'var(--foreground-soft)' };
 }
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const shouldRestore = window.sessionStorage.getItem(DASHBOARD_RESTORE_KEY);
+    const savedScroll = window.sessionStorage.getItem(DASHBOARD_SCROLL_KEY);
+
+    if (shouldRestore === '1' && savedScroll) {
+      window.sessionStorage.removeItem(DASHBOARD_RESTORE_KEY);
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: Number(savedScroll), behavior: 'auto' });
+      });
+    }
+  }, []);
+
+  const rememberScrollPosition = () => {
+    if (typeof window === 'undefined') return;
+    window.sessionStorage.setItem(DASHBOARD_SCROLL_KEY, String(window.scrollY));
+    window.sessionStorage.setItem(DASHBOARD_RESTORE_KEY, '1');
+  };
+
+  if (status === 'loading') {
+    return (
+      <div className="space-y-6">
+        <section className="rounded-2xl border px-6 py-6 sm:px-8" style={sectionCardStyle()}>
+          <p className="text-sm font-medium uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+            Workspace Home
+          </p>
+          <div className="mt-4 h-8 w-56 rounded-lg" style={{ backgroundColor: 'var(--surface-subtle)' }} />
+          <div className="mt-3 h-4 w-full max-w-2xl rounded-lg" style={{ backgroundColor: 'var(--surface-subtle)' }} />
+        </section>
+      </div>
+    );
+  }
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  const hasActiveCompany = !!session.user.activeCompanyId;
+  if (isEmployeeSelfServiceUser(session.user)) {
+    redirect('/me/profile');
+  }
 
-  // Fetch both reports in parallel, skip if no company selected
-  const { data: valuationData, isFetching: isValuationLoading } = useGetStockValuationQuery(
-    undefined,
-    { skip: !hasActiveCompany }
-  );
-  const { data: consumptionData, isFetching: isConsumptionLoading } = useGetConsumptionQuery(
-    undefined,
-    { skip: !hasActiveCompany }
-  );
-
-  const summary: Summary | undefined = valuationData?.summary;
-  const topMaterials: Material[] = valuationData?.topMaterialsByValue || [];
-  const topConsumed: Material[] = valuationData?.topConsumedItems || [];
-  const currentConsumption: ConsumptionData | null | undefined = consumptionData?.currentMonth;
-
-  const isLoadingSummary = isValuationLoading && !summary;
-  const isLoadingTable = isValuationLoading && topMaterials.length === 0;
-
-  if (!hasActiveCompany) {
+  if (!session.user.activeCompanyId) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-          <p className="text-slate-400 text-sm mt-1">Select a company from the header to view its data.</p>
-        </div>
-        <div className="p-8 rounded-xl bg-slate-900 border border-slate-700/50 text-center text-slate-500">
-          No company selected. Use the company switcher in the top bar.
-        </div>
+        <section className="rounded-2xl border px-6 py-6 sm:px-8" style={sectionCardStyle()}>
+          <p className="text-sm font-medium uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+            Workspace Home
+          </p>
+          <h1 className="mt-3 text-2xl font-semibold sm:text-3xl" style={{ color: 'var(--foreground)' }}>
+            Select a company to continue
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm sm:text-base" style={bodyTextStyle()}>
+            This home page is organized by category and shows the modules available for the active company.
+            Select a company from the header first, then open the work area you need.
+          </p>
+        </section>
+
+        <section className="rounded-2xl border px-6 py-8 text-center" style={sectionCardStyle()}>
+          <p className="text-sm" style={mutedTextStyle()}>
+            No active company selected. Use the company switcher in the top bar to load your workspace.
+          </p>
+        </section>
       </div>
     );
   }
 
+  const visibleItems = filterVisibleNavItems(APP_NAV_ITEMS, {
+    permissions: session.user.permissions ?? [],
+    isSuperAdmin: session.user.isSuperAdmin ?? false,
+    linkedEmployeeId: session.user.linkedEmployeeId,
+    selfServiceOnly: false,
+  }).filter((item) => item.href !== '/dashboard');
+
+  const groupedItems = CATEGORY_ORDER.map((category) => ({
+    category,
+    items: visibleItems.filter((item) => item.category === category),
+  })).filter((group) => group.items.length > 0);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-slate-400 text-sm mt-1">{session.user.activeCompanyName} — live overview</p>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-4">
-        {isLoadingSummary ? (
-          <>
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-          </>
-        ) : (
-          <>
-            <StatCard
-              title="Total Stock Value (Now)"
-              value={summary ? `AED ${(summary.totalStockValue || 0).toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : '—'}
-              color="green"
-              icon={
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                </svg>
-              }
-            />
-            <StatCard
-              title="Previous Month Consumption Value"
-              value={summary ? `AED ${(summary.prevMonthConsumptionValue || 0).toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : '—'}
-              color="orange"
-              icon={
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              }
-            />
-          </>
-        )}
-      </div>
-
-      {/* Current Month Consumption */}
-      {currentConsumption && (
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
+      <section className="rounded-2xl border px-6 py-6 sm:px-8" style={sectionCardStyle()}>
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <p className="text-sm font-medium uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+              Workspace Home
+            </p>
             <div>
-              <h2 className="text-lg font-bold text-white">Current Month Consumption</h2>
-              <p className="text-sm text-slate-400 mt-1">
-                {new Date(currentConsumption.year, currentConsumption.month - 1).toLocaleDateString('en-AE', {
-                  month: 'long',
-                  year: 'numeric',
-                })}
+              <h1 className="text-2xl font-semibold sm:text-3xl" style={{ color: 'var(--foreground)' }}>
+                {session.user.activeCompanyName || 'Company workspace'}
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm sm:text-base" style={bodyTextStyle()}>
+                Every module is grouped below by category. The large title on each card is the short title for
+                faster scanning, and the smaller line underneath keeps the full menu name visible.
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-3xl font-bold text-cyan-400">
-                AED {currentConsumption.totalValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border px-4 py-3" style={sectionCardStyle()}>
+              <p className="text-xs uppercase tracking-[0.16em]" style={mutedTextStyle()}>
+                Categories
               </p>
-              <p className="text-sm text-slate-400">{currentConsumption.itemCount} items</p>
+              <p className="mt-2 text-2xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                {groupedItems.length}
+              </p>
+            </div>
+            <div className="rounded-xl border px-4 py-3" style={sectionCardStyle()}>
+              <p className="text-xs uppercase tracking-[0.16em]" style={mutedTextStyle()}>
+                Modules
+              </p>
+              <p className="mt-2 text-2xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                {visibleItems.length}
+              </p>
+            </div>
+            <div className="col-span-2 rounded-xl border px-4 py-3 sm:col-span-1" style={sectionCardStyle()}>
+              <p className="text-xs uppercase tracking-[0.16em]" style={mutedTextStyle()}>
+                Active company
+              </p>
+              <p className="mt-2 truncate text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                {session.user.activeCompanyName || 'Not set'}
+              </p>
             </div>
           </div>
         </div>
-      )}
+      </section>
 
-      {/* Top Materials by Valuation */}
-      <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-700">
-          <h2 className="text-lg font-bold text-white">Top 30 Materials by Stock Valuation</h2>
-          <p className="text-sm text-slate-400 mt-1">Items in stock right now, sorted by total value</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-900 border-b border-slate-700">
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">#</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Material</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Qty</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Unit Cost</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Total Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoadingTable ? (
-                <TableSkeleton rows={5} columns={5} />
-              ) : topMaterials.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-slate-500">
-                    No materials in stock
-                  </td>
-                </tr>
-              ) : (
-                topMaterials.map((mat, idx) => (
-                  <tr key={mat.id} className="border-b border-slate-700/50 hover:bg-slate-900/50">
-                    <td className="px-6 py-3 text-slate-400 text-xs font-mono">{idx + 1}</td>
-                    <td className="px-6 py-3">
-                      <div>
-                        <p className="text-white font-medium">{mat.name}</p>
-                        <p className="text-xs text-slate-500">{mat.unit}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-3 text-right text-slate-300">{mat.quantity.toFixed(3)}</td>
-                    <td className="px-6 py-3 text-right text-slate-300">AED {mat.unitCost.toFixed(2)}</td>
-                    <td className="px-6 py-3 text-right">
-                      <span className="font-semibold text-emerald-400">
-                        AED {mat.totalValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {groupedItems.map((group) => (
+        <section key={group.category} className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                {group.category}
+              </h2>
+              <p className="mt-1 text-sm" style={mutedTextStyle()}>
+                {CATEGORY_COPY[group.category]}
+              </p>
+            </div>
+            <p className="text-xs uppercase tracking-[0.16em]" style={mutedTextStyle()}>
+              {group.items.length} item{group.items.length === 1 ? '' : 's'}
+            </p>
+          </div>
 
-      {/* Top Consumed Items */}
-      <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-700">
-          <h2 className="text-lg font-bold text-white">Top 30 Consumed Items (Previous Month)</h2>
-          <p className="text-sm text-slate-400 mt-1">Items dispatched last month, sorted by consumption value</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-900 border-b border-slate-700">
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">#</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">Material</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Qty Consumed</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Unit Cost</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">Consumption Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoadingTable ? (
-                <TableSkeleton rows={5} columns={5} />
-              ) : topConsumed.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-slate-500">
-                    No consumption data available
-                  </td>
-                </tr>
-              ) : (
-                topConsumed.map((mat, idx) => (
-                  <tr key={mat.id} className="border-b border-slate-700/50 hover:bg-slate-900/50">
-                    <td className="px-6 py-3 text-slate-400 text-xs font-mono">{idx + 1}</td>
-                    <td className="px-6 py-3">
-                      <div>
-                        <p className="text-white font-medium">{mat.name}</p>
-                        <p className="text-xs text-slate-500">{mat.unit}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-3 text-right text-slate-300">{mat.quantity.toFixed(3)}</td>
-                    <td className="px-6 py-3 text-right text-slate-300">AED {mat.unitCost.toFixed(2)}</td>
-                    <td className="px-6 py-3 text-right">
-                      <span className="font-semibold text-orange-400">
-                        AED {mat.totalValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {group.items.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onNavigate={rememberScrollPosition}
+                className="group rounded-2xl border px-5 py-5 transition-colors duration-200 hover:bg-white/5"
+                style={sectionCardStyle()}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-cyan-400 transition-colors duration-200 group-hover:text-cyan-300"
+                    style={{
+                      backgroundColor: 'var(--surface-subtle)',
+                      borderColor: 'var(--border-strong)',
+                    }}
+                  >
+                    {item.icon}
+                  </div>
+                  <span
+                    className="rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em]"
+                    style={{
+                      color: 'var(--foreground-muted)',
+                      borderColor: 'var(--border-strong)',
+                    }}
+                  >
+                    {group.category}
+                  </span>
+                </div>
+
+                <div className="mt-5">
+                  <h3 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                    {item.shortTitle}
+                  </h3>
+                  <p className="mt-1 text-sm font-medium" style={bodyTextStyle()}>
+                    {item.label}
+                  </p>
+                  <p className="mt-3 text-sm leading-6" style={mutedTextStyle()}>
+                    {item.description}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

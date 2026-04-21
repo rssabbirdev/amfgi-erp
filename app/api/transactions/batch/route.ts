@@ -4,12 +4,14 @@ import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 import { calculateFIFOConsumption } from '@/lib/utils/fifoConsumption';
 import { createBatchData } from '@/lib/utils/stockBatchManagement';
+import { resolveQuantityToBase, resolveFactorToBase } from '@/lib/utils/materialUomDb';
 
 const LineSchema = z.object({
-  materialId:  z.string().min(1),
-  quantity:    z.number().min(0.001),
-  unitCost:    z.number().min(0).optional(),
-  returnQty:   z.number().min(0).optional(),
+  materialId:     z.string().min(1),
+  quantity:       z.number().min(0.001),
+  quantityUomId:  z.string().optional(),
+  unitCost:       z.number().min(0).optional(),
+  returnQty:      z.number().min(0).optional(),
 });
 
 const BatchSchema = z.object({
@@ -19,7 +21,7 @@ const BatchSchema = z.object({
   jobId:         z.string().optional(),
   supplier:      z.string().max(100).optional(),
   supplierId:    z.string().min(1).optional(),
-  notes:         z.string().max(500).optional(),
+  notes:         z.string().max(20000).optional(),
   date:          z.string().optional(),
   isDeliveryNote: z.boolean().optional(),
   existingTransactionIds: z.array(z.string()).optional(),
@@ -29,6 +31,7 @@ const BatchSchema = z.object({
   materialUpdates: z.array(z.object({
     materialId: z.string(),
     unitCost: z.number(),
+    quantityUomId: z.string().optional(),
   })).optional(),
 }).refine(
   (data) => data.lines.length > 0 || data.isDeliveryNote === true,
@@ -187,7 +190,12 @@ export async function POST(req: Request) {
 
         if (!mat) throw new Error(`Material ${line.materialId} not found`);
 
-        const baseQuantity = line.quantity;
+        const baseQuantity = await resolveQuantityToBase(tx, line.materialId, line.quantity, line.quantityUomId);
+        const returnQtyInput = line.returnQty && line.returnQty > 0 ? line.returnQty : 0;
+        const returnBase =
+          returnQtyInput > 0
+            ? await resolveQuantityToBase(tx, line.materialId, returnQtyInput, line.quantityUomId)
+            : 0;
 
         if (type === 'STOCK_OUT') {
           // FIFO consumption
@@ -313,13 +321,13 @@ export async function POST(req: Request) {
           created.push(stockOutTxn.id);
 
           // Create RETURN transaction if returnQty provided
-          if (line.returnQty && line.returnQty > 0) {
+          if (returnBase > 0) {
             // Re-add returned quantity to stock
             await tx.material.update({
               where: { id: line.materialId },
               data: {
                 currentStock: {
-                  increment: line.returnQty,
+                  increment: returnBase,
                 },
               },
             });
@@ -329,7 +337,7 @@ export async function POST(req: Request) {
                 companyId,
                 type: 'RETURN',
                 materialId: line.materialId,
-                quantity: line.returnQty,
+                quantity: returnBase,
                 jobId: jobId || null,
                 parentTransactionId: stockOutTxn.id,
                 notes: notes ? `Return: ${notes}` : 'Return',
@@ -341,11 +349,16 @@ export async function POST(req: Request) {
             created.push(returnTxn.id);
           }
         } else {
-          // STOCK_IN: create batch and transaction
+          // STOCK_IN: create batch and transaction (unitCost on line = per line UOM when quantityUomId set)
+          let unitCostPerBase = line.unitCost ?? mat.unitCost ?? 0;
+          if (line.quantityUomId && line.unitCost != null && line.unitCost > 0) {
+            const factor = await resolveFactorToBase(tx, line.materialId, line.quantityUomId);
+            unitCostPerBase = line.unitCost / factor;
+          }
           const batchData = createBatchData({
             materialId: line.materialId,
             quantity: baseQuantity,
-            unitCost: line.unitCost || mat.unitCost || 0,
+            unitCost: unitCostPerBase,
             supplier,
             supplierId,
             receiptNumber,
@@ -371,12 +384,12 @@ export async function POST(req: Request) {
             },
           });
 
-          // Update unit cost if provided
+          // Update unit cost if provided (stored per base UOM)
           if (line.unitCost !== undefined) {
             await tx.material.update({
               where: { id: line.materialId },
               data: {
-                unitCost: line.unitCost,
+                unitCost: unitCostPerBase,
               },
             });
           }
@@ -407,7 +420,11 @@ export async function POST(req: Request) {
 
           if (material) {
             const previousPrice = material.unitCost || 0;
-            const currentPrice = update.unitCost;
+            let currentPrice = update.unitCost;
+            if (update.quantityUomId) {
+              const factor = await resolveFactorToBase(tx, update.materialId, update.quantityUomId);
+              currentPrice = update.unitCost / factor;
+            }
 
             // Only create log if price changed
             if (previousPrice !== currentPrice) {

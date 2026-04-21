@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
     if (replaceDriveId) {
       try {
-        await deleteFromDrive(replaceDriveId);
+        await deleteFromDrive(replaceDriveId, companyId);
       } catch (err) {
         console.error('Failed to delete replaced template image from Drive:', err);
       }
@@ -53,14 +53,21 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const ext =
       file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-    const { id, webViewLink } = await uploadToDrive(
+    const { id, viewerUrl } = await uploadToDrive(
       buffer,
       `print-template-${companyId}-${Date.now()}.${ext}`,
       file.type,
-      folderId
+      {
+        companyId,
+        rootFolderId: folderId,
+        folderPath: [
+          { key: 'drive-folder:company-root', name: 'Company' },
+          { key: 'drive-folder:company:print-templates', name: 'Print Templates' },
+        ],
+      },
     );
 
-    return successResponse({ url: webViewLink, driveId: id });
+    return successResponse({ url: viewerUrl, driveId: id });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Upload failed';
     console.error('Template image upload error:', err);

@@ -16,8 +16,10 @@ export async function GET() {
 }
 
 const CreateSchema = z.object({
-  name:        z.string().min(1).max(100),
-  description: z.string().max(300).optional(),
+  name:              z.string().min(1).max(100),
+  description:       z.string().max(300).optional(),
+  externalCompanyId: z.string().max(120).optional(),
+  jobSourceMode:     z.enum(['HYBRID', 'EXTERNAL_ONLY']).optional(),
 });
 
 export async function POST(req: Request) {
@@ -30,22 +32,20 @@ export async function POST(req: Request) {
 
   const slug = parsed.data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-  const existing = await prisma.company.findFirst({
-    where: {
-      OR: [
-        { slug },
-        { name: parsed.data.name },
-      ],
-    },
-  });
-
-  if (existing) return errorResponse('Company with this name already exists', 409);
+  const conflictOr = [{ slug }, { name: parsed.data.name }] as Array<Record<string, string>>;
+  if (parsed.data.externalCompanyId) {
+    conflictOr.push({ externalCompanyId: parsed.data.externalCompanyId });
+  }
+  const existing = await prisma.company.findFirst({ where: { OR: conflictOr } });
+  if (existing) return errorResponse('Company with this name/slug/external id already exists', 409);
 
   const company = await prisma.company.create({
     data: {
       name:        parsed.data.name,
       slug,
       description: parsed.data.description,
+      externalCompanyId: parsed.data.externalCompanyId || null,
+      jobSourceMode: parsed.data.jobSourceMode || 'HYBRID',
       isActive:    true,
     },
   });

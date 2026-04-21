@@ -122,6 +122,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
@@ -130,7 +131,7 @@ import toast from 'react-hot-toast';
 export default function LoginPage() {
 	const router = useRouter();
 	const params = useSearchParams();
-	const callbackUrl = params.get('callbackUrl') ?? '/dashboard';
+	const callbackUrl = params.get('callbackUrl') ?? '/';
 	const error = params.get('error');
 
 	const [email, setEmail] = useState('');
@@ -367,6 +368,22 @@ export default function LoginPage() {
 							</button>
 						</div>
 					</div>
+				</div>
+
+				<div className='mt-5 flex items-center justify-center gap-4 text-xs text-slate-400'>
+					<Link
+						href='/privacy-policy'
+						className='transition hover:text-emerald-300'
+					>
+						Privacy Policy
+					</Link>
+					<span className='text-slate-600'>•</span>
+					<Link
+						href='/terms-of-service'
+						className='transition hover:text-emerald-300'
+					>
+						Terms of Service
+					</Link>
 				</div>
 			</div>
 		</div>

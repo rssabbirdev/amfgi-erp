@@ -42,6 +42,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   if (!job)
     return <p className="text-slate-400 text-center py-12">Job not found.</p>;
 
+  const contacts = Array.isArray((job as any).contactsJson) ? ((job as any).contactsJson as Array<any>) : [];
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -88,6 +90,53 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
             <p className="text-xs text-slate-400 uppercase tracking-wide">Status</p>
             <p className="text-white font-medium mt-2">{job.status}</p>
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 col-span-2">
+            <p className="text-xs text-slate-400 uppercase tracking-wide">External Sync</p>
+            <p className="text-white font-medium mt-2">
+              {(job as any).source === 'EXTERNAL_API' ? 'External API' : 'Local'}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              External Job ID: {(job as any).externalJobId || '—'}
+            </p>
+            <p className="text-xs text-slate-400">
+              External Updated: {(job as any).externalUpdatedAt ? new Date((job as any).externalUpdatedAt).toLocaleString() : '—'}
+            </p>
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 col-span-2">
+            <p className="text-xs text-slate-400 uppercase tracking-wide">LPO / Quotation</p>
+            <p className="text-white font-medium mt-2">
+              LPO: {(job as any).lpoNumber || '—'} · Value: {(job as any).lpoValue ?? '—'}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              LPO Date: {(job as any).lpoDate ? new Date((job as any).lpoDate).toLocaleDateString('en-AE') : '—'}
+            </p>
+            <p className="text-xs text-slate-400">
+              Quotation: {(job as any).quotationNumber || '—'} ({(job as any).quotationDate ? new Date((job as any).quotationDate).toLocaleDateString('en-AE') : '—'})
+            </p>
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 col-span-4">
+            <p className="text-xs text-slate-400 uppercase tracking-wide">Address / Location</p>
+            <p className="text-white font-medium mt-2">{(job as any).address || '—'}</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {(job as any).locationName || '—'} · {(job as any).locationLat ?? '—'}, {(job as any).locationLng ?? '—'}
+            </p>
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 col-span-4">
+            <p className="text-xs text-slate-400 uppercase tracking-wide">Contact person</p>
+            <p className="text-white font-medium mt-2">{(job as any).contactPerson || '—'}</p>
+            <p className="text-xs text-slate-400 uppercase tracking-wide mt-4">Additional contacts</p>
+            {contacts.length === 0 ? (
+              <p className="text-slate-400 mt-2">None</p>
+            ) : (
+              <div className="mt-2 space-y-1">
+                {contacts.map((c, i) => (
+                  <p key={i} className="text-sm text-white">
+                    {c.label ? `[${c.label}] ` : ''}{c.name || '—'} · {c.number || '—'} · {c.email || '—'} · {c.designation || '—'}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

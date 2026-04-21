@@ -11,6 +11,7 @@ const UpdateSchema = z
     phone: z.string().max(30).optional(),
     email: z.union([z.string().email(), z.literal('')]).optional(),
     address: z.string().max(500).optional(),
+    isActive: z.boolean().optional(),
   })
   .merge(partyListPartyFieldsSchema.partial());
 
@@ -56,6 +57,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (d.phone !== undefined) updateData.phone = d.phone?.trim() || null;
     if (d.email !== undefined) updateData.email = d.email?.trim() ? d.email.trim() : null;
     if (d.address !== undefined) updateData.address = d.address?.trim() || null;
+    if (d.isActive !== undefined) updateData.isActive = d.isActive;
     applyPartialPartyFieldsToUpdate(d, body, updateData);
 
     const existing = await prisma.customer.findFirst({

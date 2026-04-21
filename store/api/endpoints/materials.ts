@@ -1,5 +1,15 @@
 import { appApi } from '../appApi';
 
+export interface MaterialUomDto {
+  id: string;
+  unitId: string;
+  unitName: string;
+  isBase: boolean;
+  parentUomId: string | null;
+  factorToParent: number;
+  factorToBase: number;
+}
+
 export interface Material {
   id: string;
   companyId: string;
@@ -16,6 +26,7 @@ export interface Material {
   isActive: boolean;
   createdAt?: string | Date;
   updatedAt?: string | Date;
+  materialUoms?: MaterialUomDto[];
 }
 
 interface CrossCompanyMaterial {
@@ -24,6 +35,7 @@ interface CrossCompanyMaterial {
   unit: string;
   currentStock: number;
   isActive: boolean;
+  materialUoms?: MaterialUomDto[];
 }
 
 export const materialsApi = appApi.injectEndpoints({
@@ -95,6 +107,34 @@ export const materialsApi = appApi.injectEndpoints({
       transformResponse: (r: { data: { created: number; updated: number } }) => r.data,
       invalidatesTags: [{ type: 'Material', id: 'LIST' }],
     }),
+
+    createMaterialUom: builder.mutation<
+      MaterialUomDto,
+      { materialId: string; body: Record<string, unknown> }
+    >({
+      query: ({ materialId, body }) => ({
+        url: `/materials/${materialId}/uoms`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (r: { data: MaterialUomDto }) => r.data,
+      invalidatesTags: (r, e, { materialId }) => [
+        { type: 'Material', id: materialId },
+        { type: 'Material', id: 'LIST' },
+      ],
+    }),
+
+    deleteMaterialUom: builder.mutation<{ deleted: boolean }, { materialId: string; uomId: string }>({
+      query: ({ materialId, uomId }) => ({
+        url: `/materials/${materialId}/uoms/${uomId}`,
+        method: 'DELETE',
+      }),
+      transformResponse: (r: { data: { deleted: boolean } }) => r.data,
+      invalidatesTags: (r, e, { materialId }) => [
+        { type: 'Material', id: materialId },
+        { type: 'Material', id: 'LIST' },
+      ],
+    }),
   }),
 });
 
@@ -106,4 +146,6 @@ export const {
   useDeleteMaterialMutation,
   useGetCrossCompanyMaterialsQuery,
   useBulkCreateMaterialsMutation,
+  useCreateMaterialUomMutation,
+  useDeleteMaterialUomMutation,
 } = materialsApi;

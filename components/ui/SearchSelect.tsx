@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId, type InputHTMLAttributes } from 'react';
 import { searchItems } from '@/lib/utils/fuzzyMatch';
 
 interface SearchSelectProps<T extends { id: string; label: string; searchText?: string }> {
@@ -8,11 +8,17 @@ interface SearchSelectProps<T extends { id: string; label: string; searchText?: 
   value: string;
   onChange: (id: string) => void;
   onInputChange?: (value: string) => void;
+  onBlurInputValue?: (value: string) => void;
   placeholder?: string;
   label?: string;
   required?: boolean;
   disabled?: boolean;
   renderItem?: (item: T, isHighlighted: boolean) => React.ReactNode;
+  minCharactersToSearch?: number;
+  showMinCharactersHint?: boolean;
+  openOnFocus?: boolean;
+  clearInputOnFocus?: boolean;
+  inputProps?: InputHTMLAttributes<HTMLInputElement>;
 }
 
 export default function SearchSelect<T extends { id: string; label: string; searchText?: string }>(
@@ -23,11 +29,17 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     value,
     onChange,
     onInputChange,
+    onBlurInputValue,
     placeholder = 'Search...',
     label,
     required,
     disabled,
     renderItem,
+    minCharactersToSearch = 0,
+    showMinCharactersHint = false,
+    openOnFocus = false,
+    clearInputOnFocus = false,
+    inputProps,
   } = props;
 
   const [input, setInput] = useState('');
@@ -35,19 +47,14 @@ export default function SearchSelect<T extends { id: string; label: string; sear
   const [highlightedIdx, setHighlightedIdx] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listboxId = useId();
+  const mergedInputClassName = [inputProps?.className, 'w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white outline-none transition-colors focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50']
+    .filter(Boolean)
+    .join(' ');
 
-  const filteredItems = searchItems(items, input, 0.2);
+  const hasEnoughInput = input.trim().length >= minCharactersToSearch;
+  const filteredItems = hasEnoughInput ? searchItems(items, input, 0.2) : [];
   const selectedItem = items.find((item) => item.id === value);
-
-  // Update input when value changes externally
-  useEffect(() => {
-    if (selectedItem && !isOpen) {
-      setInput(selectedItem.label);
-    } else if (!value && !isOpen) {
-      // Clear input when value is cleared
-      setInput('');
-    }
-  }, [value, selectedItem, isOpen]);
 
   // Reset input when opening
   useEffect(() => {
@@ -55,6 +62,8 @@ export default function SearchSelect<T extends { id: string; label: string; sear
       inputRef.current?.focus();
     }
   }, [isOpen]);
+
+  const displayedValue = isOpen ? input : selectedItem?.label ?? (value ? input : '');
 
   const handleSelect = (itemId: string) => {
     onChange(itemId);
@@ -128,7 +137,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
   return (
     <div ref={containerRef} className="relative">
       {label && (
-        <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">
+        <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">
           {label}
           {required && ' *'}
         </label>
@@ -136,16 +145,40 @@ export default function SearchSelect<T extends { id: string; label: string; sear
 
       <div className="relative">
         <input
+          {...inputProps}
           ref={inputRef}
           type="text"
-          value={input}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          onFocus={() => setIsOpen(true)}
+          value={displayedValue}
+          onChange={(e) => {
+            handleInputChange(e);
+            inputProps?.onChange?.(e);
+          }}
+          onKeyDown={(e) => {
+            handleKeyDown(e);
+            if (!e.defaultPrevented) {
+              inputProps?.onKeyDown?.(e);
+            }
+          }}
+          onFocus={(e) => {
+            setInput(clearInputOnFocus ? '' : (selectedItem?.label ?? input));
+            if (openOnFocus) {
+              setIsOpen(true);
+              setHighlightedIdx(0);
+            }
+            inputProps?.onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            onBlurInputValue?.(input);
+            inputProps?.onBlur?.(e);
+          }}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+          className={mergedInputClassName}
           autoComplete="off"
+          role="combobox"
+          aria-controls={listboxId}
+          aria-expanded={isOpen}
+          aria-autocomplete="list"
         />
 
         {input && (
@@ -156,15 +189,15 @@ export default function SearchSelect<T extends { id: string; label: string; sear
               onChange('');
               setIsOpen(false);
             }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-white"
           >
-            ✕
+            x
           </button>
         )}
       </div>
 
       {isOpen && filteredItems.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+        <div id={listboxId} role="listbox" className="absolute top-full left-0 right-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 shadow-lg">
           {filteredItems.map((item, idx) => (
             <button
               key={item.id}
@@ -192,9 +225,17 @@ export default function SearchSelect<T extends { id: string; label: string; sear
         </div>
       )}
 
-      {isOpen && input && filteredItems.length === 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-lg z-50 p-3">
-          <p className="text-xs text-slate-400">No matches found for "{input}"</p>
+      {isOpen && !hasEnoughInput && minCharactersToSearch > 0 && showMinCharactersHint && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-lg">
+          <p className="text-xs text-slate-400">
+            Type at least {minCharactersToSearch} character{minCharactersToSearch === 1 ? '' : 's'} to search
+          </p>
+        </div>
+      )}
+
+      {isOpen && hasEnoughInput && input && filteredItems.length === 0 && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-lg">
+          <p className="text-xs text-slate-400">No matches found for &quot;{input}&quot;</p>
         </div>
       )}
     </div>

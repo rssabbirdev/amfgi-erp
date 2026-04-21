@@ -14,8 +14,13 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-slate-950 text-white antialiased`} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
+      <head />
+      <body
+        className={`${inter.className} antialiased`}
+        style={{ background: 'var(--background)', color: 'var(--foreground)' }}
+        suppressHydrationWarning
+      >
         <AppProviders session={session}>
           {children}
         </AppProviders>

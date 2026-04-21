@@ -7,6 +7,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { resolveQuantityToBase } from '@/lib/utils/materialUomDb';
 import { z } from 'zod';
 
 const TransferSchema = z.object({
@@ -14,7 +15,8 @@ const TransferSchema = z.object({
   destinationCompanyId: z.string().min(1),
   materialId: z.string().min(1),
   quantity: z.number().min(0.001),
-  notes: z.string().max(500).optional(),
+  quantityUomId: z.string().optional(),
+  notes: z.string().max(20000).optional(),
   date: z.string().optional(),
 });
 
@@ -31,7 +33,8 @@ export async function POST(req: Request) {
   const parsed = TransferSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  const { sourceCompanyId, destinationCompanyId, materialId, quantity, notes, date } = parsed.data;
+  const { sourceCompanyId, destinationCompanyId, materialId, quantity, quantityUomId, notes, date } =
+    parsed.data;
   const txDate = date ? new Date(date) : new Date();
 
   // Use provided sourceCompanyId if given, otherwise default to activeCompanyId
@@ -64,7 +67,9 @@ export async function POST(req: Request) {
       if (srcCompany.id !== srcMaterial.companyId) {
         throw new Error('Material does not belong to source company');
       }
-      if (srcMaterial.currentStock < quantity) {
+      const qtyBase = await resolveQuantityToBase(tx, materialId, quantity, quantityUomId);
+
+      if (srcMaterial.currentStock < qtyBase) {
         throw new Error(`Insufficient stock. Available: ${srcMaterial.currentStock} ${srcMaterial.unit}`);
       }
 
@@ -104,7 +109,7 @@ export async function POST(req: Request) {
         where: { id: materialId },
         data: {
           currentStock: {
-            decrement: quantity,
+            decrement: qtyBase,
           },
         },
       });
@@ -115,7 +120,7 @@ export async function POST(req: Request) {
           companyId: srcCompanyId,
           type: 'TRANSFER_OUT',
           materialId,
-          quantity,
+          quantity: qtyBase,
           counterpartCompany: destCompany.slug,
           notes: notes || null,
           date: txDate,
@@ -128,7 +133,7 @@ export async function POST(req: Request) {
         where: { id: destMaterial.id },
         data: {
           currentStock: {
-            increment: quantity,
+            increment: qtyBase,
           },
         },
       });
@@ -139,7 +144,7 @@ export async function POST(req: Request) {
           companyId: destinationCompanyId,
           type: 'TRANSFER_IN',
           materialId: destMaterial.id,
-          quantity,
+          quantity: qtyBase,
           counterpartCompany: srcCompany.slug,
           notes: notes || null,
           date: txDate,
@@ -148,7 +153,7 @@ export async function POST(req: Request) {
       });
 
       return {
-        transferredQty: quantity,
+        transferredQty: qtyBase,
         materialName: srcMaterial.name,
         sourceCompany: srcCompany.slug,
         destinationCompany: destCompany.slug,

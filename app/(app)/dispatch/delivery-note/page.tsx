@@ -14,9 +14,18 @@ import {
   useGetMaterialsQuery,
   useGetJobMaterialsQuery,
   useAddBatchTransactionMutation,
+  useUpdateJobMutation,
+  type MaterialUomDto,
 } from '@/store/hooks';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+function qtyInBase(uoms: MaterialUomDto[] | undefined, quantityUomId: string, qty: number): number {
+  if (!uoms?.length || !quantityUomId?.trim()) return qty;
+  const u = uoms.find((x) => x.id === quantityUomId);
+  if (!u) return qty;
+  return qty * u.factorToBase;
+}
 
 interface CustomItem {
   id: string;
@@ -32,12 +41,24 @@ interface Line {
   materialId: string;
   dispatchQty: string;
   returnQty: string;
+  quantityUomId: string;
   originalDispatchQty?: number;
 }
 
 interface PendingChange {
   type: 'job' | 'date';
   newValue: string;
+}
+
+interface JobContactOption {
+  id: string;
+  name: string;
+  label: string;
+  phone?: string;
+  email?: string;
+  designation?: string;
+  contactLabel?: string;
+  searchText: string;
 }
 
 export default function DeliveryNoteCreatePage() {
@@ -49,10 +70,12 @@ export default function DeliveryNoteCreatePage() {
   const { data: customers = [] } = useGetCustomersQuery();
   const { data: materials = [] } = useGetMaterialsQuery();
   const [addBatchTransaction] = useAddBatchTransactionMutation();
+  const [updateJob] = useUpdateJobMutation();
 
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [selectedJob, setSelectedJob] = useState('');
+  const [selectedContactPerson, setSelectedContactPerson] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deliveryNoteNumber, setDeliveryNoteNumber] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
@@ -67,6 +90,7 @@ export default function DeliveryNoteCreatePage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     },
     {
       id: generateId(),
@@ -74,6 +98,7 @@ export default function DeliveryNoteCreatePage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     },
     {
       id: generateId(),
@@ -81,6 +106,7 @@ export default function DeliveryNoteCreatePage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     },
   ]);
   const [submitting, setSubmitting] = useState(false);
@@ -90,12 +116,41 @@ export default function DeliveryNoteCreatePage() {
     open: false,
     pendingChange: null,
   });
+  const [addContactModal, setAddContactModal] = useState<{
+    open: boolean;
+    name: string;
+    number: string;
+    email: string;
+    designation: string;
+    label: string;
+    saving: boolean;
+  }>({
+    open: false,
+    name: '',
+    number: '',
+    email: '',
+    designation: '',
+    label: '',
+    saving: false,
+  });
 
   const isSA = session?.user?.isSuperAdmin ?? false;
   const perms = (session?.user?.permissions ?? []) as string[];
   const canCreate = isSA || perms.includes('job.create');
 
   const { data: jobMaterials = [] } = useGetJobMaterialsQuery(selectedJob, { skip: !selectedJob });
+
+  useEffect(() => {
+    if (!selectedJob) {
+      setSelectedContactPerson('');
+      return;
+    }
+    if (selectedContactPerson.trim()) return;
+    const contacts = getJobContactOptions(selectedJob);
+    if (contacts.length > 0) {
+      setSelectedContactPerson(contacts[0].name);
+    }
+  }, [selectedJob, selectedContactPerson, jobs]);
 
   // Parse delivery note number from notes
   const parseDeliveryNoteNumber = (notesText: string): number | null => {
@@ -135,6 +190,77 @@ export default function DeliveryNoteCreatePage() {
     });
   };
 
+  const parseDeliveryContactPerson = (notesText: string): string => {
+    const match = notesText.match(/--- DELIVERY CONTACT PERSON:([^\n\r]+)/);
+    return match ? match[1].trim() : '';
+  };
+
+  function getJobContactOptions(jobId: string): JobContactOption[] {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return [];
+
+    const options: JobContactOption[] = [];
+    const pushUnique = (
+      name: string,
+      details?: {
+        extraLabel?: string;
+        phone?: string;
+        email?: string;
+        designation?: string;
+        contactLabel?: string;
+      }
+    ) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      if (options.some((x) => x.name.toLowerCase() === trimmed.toLowerCase())) return;
+      const searchBits = [
+        trimmed,
+        details?.phone?.trim() || '',
+        details?.email?.trim() || '',
+        details?.designation?.trim() || '',
+        details?.contactLabel?.trim() || '',
+        details?.extraLabel?.trim() || '',
+      ].filter(Boolean);
+      options.push({
+        id: `${trimmed}-${options.length}`,
+        name: trimmed,
+        label: details?.extraLabel ? `${trimmed} (${details.extraLabel})` : trimmed,
+        phone: details?.phone?.trim() || undefined,
+        email: details?.email?.trim() || undefined,
+        designation: details?.designation?.trim() || undefined,
+        contactLabel: details?.contactLabel?.trim() || undefined,
+        searchText: searchBits.join(' '),
+      });
+    };
+
+    if (Array.isArray(job.contactsJson)) {
+      for (const row of job.contactsJson as Array<Record<string, unknown>>) {
+        const name = typeof row?.name === 'string' ? row.name : '';
+        const designation = typeof row?.designation === 'string' ? row.designation : '';
+        const number = typeof row?.number === 'string' ? row.number : '';
+        const email = typeof row?.email === 'string' ? row.email : '';
+        const contactLabel = typeof row?.label === 'string' ? row.label : '';
+        pushUnique(name, {
+          extraLabel: designation.trim() || undefined,
+          phone: number,
+          email,
+          designation,
+          contactLabel,
+        });
+      }
+    }
+
+    if (job.contactPerson?.trim()) {
+      pushUnique(job.contactPerson.trim(), { extraLabel: 'Primary' });
+    }
+
+    return options;
+  }
+
+  const selectedContactOption = getJobContactOptions(selectedJob).find(
+    (c) => c.name === selectedContactPerson
+  );
+
   // Load existing delivery note if editing or duplicating
   useEffect(() => {
     const transactionId = searchParams.get('transactionId');
@@ -157,6 +283,7 @@ export default function DeliveryNoteCreatePage() {
           if (res.ok && data.data) {
             const txn = data.data;
             setSelectedJob(txn.jobId || '');
+            setSelectedContactPerson(parseDeliveryContactPerson(txn.notes || ''));
             // Duplicates default to today's date; edits keep the original date
             setDate(isDuplicating
               ? new Date().toISOString().split('T')[0]
@@ -169,6 +296,7 @@ export default function DeliveryNoteCreatePage() {
             // Extract base notes (without delivery note headers)
             let baseNotes = (txn.notes || '')
               .replace(/--- DELIVERY NOTE #\d+\n?/g, '')
+              .replace(/--- DELIVERY CONTACT PERSON:[^\n\r]*\r?\n?/g, '')
               .replace(/--- DELIVERY NOTE ITEMS \(For Printing\) ---[\s\S]*?(?=\n--- |$)/g, '')
               .trim();
             setNotes(baseNotes);
@@ -185,6 +313,7 @@ export default function DeliveryNoteCreatePage() {
                   materialId: txn.material.id,
                   dispatchQty: txn.quantity.toString(),
                   returnQty: '',
+                  quantityUomId: '',
                   originalDispatchQty: txn.quantity,
                 },
               ]);
@@ -263,6 +392,7 @@ export default function DeliveryNoteCreatePage() {
       });
     } else {
       setSelectedJob(newJobId);
+      setSelectedContactPerson('');
     }
   };
 
@@ -282,6 +412,7 @@ export default function DeliveryNoteCreatePage() {
     const { type, newValue } = changeWarningModal.pendingChange;
     if (type === 'job') setSelectedJob(newValue);
     if (type === 'date') setDate(newValue);
+    if (type === 'job') setSelectedContactPerson('');
     setCustomItems([{ id: generateId(), name: '', description: '', unit: '', qty: '' }]);
     setLines(Array.from({ length: 3 }, () => ({
       id: generateId(),
@@ -289,6 +420,7 @@ export default function DeliveryNoteCreatePage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     })));
     setNotes('');
     setSkipMaterialDispatch(false);
@@ -305,6 +437,16 @@ export default function DeliveryNoteCreatePage() {
     }
   };
 
+  const duplicateCustomItem = (id: string) => {
+    setCustomItems((prev) => {
+      const idx = prev.findIndex((item) => item.id === id);
+      if (idx < 0) return prev;
+      const source = prev[idx];
+      const clone = { ...source, id: generateId() };
+      return [...prev.slice(0, idx + 1), clone, ...prev.slice(idx + 1)];
+    });
+  };
+
   const updateCustomItem = (id: string, field: string, value: string) => {
     setCustomItems(customItems.map(item =>
       item.id === id ? { ...item, [field]: value } : item
@@ -318,6 +460,7 @@ export default function DeliveryNoteCreatePage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     }]);
   };
 
@@ -327,17 +470,91 @@ export default function DeliveryNoteCreatePage() {
 
   const updateLine = (id: string, field: keyof Line, value: string) => {
     setLines((prev) =>
-      prev.map((l) => l.id === id ? { ...l, [field]: value } : l)
+      prev.map((l) =>
+        l.id === id
+          ? { ...l, [field]: value, ...(field === 'materialId' ? { quantityUomId: '' } : {}) }
+          : l
+      )
     );
   };
 
   const getMaterial = (id: string) => materials.find((m) => m.id === id);
+
+  const handleCreateContactPerson = async () => {
+    if (!selectedJob) {
+      toast.error('Select a job first');
+      return;
+    }
+    const name = addContactModal.name.trim();
+    if (!name) {
+      toast.error('Contact name is required');
+      return;
+    }
+    const currentJob = jobs.find((j) => j.id === selectedJob);
+    if (!currentJob) {
+      toast.error('Selected job not found');
+      return;
+    }
+
+    const currentContacts = Array.isArray(currentJob.contactsJson)
+      ? [...(currentJob.contactsJson as Array<Record<string, unknown>>)]
+      : [];
+    if (
+      currentContacts.some(
+        (x) => typeof x?.name === 'string' && x.name.trim().toLowerCase() === name.toLowerCase()
+      )
+    ) {
+      toast.error('Contact with this name already exists on the selected job');
+      return;
+    }
+
+    const newContact: Record<string, string> = { name };
+    if (addContactModal.label.trim()) newContact.label = addContactModal.label.trim();
+    if (addContactModal.number.trim()) newContact.number = addContactModal.number.trim();
+    if (addContactModal.email.trim()) newContact.email = addContactModal.email.trim();
+    if (addContactModal.designation.trim()) newContact.designation = addContactModal.designation.trim();
+
+    const nextContacts = [...currentContacts, newContact];
+    const nextPrimary =
+      (currentJob.contactPerson && currentJob.contactPerson.trim()) || name;
+
+    try {
+      setAddContactModal((prev) => ({ ...prev, saving: true }));
+      await updateJob({
+        id: selectedJob,
+        data: {
+          contactsJson: nextContacts,
+          contactPerson: nextPrimary,
+        },
+      }).unwrap();
+      setSelectedContactPerson(name);
+      setAddContactModal({
+        open: false,
+        name: '',
+        number: '',
+        email: '',
+        designation: '',
+        label: '',
+        saving: false,
+      });
+      toast.success('Contact person added to selected job');
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? 'Failed to add contact person');
+      setAddContactModal((prev) => ({ ...prev, saving: false }));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedJob) {
       toast.error('Select a job');
+      return;
+    }
+
+    const contactOptions = getJobContactOptions(selectedJob);
+    if (contactOptions.length > 0 && !selectedContactPerson.trim()) {
+      toast.error('Select a contact person');
       return;
     }
 
@@ -379,19 +596,25 @@ export default function DeliveryNoteCreatePage() {
         }
 
         const currentStock = typeof mat.currentStock === 'number' ? mat.currentStock : parseFloat(String(mat.currentStock));
-        if (isNaN(currentStock) || currentStock < qty) {
-          toast.error(`Insufficient stock for ${mat.name}. Available: ${currentStock.toFixed(3)} ${mat.unit}`);
+        const baseQty = qtyInBase(mat.materialUoms, line.quantityUomId, qty);
+        if (isNaN(currentStock) || currentStock < baseQty) {
+          toast.error(
+            `Insufficient stock for ${mat.name}. Need ${baseQty.toFixed(3)} ${mat.unit} (from entry). Available: ${currentStock.toFixed(3)} ${mat.unit}`
+          );
           return;
         }
 
         const ret = line.returnQty ? parseFloat(line.returnQty) : 0;
         if (ret > 0) {
+          const retBase = qtyInBase(mat.materialUoms, line.quantityUomId, ret);
           const jobMatSummary = jobMaterials.find((jm: any) => jm.materialId === line.materialId);
           if (jobMatSummary) {
-            const totalReturnAfter = jobMatSummary.returned + ret;
+            const totalReturnAfter = jobMatSummary.returned + retBase;
             if (totalReturnAfter > jobMatSummary.dispatched) {
               const maxCanReturn = jobMatSummary.dispatched - jobMatSummary.returned;
-              toast.error(`Cannot return ${ret} ${mat.unit}. Only ${maxCanReturn.toFixed(3)} can be returned`);
+              toast.error(
+                `Cannot return ${retBase.toFixed(3)} ${mat.unit} (from entry). Only ${maxCanReturn.toFixed(3)} can be returned`
+              );
               return;
             }
           }
@@ -401,29 +624,25 @@ export default function DeliveryNoteCreatePage() {
 
     setSubmitting(true);
     try {
-      // If editing, delete the old transaction first
-      if (editingTransactionId) {
-        const deleteRes = await fetch(`/api/transactions/${editingTransactionId}`, { method: 'DELETE' });
-        if (!deleteRes.ok) {
-          const deleteData = await deleteRes.json();
-          throw new Error(deleteData.error || 'Failed to delete old delivery note');
-        }
-      }
-
       // Build notes with delivery note header and custom items
       let finalNotes = notes?.trim() || '';
 
       if (deliveryNoteNumber) {
         const deliveryNoteHeader = `--- DELIVERY NOTE #${deliveryNoteNumber}`;
+        const contactLine = selectedContactPerson.trim()
+          ? `\n--- DELIVERY CONTACT PERSON: ${selectedContactPerson.trim()}`
+          : '';
 
         if (validCustomItems.length > 0) {
-          const customItemsText = '\n--- DELIVERY NOTE ITEMS (For Printing) ---\n' +
+          const customItemsText = `${contactLine}\n--- DELIVERY NOTE ITEMS (For Printing) ---\n` +
             validCustomItems.map(item =>
               `• ${item.name}${item.description ? ' - ' + item.description : ''} | ${item.qty} ${item.unit}`
             ).join('\n');
           finalNotes = finalNotes ? finalNotes + '\n' + deliveryNoteHeader + customItemsText : (deliveryNoteHeader + customItemsText);
         } else {
-          finalNotes = finalNotes ? finalNotes + '\n' + deliveryNoteHeader : deliveryNoteHeader;
+          finalNotes = finalNotes
+            ? finalNotes + '\n' + deliveryNoteHeader + contactLine
+            : deliveryNoteHeader + contactLine;
         }
       }
 
@@ -431,6 +650,7 @@ export default function DeliveryNoteCreatePage() {
       const linesToSubmit = skipMaterialDispatch ? [] : validLines.map((l) => ({
         materialId: l.materialId,
         quantity: parseFloat(l.dispatchQty),
+        quantityUomId: l.quantityUomId.trim() || undefined,
         returnQty: l.returnQty ? parseFloat(l.returnQty) : undefined,
       }));
 
@@ -440,6 +660,7 @@ export default function DeliveryNoteCreatePage() {
         notes: finalNotes || undefined,
         date,
         isDeliveryNote: true,
+        existingTransactionIds: editingTransactionId ? [editingTransactionId] : undefined,
         lines: linesToSubmit,
       }).unwrap();
 
@@ -447,6 +668,7 @@ export default function DeliveryNoteCreatePage() {
       const materialsText = skipMaterialDispatch ? '0 material(s) (custom items only)' : `${validLines.length} material(s)`;
       toast.success(`Delivery Note #${deliveryNoteNumber} ${actionText} with ${materialsText} and ${validCustomItems.length} custom item(s)`);
       setSelectedJob('');
+      setSelectedContactPerson('');
       setNotes('');
       setSkipMaterialDispatch(false);
       setCustomItems([{ id: generateId(), name: '', description: '', unit: '', qty: '' }]);
@@ -456,6 +678,7 @@ export default function DeliveryNoteCreatePage() {
         materialId: '',
         dispatchQty: '',
         returnQty: '',
+        quantityUomId: '',
       })));
       setEditingTransactionId(null);
       setDeliveryNoteNumber(null);
@@ -531,6 +754,7 @@ export default function DeliveryNoteCreatePage() {
       materialId: '',
       dispatchQty: '',
       returnQty: '',
+      quantityUomId: '',
     })));
 
     // Clear editing state immediately so save creates a new entry instead of updating
@@ -596,7 +820,7 @@ export default function DeliveryNoteCreatePage() {
       <form ref={formRef} onSubmit={handleSubmit} className="space-y-0">
         {/* Header */}
         <div className="rounded-t-xl bg-slate-800 border border-slate-700 border-b-0 p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <div>
               <SearchSelect
                 label="Job"
@@ -641,6 +865,90 @@ export default function DeliveryNoteCreatePage() {
                 </span>
               </div>
             </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">
+                Contact Person
+              </label>
+              {(() => {
+                const options = getJobContactOptions(selectedJob);
+                const selectedContactId = options.find((opt) => opt.name === selectedContactPerson)?.id || '';
+                return (
+                  <div className="space-y-2">
+                    <SearchSelect
+                      value={selectedContactId}
+                      onChange={(id) => {
+                        const picked = options.find((opt) => opt.id === id);
+                        setSelectedContactPerson(picked?.name || '');
+                      }}
+                      placeholder={
+                        selectedJob
+                          ? options.length > 0
+                            ? 'Search contact by name / phone / email / designation'
+                            : 'No contacts found on this job'
+                          : 'Select a job first'
+                      }
+                      disabled={!selectedJob || options.length === 0}
+                      items={options.map((opt) => ({
+                        id: opt.id,
+                        label: opt.label,
+                        searchText: opt.searchText,
+                      }))}
+                      renderItem={(item) => {
+                        const full = options.find((x) => x.id === item.id);
+                        return (
+                          <div className="flex flex-col">
+                            <span className="font-medium">{item.label}</span>
+                            {(full?.phone || full?.email) && (
+                              <span className="text-xs text-slate-400">
+                                {[full.phone, full.email].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }}
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] text-slate-500">
+                        Can&apos;t find contact? Add under this job.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAddContactModal((prev) => ({
+                            ...prev,
+                            open: true,
+                            name: '',
+                            number: '',
+                            email: '',
+                            designation: '',
+                            label: '',
+                            saving: false,
+                          }))
+                        }
+                        disabled={!selectedJob}
+                        className="px-2.5 py-1 rounded-md border border-blue-500/40 bg-blue-500/10 text-blue-300 text-xs hover:bg-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        + Add Contact
+                      </button>
+                    </div>
+                    {selectedContactOption && (
+                      <div className="rounded-md border border-slate-700 bg-slate-900/80 p-2.5 text-xs text-slate-300 space-y-1">
+                        <p className="text-sm font-semibold text-white">{selectedContactOption.name}</p>
+                        {(selectedContactOption.designation || selectedContactOption.contactLabel) && (
+                          <p className="text-slate-400">
+                            {selectedContactOption.designation || selectedContactOption.contactLabel}
+                          </p>
+                        )}
+                        {selectedContactOption.phone && <p>{selectedContactOption.phone}</p>}
+                        {selectedContactOption.email && (
+                          <p className="break-all text-slate-400">{selectedContactOption.email}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
 
@@ -672,7 +980,7 @@ export default function DeliveryNoteCreatePage() {
             <button
               type="button"
               onClick={() => setSkipMaterialDispatch(!skipMaterialDispatch)}
-              className={`relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800 ${
+              className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800 ${
                 skipMaterialDispatch ? 'bg-blue-600' : 'bg-slate-700'
               }`}
             >
@@ -697,7 +1005,7 @@ export default function DeliveryNoteCreatePage() {
               <tr className="bg-slate-800 border-b border-slate-700">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide w-8">#</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide min-w-[200px]">Material</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide w-20">Unit</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wide min-w-[128px]">UOM</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-28">In Stock</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Dispatch Qty</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Return Qty</th>
@@ -740,8 +1048,23 @@ export default function DeliveryNoteCreatePage() {
                         />
                       </td>
 
-                      <td className="px-3 py-2 text-center text-slate-400 text-xs">
-                        {mat?.unit ?? '—'}
+                      <td className="px-3 py-2 text-center text-slate-400 text-xs min-w-[120px]">
+                        {mat?.materialUoms && mat.materialUoms.length > 0 ? (
+                          <select
+                            value={line.quantityUomId}
+                            onChange={(e) => updateLine(line.id, 'quantityUomId', e.target.value)}
+                            className="w-full max-w-44 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs"
+                          >
+                            {mat.materialUoms.map((u) => (
+                              <option key={u.id} value={u.isBase ? '' : u.id}>
+                                {u.unitName}
+                                {u.isBase ? ' (base)' : ` (=${u.factorToBase} ${mat.unit})`}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span>{mat?.unit ?? '—'}</span>
+                        )}
                       </td>
 
                       <td className="px-3 py-2 text-right text-emerald-400 font-mono text-sm">
@@ -881,6 +1204,16 @@ export default function DeliveryNoteCreatePage() {
                         />
                       </td>
                       <td className="px-2 py-2">
+                        <button
+                          type="button"
+                          onClick={() => duplicateCustomItem(item.id)}
+                          className="text-slate-500 hover:text-blue-400 p-1"
+                          title="Duplicate item row"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2M8 7V5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2h-2M8 7h10a2 2 0 012 2v10" />
+                          </svg>
+                        </button>
                         <button
                           type="button"
                           onClick={() => removeCustomItem(item.id)}
@@ -1025,6 +1358,72 @@ export default function DeliveryNoteCreatePage() {
         )}
 
       </form>
+
+      {addContactModal.open && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={() => {
+              if (addContactModal.saving) return;
+              setAddContactModal((prev) => ({ ...prev, open: false }));
+            }}
+          />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[92vw] max-w-md bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-2xl">
+            <h2 className="text-lg font-semibold text-white mb-1">Add Contact Person</h2>
+            <p className="text-xs text-slate-400 mb-4">This contact will be saved under the selected job.</p>
+            <div className="space-y-3">
+              <input
+                value={addContactModal.name}
+                onChange={(e) => setAddContactModal((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Name *"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-md text-white text-sm"
+              />
+              <input
+                value={addContactModal.number}
+                onChange={(e) => setAddContactModal((prev) => ({ ...prev, number: e.target.value }))}
+                placeholder="Phone number"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-md text-white text-sm"
+              />
+              <input
+                value={addContactModal.email}
+                onChange={(e) => setAddContactModal((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="Email"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-md text-white text-sm"
+              />
+              <input
+                value={addContactModal.designation}
+                onChange={(e) => setAddContactModal((prev) => ({ ...prev, designation: e.target.value }))}
+                placeholder="Designation"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-md text-white text-sm"
+              />
+              <input
+                value={addContactModal.label}
+                onChange={(e) => setAddContactModal((prev) => ({ ...prev, label: e.target.value }))}
+                placeholder="Label (e.g. Site / Procurement)"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-md text-white text-sm"
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={addContactModal.saving}
+                onClick={() => setAddContactModal((prev) => ({ ...prev, open: false }))}
+                className="px-3 py-2 rounded-md bg-slate-700 text-slate-200 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={addContactModal.saving}
+                onClick={handleCreateContactPerson}
+                className="px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-60"
+              >
+                {addContactModal.saving ? 'Saving...' : 'Save Contact'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Change Warning Modal */}
       {changeWarningModal.open && changeWarningModal.pendingChange && (

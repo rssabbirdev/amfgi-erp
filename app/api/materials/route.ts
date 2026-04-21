@@ -1,6 +1,8 @@
 import { auth }              from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { serializeMaterialUoms } from '@/lib/utils/materialUom';
+import type { MaterialUomWithUnit } from '@/lib/utils/materialUom';
 import { z }                 from 'zod';
 
 const MaterialSchema = z.object({
@@ -31,9 +33,20 @@ export async function GET() {
       isActive: true,
     },
     orderBy: { name: 'asc' },
+    include: {
+      materialUoms: {
+        include: { unit: { select: { id: true, name: true } } },
+        orderBy: [{ isBase: 'desc' }, { createdAt: 'asc' }],
+      },
+    },
   });
 
-  return successResponse(materials);
+  return successResponse(
+    materials.map(({ materialUoms, ...m }) => ({
+      ...m,
+      materialUoms: serializeMaterialUoms(materialUoms as MaterialUomWithUnit[]),
+    }))
+  );
 }
 
 export async function POST(req: Request) {
@@ -60,15 +73,60 @@ export async function POST(req: Request) {
   });
   if (existing) return errorResponse('Material with this name already exists', 409);
 
-  const material = await prisma.material.create({
-    data: {
-      ...parsed.data,
-      externalItemName: parsed.data.externalItemName ?? null,
-      companyId: session.user.activeCompanyId,
-      currentStock: 0,
-      isActive: true,
+  const companyId = session.user.activeCompanyId;
+
+  const material = await prisma.$transaction(async (tx) => {
+    const mat = await tx.material.create({
+      data: {
+        ...parsed.data,
+        externalItemName: parsed.data.externalItemName ?? null,
+        companyId,
+        currentStock: 0,
+        isActive: true,
+      },
+    });
+
+    const unitRow = await tx.unit.findUnique({
+      where: {
+        companyId_name: {
+          companyId,
+          name: parsed.data.unit.trim(),
+        },
+      },
+    });
+    if (unitRow) {
+      await tx.materialUom.create({
+        data: {
+          companyId,
+          materialId: mat.id,
+          unitId: unitRow.id,
+          isBase: true,
+          parentUomId: null,
+          factorToParent: 1,
+        },
+      });
+    }
+
+    return mat;
+  });
+
+  const withUoms = await prisma.material.findUnique({
+    where: { id: material.id },
+    include: {
+      materialUoms: {
+        include: { unit: { select: { id: true, name: true } } },
+        orderBy: [{ isBase: 'desc' }, { createdAt: 'asc' }],
+      },
     },
   });
 
-  return successResponse(material, 201);
+  return successResponse(
+    {
+      ...material,
+      materialUoms: withUoms
+        ? serializeMaterialUoms(withUoms.materialUoms as MaterialUomWithUnit[])
+        : [],
+    },
+    201
+  );
 }

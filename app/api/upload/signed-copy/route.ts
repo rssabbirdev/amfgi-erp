@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     // Delete old file from Drive if it exists
     if (transaction.signedCopyDriveId) {
       try {
-        await deleteFromDrive(transaction.signedCopyDriveId);
+        await deleteFromDrive(transaction.signedCopyDriveId, transaction.companyId);
       } catch (err) {
         console.error('Failed to delete old signed copy from Drive:', err);
       }
@@ -65,23 +65,30 @@ export async function POST(req: Request) {
     const ext = file.type === 'application/pdf' ? 'pdf' : 'jpg';
 
     // Upload new file to Drive
-    const { id, webViewLink } = await uploadToDrive(
+    const { id, viewerUrl } = await uploadToDrive(
       buffer,
       `signed-dn-${transactionId}.${ext}`,
       file.type,
-      folderId,
+      {
+        companyId: transaction.companyId,
+        rootFolderId: folderId,
+        folderPath: [
+          { key: 'drive-folder:company-root', name: 'Company' },
+          { key: 'drive-folder:company:signed-copies', name: 'Signed Copies' },
+        ],
+      },
     );
 
     // Update transaction with new URL and Drive ID
     await prisma.transaction.update({
       where: { id: transactionId },
       data: {
-        signedCopyUrl: webViewLink,
+        signedCopyUrl: viewerUrl,
         signedCopyDriveId: id,
       },
     });
 
-    return successResponse({ signedCopyUrl: webViewLink });
+    return successResponse({ signedCopyUrl: viewerUrl });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Upload failed';
     console.error('Signed copy upload error:', err);

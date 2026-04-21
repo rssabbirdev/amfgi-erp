@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React from 'react';
 import type { DocumentSection, SectionStylePack } from '@/lib/types/documentTemplate';
@@ -26,7 +26,7 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
 
   const num = (label: string, key: keyof SectionStylePack, min?: number, max?: number, step?: number) => (
     <div>
-      <label className="mb-0.5 block text-[10px] text-slate-500">{label}</label>
+      <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">{label}</label>
       <input
         type="number"
         value={s[key] !== undefined ? Number(s[key]) : ''}
@@ -38,54 +38,54 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
         min={min}
         max={max}
         step={step}
-        className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white"
+        className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
       />
     </div>
   );
 
   return (
-    <div className="mt-3 border-t border-slate-700 pt-3">
-      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-amber-500/90">
+    <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-amber-600 dark:text-amber-500/90">
         Advanced appearance
       </p>
-      <p className="mb-2 text-[10px] text-slate-500">
+      <p className="mb-2 text-[10px] text-slate-600 dark:text-slate-500">
         Wrapper around this block: typography, box, spacing, optional fixed width/height (mm), background
         image.
       </p>
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-0.5 block text-[10px] text-slate-500">Text color</label>
+            <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">Text color</label>
             <input
               type="color"
               value={s.color || '#000000'}
               onChange={(e) => patch({ color: e.target.value })}
-              className="h-8 w-full rounded border border-slate-600 bg-slate-800"
+              className="h-8 w-full rounded border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800"
             />
           </div>
           <div>
-            <label className="mb-0.5 block text-[10px] text-slate-500">Background</label>
+            <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">Background</label>
             <input
               type="color"
               value={s.backgroundColor || '#ffffff'}
               onChange={(e) => patch({ backgroundColor: e.target.value })}
-              className="h-8 w-full rounded border border-slate-600 bg-slate-800"
+              className="h-8 w-full rounded border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800"
             />
           </div>
         </div>
         <div>
-          <label className="mb-0.5 block text-[10px] text-slate-500">Background image URL</label>
+          <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">Background image URL</label>
           <input
             type="text"
             value={s.backgroundImageUrl ?? ''}
             onChange={(e) => patch({ backgroundImageUrl: e.target.value.trim() || undefined })}
-            placeholder="https://…"
-            className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-xs text-white placeholder:text-slate-600"
+            placeholder="https://..."
+            className="w-full rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
           />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-0.5 block text-[10px] text-slate-500">BG size</label>
+            <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">BG size</label>
             <select
               value={s.backgroundSize ?? ''}
               onChange={(e) =>
@@ -93,7 +93,7 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
                   backgroundSize: (e.target.value || undefined) as SectionStylePack['backgroundSize'],
                 })
               }
-              className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white"
+              className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             >
               <option value="">(default)</option>
               <option value="auto">auto</option>
@@ -102,7 +102,7 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
             </select>
           </div>
           <div>
-            <label className="mb-0.5 block text-[10px] text-slate-500">BG repeat</label>
+            <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">BG repeat</label>
             <select
               value={s.backgroundRepeat ?? ''}
               onChange={(e) =>
@@ -110,7 +110,7 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
                   backgroundRepeat: (e.target.value || undefined) as SectionStylePack['backgroundRepeat'],
                 })
               }
-              className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white"
+              className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             >
               <option value="">(default)</option>
               <option value="no-repeat">no-repeat</option>
@@ -121,24 +121,24 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
           </div>
         </div>
         <div>
-          <label className="mb-0.5 block text-[10px] text-slate-500">BG position (CSS)</label>
+          <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">BG position (CSS)</label>
           <input
             type="text"
             value={s.backgroundPosition ?? ''}
             onChange={(e) => patch({ backgroundPosition: e.target.value.trim() || undefined })}
             placeholder="e.g. center top, 50% 20%"
-            className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white"
+            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
           />
         </div>
         <div className="grid grid-cols-2 gap-2">
           {num('Border width (px)', 'borderWidthPx', 0, 12)}
           <div>
-            <label className="mb-0.5 block text-[10px] text-slate-500">Border color</label>
+            <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">Border color</label>
             <input
               type="color"
               value={s.borderColor || '#000000'}
               onChange={(e) => patch({ borderColor: e.target.value })}
-              className="h-8 w-full rounded border border-slate-600 bg-slate-800"
+              className="h-8 w-full rounded border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800"
             />
           </div>
         </div>
@@ -157,19 +157,19 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
           {num('Max width (mm)', 'maxWidthMm', 0, 200)}
         </div>
         <div>
-          <label className="mb-0.5 block text-[10px] text-slate-500">Font family</label>
+          <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">Font family</label>
           <input
             type="text"
             value={s.fontFamily ?? ''}
             onChange={(e) => patch({ fontFamily: e.target.value || undefined })}
             placeholder="e.g. Georgia, serif"
-            className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-xs text-white placeholder:text-slate-600"
+            className="w-full rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
           />
         </div>
         <div className="grid grid-cols-2 gap-2">
           {num('Font size (pt)', 'fontSizePt', 6, 48)}
           <div>
-            <label className="mb-0.5 block text-[10px] text-slate-500">Font weight</label>
+            <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">Font weight</label>
             <select
               value={s.fontWeight ?? ''}
               onChange={(e) =>
@@ -177,7 +177,7 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
                   fontWeight: (e.target.value || undefined) as 'normal' | 'bold' | undefined,
                 })
               }
-              className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white"
+              className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             >
               <option value="">(inherit)</option>
               <option value="normal">Normal</option>
@@ -187,7 +187,7 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-0.5 block text-[10px] text-slate-500">Font style</label>
+            <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">Font style</label>
             <select
               value={s.fontStyle ?? ''}
               onChange={(e) =>
@@ -195,7 +195,7 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
                   fontStyle: (e.target.value || undefined) as 'normal' | 'italic' | undefined,
                 })
               }
-              className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white"
+              className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             >
               <option value="">(inherit)</option>
               <option value="normal">Normal</option>
@@ -203,16 +203,15 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
             </select>
           </div>
           <div>
-            <label className="mb-0.5 block text-[10px] text-slate-500">Decoration</label>
+            <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">Decoration</label>
             <select
               value={s.textDecoration ?? ''}
               onChange={(e) =>
                 patch({
-                  textDecoration: (e.target.value ||
-                    undefined) as SectionStylePack['textDecoration'],
+                  textDecoration: (e.target.value || undefined) as SectionStylePack['textDecoration'],
                 })
               }
-              className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white"
+              className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             >
               <option value="">(inherit)</option>
               <option value="none">None</option>
@@ -227,7 +226,7 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
           {num('Opacity', 'opacity', 0, 1, 0.05)}
         </div>
         <div>
-          <label className="mb-0.5 block text-[10px] text-slate-500">Text align</label>
+          <label className="mb-0.5 block text-[10px] text-slate-600 dark:text-slate-500">Text align</label>
           <select
             value={s.textAlign ?? ''}
             onChange={(e) =>
@@ -235,7 +234,7 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
                 textAlign: (e.target.value || undefined) as 'left' | 'center' | 'right' | undefined,
               })
             }
-            className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white"
+            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
           >
             <option value="">(inherit)</option>
             <option value="left">Left</option>
@@ -246,7 +245,7 @@ export function SectionAdvancedStyleEditor({ section, onChange }: Props) {
         <button
           type="button"
           onClick={() => onChange({ ...section, style: undefined })}
-          className="w-full rounded bg-slate-800 py-1.5 text-[10px] text-slate-500 hover:text-white"
+          className="w-full rounded bg-slate-200 py-1.5 text-[10px] text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-white"
         >
           Clear advanced styles
         </button>

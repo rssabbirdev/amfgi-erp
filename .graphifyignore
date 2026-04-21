@@ -1,0 +1,8 @@
+# .graphifyignore
+vendor/
+node_modules/
+dist/
+*.generated.py
+.vscode/
+.vercel/
+.__tests__/

@@ -81,7 +81,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return errorResponse('Unit not found', 404);
     }
 
-    // Count materials using this unit
+    // Count materials using this unit (legacy string field)
     const count = await prisma.material.count({
       where: {
         companyId,
@@ -90,11 +90,19 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       },
     });
 
-    if (count > 0) {
-      return errorResponse(
-        `${count} material${count !== 1 ? 's' : ''} ${count === 1 ? 'uses' : 'use'} this unit`,
-        409
-      );
+    const uomCount = await prisma.materialUom.count({
+      where: { unitId: id },
+    });
+
+    if (count > 0 || uomCount > 0) {
+      const parts: string[] = [];
+      if (count > 0) {
+        parts.push(`${count} material${count !== 1 ? 's' : ''} ${count === 1 ? 'lists' : 'list'} this as base/display unit`);
+      }
+      if (uomCount > 0) {
+        parts.push(`${uomCount} material UOM link${uomCount !== 1 ? 's' : ''}`);
+      }
+      return errorResponse(`Cannot delete: ${parts.join('; ')}.`, 409);
     }
 
     // Delete the unit

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -19,6 +19,8 @@ import {
 interface Job {
   id: string;
   companyId: string;
+  externalJobId?: string;
+  source?: 'LOCAL' | 'EXTERNAL_API';
   jobNumber: string;
   customerId: string;
   customerName?: string;
@@ -61,6 +63,7 @@ export default function JobsPage() {
   const canDelete = isSA || perms.includes('job.delete');
 
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [jobSourceMode, setJobSourceMode] = useState<'HYBRID' | 'EXTERNAL_ONLY'>('HYBRID');
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     job: Job | null;
@@ -68,6 +71,25 @@ export default function JobsPage() {
     linkedCount: number;
     canDelete: boolean;
   }>({ open: false, job: null, loading: false, linkedCount: 0, canDelete: true });
+
+  useEffect(() => {
+    if (!session?.user?.activeCompanyId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/companies/${session.user.activeCompanyId}`, { cache: 'no-store' });
+        const json = await res.json();
+        if (!cancelled && res.ok && json?.success) {
+          setJobSourceMode((json.data?.jobSourceMode as 'HYBRID' | 'EXTERNAL_ONLY') || 'HYBRID');
+        }
+      } catch {
+        if (!cancelled) setJobSourceMode('HYBRID');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.activeCompanyId]);
 
   const handleCreateJob = () => {
     router.push('/jobs/form?mode=create');
@@ -169,7 +191,21 @@ export default function JobsPage() {
           onContextMenu={(e) => handleJobContextMenu(j, e)}
           className="cursor-context-menu hover:text-emerald-400 transition-colors"
         >
-          {j.jobNumber}
+          <span>{j.jobNumber}</span>
+          {j.source === 'EXTERNAL_API' && (
+            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-700/40">
+              API
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'externalJobId',
+      header: 'External ID',
+      render: (j) => (
+        <div onContextMenu={(e) => handleJobContextMenu(j, e)} className="cursor-context-menu text-xs text-slate-300">
+          {j.externalJobId || '—'}
         </div>
       ),
     },
@@ -242,9 +278,14 @@ export default function JobsPage() {
             <option value="COMPLETED">Completed</option>
             <option value="CANCELLED">Cancelled</option>
           </select>
-          {canCreate && <Button onClick={handleCreateJob}>+ Add Job</Button>}
+          {canCreate && jobSourceMode !== 'EXTERNAL_ONLY' && <Button onClick={handleCreateJob}>+ Add Job</Button>}
         </div>
       </div>
+      {jobSourceMode === 'EXTERNAL_ONLY' && (
+        <div className="rounded-lg border border-amber-700/50 bg-amber-900/20 p-3 text-sm text-amber-200">
+          Parent job creation is disabled for this company. Sync parent jobs via API. You can still create local variations from parent jobs.
+        </div>
+      )}
 
       <DataTable
         columns={columns}

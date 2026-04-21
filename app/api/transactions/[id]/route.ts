@@ -25,11 +25,29 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
             jobNumber: true,
             description: true,
             site: true,
+            address: true,
+            locationName: true,
+            locationLat: true,
+            locationLng: true,
+            status: true,
+            startDate: true,
+            endDate: true,
             lpoNumber: true,
+            lpoDate: true,
+            lpoValue: true,
             quotationNumber: true,
+            quotationDate: true,
             projectName: true,
             projectDetails: true,
             jobWorkValue: true,
+            contactPerson: true,
+            contactsJson: true,
+            salesPerson: true,
+            source: true,
+            externalJobId: true,
+            externalUpdatedAt: true,
+            parentJobId: true,
+            parentJob: { select: { jobNumber: true } },
             customerId: true,
             customer: {
               select: {
@@ -54,7 +72,26 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       return errorResponse('Unauthorized', 403);
     }
 
-    return successResponse(txn);
+    const performedById = typeof txn.performedBy === 'string' ? txn.performedBy.trim() : '';
+    const performedByUser = performedById
+      ? await prisma.user.findUnique({
+          where: { id: performedById },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            signatureUrl: true,
+            imageDriveId: true,
+            signatureDriveId: true,
+          },
+        })
+      : null;
+
+    return successResponse({
+      ...txn,
+      performedByUser: performedByUser ?? null,
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to fetch transaction';
     return errorResponse(message, 500);

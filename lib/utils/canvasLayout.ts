@@ -1,4 +1,4 @@
-import type { DocumentSection, DocumentTemplate, SectionCanvasRect } from '@/lib/types/documentTemplate';
+import type { DocumentPageStyle, DocumentSection, DocumentTemplate, SectionCanvasRect } from '@/lib/types/documentTemplate';
 
 /** CSS px at 96dpi → mm (border thickness on line/divider) */
 const PX_TO_MM = 25.4 / 96;
@@ -8,12 +8,25 @@ function ptToMm(pt: number): number {
   return pt * MM_PER_PT;
 }
 
-export function contentWidthMm(m: DocumentTemplate['pageMargins']): number {
-  return Math.max(40, 210 - m.left - m.right);
+export function getPageDimensionsMm(pageStyle?: DocumentPageStyle): { widthMm: number; heightMm: number } {
+  if (pageStyle?.pageOrientation === 'landscape') {
+    return { widthMm: 297, heightMm: 210 };
+  }
+  return { widthMm: 210, heightMm: 297 };
 }
 
-export function contentHeightMm(m: DocumentTemplate['pageMargins']): number {
-  return Math.max(80, 297 - m.top - m.bottom);
+export function contentWidthMm(
+  m: DocumentTemplate['pageMargins'],
+  pageStyle?: DocumentPageStyle
+): number {
+  return Math.max(40, getPageDimensionsMm(pageStyle).widthMm - m.left - m.right);
+}
+
+export function contentHeightMm(
+  m: DocumentTemplate['pageMargins'],
+  pageStyle?: DocumentPageStyle
+): number {
+  return Math.max(80, getPageDimensionsMm(pageStyle).heightMm - m.top - m.bottom);
 }
 
 /** When `allowMarginBleed` is set on the section, canvas rects may extend into page margins by this much (mm). */
@@ -100,7 +113,7 @@ export function estimateSectionHeightMm(section: DocumentSection, contentWidthMm
 }
 
 export function buildCanvasRectsFromSections(template: DocumentTemplate): SectionCanvasRect[] {
-  const cw = contentWidthMm(template.pageMargins);
+  const cw = contentWidthMm(template.pageMargins, template.pageStyle);
   let y = 0;
   const gap = 2;
   return template.sections.map((s, i) => {
@@ -117,6 +130,7 @@ export function buildCanvasRectsFromSections(template: DocumentTemplate): Sectio
  */
 export function resolveCanvasRectsForSections(
   pageMargins: DocumentTemplate['pageMargins'],
+  pageStyle: DocumentPageStyle | undefined,
   sections: DocumentSection[],
   existingMode: boolean | undefined,
   existingRects: SectionCanvasRect[] | undefined
@@ -136,6 +150,7 @@ export function resolveCanvasRectsForSections(
     itemType: 'delivery-note',
     isDefault: false,
     pageMargins,
+    pageStyle,
     sections,
     canvasMode: true,
   });
@@ -146,7 +161,7 @@ export function ensureCanvasRects(
   rects: SectionCanvasRect[] | undefined
 ): SectionCanvasRect[] {
   const n = template.sections.length;
-  const cw = contentWidthMm(template.pageMargins);
+  const cw = contentWidthMm(template.pageMargins, template.pageStyle);
   const next = [...(rects ?? [])];
   while (next.length < n) {
     const idx = next.length;
