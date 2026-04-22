@@ -1,15 +1,5 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-
-export default function DispatchHistoryPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    // Redirect to new dispatch location
-    router.replace('/dispatch');
-  }, [router]);
-
-  return null;
+export default function MaterialsDispatchHistoryRedirectPage() {
+  redirect('/stock/materials/dispatch-history');
 }

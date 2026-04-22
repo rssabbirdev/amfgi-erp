@@ -1,7 +1,20 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { uploadToDrive, deleteFromDrive } from '@/lib/utils/googleDrive';
+import {
+  buildCustomerDriveFolderName,
+  buildJobDriveFolderName,
+  buildSignedDeliveryNoteDriveFileName,
+  deleteFromDrive,
+  uploadToDrive,
+} from '@/lib/utils/googleDrive';
+
+function parseDeliveryNoteLabel(notes?: string | null): string {
+  const match = notes?.match(/--- DELIVERY NOTE #(\d+)/);
+  const raw = match?.[1] ?? '';
+  const normalized = raw ? raw.padStart(3, '0') : '000';
+  return `DN${normalized}`;
+}
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -36,7 +49,27 @@ export async function POST(req: Request) {
     // Fetch transaction and verify it belongs to active company
     const transaction = await prisma.transaction.findUnique({
       where: { id: transactionId },
-      select: { companyId: true, isDeliveryNote: true, signedCopyDriveId: true },
+      select: {
+        id: true,
+        companyId: true,
+        isDeliveryNote: true,
+        signedCopyDriveId: true,
+        notes: true,
+        jobId: true,
+        job: {
+          select: {
+            id: true,
+            jobNumber: true,
+            customerId: true,
+            customer: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!transaction) return errorResponse('Transaction not found', 404);
@@ -64,17 +97,31 @@ export async function POST(req: Request) {
     // Determine file extension
     const ext = file.type === 'application/pdf' ? 'pdf' : 'jpg';
 
+    const customerId = transaction.job?.customer?.id || transaction.job?.customerId || 'customer';
+    const customerName = transaction.job?.customer?.name || 'Customer';
+    const jobId = transaction.job?.id || transaction.jobId || 'job';
+    const jobNumber = transaction.job?.jobNumber || 'JOB';
+    const deliveryNoteLabel = parseDeliveryNoteLabel(transaction.notes);
+    const fileName = buildSignedDeliveryNoteDriveFileName(deliveryNoteLabel, jobNumber, transaction.id, ext);
+
     // Upload new file to Drive
     const { id, viewerUrl } = await uploadToDrive(
       buffer,
-      `signed-dn-${transactionId}.${ext}`,
+      fileName,
       file.type,
       {
         companyId: transaction.companyId,
         rootFolderId: folderId,
         folderPath: [
-          { key: 'drive-folder:company-root', name: 'Company' },
-          { key: 'drive-folder:company:signed-copies', name: 'Signed Copies' },
+          { key: 'drive-folder:customer-root', name: 'Customer' },
+          {
+            key: `drive-folder:customer:${customerId}`,
+            name: buildCustomerDriveFolderName(customerName, customerId),
+          },
+          {
+            key: `drive-folder:job:${jobId}`,
+            name: buildJobDriveFolderName(jobNumber, jobId),
+          },
         ],
       },
     );

@@ -12,6 +12,10 @@ interface Material {
 interface StockValuationResponse {
   summary: {
     totalStockValue: number;
+    fifoStockValue: number;
+    movingAverageStockValue: number;
+    currentStockValue: number;
+    preferredMethod: 'FIFO';
     prevMonthConsumptionValue: number;
   };
   topMaterialsByValue: Material[];

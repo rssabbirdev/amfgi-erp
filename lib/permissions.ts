@@ -55,6 +55,8 @@ export const P = {
   HR_ATTENDANCE_VIEW: 'hr.attendance.view',
   HR_ATTENDANCE_EDIT: 'hr.attendance.edit',
   HR_ATTENDANCE_APPROVE: 'hr.attendance.approve',
+  HR_GEOFENCE_VIEW: 'hr.geofence.view',
+  HR_GEOFENCE_EDIT: 'hr.geofence.edit',
   HR_SETTINGS_DOC_TYPES: 'hr.settings.document_types',
 
   // Employee self-service (linked User.linkedEmployeeId)
@@ -83,6 +85,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.HR_DOCUMENT_VIEW, P.HR_DOCUMENT_EDIT,
     P.HR_SCHEDULE_VIEW, P.HR_SCHEDULE_EDIT, P.HR_SCHEDULE_PUBLISH,
     P.HR_ATTENDANCE_VIEW, P.HR_ATTENDANCE_EDIT, P.HR_ATTENDANCE_APPROVE,
+    P.HR_GEOFENCE_VIEW, P.HR_GEOFENCE_EDIT,
     P.HR_SETTINGS_DOC_TYPES,
   ],
 
@@ -192,6 +195,13 @@ export const PERMISSION_GROUPS: Array<{
       { key: P.HR_ATTENDANCE_VIEW, label: 'View' },
       { key: P.HR_ATTENDANCE_EDIT, label: 'Edit' },
       { key: P.HR_ATTENDANCE_APPROVE, label: 'Approve' },
+    ],
+  },
+  {
+    group: 'HR — Geofence Attendance',
+    perms: [
+      { key: P.HR_GEOFENCE_VIEW, label: 'View' },
+      { key: P.HR_GEOFENCE_EDIT, label: 'Edit' },
     ],
   },
   {

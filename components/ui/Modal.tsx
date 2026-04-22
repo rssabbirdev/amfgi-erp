@@ -41,15 +41,15 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', a
         onClick={onClose}
       />
       {/* Panel */}
-      <div className={`relative z-10 w-full ${sizes[size]} rounded-xl border border-slate-700 bg-slate-800 shadow-2xl`}>
+      <div className={`relative z-10 w-full ${sizes[size]} rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800`}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-700 px-6 py-4">
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h2>
           <div className="flex items-center gap-2">
             {actions && <div className="flex gap-2">{actions}</div>}
             <button
               onClick={onClose}
-              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
+              className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

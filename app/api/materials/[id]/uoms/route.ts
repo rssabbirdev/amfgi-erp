@@ -28,6 +28,16 @@ function canEdit(user: AppSessionUser) {
   return user.isSuperAdmin || user.permissions.includes('material.edit');
 }
 
+async function getSerializedMaterialUoms(materialId: string) {
+  const rows = await prisma.materialUom.findMany({
+    where: { materialId },
+    include: { unit: { select: { id: true, name: true } } },
+    orderBy: [{ isBase: 'desc' }, { createdAt: 'asc' }],
+  });
+
+  return serializeMaterialUoms(rows as MaterialUomWithUnit[]);
+}
+
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
@@ -41,13 +51,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   });
   if (!mat) return errorResponse('Material not found', 404);
 
-  const rows = await prisma.materialUom.findMany({
-    where: { materialId },
-    include: { unit: { select: { id: true, name: true } } },
-    orderBy: [{ isBase: 'desc' }, { createdAt: 'asc' }],
-  });
-
-  return successResponse(serializeMaterialUoms(rows as MaterialUomWithUnit[]));
+  return successResponse(await getSerializedMaterialUoms(materialId));
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -99,7 +103,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return row;
     });
 
-    return successResponse(serializeMaterialUoms([created as MaterialUomWithUnit])[0], 201);
+    const serialized = await getSerializedMaterialUoms(materialId);
+    return successResponse(serialized.find((row) => row.id === created.id) ?? null, 201);
   }
 
   // derived
@@ -140,5 +145,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     include: { unit: { select: { id: true, name: true } } },
   });
 
-  return successResponse(serializeMaterialUoms([created as MaterialUomWithUnit])[0], 201);
+  const serialized = await getSerializedMaterialUoms(materialId);
+  return successResponse(serialized.find((row) => row.id === created.id) ?? null, 201);
 }

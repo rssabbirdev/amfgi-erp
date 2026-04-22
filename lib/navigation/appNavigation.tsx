@@ -8,6 +8,7 @@ export interface AppNavItem {
   category: 'Operations' | 'Master Data' | 'People' | 'Insights' | 'Administration';
   icon: ReactNode;
   perm?: string;
+  anyPerms?: string[];
   adminOnly?: boolean;
   linkedEmployeeOnly?: boolean;
 }
@@ -39,41 +40,15 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     ),
   },
   {
-    href: '/materials',
-    label: 'Materials',
-    shortTitle: 'Materials',
-    description: 'Maintain material master data and stock definitions.',
-    category: 'Master Data',
-    perm: 'material.view',
+    href: '/stock',
+    label: 'Stock',
+    shortTitle: 'Stock',
+    description: 'Open the stock workspace for materials, receipts, dispatch, and batch visibility.',
+    category: 'Operations',
+    anyPerms: ['material.view', 'transaction.stock_in', 'transaction.stock_out'],
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-      </svg>
-    ),
-  },
-  {
-    href: '/goods-receipt',
-    label: 'Goods Receipt',
-    shortTitle: 'Receipts',
-    description: 'Record incoming stock and supplier receipts.',
-    category: 'Operations',
-    perm: 'transaction.stock_in',
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    ),
-  },
-  {
-    href: '/dispatch',
-    label: 'Dispatch',
-    shortTitle: 'Dispatch',
-    description: 'Issue stock, create delivery notes, and send materials out.',
-    category: 'Operations',
-    perm: 'transaction.stock_out',
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
       </svg>
     ),
   },
@@ -117,6 +92,20 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     ),
   },
   {
+    href: '/hr/geofence',
+    label: 'Geofence Attendance',
+    shortTitle: 'Geofence',
+    description: 'Manage factory polygon borders and gate zones for location-based attendance.',
+    category: 'People',
+    perm: 'hr.geofence.view',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2l7 4v5c0 5.25-3.438 9.938-7 11-3.562-1.062-7-5.75-7-11V6l7-4z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9a2.5 2.5 0 110 5 2.5 2.5 0 010-5z" />
+      </svg>
+    ),
+  },
+  {
     href: '/me',
     label: 'My HR',
     shortTitle: 'My HR',
@@ -153,19 +142,6 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-  },
-  {
-    href: '/settings/media',
-    label: 'Media library',
-    shortTitle: 'Media',
-    description: 'Review uploaded media and clean unused files.',
-    category: 'Administration',
-    perm: 'settings.manage',
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     ),
   },
@@ -224,6 +200,9 @@ export function filterVisibleNavItems(
     if (!options.selfServiceOnly && item.linkedEmployeeOnly && !options.linkedEmployeeId) return false;
     if (item.adminOnly) return options.isSuperAdmin;
     if (item.linkedEmployeeOnly) return Boolean(options.linkedEmployeeId);
+    if (item.anyPerms?.length) {
+      return options.isSuperAdmin || item.anyPerms.some((perm) => options.permissions.includes(perm));
+    }
     if (item.perm) return options.isSuperAdmin || options.permissions.includes(item.perm);
     return true;
   });

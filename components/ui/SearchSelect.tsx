@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useId, type InputHTMLAttributes } from 'react';
+import { createPortal } from 'react-dom';
 import { searchItems } from '@/lib/utils/fuzzyMatch';
 
 interface SearchSelectProps<T extends { id: string; label: string; searchText?: string }> {
@@ -19,6 +20,7 @@ interface SearchSelectProps<T extends { id: string; label: string; searchText?: 
   openOnFocus?: boolean;
   clearInputOnFocus?: boolean;
   inputProps?: InputHTMLAttributes<HTMLInputElement>;
+  dropdownInPortal?: boolean;
 }
 
 export default function SearchSelect<T extends { id: string; label: string; searchText?: string }>(
@@ -40,15 +42,22 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     openOnFocus = false,
     clearInputOnFocus = false,
     inputProps,
+    dropdownInPortal = false,
   } = props;
 
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIdx, setHighlightedIdx] = useState(0);
+  const [dropdownStyle, setDropdownStyle] = useState<{
+    left: number;
+    top: number;
+    width: number;
+  } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
-  const mergedInputClassName = [inputProps?.className, 'w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white outline-none transition-colors focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50']
+  const mergedInputClassName = [inputProps?.className, 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-white']
     .filter(Boolean)
     .join(' ');
 
@@ -62,6 +71,29 @@ export default function SearchSelect<T extends { id: string; label: string; sear
       inputRef.current?.focus();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!dropdownInPortal || !isOpen) return;
+
+    const updatePosition = () => {
+      if (!inputRef.current) return;
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        left: rect.left,
+        top: rect.bottom + 4,
+        width: rect.width,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [dropdownInPortal, isOpen]);
 
   const displayedValue = isOpen ? input : selectedItem?.label ?? (value ? input : '');
 
@@ -122,9 +154,11 @@ export default function SearchSelect<T extends { id: string; label: string; sear
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
       if (
         containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
+        !containerRef.current.contains(target) &&
+        !dropdownRef.current?.contains(target)
       ) {
         setIsOpen(false);
       }
@@ -134,10 +168,54 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const resultsDropdown = (
+    <div
+      ref={dropdownRef}
+      id={listboxId}
+      role="listbox"
+      className="z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      style={
+        dropdownInPortal && dropdownStyle
+          ? {
+              position: 'fixed',
+              left: dropdownStyle.left,
+              top: dropdownStyle.top,
+              width: dropdownStyle.width,
+            }
+          : undefined
+      }
+    >
+      {filteredItems.map((item, idx) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => handleSelect(item.id)}
+          onMouseEnter={() => setHighlightedIdx(idx)}
+          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+            idx === highlightedIdx
+              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-400'
+              : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800'
+          }`}
+        >
+          {renderItem ? (
+            renderItem(item, idx === highlightedIdx)
+          ) : (
+            <div>
+              <div className="font-medium">{item.label}</div>
+              {item.searchText && (
+                <div className="text-xs text-slate-500 dark:text-slate-400">{item.searchText}</div>
+              )}
+            </div>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div ref={containerRef} className="relative">
       {label && (
-        <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">
+        <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
           {label}
           {required && ' *'}
         </label>
@@ -189,53 +267,30 @@ export default function SearchSelect<T extends { id: string; label: string; sear
               onChange('');
               setIsOpen(false);
             }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-white"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-900 dark:hover:text-white"
           >
             x
           </button>
         )}
       </div>
 
-      {isOpen && filteredItems.length > 0 && (
-        <div id={listboxId} role="listbox" className="absolute top-full left-0 right-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 shadow-lg">
-          {filteredItems.map((item, idx) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => handleSelect(item.id)}
-              onMouseEnter={() => setHighlightedIdx(idx)}
-              className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                idx === highlightedIdx
-                  ? 'bg-emerald-600/20 text-emerald-400'
-                  : 'text-slate-200 hover:bg-slate-800'
-              }`}
-            >
-              {renderItem ? (
-                renderItem(item, idx === highlightedIdx)
-              ) : (
-                <div>
-                  <div className="font-medium">{item.label}</div>
-                  {item.searchText && (
-                    <div className="text-xs text-slate-400">{item.searchText}</div>
-                  )}
-                </div>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      {isOpen && filteredItems.length > 0
+        ? dropdownInPortal && dropdownStyle
+          ? createPortal(resultsDropdown, document.body)
+          : <div className="absolute left-0 right-0 top-full">{resultsDropdown}</div>
+        : null}
 
       {isOpen && !hasEnoughInput && minCharactersToSearch > 0 && showMinCharactersHint && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-lg">
-          <p className="text-xs text-slate-400">
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Type at least {minCharactersToSearch} character{minCharactersToSearch === 1 ? '' : 's'} to search
           </p>
         </div>
       )}
 
       {isOpen && hasEnoughInput && input && filteredItems.length === 0 && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-lg">
-          <p className="text-xs text-slate-400">No matches found for &quot;{input}&quot;</p>
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <p className="text-xs text-slate-500 dark:text-slate-400">No matches found for &quot;{input}&quot;</p>
         </div>
       )}
     </div>

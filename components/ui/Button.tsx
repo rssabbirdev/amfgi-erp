@@ -14,10 +14,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<Variant, string> = {
   primary:   'bg-emerald-600 hover:bg-emerald-700 text-white border-transparent',
-  secondary: 'bg-slate-700 hover:bg-slate-600 text-white border-slate-600',
+  secondary: 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white dark:border-slate-600',
   danger:    'bg-red-600 hover:bg-red-700 text-white border-transparent',
-  ghost:     'bg-transparent hover:bg-slate-700 text-slate-300 border-transparent',
-  outline:   'bg-transparent hover:bg-slate-700 text-slate-300 border-slate-600',
+  ghost:     'bg-transparent hover:bg-slate-100 text-slate-700 border-transparent dark:hover:bg-slate-700 dark:text-slate-300',
+  outline:   'bg-transparent hover:bg-slate-100 text-slate-700 border-slate-200 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-slate-600',
 };
 
 const sizes: Record<Size, string> = {
@@ -36,7 +36,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled || loading}
       className={[
         'inline-flex items-center justify-center gap-2 rounded-md border font-medium',
-        'transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900 shadow-sm',
+        'transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-white shadow-sm dark:focus:ring-offset-slate-900',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         variants[variant],
         sizes[size],

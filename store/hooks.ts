@@ -1,7 +1,5 @@
 import { useDispatch, useSelector } from 'react-redux';
 import type { RootState, AppDispatch } from './store';
-import { appApi } from './api/appApi';
-import { adminApi } from './api/adminApi';
 
 export const useAppDispatch = () => useDispatch<AppDispatch>();
 export const useAppSelector = <T>(selector: (state: RootState) => T): T =>
@@ -47,6 +45,11 @@ export {
   type Material,
   type MaterialUomDto,
 } from './api/endpoints/materials';
+
+export {
+  useGetStockBatchesQuery,
+  type StockBatch,
+} from './api/endpoints/stockBatches';
 
 export {
   useGetJobsQuery,

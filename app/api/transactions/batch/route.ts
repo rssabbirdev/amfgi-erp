@@ -5,6 +5,18 @@ import { z } from 'zod';
 import { calculateFIFOConsumption } from '@/lib/utils/fifoConsumption';
 import { createBatchData } from '@/lib/utils/stockBatchManagement';
 import { resolveQuantityToBase, resolveFactorToBase } from '@/lib/utils/materialUomDb';
+import {
+  buildCustomerDriveFolderName,
+  buildJobDriveFolderName,
+  buildSignedDeliveryNoteDriveFileName,
+  moveDriveFile,
+} from '@/lib/utils/googleDrive';
+
+function parseDeliveryNoteLabel(notes?: string | null): string {
+  const match = notes?.match(/--- DELIVERY NOTE #(\d+)/);
+  const raw = match?.[1] ?? '';
+  return `DN${(raw || '0').padStart(3, '0')}`;
+}
 
 const LineSchema = z.object({
   materialId:     z.string().min(1),
@@ -90,6 +102,12 @@ export async function POST(req: Request) {
   try {
     const result = await prisma.$transaction(async (tx) => {
       const created: string[] = [];
+      let preservedSignedCopy:
+        | {
+            signedCopyDriveId: string;
+            signedCopyUrl: string | null;
+          }
+        | null = null;
 
       // Delete existing transactions and reverse stock if updating
       if (existingTransactionIds && existingTransactionIds.length > 0) {
@@ -100,6 +118,12 @@ export async function POST(req: Request) {
           });
 
           if (existingTxn) {
+            if (!preservedSignedCopy && existingTxn.signedCopyDriveId) {
+              preservedSignedCopy = {
+                signedCopyDriveId: existingTxn.signedCopyDriveId,
+                signedCopyUrl: existingTxn.signedCopyUrl,
+              };
+            }
             // Reverse stock impact
             if (existingTxn.type === 'STOCK_OUT') {
               // STOCK_OUT reduced stock, so add it back
@@ -240,7 +264,7 @@ export async function POST(req: Request) {
           // Calculate FIFO consumption with Prisma StockBatch objects
           const fifoResult = calculateFIFOConsumption(
             batches.map((b) => ({
-              _id: b.id as any, // Map string id to _id for FIFO function
+              id: b.id,
               batchNumber: b.batchNumber,
               quantityAvailable: b.quantityAvailable,
               unitCost: b.unitCost,
@@ -299,6 +323,8 @@ export async function POST(req: Request) {
               averageCost: fifoResult.averageCost,
               notes: notes || null,
               isDeliveryNote: isDeliveryNote || false,
+              signedCopyDriveId: preservedSignedCopy && created.length === 0 ? preservedSignedCopy.signedCopyDriveId : null,
+              signedCopyUrl: preservedSignedCopy && created.length === 0 ? preservedSignedCopy.signedCopyUrl : null,
               date: txDate,
               performedBy: session.user.id,
             },
@@ -367,7 +393,7 @@ export async function POST(req: Request) {
           });
 
           // Create StockBatch record
-          const newBatch = await tx.stockBatch.create({
+          await tx.stockBatch.create({
             data: {
               companyId,
               ...batchData,
@@ -446,7 +472,7 @@ export async function POST(req: Request) {
             await tx.material.update({
               where: { id: update.materialId },
               data: {
-                unitCost: update.unitCost,
+                unitCost: currentPrice,
               },
             });
           }
@@ -459,8 +485,59 @@ export async function POST(req: Request) {
         billAmount,
         includeTax,
         taxAmount,
+        signedCopyDriveId: preservedSignedCopy?.signedCopyDriveId ?? null,
       };
     });
+
+    if (result.signedCopyDriveId && result.ids.length > 0 && jobId) {
+      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
+      if (folderId) {
+        try {
+          const job = await prisma.job.findUnique({
+            where: { id: jobId },
+            select: {
+              id: true,
+              jobNumber: true,
+              customerId: true,
+              customer: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          });
+
+          if (job) {
+            const customerId = job.customer?.id || job.customerId || 'customer';
+            const customerName = job.customer?.name || 'Customer';
+            const fileName = buildSignedDeliveryNoteDriveFileName(
+              parseDeliveryNoteLabel(notes),
+              job.jobNumber || 'JOB',
+              result.ids[0],
+            );
+
+            await moveDriveFile(result.signedCopyDriveId, fileName, {
+              companyId,
+              rootFolderId: folderId,
+              folderPath: [
+                { key: 'drive-folder:customer-root', name: 'Customer' },
+                {
+                  key: `drive-folder:customer:${customerId}`,
+                  name: buildCustomerDriveFolderName(customerName, customerId),
+                },
+                {
+                  key: `drive-folder:job:${job.id}`,
+                  name: buildJobDriveFolderName(job.jobNumber || 'JOB', job.id),
+                },
+              ],
+            });
+          }
+        } catch (moveError) {
+          console.error('Failed to move signed delivery note copy after save:', moveError);
+        }
+      }
+    }
 
     return successResponse(result, 201);
   } catch (err: unknown) {

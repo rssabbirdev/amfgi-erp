@@ -1,0 +1,1423 @@
+{
+  "communities": {
+    "0": [
+      "apiresponse_errorresponse",
+      "apiresponse_successresponse",
+      "c_almuraqib_custom_application_amfgi_app_api_categories_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_categories_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_companies_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_companies_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_company_profiles_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_customers_id_check_delete_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_customers_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_customers_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_customers_sync_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_delivery_notes_next_number_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_attendance_bulk_upsert_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_attendance_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_attendance_monthly_report_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_attendance_overview_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_attendance_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_document_types_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_document_types_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_documents_expiring_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_documents_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_documents_id_upload_file_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_employee_type_settings_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_employees_id_documents_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_employees_id_portal_link_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_employees_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_employees_id_upload_photo_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_employees_id_visa_periods_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_employees_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_expertises_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_expertises_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_schedule_id_absences_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_schedule_id_assignments_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_schedule_id_driver_logs_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_schedule_id_generate_attendance_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_schedule_id_import_csv_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_schedule_id_import_xlsx_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_schedule_id_lock_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_schedule_id_publish_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_schedule_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_schedule_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_hr_visa_periods_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_integrations_jobs_upsert_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_jobs_id_check_delete_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_jobs_id_consumption_costing_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_jobs_id_materials_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_jobs_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_jobs_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_bulk_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_cross_company_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_dispatch_history_entries_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_dispatch_history_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_id_check_delete_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_id_logs_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_id_price_logs_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_id_uoms_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_id_uoms_uomid_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_logs_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_price_logs_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_receipt_history_entries_receiptnumber_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_receipt_history_entries_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_materials_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_me_attendance_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_me_employee_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_me_schedule_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_media_cleanup_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_media_drive_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_media_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_media_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_reports_consumption_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_reports_job_consumption_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_reports_stock_valuation_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_roles_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_roles_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_session_switch_company_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_session_switch_profile_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_settings_google_drive_oauth_callback_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_settings_google_drive_oauth_start_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_settings_google_drive_status_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_settings_integration_logs_id_retry_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_settings_integration_logs_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_suppliers_id_check_delete_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_suppliers_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_suppliers_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_suppliers_sync_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_transactions_batch_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_transactions_dispatch_entry_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_transactions_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_transactions_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_transactions_transfer_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_units_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_units_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_upload_letterhead_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_upload_signed_copy_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_upload_template_image_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_upload_user_profile_image_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_upload_user_signature_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_user_profile_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_users_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_users_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_warehouses_id_route_ts",
+      "c_almuraqib_custom_application_amfgi_app_api_warehouses_route_ts",
+      "c_almuraqib_custom_application_amfgi_components_reports_jobconsumptiontable_tsx",
+      "c_almuraqib_custom_application_amfgi_lib_hr_defaultdocumenttypes_ts",
+      "c_almuraqib_custom_application_amfgi_lib_hr_linkedemployee_ts",
+      "c_almuraqib_custom_application_amfgi_lib_hr_requirecompanysession_ts",
+      "c_almuraqib_custom_application_amfgi_lib_hr_workdate_ts",
+      "c_almuraqib_custom_application_amfgi_lib_utils_apiresponse_ts",
+      "c_almuraqib_custom_application_amfgi_lib_utils_materialuom_ts",
+      "c_almuraqib_custom_application_amfgi_lib_utils_requireactivecompanyindb_ts",
+      "defaultdocumenttypes_ensuredefaultemployeedocumenttypes",
+      "jobconsumptiontable_buildpivot",
+      "linkedemployee_getportalemployeeforsession",
+      "materialuom_assertacyclicnewparent",
+      "materialuom_serializematerialuoms",
+      "requireactivecompanyindb_requireactivecompanyindb",
+      "requirecompanysession_hasperm",
+      "requirecompanysession_requirecompanysession",
+      "requirecompanysession_requireperm",
+      "route_canaccess",
+      "route_canedit",
+      "route_canmanagedrive",
+      "route_canview",
+      "route_delete",
+      "route_diffminutes",
+      "route_displayprofileimage",
+      "route_displaysignature",
+      "route_get",
+      "route_hasmanagepermission",
+      "route_jobusesexpertise",
+      "route_monthboundsfromymd",
+      "route_parsedt",
+      "route_parserequestbody",
+      "route_patch",
+      "route_post",
+      "route_put",
+      "route_readapikey",
+      "route_readidempotencykey",
+      "route_redirecttosettings",
+      "route_sanitizesheetname",
+      "workdate_datefromymd",
+      "workdate_ymdfrominput"
+    ],
+    "1": [
+      "appshell_onkey",
+      "appshell_persistscroll",
+      "c_almuraqib_custom_application_amfgi_app_app_dashboard_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_hr_employees_new_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_hr_settings_document_types_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_hr_settings_expertises_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_settings_media_page_tsx",
+      "c_almuraqib_custom_application_amfgi_components_hr_employeeprofileview_tsx",
+      "c_almuraqib_custom_application_amfgi_components_layout_appshell_tsx",
+      "c_almuraqib_custom_application_amfgi_components_print_builder_templatebuilder_tsx",
+      "c_almuraqib_custom_application_amfgi_lib_hr_workforceprofile_ts",
+      "documentrenderer_string",
+      "employeeprofileview_adddocument",
+      "employeeprofileview_buildoverviewdraftsignature",
+      "employeeprofileview_buildoverviewemployeesignature",
+      "employeeprofileview_daysuntil",
+      "employeeprofileview_deletedocument",
+      "employeeprofileview_deletevisa",
+      "employeeprofileview_drivefilewebviewurl",
+      "employeeprofileview_initials",
+      "employeeprofileview_onbeforeunload",
+      "employeeprofileview_ondocumentclick",
+      "employeeprofileview_onpopstate",
+      "employeeprofileview_onsaveoverview",
+      "employeeprofileview_openphotocontextmenu",
+      "employeeprofileview_patchemployee",
+      "employeeprofileview_provisionlogin",
+      "employeeprofileview_readapijson",
+      "employeeprofileview_removeprofilephoto",
+      "employeeprofileview_saveediteddocument",
+      "employeeprofileview_submitvisa",
+      "employeeprofileview_tenurelabel",
+      "employeeprofileview_toinputdate",
+      "employeeprofileview_uploadphotofrominput",
+      "employeeprofileview_validitylabel",
+      "page_bodytextstyle",
+      "page_createtype",
+      "page_formatbytes",
+      "page_formatscheduletimeforprint",
+      "page_generateemployeecode",
+      "page_getinitialworkprocessdetails",
+      "page_load",
+      "page_mutedtextstyle",
+      "page_oncleanuporphans",
+      "page_oncreate",
+      "page_ondelete",
+      "page_ondeleteone",
+      "page_onsave",
+      "page_parsejobexpertise",
+      "page_publish",
+      "page_rememberscrollposition",
+      "page_removetype",
+      "page_saveedit",
+      "page_sectioncardstyle",
+      "page_submit",
+      "page_summarizename",
+      "page_usagesummary",
+      "templatebuilder_cloneeditorsnapshot",
+      "templatebuilder_formatscheduletimeforprint",
+      "templatebuilder_handlesave",
+      "templatebuilder_layoutsnapshotkey",
+      "templatebuilder_layoutversionsstoragekey",
+      "templatebuilder_loadlayoutversions",
+      "templatebuilder_navchip",
+      "templatebuilder_newsectiongroupid",
+      "templatebuilder_persistlayoutversions",
+      "templatebuilder_requestclose",
+      "templatedata_formatscheduletimeforprint",
+      "templatedata_resolvefield",
+      "workforceprofile_buildworkforceprofileextension",
+      "workforceprofile_normalizeexpertises",
+      "workforceprofile_normalizetype",
+      "workforceprofile_normalizevisaholding",
+      "workforceprofile_parseworkforceprofile"
+    ],
+    "2": [
+      "c_almuraqib_custom_application_amfgi_app_app_admin_companies_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_admin_roles_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_admin_users_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_customers_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_jobs_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_materials_id_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_materials_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_reports_job_consumption_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_suppliers_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_settings_print_template_edit_page_tsx",
+      "c_almuraqib_custom_application_amfgi_lib_partyformui_ts",
+      "page_addaccessrow",
+      "page_addcontactrow",
+      "page_applypreset",
+      "page_canedit",
+      "page_compactnumber",
+      "page_customerstatusclasses",
+      "page_cx",
+      "page_extractapierrormessage",
+      "page_fetchroles",
+      "page_fetchusers",
+      "page_formatdate",
+      "page_handleclose",
+      "page_handlecreatecategory",
+      "page_handlecreatejob",
+      "page_handlecreateunit",
+      "page_handlecreatevariation",
+      "page_handlecreatewarehouse",
+      "page_handledelete",
+      "page_handledeletejob",
+      "page_handleeditclick",
+      "page_handleeditjob",
+      "page_handleexport",
+      "page_handlejobcontextmenu",
+      "page_handlerowcontextmenu",
+      "page_handlesave",
+      "page_handlesearch",
+      "page_handlesyncpartycustomers",
+      "page_handlesyncpartysuppliers",
+      "page_handletoggleactive",
+      "page_jobstatusclasses",
+      "page_matchestext",
+      "page_onbeforeunload",
+      "page_opencreate",
+      "page_opencustomercontextmenu",
+      "page_opencustomerdetails",
+      "page_opendeletemodal",
+      "page_openedit",
+      "page_openjobcontextmenu",
+      "page_prettyjobstatus",
+      "page_removeaccessrow",
+      "page_removecontactrow",
+      "page_togglejob",
+      "page_togglemainjob",
+      "page_toggleperm",
+      "page_updateaccessrow",
+      "page_updatecontactrow",
+      "partyformui_customerpartyformtoapibody",
+      "partyformui_customertopartyformstate",
+      "partyformui_emptycustomerpartyformstate",
+      "partyformui_emptysupplierpartyformstate",
+      "partyformui_formatpartydateinput",
+      "partyformui_rowsfromcontactsjson",
+      "partyformui_supplierpartyformtoapibody",
+      "partyformui_suppliertopartyformstate"
+    ],
+    "3": [
+      "c_almuraqib_custom_application_amfgi_app_app_hr_schedule_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_hr_schedule_workdate_page_tsx",
+      "page_addcolumn",
+      "page_adddrivertriprow",
+      "page_addflatmember",
+      "page_addsubteam",
+      "page_addsubteammember",
+      "page_addworkertosubteambydrop",
+      "page_addworkertoteam",
+      "page_applydrafts",
+      "page_applypreviousscheduletemplate",
+      "page_applytimingfromtemplate",
+      "page_buildschedulepreviewdata",
+      "page_createemptydraft",
+      "page_createemptysubteam",
+      "page_createschedule",
+      "page_duplicatecolumn",
+      "page_empname",
+      "page_extractsubteamsfrommembers",
+      "page_filltimingtemplate",
+      "page_formatdatelabel",
+      "page_getnextteamnumber",
+      "page_nextsubteamlabel",
+      "page_normalizedraft",
+      "page_normalizememberlist",
+      "page_normalizeskill",
+      "page_onkeydown",
+      "page_onworkerdragstart",
+      "page_onworkerdrop",
+      "page_onworkerdroptosubteam",
+      "page_openscheduleprintoutput",
+      "page_parsebrk",
+      "page_readapienvelope",
+      "page_readstoredscheduleviewprefs",
+      "page_redo",
+      "page_removecolumn",
+      "page_removedrivertriprow",
+      "page_removeflatmember",
+      "page_removesubteam",
+      "page_removesubteammember",
+      "page_resolveworkprocessdetails",
+      "page_saveassignments",
+      "page_statcard",
+      "page_togglesplitmode",
+      "page_undo",
+      "page_upd",
+      "page_updateflatmember",
+      "page_updatesubteammember",
+      "page_updatesubteammeta",
+      "templatebuilder_onkey"
+    ],
+    "4": [
+      "c_almuraqib_custom_application_amfgi_app_app_dispatch_delivery_note_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_dispatch_entry_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_dispatch_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_goods_receipt_receive_page_tsx",
+      "page_addcustomitem",
+      "page_addline",
+      "page_confirmchange",
+      "page_confirmdelete",
+      "page_crosscompanymaterialloader",
+      "page_duplicatecustomitem",
+      "page_duplicateline",
+      "page_emptyline",
+      "page_executesubmit",
+      "page_fetchentries",
+      "page_fetchnextnumber",
+      "page_fetchreceiptdata",
+      "page_generateid",
+      "page_getbasenotes",
+      "page_getdeliverynotenumber",
+      "page_geteffectivematerial",
+      "page_getjob",
+      "page_getjobcontactoptions",
+      "page_getmaterial",
+      "page_getsuppliername",
+      "page_handleconfirmtransfer",
+      "page_handlecreatecontactperson",
+      "page_handledatechange",
+      "page_handleduplicate",
+      "page_handlefiltertypechange",
+      "page_handlejobchange",
+      "page_handlesubmit",
+      "page_hasdata",
+      "page_linetotal",
+      "page_loadtransaction",
+      "page_parsecustomitems",
+      "page_parsedeliverycontactperson",
+      "page_parsedeliverynotenumber",
+      "page_parsejobcontacts",
+      "page_qtyinbase",
+      "page_removecustomitem",
+      "page_removeline",
+      "page_setlinesourcecompany",
+      "page_signedcopyurl",
+      "page_togglesourcemode",
+      "page_uid",
+      "page_updatecustomitem",
+      "page_updateline",
+      "page_validateandsubmit"
+    ],
+    "5": [
+      "c_almuraqib_custom_application_amfgi_lib_media_userscopedmedia_ts",
+      "c_almuraqib_custom_application_amfgi_lib_utils_companyprinttemplates_ts",
+      "c_almuraqib_custom_application_amfgi_lib_utils_googledrive_ts",
+      "c_almuraqib_custom_application_amfgi_lib_utils_googledriveurl_ts",
+      "companyprinttemplates_extractindexedtemplates",
+      "companyprinttemplates_istemplatelike",
+      "companyprinttemplates_normalizecompanyprinttemplateshape",
+      "companyprinttemplates_readcompanydocumenttemplates",
+      "companyprinttemplates_readcompanygoogledrivefolderregistry",
+      "companyprinttemplates_readcompanygoogledriveoauthconfig",
+      "companyprinttemplates_toobjectroot",
+      "companyprinttemplates_writecompanygoogledrivefolderregistry",
+      "companyprinttemplates_writecompanygoogledriveoauthconfig",
+      "googledrive_buildcompanydrivefoldername",
+      "googledrive_buildcustomerdrivefoldername",
+      "googledrive_buildemployeedrivefoldername",
+      "googledrive_buildjobdrivefoldername",
+      "googledrive_builduserdrivefoldername",
+      "googledrive_creategoogledriveauthorizationurl",
+      "googledrive_createoauthclient",
+      "googledrive_deletefromdrive",
+      "googledrive_ensurechildfolder",
+      "googledrive_ensurefolderpath",
+      "googledrive_escapedrivequeryvalue",
+      "googledrive_exchangegoogledriveauthorizationcode",
+      "googledrive_explaingoogledriveerror",
+      "googledrive_getdriveclientforcompany",
+      "googledrive_getgoogledriveoauthredirecturi",
+      "googledrive_loadcompanydriveoauthconfig",
+      "googledrive_renamefolderifneeded",
+      "googledrive_requireclientcredentials",
+      "googledrive_sanitizefoldername",
+      "googledrive_uploadtodrive",
+      "googledriveurl_convertgoogledriveurl",
+      "googledriveurl_drivefileidtodisplayurl",
+      "googledriveurl_extractgoogledrivefileid",
+      "googledriveurl_resolveboundfieldimagesrc",
+      "page_loadcompanydata",
+      "page_previewsrc",
+      "userscopedmedia_finalizeusermediaupload"
+    ],
+    "6": [
+      "c_almuraqib_custom_application_amfgi_components_print_builder_canvaspreview_tsx",
+      "c_almuraqib_custom_application_amfgi_lib_types_documenttemplate_ts",
+      "c_almuraqib_custom_application_amfgi_lib_utils_canvaslayout_ts",
+      "c_almuraqib_custom_application_amfgi_lib_utils_documentdefaults_ts",
+      "canvaslayout_buildcanvasrectsfromsections",
+      "canvaslayout_clamprecttocontent",
+      "canvaslayout_contentheightmm",
+      "canvaslayout_contentwidthmm",
+      "canvaslayout_ensurecanvasrects",
+      "canvaslayout_estimatesectionheightmm",
+      "canvaslayout_getpagedimensionsmm",
+      "canvaslayout_marginbleedbox",
+      "canvaslayout_materializecanvaszorder",
+      "canvaslayout_pttomm",
+      "canvaslayout_reordercanvasrectz",
+      "canvaslayout_resolvecanvasrectsforsections",
+      "canvaslayout_snapcanvasrect",
+      "canvaspreview_canvasoverlayz",
+      "canvaspreview_handlecanvasoverlaymousedown",
+      "canvaspreview_handleflowresizestart",
+      "canvaspreview_onmove",
+      "canvaspreview_onup",
+      "canvaspreview_overlaychrome",
+      "canvaspreview_startcanvasresize",
+      "documentdefaults_createworkscheduletemplatedraft",
+      "documenttemplate_createdefaultsection",
+      "documenttemplate_getcanvasmoveindicesforsection",
+      "documenttemplate_getsectioncustomnameinputvalue",
+      "documenttemplate_getsectionorderdisplay",
+      "documenttemplate_getsectionorderlabel",
+      "documenttemplate_getsectiontypelabel",
+      "documenttemplate_issectionlocked"
+    ],
+    "7": [
+      "apikeys_generateintegrationapikey",
+      "apikeys_resolveapicredentialbykey",
+      "apikeys_sha256",
+      "c_almuraqib_custom_application_amfgi_app_app_hr_settings_employee_types_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_profile_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_auth_select_company_page_tsx",
+      "c_almuraqib_custom_application_amfgi_components_layout_companyswitcher_tsx",
+      "c_almuraqib_custom_application_amfgi_lib_hr_provisionemployeeuser_ts",
+      "c_almuraqib_custom_application_amfgi_lib_integrations_apikeys_ts",
+      "c_almuraqib_custom_application_amfgi_lib_integrations_jobsyncservice_ts",
+      "companyswitcher_fn",
+      "companyswitcher_handleswitch",
+      "companyswitcher_handleswitchconfirmed",
+      "companyswitcher_onkey",
+      "employeeprofileview_linkportal",
+      "employeeprofileview_unlinkportal",
+      "jobsyncservice_jobsyncconflicterror",
+      "jobsyncservice_jobsyncconflicterror_constructor",
+      "jobsyncservice_jobsyncreferenceerror",
+      "jobsyncservice_jobsyncreferenceerror_constructor",
+      "jobsyncservice_parsedateornull",
+      "jobsyncservice_processjobupsert",
+      "jobsyncservice_resolvecustomerforjobupsert",
+      "page_emptyavatar",
+      "page_handleselect",
+      "page_onavatarchange",
+      "page_onsignaturechange",
+      "page_save",
+      "page_savename",
+      "page_update",
+      "provisionemployeeuser_provisionemployeeuser"
+    ],
+    "8": [
+      "attendancereportformatting_attendancereportcolumnlabel",
+      "attendancereportformatting_attendancereportstatuslabel",
+      "attendancereportformatting_formatattendancereportcell",
+      "attendancereportformatting_formatattendancereportdate",
+      "attendancereportformatting_formatattendancereporthours",
+      "attendancereportformatting_formatattendancereporttime",
+      "attendancereportformatting_normalizeattendancereportcolumns",
+      "attendancereportformatting_normalizeattendancereportformats",
+      "attendancereports_diffminutes",
+      "attendancereports_exportstatuslabel",
+      "attendancereports_exportworklocation",
+      "attendancereports_findmonthlyattendancerows",
+      "attendancereports_formathoursfromminutes",
+      "attendancereports_getmonthlyattendancereports",
+      "attendancereports_isoday",
+      "attendancereports_locationlabel",
+      "attendancereports_minutesofday",
+      "attendancereports_monthbounds",
+      "c_almuraqib_custom_application_amfgi_lib_hr_attendancereportformatting_ts",
+      "c_almuraqib_custom_application_amfgi_lib_hr_attendancereports_ts",
+      "c_almuraqib_custom_application_amfgi_lib_hr_employeetypesettings_ts",
+      "employeetypesettings_basichoursforprofileextension",
+      "employeetypesettings_employeetypefromprofileextension",
+      "employeetypesettings_normalizebasichours",
+      "employeetypesettings_normalizeemployeetypesettings",
+      "employeetypesettings_normalizetime",
+      "employeetypesettings_reademployeetypesettingsfromcompanydata",
+      "employeetypesettings_writeemployeetypesettingsintocompanyfield"
+    ],
+    "9": [
+      "c_almuraqib_custom_application_amfgi_app_app_hr_attendance_create_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_hr_attendance_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_print_delivery_note_page_tsx",
+      "c_almuraqib_custom_application_amfgi_components_transactions_transactionledger_tsx",
+      "page_attendancecreatepage",
+      "page_builddraftfromexistingrow",
+      "page_calculateworkedminutes",
+      "page_combinedateandtimetoiso",
+      "page_commitvalue",
+      "page_convertscheduletoattendance",
+      "page_deleteattendancebydate",
+      "page_diffminutes",
+      "page_emptystate",
+      "page_formathourvalue",
+      "page_formattimefordisplay",
+      "page_if",
+      "page_minutesfromtimevalue",
+      "page_panel",
+      "page_parsebreakwindow",
+      "page_parseflexibletimeinput",
+      "page_refreshoverview",
+      "page_todayymd",
+      "page_tolocaltimeinput",
+      "page_workedhourtone",
+      "transactionledger_transactionledger"
+    ],
+    "10": [
+      "mongodb_archived_archive_status",
+      "mongodb_archived_archived_files_section",
+      "mongodb_archived_company_ts",
+      "mongodb_archived_connect_ts",
+      "mongodb_archived_current_client",
+      "mongodb_archived_database_change",
+      "mongodb_archived_doc",
+      "mongodb_archived_id_system_change",
+      "mongodb_archived_key_changes",
+      "mongodb_archived_migration_complete",
+      "mongodb_archived_models_dir",
+      "mongodb_archived_mongoClient_ts",
+      "mongodb_archived_mongoose_mongodb_stack",
+      "mongodb_archived_orm_change",
+      "mongodb_archived_prisma_mysql_stack",
+      "mongodb_archived_restore_dependencies",
+      "mongodb_archived_restore_env_vars",
+      "mongodb_archived_restore_git_history",
+      "mongodb_archived_restore_mongodb_support",
+      "mongodb_archived_schemas_dir",
+      "mongodb_archived_system_ts",
+      "mongodb_archived_tenancy_change",
+      "mongodb_archived_transactions_change",
+      "mongodb_archived_why_archived"
+    ],
+    "11": [
+      "c_almuraqib_custom_application_amfgi_lib_utils_formatters_ts",
+      "c_almuraqib_custom_application_amfgi_lib_utils_templatedata_ts",
+      "formatters_formatcurrency",
+      "formatters_formatdate",
+      "formatters_formatdatetime",
+      "formatters_formatnumber",
+      "templatedata_builddatacontext",
+      "templatedata_builddeliverynotetemplatedata",
+      "templatedata_buildtemplatedata",
+      "templatedata_contactsjsontostring",
+      "templatedata_deliverynotetablerowsfromnotesandtransactions",
+      "templatedata_enrichwithprimarycontact",
+      "templatedata_finitenumber",
+      "templatedata_formatvalue",
+      "templatedata_getmockdata",
+      "templatedata_jobtemplateslice",
+      "templatedata_parsecustomitems",
+      "templatedata_parsedeliverycontactperson",
+      "templatedata_parsedeliverynotenumber",
+      "templatedata_parsejobcontacts",
+      "templatedata_stockoutmaterialtablerows",
+      "templatedata_toisodatestring",
+      "templatedata_userslicefromsession"
+    ],
+    "12": [
+      "attendancereportbuilder_attendancereportfieldkind",
+      "attendancereportbuilder_attendancereportfieldlabel",
+      "attendancereportbuilder_attendancestatuslabel",
+      "attendancereportbuilder_formatattendancereportbuildercell",
+      "attendancereportbuilder_formatdatevalue",
+      "attendancereportbuilder_formathoursvalue",
+      "attendancereportbuilder_formattimevalue",
+      "attendancereportbuilder_normalizeattendancereportbuilderschema",
+      "attendancereportbuilder_rawfieldvalue",
+      "c_almuraqib_custom_application_amfgi_app_app_hr_reports_attendance_builder_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_hr_reports_attendance_page_tsx",
+      "c_almuraqib_custom_application_amfgi_lib_hr_attendancereportbuilder_ts",
+      "page_availableformats",
+      "page_buildbasequery",
+      "page_buildquery",
+      "page_buildquerystring",
+      "page_currentmonth",
+      "page_downloadfile",
+      "page_formathours",
+      "page_makecolumn"
+    ],
+    "13": [
+      "c_almuraqib_custom_application_amfgi_app_app_settings_page_tsx",
+      "companyprinttemplates_writecompanydocumenttemplates",
+      "page_copynewapikey",
+      "page_extractmutationerrormessage",
+      "page_handlecategorydelete",
+      "page_handlecategorysave",
+      "page_handlecreateapicredential",
+      "page_handlerevokeapicredential",
+      "page_handlesetdefault",
+      "page_handletemplatedelete",
+      "page_handletemplateduplicate",
+      "page_handleunitdelete",
+      "page_handleunitsave",
+      "page_handlewarehousedelete",
+      "page_handlewarehousesave",
+      "page_opendomainmodal",
+      "page_retryintegrationlog",
+      "page_runintegrationplayground",
+      "page_savedomainmodal"
+    ],
+    "14": [
+      "c_almuraqib_custom_application_amfgi_lib_partylistrecordpayload_ts",
+      "c_almuraqib_custom_application_amfgi_lib_partylistsapi_ts",
+      "partylistrecordpayload_applypartialpartyfieldstoupdate",
+      "partylistrecordpayload_contactstojson",
+      "partylistrecordpayload_primaryfrompartycontacts",
+      "partylistrecordpayload_prismapartyfieldsfrombody",
+      "partylistrecordpayload_sortcontacts",
+      "partylistrecordpayload_strornull",
+      "partylistsapi_buildpartylisturl",
+      "partylistsapi_fetchexternalclients",
+      "partylistsapi_fetchexternalsuppliers",
+      "partylistsapi_fetchpartylistarray",
+      "partylistsapi_getpartylistsapiconfig",
+      "partylistsapi_mappartytocustomerfields",
+      "partylistsapi_normalizepartylistsbaseurl",
+      "partylistsapi_normalizepartylistsbearertoken",
+      "partylistsapi_parsepartylistdateinput",
+      "partylistsapi_resolvepartylistrequesturl"
+    ],
+    "15": [
+      "c_almuraqib_custom_application_amfgi_components_me_shared_tsx",
+      "shared_currentmonthvalue",
+      "shared_diffminutes",
+      "shared_displayname",
+      "shared_formatdate",
+      "shared_formathours",
+      "shared_formattime",
+      "shared_initials",
+      "shared_jobnumberlabel",
+      "shared_monthbounds",
+      "shared_statustone",
+      "shared_upcomingdocument",
+      "shared_worklocationlabel"
+    ],
+    "16": [
+      "c_almuraqib_custom_application_amfgi_app_app_jobs_id_consumption_costing_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_hr_schedule_print_page_tsx",
+      "c_almuraqib_custom_application_amfgi_components_print_builder_searchablefieldselect_tsx",
+      "page_fetchdata",
+      "page_handleclickoutside",
+      "page_handleexportexcel",
+      "page_handleprint",
+      "page_togglevariation",
+      "page_workscheduleprintpage",
+      "searchablefieldselect_close",
+      "searchablefieldselect_mergefielddefs"
+    ],
+    "17": [
+      "c_almuraqib_custom_application_amfgi_components_print_builder_sectioneditor_tsx",
+      "sectioneditor_applysuggestion",
+      "sectioneditor_detecttemplatetoken",
+      "sectioneditor_editoralignselect",
+      "sectioneditor_editorcheckbox",
+      "sectioneditor_editorinput",
+      "sectioneditor_editorverticalalignselect",
+      "sectioneditor_movearrayitem",
+      "sectioneditor_patchrect",
+      "sectioneditor_refreshtoken",
+      "sectioneditor_settablecolumncollapsed"
+    ],
+    "18": [
+      "c_almuraqib_custom_application_amfgi_lib_hr_matchemployee_ts",
+      "c_almuraqib_custom_application_amfgi_lib_hr_parsedailyworkschedulecsv_ts",
+      "c_almuraqib_custom_application_amfgi_lib_hr_runschedulecsvimport_ts",
+      "matchemployee_findemployeebynameinsensitive",
+      "parsedailyworkschedulecsv_isfactoryjobnumber",
+      "parsedailyworkschedulecsv_parsedailyworkschedulecsv",
+      "parsedailyworkschedulecsv_parseusdatecell",
+      "parsedailyworkschedulecsv_rowlabel",
+      "parsedailyworkschedulecsv_splitcsvline",
+      "runschedulecsvimport_runschedulecsvimport"
+    ],
+    "19": [
+      "c_almuraqib_custom_application_amfgi_components_print_builder_documentrenderer_tsx",
+      "c_almuraqib_custom_application_amfgi_components_print_builder_sectionstylewrap_tsx",
+      "documentrenderer_canshareprintrow",
+      "documentrenderer_flushrow",
+      "documentrenderer_previewpttopx",
+      "documentrenderer_pt",
+      "documentrenderer_shouldkeepcanvasplacementinprint",
+      "documentrenderer_u",
+      "sectionstylewrap_wrapsectionchrome"
+    ],
+    "20": [
+      "c_almuraqib_custom_application_amfgi_app_app_jobs_form_page_tsx",
+      "c_almuraqib_custom_application_amfgi_lib_jobcontactformui_ts",
+      "jobcontactformui_emptyjobcontactrow",
+      "jobcontactformui_jobcontactstorows",
+      "jobcontactformui_primaryjobcontactpersonfromrows",
+      "jobcontactformui_rowhascontent",
+      "jobcontactformui_rowstojobcontactspayload",
+      "page_jobformpage"
+    ],
+    "21": [
+      "c_almuraqib_custom_application_amfgi_lib_hr_dubaishift_ts",
+      "c_almuraqib_custom_application_amfgi_lib_hr_generateattendancefromschedule_ts",
+      "dubaishift_atdubaistartofdayutc",
+      "dubaishift_dubaiwalltimetoutc",
+      "dubaishift_parsetimecell",
+      "generateattendancefromschedule_parsebreakwindow",
+      "generateattendancefromschedule_regenerateattendanceboilerplate",
+      "generateattendancefromschedule_ymd"
+    ],
+    "22": [
+      "c_almuraqib_custom_application_amfgi_lib_utils_fifoconsumption_ts",
+      "c_almuraqib_custom_application_amfgi_lib_utils_stockbatchmanagement_ts",
+      "fifoconsumption_calculatefifoconsumption",
+      "fifoconsumption_generatebatchnumber",
+      "fifoconsumption_hasenoughstock",
+      "stockbatchmanagement_calculateweightedaveragecost",
+      "stockbatchmanagement_createbatchdata",
+      "stockbatchmanagement_formatbatchforreport"
+    ],
+    "23": [
+      "c_almuraqib_custom_application_amfgi_lib_integrations_domainallowlist_ts",
+      "domainallowlist_integrationdomaincheck",
+      "domainallowlist_isrequesthostallowed",
+      "domainallowlist_normalizealloweddomainslist",
+      "domainallowlist_normalizedomainorurltohostname",
+      "domainallowlist_parsestoredalloweddomains",
+      "domainallowlist_requestclienthost"
+    ],
+    "24": [
+      "c_almuraqib_custom_application_amfgi_app_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_unauthorized_page_tsx",
+      "c_almuraqib_custom_application_amfgi_lib_auth_selfservice_ts",
+      "page_rootpage",
+      "page_unauthorizedpage",
+      "selfservice_isemployeeselfserviceuser"
+    ],
+    "25": [
+      "c_almuraqib_custom_application_amfgi_lib_utils_itemtypefields_ts",
+      "itemtypefields_getfieldsforitemtype",
+      "itemtypefields_getitemtypelabel",
+      "itemtypefields_gettablecolumnfieldsfordatasource",
+      "itemtypefields_mergefieldlists",
+      "itemtypefields_registerprintitemtypefields"
+    ],
+    "26": [
+      "c_almuraqib_custom_application_amfgi_components_print_builder_pagechromeeditor_tsx",
+      "pagechromeeditor_applypick",
+      "pagechromeeditor_patch",
+      "pagechromeeditor_resolvetemplatetoken",
+      "pagechromeeditor_uploadbackgroundimage"
+    ],
+    "27": [
+      "c_almuraqib_custom_application_amfgi_components_ui_searchselect_tsx",
+      "searchselect_handleclickoutside",
+      "searchselect_handleinputchange",
+      "searchselect_handlekeydown",
+      "searchselect_handleselect"
+    ],
+    "28": [
+      "c_almuraqib_custom_application_amfgi_lib_utils_unitconversion_ts",
+      "unitconversion_buildunitoptions",
+      "unitconversion_frombaseunit",
+      "unitconversion_tobaseunit",
+      "unitconversion_validateconversions"
+    ],
+    "29": [
+      "c_almuraqib_custom_application_amfgi_app_app_admin_profiles_page_tsx",
+      "page_autoslug",
+      "page_fetchprofiles",
+      "page_handlecreate"
+    ],
+    "30": [
+      "c_almuraqib_custom_application_amfgi_app_app_hr_employees_page_tsx",
+      "page_openemployeeprofile",
+      "page_prettystatus",
+      "page_readapijson"
+    ],
+    "31": [
+      "c_almuraqib_custom_application_amfgi_app_auth_login_page_tsx",
+      "page_handlecredentials",
+      "page_handlegoogle",
+      "page_handleusecredentials"
+    ],
+    "32": [
+      "c_almuraqib_custom_application_amfgi_components_hr_hrpagechrome_tsx",
+      "hrpagechrome_buildbreadcrumbs",
+      "hrpagechrome_labelforsegment",
+      "hrpagechrome_prettifydatesegment"
+    ],
+    "33": [
+      "c_almuraqib_custom_application_amfgi_components_ui_contextmenu_tsx",
+      "contextmenu_handleclickoutside",
+      "contextmenu_handlekeydown",
+      "contextmenu_handleoptionclick"
+    ],
+    "34": [
+      "attendancereportpresets_attendancereportpresetstoragekey",
+      "attendancereportpresets_readattendancereportpresets",
+      "attendancereportpresets_writeattendancereportpresets",
+      "c_almuraqib_custom_application_amfgi_lib_hr_attendancereportpresets_ts"
+    ],
+    "35": [
+      "c_almuraqib_custom_application_amfgi_lib_utils_materialuomdb_ts",
+      "materialuom_computefactortobase",
+      "materialuomdb_resolvefactortobase",
+      "materialuomdb_resolvequantitytobase"
+    ],
+    "36": [
+      "c_almuraqib_custom_application_amfgi_app_app_hr_page_tsx",
+      "page_canseecard",
+      "page_hublinkcard"
+    ],
+    "37": [
+      "c_almuraqib_custom_application_amfgi_app_app_hr_employees_id_page_tsx",
+      "c_almuraqib_custom_application_amfgi_app_app_me_profile_page_tsx",
+      "page_employeeprofilepage"
+    ],
+    "38": [
+      "c_almuraqib_custom_application_amfgi_app_docs_api_page_tsx",
+      "page_apidocspage",
+      "page_endpointrow"
+    ],
+    "39": [
+      "c_almuraqib_custom_application_amfgi_components_jobs_consumptioncostingmodal_tsx",
+      "consumptioncostingmodal_fetchdata",
+      "consumptioncostingmodal_togglevariation"
+    ],
+    "40": [
+      "c_almuraqib_custom_application_amfgi_components_layout_header_tsx",
+      "header_handlekeydown",
+      "header_handlepointerdown"
+    ],
+    "41": [
+      "bulkimportmodal_automap",
+      "bulkimportmodal_handlesubmit",
+      "c_almuraqib_custom_application_amfgi_components_materials_bulkimportmodal_tsx"
+    ],
+    "42": [
+      "c_almuraqib_custom_application_amfgi_components_print_builder_sectionadvancedstyleeditor_tsx",
+      "sectionadvancedstyleeditor_num",
+      "sectionadvancedstyleeditor_patch"
+    ],
+    "43": [
+      "c_almuraqib_custom_application_amfgi_components_transactions_stocktransactionmodal_tsx",
+      "stocktransactionmodal_qtyinbase",
+      "stocktransactionmodal_stocktransactionmodal"
+    ],
+    "44": [
+      "badge_badge",
+      "badge_statusbadge",
+      "c_almuraqib_custom_application_amfgi_components_ui_badge_tsx"
+    ],
+    "45": [
+      "c_almuraqib_custom_application_amfgi_components_ui_hovertooltip_tsx",
+      "hovertooltip_hovertooltip",
+      "hovertooltip_uselgup"
+    ],
+    "46": [
+      "c_almuraqib_custom_application_amfgi_components_ui_multiselectdropdown_tsx",
+      "multiselectdropdown_onmousedown",
+      "multiselectdropdown_togglevalue"
+    ],
+    "47": [
+      "c_almuraqib_custom_application_amfgi_lib_permissions_ts",
+      "permissions_can",
+      "permissions_canany"
+    ],
+    "48": [
+      "c_almuraqib_custom_application_amfgi_lib_utils_fuzzymatch_ts",
+      "fuzzymatch_fuzzymatch",
+      "fuzzymatch_searchitems"
+    ],
+    "49": [
+      "c_almuraqib_custom_application_amfgi_lib_utils_migratedocumentsections_ts",
+      "migratedocumentsections_letterheadtoimage",
+      "migratedocumentsections_migratelegacydocumentsections"
+    ],
+    "50": [
+      "c_almuraqib_custom_application_amfgi_store_hooks_ts",
+      "hooks_useappdispatch",
+      "hooks_useappselector"
+    ],
+    "51": [
+      "c_almuraqib_custom_application_amfgi_app_layout_tsx",
+      "layout_rootlayout"
+    ],
+    "52": [
+      "c_almuraqib_custom_application_amfgi_app_app_layout_tsx",
+      "layout_applayout"
+    ],
+    "53": [
+      "c_almuraqib_custom_application_amfgi_app_app_hr_layout_tsx",
+      "layout_hrlayout"
+    ],
+    "54": [
+      "c_almuraqib_custom_application_amfgi_app_app_jobs_id_page_tsx",
+      "page_ontxsuccess"
+    ],
+    "55": [
+      "c_almuraqib_custom_application_amfgi_app_app_materials_dispatch_page_tsx",
+      "page_dispatchmaterialspage"
+    ],
+    "56": [
+      "c_almuraqib_custom_application_amfgi_app_app_materials_dispatch_history_page_tsx",
+      "page_dispatchhistorypage"
+    ],
+    "57": [
+      "c_almuraqib_custom_application_amfgi_app_app_me_layout_tsx",
+      "layout_melayout"
+    ],
+    "58": [
+      "c_almuraqib_custom_application_amfgi_app_app_me_page_tsx",
+      "page_meindexpage"
+    ],
+    "59": [
+      "c_almuraqib_custom_application_amfgi_app_app_me_attendance_page_tsx",
+      "page_employeeattendancepage"
+    ],
+    "60": [
+      "c_almuraqib_custom_application_amfgi_app_auth_select_profile_page_tsx",
+      "page_selectprofileredirect"
+    ],
+    "61": [
+      "c_almuraqib_custom_application_amfgi_app_privacy_policy_page_tsx",
+      "page_privacypolicypage"
+    ],
+    "62": [
+      "c_almuraqib_custom_application_amfgi_app_settings_print_template_edit_layout_tsx",
+      "layout_printtemplateeditlayout"
+    ],
+    "63": [
+      "c_almuraqib_custom_application_amfgi_app_terms_of_service_page_tsx",
+      "page_termsofservicepage"
+    ],
+    "64": [
+      "c_almuraqib_custom_application_amfgi_components_layout_profileswitcher_tsx",
+      "profileswitcher_profileswitcher"
+    ],
+    "65": [
+      "c_almuraqib_custom_application_amfgi_components_legal_legalpage_tsx",
+      "legalpage_legalpage"
+    ],
+    "66": [
+      "c_almuraqib_custom_application_amfgi_components_print_builder_datafieldsexplorer_tsx",
+      "datafieldsexplorer_copypath"
+    ],
+    "67": [
+      "c_almuraqib_custom_application_amfgi_components_transactions_transfermodal_tsx",
+      "transfermodal_handlesubmit"
+    ],
+    "68": [
+      "c_almuraqib_custom_application_amfgi_components_ui_datatable_tsx",
+      "datatable_handlesort"
+    ],
+    "69": [
+      "c_almuraqib_custom_application_amfgi_components_ui_modal_tsx",
+      "modal_modal"
+    ],
+    "70": [
+      "c_almuraqib_custom_application_amfgi_components_ui_spinner_tsx",
+      "spinner_spinner"
+    ],
+    "71": [
+      "c_almuraqib_custom_application_amfgi_components_ui_statcard_tsx",
+      "statcard_statcard"
+    ],
+    "72": [
+      "c_almuraqib_custom_application_amfgi_components_ui_skeleton_cardgridskeleton_tsx",
+      "cardgridskeleton_cardgridskeleton"
+    ],
+    "73": [
+      "c_almuraqib_custom_application_amfgi_components_ui_skeleton_skeletonblock_tsx",
+      "skeletonblock_skeletonblock"
+    ],
+    "74": [
+      "c_almuraqib_custom_application_amfgi_components_ui_skeleton_skeletonline_tsx",
+      "skeletonline_skeletonline"
+    ],
+    "75": [
+      "c_almuraqib_custom_application_amfgi_components_ui_skeleton_statcardskeleton_tsx",
+      "statcardskeleton_statcardskeleton"
+    ],
+    "76": [
+      "c_almuraqib_custom_application_amfgi_lib_auth_requiresession_ts",
+      "requiresession_requiresession"
+    ],
+    "77": [
+      "apiendpoints_authlabel",
+      "c_almuraqib_custom_application_amfgi_lib_docs_apiendpoints_ts"
+    ],
+    "78": [
+      "c_almuraqib_custom_application_amfgi_lib_hooks_usecontextmenu_ts",
+      "usecontextmenu_usecontextmenu"
+    ],
+    "79": [
+      "appnavigation_filtervisiblenavitems",
+      "c_almuraqib_custom_application_amfgi_lib_navigation_appnavigation_tsx"
+    ],
+    "80": [
+      "c_almuraqib_custom_application_amfgi_app_app_goods_receipt_page_tsx"
+    ],
+    "81": [
+      "c_almuraqib_custom_application_amfgi_app_api_auth_nextauth_route_ts"
+    ],
+    "82": [
+      "c_almuraqib_custom_application_amfgi_components_jobs_jobvariationmodal_tsx"
+    ],
+    "83": [
+      "c_almuraqib_custom_application_amfgi_components_layout_sidebar_tsx"
+    ],
+    "84": [
+      "c_almuraqib_custom_application_amfgi_components_me_employeeportallayout_tsx"
+    ],
+    "85": [
+      "c_almuraqib_custom_application_amfgi_components_me_meattendancepage_tsx"
+    ],
+    "86": [
+      "c_almuraqib_custom_application_amfgi_components_me_meprofilepage_tsx"
+    ],
+    "87": [
+      "c_almuraqib_custom_application_amfgi_components_ui_button_tsx"
+    ],
+    "88": [
+      "c_almuraqib_custom_application_amfgi_components_ui_skeleton_tableskeleton_tsx"
+    ],
+    "89": [
+      "c_almuraqib_custom_application_amfgi_lib_db_prisma_ts"
+    ],
+    "90": [
+      "c_almuraqib_custom_application_amfgi_lib_hr_employeemeta_ts"
+    ],
+    "91": [
+      "c_almuraqib_custom_application_amfgi_lib_utils_printtemplatesession_ts"
+    ],
+    "92": [
+      "c_almuraqib_custom_application_amfgi_lib_validations_customer_schema_ts"
+    ],
+    "93": [
+      "c_almuraqib_custom_application_amfgi_lib_validations_job_schema_ts"
+    ],
+    "94": [
+      "c_almuraqib_custom_application_amfgi_lib_validations_material_schema_ts"
+    ],
+    "95": [
+      "c_almuraqib_custom_application_amfgi_lib_validations_transaction_schema_ts"
+    ],
+    "96": [
+      "c_almuraqib_custom_application_amfgi_store_store_ts"
+    ],
+    "97": [
+      "c_almuraqib_custom_application_amfgi_store_api_adminapi_ts"
+    ],
+    "98": [
+      "c_almuraqib_custom_application_amfgi_store_api_appapi_ts"
+    ],
+    "99": [
+      "c_almuraqib_custom_application_amfgi_store_api_adminendpoints_companies_ts"
+    ],
+    "100": [
+      "c_almuraqib_custom_application_amfgi_store_api_adminendpoints_profiles_ts"
+    ],
+    "101": [
+      "c_almuraqib_custom_application_amfgi_store_api_adminendpoints_roles_ts"
+    ],
+    "102": [
+      "c_almuraqib_custom_application_amfgi_store_api_adminendpoints_users_ts"
+    ],
+    "103": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_categories_ts"
+    ],
+    "104": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_customers_ts"
+    ],
+    "105": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_dispatch_ts"
+    ],
+    "106": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_jobs_ts"
+    ],
+    "107": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_materiallogs_ts"
+    ],
+    "108": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_materials_ts"
+    ],
+    "109": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_receipts_ts"
+    ],
+    "110": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_reports_ts"
+    ],
+    "111": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_suppliers_ts"
+    ],
+    "112": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_transactions_ts"
+    ],
+    "113": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_units_ts"
+    ],
+    "114": [
+      "c_almuraqib_custom_application_amfgi_store_api_endpoints_warehouses_ts"
+    ],
+    "115": [
+      "c_almuraqib_custom_application_amfgi_store_slices_companyslice_ts"
+    ],
+    "116": [
+      "c_almuraqib_custom_application_amfgi_store_slices_uislice_ts"
+    ]
+  },
+  "cohesion": {
+    "0": 0.03,
+    "1": 0.04,
+    "2": 0.05,
+    "3": 0.06,
+    "4": 0.08,
+    "5": 0.1,
+    "6": 0.1,
+    "7": 0.07,
+    "8": 0.12,
+    "9": 0.11,
+    "10": 0.13,
+    "11": 0.18,
+    "12": 0.15,
+    "13": 0.15,
+    "14": 0.21,
+    "15": 0.15,
+    "16": 0.18,
+    "17": 0.2,
+    "18": 0.24,
+    "19": 0.28,
+    "20": 0.29,
+    "21": 0.46,
+    "22": 0.25,
+    "23": 0.48,
+    "24": 0.33,
+    "25": 0.4,
+    "26": 0.5,
+    "27": 0.5,
+    "28": 0.4,
+    "29": 0.67,
+    "30": 0.5,
+    "31": 0.5,
+    "32": 0.67,
+    "33": 0.5,
+    "34": 0.83,
+    "35": 0.67,
+    "36": 0.67,
+    "37": 0.67,
+    "38": 0.67,
+    "39": 0.67,
+    "40": 0.67,
+    "41": 0.67,
+    "42": 0.67,
+    "43": 0.67,
+    "44": 0.67,
+    "45": 0.67,
+    "46": 0.67,
+    "47": 0.67,
+    "48": 0.67,
+    "49": 0.67,
+    "50": 0.67,
+    "51": 1.0,
+    "52": 1.0,
+    "53": 1.0,
+    "54": 1.0,
+    "55": 1.0,
+    "56": 1.0,
+    "57": 1.0,
+    "58": 1.0,
+    "59": 1.0,
+    "60": 1.0,
+    "61": 1.0,
+    "62": 1.0,
+    "63": 1.0,
+    "64": 1.0,
+    "65": 1.0,
+    "66": 1.0,
+    "67": 1.0,
+    "68": 1.0,
+    "69": 1.0,
+    "70": 1.0,
+    "71": 1.0,
+    "72": 1.0,
+    "73": 1.0,
+    "74": 1.0,
+    "75": 1.0,
+    "76": 1.0,
+    "77": 1.0,
+    "78": 1.0,
+    "79": 1.0,
+    "80": 1.0,
+    "81": 1.0,
+    "82": 1.0,
+    "83": 1.0,
+    "84": 1.0,
+    "85": 1.0,
+    "86": 1.0,
+    "87": 1.0,
+    "88": 1.0,
+    "89": 1.0,
+    "90": 1.0,
+    "91": 1.0,
+    "92": 1.0,
+    "93": 1.0,
+    "94": 1.0,
+    "95": 1.0,
+    "96": 1.0,
+    "97": 1.0,
+    "98": 1.0,
+    "99": 1.0,
+    "100": 1.0,
+    "101": 1.0,
+    "102": 1.0,
+    "103": 1.0,
+    "104": 1.0,
+    "105": 1.0,
+    "106": 1.0,
+    "107": 1.0,
+    "108": 1.0,
+    "109": 1.0,
+    "110": 1.0,
+    "111": 1.0,
+    "112": 1.0,
+    "113": 1.0,
+    "114": 1.0,
+    "115": 1.0,
+    "116": 1.0
+  },
+  "gods": [
+    {
+      "id": "route_get",
+      "label": "GET()",
+      "degree": 115
+    },
+    {
+      "id": "route_post",
+      "label": "POST()",
+      "degree": 83
+    },
+    {
+      "id": "documentrenderer_string",
+      "label": "String()",
+      "degree": 50
+    },
+    {
+      "id": "route_delete",
+      "label": "DELETE()",
+      "degree": 35
+    },
+    {
+      "id": "route_put",
+      "label": "PUT()",
+      "degree": 25
+    },
+    {
+      "id": "page_load",
+      "label": "load()",
+      "degree": 20
+    },
+    {
+      "id": "page_update",
+      "label": "update()",
+      "degree": 19
+    },
+    {
+      "id": "route_patch",
+      "label": "PATCH()",
+      "degree": 19
+    },
+    {
+      "id": "page_applydrafts",
+      "label": "applyDrafts()",
+      "degree": 17
+    },
+    {
+      "id": "attendancereports_getmonthlyattendancereports",
+      "label": "getMonthlyAttendanceReports()",
+      "degree": 13
+    }
+  ],
+  "surprises": [
+    {
+      "source": "convertScheduleToAttendance()",
+      "target": "String()",
+      "source_files": [
+        "C:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\hr\\attendance\\page.tsx",
+        "C:\\almuraqib-custom-application\\AMFGI\\components\\print-builder\\DocumentRenderer.tsx"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities; peripheral node `convertScheduleToAttendance()` unexpectedly reaches hub `String()`"
+    },
+    {
+      "source": "GET()",
+      "target": "normalizeAttendanceReportBuilderSchema()",
+      "source_files": [
+        "C:\\almuraqib-custom-application\\AMFGI\\app\\api\\warehouses\\route.ts",
+        "C:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\attendanceReportBuilder.ts"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities; peripheral node `normalizeAttendanceReportBuilderSchema()` unexpectedly reaches hub `GET()`"
+    },
+    {
+      "source": "GET()",
+      "target": "normalizeAttendanceReportColumns()",
+      "source_files": [
+        "C:\\almuraqib-custom-application\\AMFGI\\app\\api\\warehouses\\route.ts",
+        "C:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\attendanceReportFormatting.ts"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities; peripheral node `normalizeAttendanceReportColumns()` unexpectedly reaches hub `GET()`"
+    },
+    {
+      "source": "GET()",
+      "target": "normalizeAttendanceReportFormats()",
+      "source_files": [
+        "C:\\almuraqib-custom-application\\AMFGI\\app\\api\\warehouses\\route.ts",
+        "C:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\attendanceReportFormatting.ts"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities; peripheral node `normalizeAttendanceReportFormats()` unexpectedly reaches hub `GET()`"
+    },
+    {
+      "source": "attendanceReportFieldLabel()",
+      "target": "GET()",
+      "source_files": [
+        "C:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\attendanceReportBuilder.ts",
+        "C:\\almuraqib-custom-application\\AMFGI\\app\\api\\warehouses\\route.ts"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities; peripheral node `attendanceReportFieldLabel()` unexpectedly reaches hub `GET()`"
+    }
+  ],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `String()` connect `Profiles And Templates` to `API Session Core`, `Schedule Team Builder`, `Dispatch And Materials`, `Google Drive Templates`, `Attendance Reports`, `Attendance And Ledger`, `Template Data Formatting`, `Attendance Report Builder`, `Party List Payloads`, `Schedule CSV Import`, `Document Rendering`, `Dubai Shift Attendance`, `FIFO Stock Batches`?",
+      "why": "High betweenness centrality (0.306) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `GET()` connect `API Session Core` to `Profiles And Templates`, `Material UOM DB`, `Google Drive Templates`, `Integration Keys And Sync`, `Attendance Reports`, `Attendance And Ledger`, `Attendance Report Builder`, `Print Field Search`, `Job Contact Forms`, `Dubai Shift Attendance`, `Domain Allowlist`?",
+      "why": "High betweenness centrality (0.253) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `handleSubmit()` connect `Dispatch And Materials` to `Profiles And Templates`, `Party And Job Forms`?",
+      "why": "High betweenness centrality (0.113) - this node is a cross-community bridge."
+    },
+    {
+      "type": "verify_inferred",
+      "question": "Are the 43 inferred relationships involving `GET()` (e.g. with `AttendanceCreatePage()` and `createType()`) actually correct?",
+      "why": "`GET()` has 43 INFERRED edges - model-reasoned connections that need verification."
+    },
+    {
+      "type": "verify_inferred",
+      "question": "Are the 30 inferred relationships involving `POST()` (e.g. with `update()` and `GET()`) actually correct?",
+      "why": "`POST()` has 30 INFERRED edges - model-reasoned connections that need verification."
+    },
+    {
+      "type": "verify_inferred",
+      "question": "Are the 49 inferred relationships involving `String()` (e.g. with `rememberScrollPosition()` and `handleSubmit()`) actually correct?",
+      "why": "`String()` has 49 INFERRED edges - model-reasoned connections that need verification."
+    },
+    {
+      "type": "verify_inferred",
+      "question": "Are the 10 inferred relationships involving `DELETE()` (e.g. with `update()` and `POST()`) actually correct?",
+      "why": "`DELETE()` has 10 INFERRED edges - model-reasoned connections that need verification."
+    }
+  ]
+}

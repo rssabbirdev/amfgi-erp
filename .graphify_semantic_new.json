@@ -1,0 +1,673 @@
+{
+  "nodes": [
+    {
+      "id": "mongodb_archived_doc",
+      "label": "MongoDB Files Archived",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_archive_status",
+      "label": "Archived MongoDB/Mongoose Integration",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 3",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_archived_files_section",
+      "label": "Archived Files",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_schemas_dir",
+      "label": "schemas/",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 7",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_models_dir",
+      "label": "models/",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 8",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_company_ts",
+      "label": "company.ts",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 9",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_system_ts",
+      "label": "system.ts",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 10",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_connect_ts",
+      "label": "connect.ts",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 11",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_mongoClient_ts",
+      "label": "mongoClient.ts",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 12",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_why_archived",
+      "label": "Why Archived",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 14",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_prisma_mysql_stack",
+      "label": "Prisma ORM with MySQL",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 16",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_mongoose_mongodb_stack",
+      "label": "Mongoose with MongoDB",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 16",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_key_changes",
+      "label": "Key Changes",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 18",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_database_change",
+      "label": "Database migration: MongoDB Atlas to MySQL",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 19",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_orm_change",
+      "label": "ORM migration: Mongoose to Prisma 6",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 20",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_tenancy_change",
+      "label": "Tenancy migration: per-company databases to shared companyId multi-tenancy",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 21",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_id_system_change",
+      "label": "ID system migration: ObjectId to cuid() strings",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 22",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_transactions_change",
+      "label": "Transactions migration: MongoDB sessions to Prisma transactions",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 23",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_migration_complete",
+      "label": "Migration Complete",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 25",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_restore_mongodb_support",
+      "label": "Restore MongoDB support",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 32",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_restore_dependencies",
+      "label": "Restore dependencies: mongoose, mongodb, @auth/mongodb-adapter",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 36",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_restore_env_vars",
+      "label": "Restore env vars: MONGODB_BASE_URI and SYSTEM_DB_NAME",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 37",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_restore_git_history",
+      "label": "Revert API routes using git history",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 38",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongodb_archived_current_client",
+      "label": "lib/db/prisma.ts current database client",
+      "file_type": "document",
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 46",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "mongodb_archived_doc",
+      "target": "mongodb_archived_archive_status",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 3",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_doc",
+      "target": "mongodb_archived_archived_files_section",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 5",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_doc",
+      "target": "mongodb_archived_why_archived",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 14",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_doc",
+      "target": "mongodb_archived_key_changes",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 18",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_doc",
+      "target": "mongodb_archived_migration_complete",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 25",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_doc",
+      "target": "mongodb_archived_restore_mongodb_support",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 32",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_doc",
+      "target": "mongodb_archived_current_client",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 46",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_archived_files_section",
+      "target": "mongodb_archived_schemas_dir",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 7",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_archived_files_section",
+      "target": "mongodb_archived_models_dir",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 8",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_archived_files_section",
+      "target": "mongodb_archived_company_ts",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 9",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_archived_files_section",
+      "target": "mongodb_archived_system_ts",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 10",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_archived_files_section",
+      "target": "mongodb_archived_connect_ts",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 11",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_archived_files_section",
+      "target": "mongodb_archived_mongoClient_ts",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 12",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_why_archived",
+      "target": "mongodb_archived_archive_status",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 14",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_why_archived",
+      "target": "mongodb_archived_prisma_mysql_stack",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 16",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_why_archived",
+      "target": "mongodb_archived_mongoose_mongodb_stack",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 16",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_key_changes",
+      "target": "mongodb_archived_database_change",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_key_changes",
+      "target": "mongodb_archived_orm_change",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 20",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_key_changes",
+      "target": "mongodb_archived_tenancy_change",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 21",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_key_changes",
+      "target": "mongodb_archived_id_system_change",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 22",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_key_changes",
+      "target": "mongodb_archived_transactions_change",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 23",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_database_change",
+      "target": "mongodb_archived_prisma_mysql_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_database_change",
+      "target": "mongodb_archived_mongoose_mongodb_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_orm_change",
+      "target": "mongodb_archived_prisma_mysql_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 20",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_orm_change",
+      "target": "mongodb_archived_mongoose_mongodb_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 20",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_tenancy_change",
+      "target": "mongodb_archived_prisma_mysql_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 21",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_id_system_change",
+      "target": "mongodb_archived_prisma_mysql_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 22",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_transactions_change",
+      "target": "mongodb_archived_prisma_mysql_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 23",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_migration_complete",
+      "target": "mongodb_archived_prisma_mysql_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 25",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_restore_mongodb_support",
+      "target": "mongodb_archived_restore_dependencies",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 34",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_restore_mongodb_support",
+      "target": "mongodb_archived_restore_env_vars",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 34",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_restore_mongodb_support",
+      "target": "mongodb_archived_restore_git_history",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 34",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_restore_mongodb_support",
+      "target": "mongodb_archived_mongoose_mongodb_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 34",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_restore_dependencies",
+      "target": "mongodb_archived_mongoose_mongodb_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 36",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_restore_env_vars",
+      "target": "mongodb_archived_mongoose_mongodb_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 37",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_restore_git_history",
+      "target": "mongodb_archived_mongoose_mongodb_stack",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 38",
+      "weight": 1.0
+    },
+    {
+      "source": "mongodb_archived_current_client",
+      "target": "mongodb_archived_prisma_mysql_stack",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md",
+      "source_location": "line 46",
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "key_changes_migration_bundle",
+      "label": "Key migration changes",
+      "nodes": [
+        "mongodb_archived_database_change",
+        "mongodb_archived_orm_change",
+        "mongodb_archived_tenancy_change",
+        "mongodb_archived_id_system_change",
+        "mongodb_archived_transactions_change"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md"
+    },
+    {
+      "id": "mongo_restore_path",
+      "label": "MongoDB restore path",
+      "nodes": [
+        "mongodb_archived_restore_mongodb_support",
+        "mongodb_archived_restore_dependencies",
+        "mongodb_archived_restore_env_vars",
+        "mongodb_archived_restore_git_history"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.86,
+      "source_file": "lib/db/MONGODB_ARCHIVED.md"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

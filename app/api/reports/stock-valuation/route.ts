@@ -2,7 +2,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
-export async function GET(req: Request) {
+export async function GET() {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
 
@@ -11,23 +11,65 @@ export async function GET(req: Request) {
   try {
     const companyId = session.user.activeCompanyId;
 
-    // Get all active materials with current stock
-    const materials = await prisma.material.findMany({
-      where: {
-        companyId,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        unit: true,
-        currentStock: true,
-        unitCost: true,
-      },
-    });
+    const [materials, stockBatches] = await Promise.all([
+      prisma.material.findMany({
+        where: {
+          companyId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          unit: true,
+          currentStock: true,
+          unitCost: true,
+        },
+      }),
+      prisma.stockBatch.findMany({
+        where: { companyId },
+        select: {
+          materialId: true,
+          quantityReceived: true,
+          quantityAvailable: true,
+          unitCost: true,
+          totalCost: true,
+        },
+      }),
+    ]);
 
-    // Calculate total stock value
-    const stockValuation = materials.reduce((sum, mat) => {
+    const fifoValueByMaterial = new Map<string, number>();
+    for (const batch of stockBatches) {
+      const openValue = batch.quantityAvailable * batch.unitCost;
+      fifoValueByMaterial.set(
+        batch.materialId,
+        (fifoValueByMaterial.get(batch.materialId) ?? 0) + openValue
+      );
+    }
+
+    const movingAverageAccumulator = new Map<string, { quantity: number; cost: number }>();
+    for (const batch of stockBatches) {
+      const bucket = movingAverageAccumulator.get(batch.materialId) ?? { quantity: 0, cost: 0 };
+      bucket.quantity += batch.quantityReceived;
+      bucket.cost += batch.totalCost;
+      movingAverageAccumulator.set(batch.materialId, bucket);
+    }
+
+    const movingAverageByMaterial = new Map<string, number>();
+    for (const [materialId, bucket] of movingAverageAccumulator.entries()) {
+      movingAverageByMaterial.set(materialId, bucket.quantity > 0 ? bucket.cost / bucket.quantity : 0);
+    }
+
+    const fifoStockValue = materials.reduce(
+      (sum, mat) => sum + (fifoValueByMaterial.get(mat.id) ?? (mat.currentStock || 0) * (mat.unitCost || 0)),
+      0
+    );
+
+    const movingAverageStockValue = materials.reduce((sum, mat) => {
+      const movingAverageCost = movingAverageByMaterial.get(mat.id) ?? (mat.unitCost || 0);
+      return sum + (mat.currentStock || 0) * movingAverageCost;
+    }, 0);
+
+    const currentStockValue = materials.reduce((sum, mat) => {
       const value = (mat.currentStock || 0) * (mat.unitCost || 0);
       return sum + value;
     }, 0);
@@ -95,7 +137,8 @@ export async function GET(req: Request) {
         unit: mat.unit,
         quantity: mat.currentStock || 0,
         unitCost: mat.unitCost || 0,
-        totalValue: (mat.currentStock || 0) * (mat.unitCost || 0),
+        totalValue:
+          fifoValueByMaterial.get(mat.id) ?? (mat.currentStock || 0) * (mat.unitCost || 0),
       }))
       .sort((a, b) => b.totalValue - a.totalValue)
       .slice(0, 30);
@@ -112,7 +155,11 @@ export async function GET(req: Request) {
 
     return successResponse({
       summary: {
-        totalStockValue: stockValuation,
+        totalStockValue: fifoStockValue,
+        fifoStockValue,
+        movingAverageStockValue,
+        currentStockValue,
+        preferredMethod: 'FIFO',
         prevMonthConsumptionValue: prevMonthValue,
       },
       topMaterialsByValue,

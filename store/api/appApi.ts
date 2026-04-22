@@ -5,6 +5,7 @@ export const appApi = createApi({
   baseQuery: fetchBaseQuery({ baseUrl: '/api' }),
   tagTypes: [
     'Material',
+    'StockBatch',
     'Job',
     'JobMaterials',
     'Customer',

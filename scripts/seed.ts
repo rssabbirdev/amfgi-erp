@@ -999,6 +999,77 @@ async function seedHrWorkforceDemo(
     }
   }
 
+  const isKmCompany = emailDomain === 'kandm.com';
+  const zoneName = isKmCompany ? 'Factory Yard Gate - K&M' : 'Factory Yard Gate - AMFGI';
+  const zonePolygon =
+    isKmCompany
+      ? [
+          { lat: 24.45322, lng: 54.37767 },
+          { lat: 24.45322, lng: 54.37841 },
+          { lat: 24.45263, lng: 54.37841 },
+          { lat: 24.45263, lng: 54.37767 },
+        ]
+      : [
+          { lat: 25.01062, lng: 55.14042 },
+          { lat: 25.01062, lng: 55.14118 },
+          { lat: 25.01003, lng: 55.14118 },
+          { lat: 25.01003, lng: 55.14042 },
+        ];
+  const gatePoint =
+    isKmCompany
+      ? { lat: 24.45296, lng: 54.37775 }
+      : { lat: 25.01029, lng: 55.14055 };
+
+  const geofenceZone = await prisma.geofenceZone.upsert({
+    where: { companyId_name: { companyId, name: zoneName } },
+    update: {
+      description: 'Seeded demo polygon geofence for factory gate attendance.',
+      isActive: true,
+      polygonPoints: zonePolygon as Prisma.InputJsonValue,
+      gateLat: gatePoint.lat,
+      gateLng: gatePoint.lng,
+      gateRadiusMeters: 30,
+      centerLat: zonePolygon.reduce((sum, point) => sum + point.lat, 0) / zonePolygon.length,
+      centerLng: zonePolygon.reduce((sum, point) => sum + point.lng, 0) / zonePolygon.length,
+      createdById,
+    },
+    create: {
+      companyId,
+      name: zoneName,
+      description: 'Seeded demo polygon geofence for factory gate attendance.',
+      isActive: true,
+      polygonPoints: zonePolygon as Prisma.InputJsonValue,
+      gateLat: gatePoint.lat,
+      gateLng: gatePoint.lng,
+      gateRadiusMeters: 30,
+      centerLat: zonePolygon.reduce((sum, point) => sum + point.lat, 0) / zonePolygon.length,
+      centerLng: zonePolygon.reduce((sum, point) => sum + point.lng, 0) / zonePolygon.length,
+      createdById,
+    },
+  });
+
+  await prisma.geofenceAttendanceEvent.createMany({
+    data: drivers.slice(0, 2).map((employee, index) => ({
+      companyId,
+      zoneId: geofenceZone.id,
+      employeeId: employee.id,
+      workDate: new Date(new Date().setHours(0, 0, 0, 0)),
+      eventType: index === 0 ? 'CHECK_IN' : 'CHECK_OUT',
+      validationStatus: 'VALID',
+      latitude: gatePoint.lat + index * 0.00001,
+      longitude: gatePoint.lng + index * 0.00001,
+      accuracyMeters: 8,
+      distanceToGateMeters: 4 + index,
+      insidePolygon: true,
+      withinGateRadius: true,
+      devicePlatform: index === 0 ? 'android' : 'ios',
+      deviceIdentifier: `seed-device-${index + 1}`,
+      notes: index === 0 ? 'Seeded geofence check-in' : 'Seeded geofence check-out',
+      occurredAt: new Date(Date.now() - index * 1000 * 60 * 45),
+    })),
+    skipDuplicates: false,
+  });
+
   console.log('  ✓ 30 employees seeded with workforce profiles');
   console.log('    - 6 drivers');
   console.log('    - 6 office staff');
@@ -1007,6 +1078,7 @@ async function seedHrWorkforceDemo(
   console.log('  ✓ 4 employee self-service logins linked to employees');
   console.log('  ✓ 6 schedules with schedule-level notes and driver trip logs');
   console.log('  ✓ Attendance entries generated for schedulable employees');
+  console.log('  ✓ 1 factory geofence zone and seeded gate events');
 }
 
 async function seed() {
@@ -1015,6 +1087,8 @@ async function seed() {
   // ── Delete old data (clean slate) ────────────────────────────────────────────
   console.log('Clearing old data…');
   await prisma.user.updateMany({ data: { linkedEmployeeId: null } });
+  await prisma.geofenceAttendanceEvent.deleteMany({});
+  await prisma.geofenceZone.deleteMany({});
   await prisma.attendanceEntry.deleteMany({});
   await prisma.workAssignmentMember.deleteMany({});
   await prisma.driverRunLog.deleteMany({});

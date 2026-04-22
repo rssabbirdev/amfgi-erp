@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useCallback, useEffect, Suspense } from 'react';
+import { useState, useCallback, useEffect, Suspense, use } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -39,15 +39,19 @@ import {
   writeCompanyDocumentTemplates,
 } from '@/lib/utils/companyPrintTemplates';
 import { createWorkScheduleTemplateDraft } from '@/lib/utils/documentDefaults';
+import { SettingsMediaPanel } from '@/components/settings/SettingsMediaPanel';
 
 const SETTINGS_TABS = [
   { id: 'units', label: 'Units', description: 'Material measurement labels' },
   { id: 'categories', label: 'Categories', description: 'Material master groupings' },
   { id: 'warehouses', label: 'Warehouses', description: 'Stock holding locations' },
+  { id: 'media', label: 'Media', description: 'Uploaded files and cleanup tools' },
   { id: 'company', label: 'Company', description: 'Business profile and sync setup' },
   { id: 'template', label: 'Print formats', description: 'Document layouts and defaults' },
   { id: 'api', label: 'API & Credentials', description: 'Integration keys and audit logs' },
 ] as const;
+
+type SettingsTabId = (typeof SETTINGS_TABS)[number]['id'];
 
 function SettingsPageContent() {
   const { data: session } = useSession();
@@ -61,13 +65,18 @@ function SettingsPageContent() {
   const canManage = isSA || perms.includes('settings.manage');
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'units' | 'categories' | 'warehouses' | 'company' | 'template' | 'api'>('units');
+  const [activeTab, setActiveTab] = useState<SettingsTabId>('units');
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab === 'template') setActiveTab('template');
-    if (tab === 'api') setActiveTab('api');
+    if (SETTINGS_TABS.some((item) => item.id === tab)) {
+      setActiveTab(tab as SettingsTabId);
+    }
   }, [searchParams]);
+
+  useEffect(() => { 
+    router.replace(`/settings?tab=${activeTab}`, { scroll: false });
+  }, [activeTab, router]);
 
   // Company Profile state
   const [companyData, setCompanyData] = useState<Record<string, unknown> | null>(null);
@@ -914,6 +923,8 @@ function SettingsPageContent() {
     },
   ];
 
+  const activeTabMeta = SETTINGS_TABS.find((tab) => tab.id === activeTab) ?? SETTINGS_TABS[0];
+
   return (
     <div className="space-y-6">
       {!canManage ? (
@@ -923,16 +934,45 @@ function SettingsPageContent() {
         </div>
       ) : (
         <>
-      <section className="rounded-3xl border border-slate-700 bg-slate-900/70 p-6 shadow-sm">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl">
+      <section className="rounded-3xl border border-slate-700 bg-slate-900/70 p-5 shadow-sm sm:p-6">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.85fr)]">
+          <div className="space-y-4">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300/80">Administration</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">Settings workspace</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-400">
-              Manage company master data, document layouts, and integration controls from one shared workspace.
-            </p>
+            <div>
+              <h1 className="text-3xl font-semibold text-white">Settings workspace</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+                Manage company master data, templates, media, and integration controls from one focused workspace.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-950/40 p-3">
+              <div className="flex flex-wrap gap-2">
+                {SETTINGS_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`rounded-xl px-3 py-2 text-left text-sm transition ${
+                      activeTab === tab.id
+                        ? 'bg-emerald-500/15 text-white ring-1 ring-emerald-500/40'
+                        : 'bg-transparent text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+                <div>
+                  <p className="text-sm font-medium text-white">{activeTabMeta.label}</p>
+                  <p className="mt-1 text-xs text-slate-500">{activeTabMeta.description}</p>
+                </div>
+                <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                  {SETTINGS_TABS.length} sections
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[28rem] xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Units</p>
               <p className="mt-2 text-2xl font-semibold text-white">{units.length}</p>
@@ -954,28 +994,6 @@ function SettingsPageContent() {
               <p className="mt-1 text-xs text-slate-500">Saved document layouts</p>
             </div>
           </div>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {SETTINGS_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={`rounded-2xl border px-4 py-4 text-left transition ${
-                activeTab === tab.id
-                  ? 'border-emerald-500/40 bg-emerald-500/10'
-                  : 'border-slate-700 bg-slate-950/40 hover:border-slate-600 hover:bg-slate-800/60'
-              }`}
-            >
-              <p className={`text-sm font-medium ${activeTab === tab.id ? 'text-white' : 'text-slate-200'}`}>
-                {tab.label}
-              </p>
-              <p className="mt-1 text-xs text-slate-400">{tab.description}</p>
-            </button>
-          ))}
         </div>
       </section>
 
@@ -1074,6 +1092,9 @@ function SettingsPageContent() {
           )}
         </div>
       )}
+
+      {/* Media Tab */}
+      {activeTab === 'media' && <SettingsMediaPanel />}
 
       {/* Company Profile Tab */}
       {activeTab === 'company' && (

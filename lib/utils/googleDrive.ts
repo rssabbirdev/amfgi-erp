@@ -205,6 +205,20 @@ export function buildJobDriveFolderName(jobName: string, jobId: string): string 
   return sanitizeFolderName(`${jobName || 'Job'} - ${jobId}`, jobId);
 }
 
+export function buildSignedDeliveryNoteDriveFileName(
+  deliveryNoteLabel: string,
+  jobNumber: string,
+  systemId: string,
+  extension?: string,
+): string {
+  const base = sanitizeFolderName(
+    `${deliveryNoteLabel} SIGN COPY OF - ${jobNumber || 'JOB'} - ${systemId}`,
+    systemId,
+  );
+  const normalizedExt = extension?.trim().replace(/^\./, '');
+  return normalizedExt ? `${base}.${normalizedExt}` : base;
+}
+
 export function explainGoogleDriveError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
@@ -316,6 +330,52 @@ export async function deleteFromDrive(driveId: string, companyId: string): Promi
   try {
     const drive = await getDriveClientForCompany(companyId);
     await drive.files.delete({ fileId: driveId, supportsAllDrives: true });
+  } catch (error) {
+    throw new Error(explainGoogleDriveError(error));
+  }
+}
+
+export async function moveDriveFile(
+  driveId: string,
+  fileName: string,
+  target: DriveUploadFolderTarget,
+): Promise<{ id: string; viewerUrl: string }> {
+  try {
+    const drive = await getDriveClientForCompany(target.companyId);
+    const parentFolderId = await ensureFolderPath(
+      drive,
+      target.companyId,
+      target.rootFolderId,
+      target.folderPath?.filter(Boolean) ?? [],
+    );
+
+    const existing = await drive.files.get({
+      fileId: driveId,
+      fields: 'id, name, parents',
+      supportsAllDrives: true,
+    });
+
+    const currentName = existing.data.name?.trim() || '';
+    const currentParents = existing.data.parents?.filter(Boolean) ?? [];
+    const currentExtMatch = currentName.match(/\.([a-zA-Z0-9]+)$/);
+    const desiredHasExt = /\.[a-zA-Z0-9]+$/.test(fileName);
+    const nextName = desiredHasExt
+      ? `${sanitizeFolderName(fileName.replace(/\.[a-zA-Z0-9]+$/, ''), driveId)}${fileName.slice(fileName.lastIndexOf('.'))}`
+      : `${sanitizeFolderName(fileName, driveId)}${currentExtMatch?.[1] ? `.${currentExtMatch[1]}` : ''}`;
+
+    await drive.files.update({
+      fileId: driveId,
+      addParents: currentParents.includes(parentFolderId) ? undefined : parentFolderId,
+      removeParents: currentParents.filter((parentId) => parentId !== parentFolderId).join(',') || undefined,
+      requestBody: { name: nextName },
+      fields: 'id',
+      supportsAllDrives: true,
+    });
+
+    return {
+      id: driveId,
+      viewerUrl: driveFileIdToDisplayUrl(driveId) ?? '',
+    };
   } catch (error) {
     throw new Error(explainGoogleDriveError(error));
   }

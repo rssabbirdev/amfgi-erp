@@ -45,6 +45,9 @@ model Company {
   employeeDocumentTypes EmployeeDocumentType[]
   workSchedules         WorkSchedule[]
   attendanceEntries     AttendanceEntry[]
+  geofenceZones         GeofenceZone[]
+  geofenceEvents        GeofenceAttendanceEvent[]
+  mobileAccessTokens    EmployeeMobileAccessToken[]
   visaPeriods           VisaPeriod[]
   employeeDocuments     EmployeeDocument[]
   workforceExpertises   WorkforceExpertise[]
@@ -76,6 +79,7 @@ model User {
   activeCompany    Company?            @relation("UserActiveCompany", fields: [activeCompanyId], references: [id])
   companyAccess    UserCompanyAccess[]
   uploadedMedia    MediaAsset[]        @relation("MediaAssetUploader")
+  mobileAccessTokens EmployeeMobileAccessToken[]
   /// When set, this login is the employee self-service account for HR portal
   linkedEmployeeId String?             @unique
   linkedEmployee   Employee?           @relation("EmployeeUserLink", fields: [linkedEmployeeId], references: [id], onDelete: SetNull)
@@ -580,6 +584,19 @@ enum AttendanceSource {
   IMPORT
 }
 
+enum GeofenceAttendanceEventType {
+  CHECK_IN
+  CHECK_OUT
+  LOCATION_PING
+  MANUAL_OVERRIDE
+}
+
+enum GeofenceValidationStatus {
+  VALID
+  OUTSIDE_POLYGON
+  OUTSIDE_GATE_RADIUS
+}
+
 model Employee {
   id                    String         @id @default(cuid())
   companyId             String
@@ -617,6 +634,8 @@ model Employee {
   scheduleAbsences      ScheduleAbsence[]
   driverRunLogs         DriverRunLog[]
   attendanceEntries     AttendanceEntry[]
+  geofenceEvents        GeofenceAttendanceEvent[]
+  mobileAccessTokens    EmployeeMobileAccessToken[]
   teamLeaderAssignments WorkAssignment[]       @relation("WorkAssignmentTeamLeader")
   driver1Assignments    WorkAssignment[]       @relation("WorkAssignmentDriver1")
   driver2Assignments    WorkAssignment[]       @relation("WorkAssignmentDriver2")
@@ -833,6 +852,83 @@ model AttendanceEntry {
   @@index([companyId, workDate])
   @@index([companyId, employeeId, workDate])
   @@index([workflowStatus])
+}
+
+model GeofenceZone {
+  id               String   @id @default(cuid())
+  companyId        String
+  name             String
+  description      String?  @db.Text
+  isActive         Boolean  @default(true)
+  polygonPoints    Json
+  gateLat          Float
+  gateLng          Float
+  gateRadiusMeters Float    @default(30)
+  centerLat        Float?
+  centerLng        Float?
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  events  GeofenceAttendanceEvent[]
+
+  @@index([companyId, isActive])
+  @@unique([companyId, name])
+}
+
+model GeofenceAttendanceEvent {
+  id                   String                    @id @default(cuid())
+  companyId            String
+  zoneId               String
+  employeeId           String?
+  workDate             DateTime?                 @db.Date
+  eventType            GeofenceAttendanceEventType
+  validationStatus     GeofenceValidationStatus
+  latitude             Float
+  longitude            Float
+  accuracyMeters       Float?
+  distanceToGateMeters Float?
+  insidePolygon        Boolean                   @default(false)
+  withinGateRadius     Boolean                   @default(false)
+  devicePlatform       String?
+  deviceIdentifier     String?
+  notes                String?                   @db.Text
+  metadata             Json?
+  occurredAt           DateTime
+  createdAt            DateTime                  @default(now())
+
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  zone     GeofenceZone  @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  employee Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, occurredAt])
+  @@index([zoneId, occurredAt])
+  @@index([employeeId, occurredAt])
+  @@index([companyId, workDate])
+}
+
+model EmployeeMobileAccessToken {
+  id         String   @id @default(cuid())
+  companyId  String
+  userId     String
+  employeeId String
+  tokenLabel String?
+  tokenPrefix String
+  tokenHash  String
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, employeeId])
+  @@index([userId, revokedAt])
+  @@unique([companyId, tokenPrefix])
 }
 
 enum TransactionType {
