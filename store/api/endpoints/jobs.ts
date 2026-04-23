@@ -4,6 +4,7 @@ export interface Job {
   id: string;
   companyId: string;
   externalJobId?: string;
+  source?: 'LOCAL' | 'EXTERNAL_API';
   jobNumber: string;
   customerId: string;
   customerName?: string;

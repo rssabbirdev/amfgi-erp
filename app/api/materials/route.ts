@@ -12,6 +12,7 @@ const MaterialSchema = z.object({
   category:            z.string().min(1).max(100).optional(),
   warehouse:           z.string().min(1).max(100).optional(),
   stockType:           z.string().min(1).max(50),
+  allowNegativeConsumption: z.boolean().optional(),
   externalItemName:    z.string().min(1).max(100).optional(),
   unitCost:            z.number().min(0).optional(),
   reorderLevel:        z.number().min(0).optional(),
@@ -79,6 +80,7 @@ export async function POST(req: Request) {
     const mat = await tx.material.create({
       data: {
         ...parsed.data,
+        allowNegativeConsumption: parsed.data.allowNegativeConsumption ?? false,
         externalItemName: parsed.data.externalItemName ?? null,
         companyId,
         currentStock: 0,

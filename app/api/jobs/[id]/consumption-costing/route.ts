@@ -2,6 +2,32 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
+function resolveTransactionUnitCost(
+  txn: {
+    averageCost: number;
+    material?: { unitCost?: number | null } | null;
+    batchesUsed: Array<{ quantityFromBatch: number; unitCost: number; batch: { unitCost: number } }>;
+  },
+  costingMethod: string
+) {
+  if (costingMethod === 'CURRENT_PRICE') {
+    return txn.material?.unitCost || txn.averageCost || 0;
+  }
+
+  if (txn.batchesUsed.length > 0) {
+    let totalCostAmount = 0;
+    let totalQty = 0;
+    for (const tb of txn.batchesUsed) {
+      const batchUnitCost = costingMethod === 'FIFO' ? tb.batch.unitCost : tb.unitCost;
+      totalCostAmount += batchUnitCost * tb.quantityFromBatch;
+      totalQty += tb.quantityFromBatch;
+    }
+    if (totalQty > 0) return totalCostAmount / totalQty;
+  }
+
+  return txn.averageCost || txn.material?.unitCost || 0;
+}
+
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
@@ -50,7 +76,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     },
     include: {
       material: {
-        select: { id: true, name: true, unit: true, unitCost: true },
+        select: { id: true, name: true, unit: true, unitCost: true, stockType: true },
       },
       batchesUsed: {
         include: {
@@ -94,30 +120,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     const consumption = consumptionMap.get(materialId)!;
-    let unitCost = txn.material?.unitCost || 0;
-
-    // Calculate cost based on method
-    if (costingMethod === 'FIFO') {
-      // Use the average of batches used in this transaction
-      if (txn.batchesUsed.length > 0) {
-        const batchCosts = txn.batchesUsed.map((tb) => tb.batch.unitCost);
-        unitCost = batchCosts.reduce((a, b) => a + b, 0) / batchCosts.length;
-      }
-    } else if (costingMethod === 'MOVING_AVERAGE') {
-      // Calculate weighted average cost from all batches
-      if (txn.batchesUsed.length > 0) {
-        let totalCostAmount = 0;
-        let totalQty = 0;
-        for (const tb of txn.batchesUsed) {
-          totalCostAmount += tb.unitCost * tb.quantityFromBatch;
-          totalQty += tb.quantityFromBatch;
-        }
-        unitCost = totalQty > 0 ? totalCostAmount / totalQty : 0;
-      }
-    } else if (costingMethod === 'CURRENT_PRICE') {
-      // Use current market price from material
-      unitCost = txn.material?.unitCost || 0;
-    }
+    const unitCost = resolveTransactionUnitCost(txn, costingMethod);
 
     const cost = txn.quantity * unitCost;
     consumption.totalQuantity += txn.type === 'STOCK_OUT' ? txn.quantity : -txn.quantity;

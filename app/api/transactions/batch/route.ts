@@ -222,6 +222,9 @@ export async function POST(req: Request) {
             : 0;
 
         if (type === 'STOCK_OUT') {
+          const fallbackUnitCost = mat.unitCost || 0;
+          const canGoNegative = mat.allowNegativeConsumption;
+
           // FIFO consumption
           let batches = await tx.stockBatch.findMany({
             where: {
@@ -257,25 +260,38 @@ export async function POST(req: Request) {
             batches = [openingBatch];
           }
 
-          if (batches.length === 0 || mat.currentStock < baseQuantity) {
+          if (!canGoNegative && (batches.length === 0 || mat.currentStock < baseQuantity)) {
             throw new Error(`Insufficient stock for ${mat.name}. Available: ${mat.currentStock}`);
           }
 
-          // Calculate FIFO consumption with Prisma StockBatch objects
-          const fifoResult = calculateFIFOConsumption(
-            batches.map((b) => ({
-              id: b.id,
-              batchNumber: b.batchNumber,
-              quantityAvailable: b.quantityAvailable,
-              unitCost: b.unitCost,
-              receivedDate: b.receivedDate,
-            })),
-            baseQuantity
-          );
+          const availableFromBatches = batches.reduce((sum, batch) => sum + batch.quantityAvailable, 0);
+          const quantityFromBatches = canGoNegative ? Math.min(baseQuantity, availableFromBatches) : baseQuantity;
+          const shortfallQuantity = Math.max(0, baseQuantity - quantityFromBatches);
 
-          if (fifoResult.batchesUsed.length === 0) {
+          const fifoResult =
+            quantityFromBatches > 0
+              ? calculateFIFOConsumption(
+                  batches.map((b) => ({
+                    id: b.id,
+                    batchNumber: b.batchNumber,
+                    quantityAvailable: b.quantityAvailable,
+                    unitCost: b.unitCost,
+                    receivedDate: b.receivedDate,
+                  })),
+                  quantityFromBatches
+                )
+              : {
+                  totalCost: 0,
+                  averageCost: 0,
+                  batchesUsed: [],
+                };
+
+          if (!canGoNegative && fifoResult.batchesUsed.length === 0) {
             throw new Error(`Cannot fulfill ${baseQuantity} units of ${mat.name}`);
           }
+
+          const totalCost = fifoResult.totalCost + shortfallQuantity * fallbackUnitCost;
+          const averageCost = baseQuantity > 0 ? totalCost / baseQuantity : 0;
 
           // Update batch quantities and create TransactionBatch entries
           const batchLinkData = [];
@@ -319,8 +335,8 @@ export async function POST(req: Request) {
               materialId: line.materialId,
               quantity: baseQuantity,
               jobId: jobId || null,
-              totalCost: fifoResult.totalCost,
-              averageCost: fifoResult.averageCost,
+              totalCost,
+              averageCost,
               notes: notes || null,
               isDeliveryNote: isDeliveryNote || false,
               signedCopyDriveId: preservedSignedCopy && created.length === 0 ? preservedSignedCopy.signedCopyDriveId : null,

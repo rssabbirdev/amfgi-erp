@@ -12,6 +12,7 @@ const UpdateSchema = z.object({
   category:            z.string().min(1).max(100).optional(),
   warehouse:           z.string().min(1).max(100).optional(),
   stockType:           z.string().min(1).max(50).optional(),
+  allowNegativeConsumption: z.boolean().optional(),
   externalItemName:    z.string().min(1).max(100).optional(),
   unitCost:            z.number().min(0).optional(),
   reorderLevel:        z.number().min(0).optional(),
@@ -187,7 +188,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return successResponse({ deleted: true, permanent: true });
   } else {
     // Soft delete (deactivate)
-    const deactivated = await prisma.material.update({
+    await prisma.material.update({
       where: { id },
       data: { isActive: false },
     });

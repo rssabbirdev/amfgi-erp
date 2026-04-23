@@ -1,13 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback }       from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link                               from 'next/link';
-import { useSession }                     from 'next-auth/react';
 import { useSearchParams }                from 'next/navigation';
 import { Button }                         from '@/components/ui/Button';
-import { Badge }                          from '@/components/ui/Badge';
 import SearchSelect                       from '@/components/ui/SearchSelect';
-import Modal                              from '@/components/ui/Modal';
 import toast                              from 'react-hot-toast';
 import {
   useGetMaterialsQuery,
@@ -16,9 +13,6 @@ import {
   useGetJobMaterialsQuery,
   useGetCustomersQuery,
   useAddBatchTransactionMutation,
-  useGetCompaniesQuery,
-  useGetCrossCompanyMaterialsQuery,
-  useTransferStockMutation,
   type MaterialUomDto,
 } from '@/store/hooks';
 
@@ -40,8 +34,6 @@ interface Line {
   returnQty:   string;
   quantityUomId: string;
   originalDispatchQty?: number; // Track original qty for editing validation
-  sourceCompanyId?:   string;   // undefined = own company; '' = toggled but unpicked
-  sourceCompanyName?: string;
 }
 
 interface PendingChange {
@@ -49,13 +41,33 @@ interface PendingChange {
   newValue: string;
 }
 
-interface CrossCompanyMaterial {
-  id: string;
-  name: string;
-  unit: string;
-  currentStock: number;
-  isActive: boolean;
-  materialUoms?: MaterialUomDto[];
+const MIN_VISIBLE_ROWS = 5;
+const MIN_EMPTY_ROWS = 3;
+
+function emptyLine(jobId = ''): Line {
+  return {
+    id: generateId(),
+    jobId,
+    materialId: '',
+    dispatchQty: '',
+    returnQty: '',
+    quantityUomId: '',
+  };
+}
+
+function isLineEmpty(line: Line) {
+  return (
+    !line.materialId &&
+    !line.dispatchQty &&
+    !line.returnQty &&
+    !line.quantityUomId
+  );
+}
+
+function normalizeLines(lines: Line[], jobId = '') {
+  const nonEmptyLines = lines.filter((line) => !isLineEmpty(line));
+  const requiredEmptyRows = Math.max(MIN_EMPTY_ROWS, MIN_VISIBLE_ROWS - nonEmptyLines.length);
+  return [...nonEmptyLines, ...Array.from({ length: requiredEmptyRows }, () => emptyLine(jobId))];
 }
 
 function parseJobContacts(value: unknown): Array<{ name: string; number?: string; email?: string; designation?: string; label?: string }> {
@@ -77,100 +89,19 @@ function parseJobContacts(value: unknown): Array<{ name: string; number?: string
   return contacts;
 }
 
-// Sub-component to avoid conditional hook calls
-function CrossCompanyMaterialLoader({
-  companyId,
-  onLoaded,
-}: {
-  companyId: string;
-  onLoaded: (companyId: string, materials: CrossCompanyMaterial[]) => void;
-}) {
-  const { data = [] } = useGetCrossCompanyMaterialsQuery(companyId, { skip: !companyId });
-  useEffect(() => {
-    onLoaded(companyId, data);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId, data]);
-  return null;
-}
-
 export default function DispatchMaterialsPage() {
-  const { data: session } = useSession();
   const searchParams = useSearchParams();
   const { data: materials = [] } = useGetMaterialsQuery();
   const { data: jobs = [] } = useGetJobsQuery();
   const { data: customers = [] } = useGetCustomersQuery();
-  const { data: allCompanies = [] } = useGetCompaniesQuery();
   const [addBatchTransaction] = useAddBatchTransactionMutation();
-  const [transferStock] = useTransferStockMutation();
 
-  // Permission check for cross-company transfers
-  const isSA = session?.user?.isSuperAdmin ?? false;
-  const perms = (session?.user?.permissions ?? []) as string[];
-  const canTransfer = isSA || perms.includes('transaction.transfer');
-
-  // Companies other than the active one
-  const otherCompanies = allCompanies.filter((c) => c.id !== session?.user?.activeCompanyId);
-
-  // Cross-company materials storage
-  const [crossCompanyMaterialsMap, setCrossCompanyMaterialsMap] = useState<Record<string, any[]>>({});
-  const handleCrossCompanyMaterialsLoaded = useCallback(
-    (companyId: string, mats: any[]) => {
-      setCrossCompanyMaterialsMap((prev) => ({ ...prev, [companyId]: mats }));
-    },
-    []
-  );
-
-  // Confirmation modal state
-  const [confirmModal, setConfirmModal] = useState<{ open: boolean; crossCompanyLines: Line[] } | null>(null);
-
-  const [lines,        setLines]        = useState<Line[]>(() => [
-    {
-      id: generateId(),
-      jobId: '',
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-    },
-    {
-      id: generateId(),
-      jobId: '',
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-    },
-    {
-      id: generateId(),
-      jobId: '',
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-    },
-    {
-      id: generateId(),
-      jobId: '',
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-    },
-    {
-      id: generateId(),
-      jobId: '',
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-    },
-  ]);
+  const [lines,        setLines]        = useState<Line[]>(() => normalizeLines([emptyLine()]));
   const [selectedJob,  setSelectedJob]  = useState('');
   const [date,         setDate]         = useState(() => new Date().toISOString().slice(0, 10));
   const [notes,        setNotes]        = useState('');
   const [submitting,   setSubmitting]   = useState(false);
   const [existingEntry, setExistingEntry] = useState<{ exists: boolean; lines: any[]; transactionIds: string[]; notes: string } | null>(null);
-  const [allowInterCompanyTransfers, setAllowInterCompanyTransfers] = useState(false);
 
   // Get total dispatched/returned for each material on this job across all dates
   const { data: jobMaterials = [] } = useGetJobMaterialsQuery(selectedJob, { skip: !selectedJob });
@@ -200,16 +131,7 @@ export default function DispatchMaterialsPage() {
   useEffect(() => {
     if (!selectedJob || !date) {
       setExistingEntry(null);
-      setLines(
-        Array.from({ length: 5 }, () => ({
-          id: generateId(),
-          jobId: '',
-          materialId: '',
-          dispatchQty: '',
-          returnQty: '',
-          quantityUomId: '',
-        }))
-      );
+      setLines(normalizeLines([emptyLine()]));
       setNotes('');
       return;
     }
@@ -228,34 +150,10 @@ export default function DispatchMaterialsPage() {
           originalDispatchQty: line.quantity,
         }));
 
-        const paddedLines =
-          newLines.length < 5
-            ? [
-                ...newLines,
-                ...Array.from({ length: 5 - newLines.length }, () => ({
-                  id: generateId(),
-                  jobId: selectedJob,
-                  materialId: '',
-                  dispatchQty: '',
-                  returnQty: '',
-                  quantityUomId: '',
-                })),
-              ]
-            : newLines;
-
-        setLines(paddedLines);
+        setLines(normalizeLines(newLines, selectedJob));
         setNotes(entryData.notes || '');
       } else {
-        setLines(
-          Array.from({ length: 5 }, () => ({
-            id: generateId(),
-            jobId: selectedJob,
-            materialId: '',
-            dispatchQty: '',
-            returnQty: '',
-            quantityUomId: '',
-          }))
-        );
+        setLines(normalizeLines([emptyLine(selectedJob)], selectedJob));
         setNotes('');
       }
     }
@@ -289,16 +187,7 @@ export default function DispatchMaterialsPage() {
     if (!changeWarningModal.pendingChange) return;
 
     // Clear materials and notes, reset to 5 rows
-    setLines(
-      Array.from({ length: 5 }, () => ({
-        id: generateId(),
-        jobId: '',
-        materialId: '',
-        dispatchQty: '',
-        returnQty: '',
-        quantityUomId: '',
-      }))
-    );
+    setLines(normalizeLines([emptyLine()]));
     setNotes('');
     // Apply the change
     if (changeWarningModal.pendingChange.type === 'job') {
@@ -314,77 +203,58 @@ export default function DispatchMaterialsPage() {
   const getJob = (id: string) => jobs.find((j) => j.id === id);
   const selectedJobRecord = getJob(selectedJob);
   const selectedJobContacts = parseJobContacts(selectedJobRecord?.contactsJson);
-  const selectedPrimaryContactName = selectedJobRecord?.contactPerson?.trim() || selectedJobContacts[0]?.name || '';
-  const selectedPrimaryContact =
-    selectedJobContacts.find((c) => c.name === selectedPrimaryContactName) ?? selectedJobContacts[0];
+  const selectableJobs = useMemo(
+    () => jobs.filter((job) => Boolean(job.parentJobId) && job.status !== 'COMPLETED' && job.status !== 'CANCELLED'),
+    [jobs]
+  );
 
-  // Get material from correct source (own company or cross-company)
-  const getEffectiveMaterial = (line: Line) => {
-    if (line.sourceCompanyId) {
-      return (crossCompanyMaterialsMap[line.sourceCompanyId] ?? []).find((m) => m.id === line.materialId);
-    }
-    return getMaterial(line.materialId);
-  };
+  const populatedLines = useMemo(
+    () => lines.filter((line) => line.materialId || line.dispatchQty || line.returnQty),
+    [lines]
+  );
+
+  const totalDispatchQty = useMemo(
+    () =>
+      lines.reduce((sum, line) => {
+        const value = Number.parseFloat(line.dispatchQty);
+        return sum + (Number.isFinite(value) ? value : 0);
+      }, 0),
+    [lines]
+  );
+
+  const totalReturnQty = useMemo(
+    () =>
+      lines.reduce((sum, line) => {
+        const value = Number.parseFloat(line.returnQty);
+        return sum + (Number.isFinite(value) ? value : 0);
+      }, 0),
+    [lines]
+  );
 
   // Check if any line has actual data (not empty)
   const hasData = () => lines.some((l) => l.materialId || l.dispatchQty || l.returnQty);
 
-  const addLine = () => {
-    setLines((prev) => [...prev, {
-      id:            generateId(),
-      jobId:         selectedJob,
-      materialId:    '',
-      dispatchQty:   '',
-      returnQty:     '',
-      quantityUomId: '',
-    }]);
-  };
-
   const removeLine = (id: string) => {
-    setLines((prev) => prev.filter((l) => l.id !== id));
+    setLines((prev) => normalizeLines(prev.filter((l) => l.id !== id), selectedJob));
   };
 
   const updateLine = (id: string, field: keyof Line, value: string) => {
     setLines((prev) =>
-      prev.map((l) =>
-        l.id === id
-          ? {
-              ...l,
-              [field]: value,
-              ...(field === 'materialId' ? { quantityUomId: '' } : {}),
-            }
-          : l
-      )
-    );
-  };
+      normalizeLines(
+        prev.map((l) => {
+          if (l.id !== id) return l;
+          if (field === 'materialId' && !value) {
+            return emptyLine(selectedJob);
+          }
 
-  const toggleSourceMode = (lineId: string) => {
-    setLines((prev) =>
-      prev.map((l) =>
-        l.id === lineId
-          ? {
-              ...l,
-              sourceCompanyId:   l.sourceCompanyId !== undefined ? undefined : '',
-              sourceCompanyName: undefined,
-              materialId:        '',  // reset material when toggling mode
-            }
-          : l
-      )
-    );
-  };
-
-  const setLineSourceCompany = (lineId: string, companyId: string) => {
-    const co = allCompanies.find((c) => c.id === companyId);
-    setLines((prev) =>
-      prev.map((l) =>
-        l.id === lineId
-          ? {
-              ...l,
-              sourceCompanyId:   companyId,
-              sourceCompanyName: co?.name,
-              materialId:        '',  // reset material when changing company
-            }
-          : l
+          return {
+            ...l,
+            jobId: selectedJob,
+            [field]: value,
+            ...(field === 'materialId' ? { quantityUomId: '' } : {}),
+          };
+        }),
+        selectedJob
       )
     );
   };
@@ -417,44 +287,6 @@ export default function DispatchMaterialsPage() {
     }
   };
 
-  // Handle confirmation modal confirm button
-  const handleConfirmTransfer = async () => {
-    if (!confirmModal) return;
-    setConfirmModal(null);
-    setSubmitting(true);
-    try {
-      // Step 1: Execute transfers sequentially
-      const transferResults: Array<{ lineId: string; destMaterialId: string }> = [];
-      for (const line of confirmModal.crossCompanyLines) {
-        const result = await transferStock({
-          sourceCompanyId:      line.sourceCompanyId,
-          destinationCompanyId: session!.user!.activeCompanyId!,
-          materialId:           line.materialId,
-          quantity:             parseFloat(line.dispatchQty),
-          quantityUomId:        line.quantityUomId.trim() || undefined,
-          notes:                `Cross-company sourcing for dispatch`,
-          date,
-        }).unwrap();
-        transferResults.push({ lineId: line.id, destMaterialId: result.destMaterialId });
-      }
-
-      // Step 2: Remap cross-company lines to use local material IDs
-      const crossCompanyLines = lines.filter((l) => l.sourceCompanyId);
-      const ownLines = lines.filter((l) => !l.sourceCompanyId);
-      const remappedCrossLines = crossCompanyLines.map((line) => {
-        const mapping = transferResults.find((r) => r.lineId === line.id);
-        return { ...line, materialId: mapping?.destMaterialId ?? line.materialId };
-      });
-
-      // Step 3: Submit batch dispatch with all lines
-      await executeSubmit([...ownLines, ...remappedCrossLines]);
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Transfer or dispatch failed');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const validateAndSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedJob) { toast.error('Select a job'); return; }
@@ -466,24 +298,13 @@ export default function DispatchMaterialsPage() {
       return;
     }
 
-    // Partition lines
-    const crossCompanyLines = validLines.filter((l) => l.sourceCompanyId);
-    const ownLines = validLines.filter((l) => !l.sourceCompanyId);
-
-    // If cross-company and !canTransfer, error
-    if (crossCompanyLines.length > 0 && !canTransfer) {
-      toast.error('You do not have permission to source from other companies');
-      return;
-    }
-
-    // Validate own-company quantities
-    for (const line of ownLines) {
+    for (const line of validLines) {
       if (!line.materialId || !line.dispatchQty) {
         // Skip lines with empty material or qty
         continue;
       }
 
-      let qty = parseFloat(line.dispatchQty);
+      const qty = parseFloat(line.dispatchQty);
       const mat = getMaterial(line.materialId);
 
       // First check: Material exists
@@ -506,7 +327,7 @@ export default function DispatchMaterialsPage() {
 
       // Fourth check: Parse stock value correctly
       const currentStock = typeof mat.currentStock === 'number' ? mat.currentStock : parseFloat(String(mat.currentStock));
-      if (isNaN(currentStock) || currentStock < 0) {
+      if (isNaN(currentStock) || (!mat.allowNegativeConsumption && currentStock < 0)) {
         toast.error(`Invalid stock value for ${mat.name}: ${mat.currentStock}`);
         return;
       }
@@ -521,21 +342,23 @@ export default function DispatchMaterialsPage() {
       // Sixth check: Sufficient stock (compare in base UOM)
       const baseQty = qtyInBase(mat.materialUoms, line.quantityUomId, qty);
       const originalQty = line.originalDispatchQty ? parseFloat(String(line.originalDispatchQty)) : 0;
-      if (isNaN(originalQty)) {
-        const availableStock = currentStock;
-        if (availableStock < baseQty) {
-          toast.error(
-            `Insufficient stock for ${mat.name}. Requested: ${baseQty.toFixed(3)} ${mat.unit} (from entry), Available: ${availableStock.toFixed(3)} ${mat.unit}`
-          );
-          return;
-        }
-      } else {
-        const availableStock = currentStock + originalQty;
-        if (availableStock < baseQty) {
-          toast.error(
-            `Insufficient stock for ${mat.name}. Requested: ${baseQty.toFixed(3)} ${mat.unit} (from entry), Available: ${availableStock.toFixed(3)} ${mat.unit}`
-          );
-          return;
+      if (!mat.allowNegativeConsumption) {
+        if (isNaN(originalQty)) {
+          const availableStock = currentStock;
+          if (availableStock < baseQty) {
+            toast.error(
+              `Insufficient stock for ${mat.name}. Requested: ${baseQty.toFixed(3)} ${mat.unit} (from entry), Available: ${availableStock.toFixed(3)} ${mat.unit}`
+            );
+            return;
+          }
+        } else {
+          const availableStock = currentStock + originalQty;
+          if (availableStock < baseQty) {
+            toast.error(
+              `Insufficient stock for ${mat.name}. Requested: ${baseQty.toFixed(3)} ${mat.unit} (from entry), Available: ${availableStock.toFixed(3)} ${mat.unit}`
+            );
+            return;
+          }
         }
       }
 
@@ -555,58 +378,6 @@ export default function DispatchMaterialsPage() {
       }
     }
 
-    // Validate cross-company quantities
-    for (const line of crossCompanyLines) {
-      if (!line.sourceCompanyId || line.sourceCompanyId === '') {
-        toast.error('Select a source company for all cross-company rows');
-        return;
-      }
-      if (line.sourceCompanyId === session?.user?.activeCompanyId) {
-        toast.error('Cannot transfer from your own company. Select a different company.');
-        return;
-      }
-      const ccMat = (crossCompanyMaterialsMap[line.sourceCompanyId] ?? []).find((m) => m.id === line.materialId);
-      if (!ccMat) { toast.error(`Cross-company material not found for ${line.materialId}`); return; }
-      const qty = parseFloat(line.dispatchQty);
-      if (isNaN(qty)) { toast.error('Invalid dispatch quantity'); return; }
-
-      const ccStock = typeof ccMat.currentStock === 'number' ? ccMat.currentStock : (typeof ccMat.currentStock === 'string' ? parseFloat(ccMat.currentStock) : 0);
-      if (isNaN(ccStock)) {
-        toast.error(`Invalid stock value for ${ccMat.name} at ${line.sourceCompanyName}`);
-        return;
-      }
-
-      const ccBaseQty = qtyInBase(ccMat.materialUoms, line.quantityUomId, qty);
-      if (ccStock < ccBaseQty) {
-        toast.error(
-          `Insufficient stock for ${ccMat.name} at ${line.sourceCompanyName}. Requested: ${ccBaseQty.toFixed(3)} ${ccMat.unit} (from entry), Available: ${ccStock.toFixed(3)} ${ccMat.unit}`
-        );
-        return;
-      }
-      const ret = line.returnQty ? parseFloat(line.returnQty) : 0;
-      if (ret > 0) {
-        const retBase = qtyInBase(ccMat.materialUoms, line.quantityUomId, ret);
-        const jobMatSummary = jobMaterials.find((jm: any) => jm.materialId === line.materialId);
-        if (jobMatSummary) {
-          const totalReturnAfter = jobMatSummary.returned + retBase;
-          if (totalReturnAfter > jobMatSummary.dispatched) {
-            const maxCanReturn = jobMatSummary.dispatched - jobMatSummary.returned;
-            toast.error(
-              `Cannot return ${retBase.toFixed(3)} ${ccMat.unit} (from return entry) for ${ccMat.name}. Only ${maxCanReturn.toFixed(3)} ${ccMat.unit} can be returned for this job`
-            );
-            return;
-          }
-        }
-      }
-    }
-
-    // If cross-company lines exist, show confirmation modal
-    if (crossCompanyLines.length > 0) {
-      setConfirmModal({ open: true, crossCompanyLines });
-      return;
-    }
-
-    // Otherwise, submit directly
     setSubmitting(true);
     try {
       await executeSubmit(validLines);
@@ -616,16 +387,24 @@ export default function DispatchMaterialsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1180px] space-y-4">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
-        <div>
+    <div className="mx-auto max-w-[1240px] space-y-4 overflow-x-hidden">
+      <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+        <div className="space-y-4">
           <div className="mb-1 flex items-center gap-2">
             <Link href="/stock/dispatch" className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-700 transition-colors hover:text-emerald-600 dark:text-emerald-300/80 dark:hover:text-emerald-200">
               ← Dispatch
             </Link>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-[2rem]">Dispatch worksheet</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">Dispatch stock to a job, track returns in the same sheet, and keep issue rows easy to scan.</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">Dispatch stock to a job, capture returns in the same sheet, and keep every line easier to scan.</p>
+          <div className="flex flex-wrap gap-3 lg:justify-end">
+            <Link href="/stock/dispatch">
+              <Button type="button" variant="ghost">Cancel</Button>
+            </Link>
+            <Button type="submit" form="dispatch-entry-form" loading={submitting}>
+              Dispatch
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -637,45 +416,33 @@ export default function DispatchMaterialsPage() {
         </div>
       )}
 
-      {/* Load cross-company materials for all other companies upfront */}
-      {allowInterCompanyTransfers && otherCompanies.map((company) => (
-        <CrossCompanyMaterialLoader
-          key={company.id}
-          companyId={company.id}
-          onLoaded={handleCrossCompanyMaterialsLoaded}
-        />
-      ))}
-
-      <form id="dispatch-entry-form" onSubmit={validateAndSubmit} className="space-y-0">
-        {/* Header */}
-        <div className="rounded-t-3xl border border-slate-200 border-b-0 bg-white p-5 dark:border-slate-800 dark:bg-slate-950/70">
-          {/* Toggle for inter-company transfers */}
-          <div className="mb-5 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/80">
-            <div>
-              <p className="text-sm font-medium text-slate-900 dark:text-slate-200">Inter-company sourcing</p>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-500">Enable sourcing from other company stock when local stock is not the source.</p>
-            </div>
-            <button
-              type="button"
-              disabled={existingEntry?.exists ?? false}
-              onClick={() => setAllowInterCompanyTransfers(!allowInterCompanyTransfers)}
-              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                existingEntry?.exists
-                  ? 'opacity-50 cursor-not-allowed bg-slate-400 dark:bg-slate-700'
-                  : allowInterCompanyTransfers
-                  ? 'bg-emerald-600'
-                  : 'bg-slate-300 dark:bg-slate-700'
-              }`}
-            >
-              <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                  allowInterCompanyTransfers ? 'translate-x-5' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 dark:border-slate-800 dark:bg-slate-800 sm:grid-cols-3">
+        {[
+          { label: 'Rows in use', value: String(populatedLines.length), note: `${lines.length} open lines` },
+          { label: 'Dispatch qty', value: totalDispatchQty.toFixed(3), note: 'Entered total' },
+          { label: 'Return qty', value: totalReturnQty.toFixed(3), note: 'Entered total' },
+        ].map((item) => (
+          <div key={item.label} className="bg-white px-4 py-3 dark:bg-slate-950/80">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">{item.label}</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">{item.value}</p>
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-500">{item.note}</p>
           </div>
+        ))}
+      </section>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
+      <form
+        id="dispatch-entry-form"
+        onSubmit={validateAndSubmit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+            e.preventDefault();
+          }
+        }}
+        className="space-y-0 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950/70"
+      >
+        {/* Header */}
+        <div className="border-b border-slate-200 p-4 dark:border-slate-800 sm:p-5">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.25fr)_220px_minmax(220px,0.85fr)]">
             <div>
               <SearchSelect
                 label="Job"
@@ -683,23 +450,22 @@ export default function DispatchMaterialsPage() {
                 value={selectedJob}
                 onChange={(id) => handleJobChange(id)}
                 placeholder="Search jobs by number or customer..."
-                items={jobs
-                  .filter((j) => j.status !== 'COMPLETED' && j.status !== 'CANCELLED')
-                  .map((j) => ({
+                items={selectableJobs.map((j) => ({
                     id: j.id,
                     label: j.jobNumber,
                     searchText: customers.find((c) => c.id === j.customerId)?.name || 'Unknown',
                   }))}
                 renderItem={(item) => (
                   <div>
-                    <div className="font-medium">{item.label}</div>
-                    <div className="text-xs text-slate-400">{item.searchText}</div>
+                    <div className="font-medium text-slate-900 dark:text-white">{item.label}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{item.searchText}</div>
                   </div>
                 )}
+                dropdownInPortal
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">
                 Dispatch Date
               </label>
               <input
@@ -711,7 +477,7 @@ export default function DispatchMaterialsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">
                 Notes / Reference
               </label>
               <input
@@ -722,144 +488,81 @@ export default function DispatchMaterialsPage() {
               />
             </div>
           </div>
-          {selectedJob && (
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/80">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500">Job Contact</p>
-              <p className="mt-0.5 text-sm font-medium text-slate-900 dark:text-white">{selectedPrimaryContactName || 'No contact assigned'}</p>
-              {selectedPrimaryContact?.designation && (
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{selectedPrimaryContact.designation}</p>
-              )}
-              {selectedPrimaryContact?.number && (
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{selectedPrimaryContact.number}</p>
-              )}
-              {selectedPrimaryContact?.email && (
-                <p className="mt-0.5 break-all text-xs text-slate-500 dark:text-slate-400">{selectedPrimaryContact.email}</p>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto border border-slate-200 border-b-0 bg-white dark:border-slate-800 dark:bg-slate-950/70">
-          <table className="w-full text-sm">
+        <div className="overflow-hidden border-b border-slate-200 dark:border-slate-800">
+          <div className="overflow-x-auto overscroll-x-contain">
+          <table className="min-w-[940px] w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/80">
-                <th className="w-8 px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">#</th>
-                <th className="min-w-[220px] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Material</th>
-                <th className="min-w-[128px] px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">UOM</th>
-                <th className="w-28 px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">In Stock</th>
-                <th className="w-32 px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Dispatch Qty</th>
-                <th className="w-32 px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Return Qty</th>
-                <th className="px-2 py-3 w-20"></th>
+                <th className="w-8 px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">#</th>
+                <th className="min-w-[280px] px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Material</th>
+                <th className="w-[150px] px-2 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">UOM</th>
+                <th className="w-[120px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">In Stock</th>
+                <th className="w-[138px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Dispatch Qty</th>
+                <th className="w-[138px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Return Qty</th>
+                <th className="w-[56px] px-2 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Clr</th>
               </tr>
             </thead>
             <tbody>
               {lines.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-sm">
-                    No materials added yet. Click "+ Add" to start.
+                    No materials added yet. Click &quot;+ Add&quot; to start.
                   </td>
                 </tr>
               ) : (
                 lines.map((line, idx) => {
-                  const mat = getEffectiveMaterial(line);
-                  const dispatchQty = parseFloat(line.dispatchQty) || 0;
-                  const returnQty = parseFloat(line.returnQty) || 0;
-                  const netQty = dispatchQty - returnQty;
+                  const mat = getMaterial(line.materialId);
 
                   return (
                     <tr key={line.id} className="align-top border-b border-slate-200 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-900/40">
-                      <td className="px-4 py-2.5 font-mono text-xs text-slate-500 dark:text-slate-500">{idx + 1}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-slate-500 dark:text-slate-500">{idx + 1}</td>
 
-                      <td className="px-4 py-2">
-                        {/* Cross-company toggle and selector - only show if inter-company transfers enabled */}
-                        {allowInterCompanyTransfers && canTransfer && (
-                          <>
-                            <div className="flex items-center gap-2 mb-1.5">
-                              <button
-                                type="button"
-                                onClick={() => toggleSourceMode(line.id)}
-                                className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                                  line.sourceCompanyId !== undefined
-                                    ? 'bg-blue-600/20 border-blue-500/40 text-blue-300'
-                                    : 'bg-slate-700/40 border-slate-600 text-slate-400 hover:text-slate-300'
-                                }`}
-                              >
-                                {line.sourceCompanyId !== undefined ? 'Other company' : 'Own stock'}
-                              </button>
-                              {line.sourceCompanyId && line.sourceCompanyId !== '' && (
-                                <Badge label={line.sourceCompanyName ?? 'External'} variant="blue" />
-                              )}
-                            </div>
-
-                            {/* Company selector (shown only when cross-company toggled) */}
-                            {line.sourceCompanyId !== undefined && (
-                              <select
-                                value={line.sourceCompanyId}
-                                onChange={(e) => setLineSourceCompany(line.id, e.target.value)}
-                                className="mb-1.5 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
-                              >
-                                <option value="">Select company...</option>
-                                {otherCompanies.map((c) => (
-                                  <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                              </select>
-                            )}
-                          </>
-                        )}
-
-                        {/* Material selection with inline stock display */}
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1">
-                            {line.sourceCompanyId && !line.sourceCompanyId && (
-                              <div className="mb-1 text-xs text-amber-600 dark:text-yellow-400">Select a company first</div>
-                            )}
+                      <td className="min-w-0 px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="min-w-0">
                             <SearchSelect
                               value={line.materialId}
                               onChange={(id) => updateLine(line.id, 'materialId', id)}
-                              placeholder={
-                                line.sourceCompanyId && !line.sourceCompanyId
-                                  ? 'Select a company first...'
-                                  : 'Search materials...'
-                              }
-                              disabled={!selectedJob || (line.sourceCompanyId !== undefined && !line.sourceCompanyId)}
-                              items={(
-                                line.sourceCompanyId && line.sourceCompanyId !== ''
-                                  ? (crossCompanyMaterialsMap[line.sourceCompanyId] ?? []).filter(
-                                      (m) => m.isActive && m.currentStock > 0
-                                    )
-                                  : line.sourceCompanyId === undefined
-                                  ? materials.filter((m) => m.isActive)
-                                  : []
-                              ).map((m) => ({
+                              onBlurInputValue={(inputValue) => {
+                                if (!inputValue.trim() && line.materialId) {
+                                  updateLine(line.id, 'materialId', '');
+                                }
+                              }}
+                              placeholder="Search materials..."
+                              disabled={!selectedJob}
+                              items={materials.filter((m) => m.isActive).map((m) => ({
                                 id: m.id,
                                 label: m.name,
                                 searchText: `${m.currentStock} ${m.unit}`,
                               }))}
+                              dropdownInPortal
+                              inputProps={{ className: 'min-w-0 pr-8' }}
                               renderItem={(item) => (
-                                <div className="flex items-center justify-between w-full">
-                                  <div className="font-medium text-white">{item.label}</div>
-                                  <Badge label={item.searchText} variant="blue" />
+                                <div className="flex w-full min-w-0 items-center justify-between gap-3">
+                                  <div className="truncate font-medium text-slate-900 dark:text-white">{item.label}</div>
+                                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">
+                                    {item.searchText}
+                                  </span>
                                 </div>
                               )}
                             />
                           </div>
-                          {/* Inline stock badge next to material name */}
                           {mat && line.materialId && (
-                            <Badge
-                              label={`${mat.currentStock.toFixed(3)} ${mat.unit}`}
-                              variant="blue"
-                            />
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                            </div>
                           )}
                         </div>
                       </td>
 
-                      <td className="px-3 py-2 text-center text-slate-400 text-xs min-w-[120px]">
+                      <td className="px-2 py-2 text-center text-slate-400 text-xs">
                         {mat?.materialUoms && mat.materialUoms.length > 0 ? (
                           <select
                             value={line.quantityUomId}
                             onChange={(e) => updateLine(line.id, 'quantityUomId', e.target.value)}
-                            className="w-full max-w-44 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                           >
                             {mat.materialUoms.map((u: MaterialUomDto) => (
                               <option key={u.id} value={u.isBase ? '' : u.id}>
@@ -873,11 +576,11 @@ export default function DispatchMaterialsPage() {
                         )}
                       </td>
 
-                      <td className="px-3 py-2 text-right font-mono text-sm text-emerald-700 dark:text-emerald-300">
+                      <td className="px-2 py-2 text-right font-mono text-sm text-emerald-700 dark:text-emerald-300">
                         {mat?.currentStock ?? '—'}
                       </td>
 
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2">
                         <input
                           type="number"
                           min="0.001"
@@ -891,7 +594,7 @@ export default function DispatchMaterialsPage() {
                         />
                       </td>
 
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2">
                         <input
                           type="number"
                           min="0"
@@ -904,11 +607,12 @@ export default function DispatchMaterialsPage() {
                         />
                       </td>
 
-                      <td className="px-2 py-2">
+                      <td className="px-2 py-2 text-center">
                         <button
                           type="button"
                           onClick={() => removeLine(line.id)}
-                          className="p-1 text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+                          className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:text-slate-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                          aria-label={`Clear row ${idx + 1}`}
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -921,28 +625,11 @@ export default function DispatchMaterialsPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="flex justify-between gap-3 rounded-b-3xl border border-slate-200 border-t-0 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/70">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={addLine}
-            disabled={!selectedJob || !date}
-            title={!selectedJob || !date ? 'Select a job and date first' : ''}
-          >
-            + Add Material
-          </Button>
-          <div className="flex gap-3">
-            <Link href="/stock/dispatch">
-              <Button type="button" variant="ghost">Cancel</Button>
-            </Link>
-            <Button type="submit" loading={submitting}>
-              Dispatch
-            </Button>
-          </div>
-        </div>
+        <div className="h-4 dark:bg-slate-950/70" />
       </form>
 
       {/* Change Warning Modal */}
@@ -982,60 +669,7 @@ export default function DispatchMaterialsPage() {
         </>
       )}
 
-      {/* Confirmation Modal — Cross-Company Transfer */}
-      <Modal
-        isOpen={!!confirmModal?.open}
-        onClose={() => setConfirmModal(null)}
-        title="Confirm Cross-Company Sourcing"
-        size="sm"
-      >
-        <p className="text-slate-300 text-sm mb-4">
-          The following {confirmModal?.crossCompanyLines.length} material(s) will be sourced from other
-          companies. Stock will first be <strong>transferred to your company</strong>, then dispatched.
-        </p>
-
-        <ul className="space-y-2 mb-5">
-          {confirmModal?.crossCompanyLines.map((line) => {
-            const mat = (crossCompanyMaterialsMap[line.sourceCompanyId!] ?? []).find(
-              (m) => m.id === line.materialId
-            );
-            return (
-              <li key={line.id} className="flex items-center justify-between bg-slate-700/40 rounded-lg px-3 py-2 text-sm">
-                <span className="text-white font-medium">{mat?.name ?? line.materialId}</span>
-                <span className="text-slate-400">
-                  {line.dispatchQty} {mat?.unit} from{' '}
-                  <span className="text-blue-300">{line.sourceCompanyName}</span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-
-        <div className="bg-amber-600/15 border border-amber-500/30 rounded-lg p-3 mb-5">
-          <p className="text-xs text-amber-300">
-            This will create TRANSFER_OUT transactions in the source companies and credit stock to your
-            company before dispatch. This action cannot be undone.
-          </p>
-        </div>
-
-        <div className="flex gap-3 justify-end">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setConfirmModal(null)}
-            disabled={submitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleConfirmTransfer}
-            loading={submitting}
-          >
-            Transfer and Dispatch
-          </Button>
-        </div>
-      </Modal>
     </div>
   );
 }
+

@@ -67,7 +67,7 @@ export default function HrPageChrome({ children }: { children: React.ReactNode }
 
   return (
     <div className="space-y-4">
-      <nav className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
+      {/* <nav className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
         {breadcrumbs.map((crumb, index) => {
           const isLast = index === breadcrumbs.length - 1;
           const isClickable = CLICKABLE_HR_ROUTES.has(crumb.href);
@@ -84,7 +84,7 @@ export default function HrPageChrome({ children }: { children: React.ReactNode }
             </span>
           );
         })}
-      </nav>
+      </nav> */}
       {children}
     </div>
   );

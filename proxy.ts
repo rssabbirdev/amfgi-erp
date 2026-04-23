@@ -8,6 +8,9 @@ import { isEmployeeSelfServiceUser } from '@/lib/auth/selfService';
 const ROUTE_PERMISSIONS: Array<{ prefix: string; perm: Permission }> = [
   { prefix: '/admin', perm: 'user.view' },
   { prefix: '/reports', perm: 'report.view' },
+  { prefix: '/stock/issue-reconcile', perm: 'transaction.reconcile' },
+  { prefix: '/stock/non-stock-reconcile', perm: 'transaction.reconcile' },
+  { prefix: '/customers/jobs', perm: 'job.view' },
   { prefix: '/customers', perm: 'customer.view' },
   { prefix: '/jobs', perm: 'job.view' },
   { prefix: '/materials', perm: 'material.view' },

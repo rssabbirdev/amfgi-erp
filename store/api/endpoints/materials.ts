@@ -19,6 +19,7 @@ export interface Material {
   category: string;
   warehouse: string;
   stockType: string;
+  allowNegativeConsumption: boolean;
   externalItemName: string;
   currentStock: number;
   reorderLevel?: number;
@@ -33,6 +34,8 @@ interface CrossCompanyMaterial {
   id: string;
   name: string;
   unit: string;
+  warehouse?: string;
+  allowNegativeConsumption?: boolean;
   currentStock: number;
   isActive: boolean;
   materialUoms?: MaterialUomDto[];

@@ -182,9 +182,14 @@ export default function HrGeofencePage() {
       toast.error(json?.error ?? 'Failed to load geofence zone');
       return;
     }
-    const detail = {
-      ...(json.data as ZoneDetail),
-      polygonPoints: Array.isArray(json.data?.polygonPoints) ? json.data.polygonPoints : [],
+    const data = (json.data ?? null) as ZoneDetail | null;
+    if (!data) {
+      toast.error('Failed to load geofence zone');
+      return;
+    }
+    const detail: ZoneDetail = {
+      ...data,
+      polygonPoints: Array.isArray(data?.polygonPoints) ? data.polygonPoints : [],
     };
     setSelectedZone(detail);
     setForm(formFromZone(detail));
@@ -218,9 +223,14 @@ export default function HrGeofencePage() {
         toast.error(json?.error ?? 'Failed to load geofence zone');
         return;
       }
-      const detail = {
-        ...(json.data as ZoneDetail),
-        polygonPoints: Array.isArray(json.data?.polygonPoints) ? json.data.polygonPoints : [],
+      const data = (json.data ?? null) as ZoneDetail | null;
+      if (!data) {
+        toast.error('Failed to load geofence zone');
+        return;
+      }
+      const detail: ZoneDetail = {
+        ...data,
+        polygonPoints: Array.isArray(data?.polygonPoints) ? data.polygonPoints : [],
       };
       setSelectedZone(detail);
       setForm(formFromZone(detail));
@@ -320,7 +330,8 @@ export default function HrGeofencePage() {
 
     toast.success(form.id ? 'Geofence zone updated' : 'Geofence zone created');
     await loadZones();
-    const nextId = String(json.data?.id ?? form.id ?? '');
+    const responseZone = (json.data ?? null) as { id?: string } | null;
+    const nextId = String(responseZone?.id ?? form.id ?? '');
     if (nextId) {
       setSelectedZoneId(nextId);
       await loadZoneDetail(nextId);

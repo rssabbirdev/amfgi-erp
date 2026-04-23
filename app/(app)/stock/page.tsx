@@ -41,7 +41,9 @@ export default function StockPage() {
   const canSeeReceipts = isSA || perms.includes('transaction.stock_in');
   const canSeeDispatch = isSA || perms.includes('transaction.stock_out');
   const canSeeBatches = isSA || perms.includes('material.view') || perms.includes('transaction.stock_in');
-  const canViewStock = canSeeMaterials || canSeeReceipts || canSeeDispatch || canSeeBatches;
+  const canSeeTransfers = isSA || perms.includes('transaction.transfer');
+  const canSeeReconcile = isSA || perms.includes('transaction.reconcile');
+  const canViewStock = canSeeMaterials || canSeeReceipts || canSeeDispatch || canSeeBatches || canSeeTransfers || canSeeReconcile;
 
   const { data: valuation, isFetching: valuationLoading } = useGetStockValuationQuery(undefined, {
     skip: !canViewStock,
@@ -107,6 +109,22 @@ export default function StockPage() {
       meta: `${formatCount(batches.length)} total receipt batches`,
       tone: 'slate' as const,
     },
+    {
+      href: '/stock/inter-company-transfers',
+      title: 'Inter-Company Transfers',
+      description: 'Review transfer history and move stock between companies in a dedicated workspace.',
+      enabled: canSeeTransfers,
+      meta: 'Ledger and multi-item transfer',
+      tone: 'blue' as const,
+    },
+    {
+      href: '/stock/issue-reconcile',
+      title: 'Issue Reconcile',
+      description: 'Review reconcile history and manually distribute non-stock quantities into variation jobs.',
+      enabled: canSeeReconcile,
+      meta: 'History and create workspace',
+      tone: 'amber' as const,
+    },
   ].filter((module) => module.enabled);
 
   const workflow = [
@@ -165,9 +183,14 @@ export default function StockPage() {
                 </Link>
               ) : null}
               {canSeeDispatch ? (
+                <>
                 <Link href="/stock/dispatch/entry">
                   <Button variant="secondary">New dispatch</Button>
-                </Link>
+                  </Link>
+                  <Link href="/stock/dispatch/delivery-note">
+                                  <Button variant="secondary">New Delivery Note</Button>
+                                </Link>
+                </>
               ) : null}
             </div>
           </div>

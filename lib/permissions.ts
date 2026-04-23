@@ -37,6 +37,7 @@ export const P = {
   TXN_STOCK_OUT: 'transaction.stock_out',
   TXN_RETURN:    'transaction.return',
   TXN_TRANSFER:  'transaction.transfer',
+  TXN_RECONCILE: 'transaction.reconcile',
 
   // Reports
   REPORT_VIEW: 'report.view',
@@ -77,7 +78,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.MATERIAL_VIEW, P.MATERIAL_CREATE, P.MATERIAL_EDIT,
     P.JOB_VIEW,      P.JOB_CREATE,      P.JOB_EDIT,
     P.CUSTOMER_VIEW, P.CUSTOMER_CREATE, P.CUSTOMER_EDIT,
-    P.TXN_STOCK_IN,  P.TXN_STOCK_OUT,   P.TXN_RETURN, P.TXN_TRANSFER,
+    P.TXN_STOCK_IN,  P.TXN_STOCK_OUT,   P.TXN_RETURN, P.TXN_TRANSFER, P.TXN_RECONCILE,
     P.REPORT_VIEW,
     P.USER_VIEW,
     P.SETTINGS_MANAGE,
@@ -136,6 +137,7 @@ export const PERMISSION_GROUPS: Array<{
       { key: P.TXN_STOCK_OUT, label: 'Dispatch'         },
       { key: P.TXN_RETURN,    label: 'Return'           },
       { key: P.TXN_TRANSFER,  label: 'Inter-Company Transfer' },
+      { key: P.TXN_RECONCILE, label: 'Issue Reconcile'  },
     ],
   },
   {

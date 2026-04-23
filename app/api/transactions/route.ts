@@ -4,6 +4,8 @@ import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { resolveQuantityToBase } from '@/lib/utils/materialUomDb';
 import { z } from 'zod';
 
+type TransactionFilterType = 'STOCK_IN' | 'STOCK_OUT' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT';
+
 const TransactionSchema = z.object({
   type: z.enum(['STOCK_IN', 'STOCK_OUT', 'RETURN', 'TRANSFER_IN', 'TRANSFER_OUT']),
   materialId: z.string().min(1),
@@ -41,7 +43,7 @@ export async function GET(req: Request) {
       where: {
         companyId,
         jobId: jobId ? jobId : undefined,
-        type: type ? (type as any) : undefined,
+        type: type ? (type as TransactionFilterType) : undefined,
       },
       select: {
         id: true,
@@ -121,7 +123,7 @@ export async function POST(req: Request) {
           where: { id: materialId },
         });
         if (!mat) throw new Error('Material not found');
-        if (mat.currentStock < qtyBase) {
+        if (!mat.allowNegativeConsumption && mat.currentStock < qtyBase) {
           throw new Error(`Insufficient stock. Available: ${mat.currentStock} ${mat.unit}`);
         }
       }

@@ -14,10 +14,14 @@ interface WarehouseResponse {
   data?: Warehouse[];
 }
 
+interface WarehouseMutationResponse {
+  data?: Warehouse;
+}
+
 export const warehousesApi = appApi.injectEndpoints({
   endpoints: (builder) => ({
-    getWarehouses: builder.query<Warehouse[], void>({
-      query: () => '/warehouses',
+    getWarehouses: builder.query<Warehouse[], string | void>({
+      query: (companyId) => (companyId ? `/warehouses?companyId=${companyId}` : '/warehouses'),
       transformResponse: (r: Warehouse[] | WarehouseResponse) => (Array.isArray(r) ? r : (r.data as Warehouse[]) || []),
       providesTags: (result) =>
         result
@@ -31,7 +35,7 @@ export const warehousesApi = appApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      transformResponse: (r: any) => (r && 'data' in r ? (r.data as Warehouse) : (r as Warehouse)),
+      transformResponse: (r: Warehouse | WarehouseMutationResponse) => ('data' in r ? (r.data as Warehouse) : (r as Warehouse)),
       invalidatesTags: [{ type: 'Warehouse', id: 'LIST' }, { type: 'Material', id: 'LIST' }],
     }),
 

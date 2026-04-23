@@ -30,6 +30,8 @@ export async function GET(req: Request) {
       id: true,
       name: true,
       unit: true,
+      warehouse: true,
+      allowNegativeConsumption: true,
       currentStock: true,
       isActive: true,
       materialUoms: {

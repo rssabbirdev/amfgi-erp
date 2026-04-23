@@ -40,6 +40,7 @@ interface TransferPayload {
   quantity: number;
   quantityUomId?: string;
   destinationCompanyId: string;
+  destinationWarehouse?: string;
   notes?: string;
   date?: string;
 }
@@ -50,6 +51,89 @@ interface TransferResult {
   sourceCompany: string;
   destinationCompany: string;
   destMaterialId: string;
+}
+
+type BatchTransactionPayload = Record<string, unknown>;
+
+type DispatchEntryResponse = {
+  exists: boolean;
+  lines: Array<Record<string, unknown>>;
+  transactionIds: string[];
+  notes: string;
+};
+
+export interface TransferLedgerItem {
+  id: string;
+  type: 'TRANSFER_IN' | 'TRANSFER_OUT';
+  direction: 'IN' | 'OUT';
+  materialId: string;
+  materialName: string;
+  unit: string;
+  quantity: number;
+  counterpartCompanySlug?: string | null;
+  counterpartCompanyName?: string | null;
+  notes?: string | null;
+  date: string | Date;
+  createdAt?: string | Date;
+  performedBy: string;
+}
+
+export interface NonStockReconcileMaterial {
+  id: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  allowNegativeConsumption: boolean;
+  stockType: string;
+  materialUoms?: Array<{
+    id: string;
+    unitId: string;
+    unit: { id: string; name: string };
+    isBase: boolean;
+    parentUomId: string | null;
+    factorToParent: number;
+  }>;
+}
+
+export interface NonStockReconcileJob {
+  id: string;
+  jobNumber: string;
+  description?: string | null;
+  customerName?: string;
+}
+
+export interface NonStockReconcileHistoryItem {
+  id: string;
+  quantity: number;
+  totalCost: number;
+  averageCost: number;
+  notes?: string | null;
+  date: string | Date;
+  createdAt?: string | Date;
+  materialName: string;
+  unit: string;
+  jobId: string;
+  jobNumber: string;
+  jobDescription?: string;
+  customerName?: string;
+}
+
+export interface NonStockReconcileData {
+  materials: NonStockReconcileMaterial[];
+  jobs: NonStockReconcileJob[];
+  selectedMonth?: string;
+  history: NonStockReconcileHistoryItem[];
+}
+
+export interface NonStockReconcilePayload {
+  jobIds: string[];
+  lines: Array<{
+    materialId: string;
+    quantity: number;
+    quantityUomId?: string;
+  }>;
+  notes?: string;
+  date?: string;
 }
 
 export const transactionsApi = appApi.injectEndpoints({
@@ -78,7 +162,7 @@ export const transactionsApi = appApi.injectEndpoints({
 
     addBatchTransaction: builder.mutation<
       { created: number; ids: string[] },
-      any
+      BatchTransactionPayload
     >({
       query: (body) => ({
         url: '/transactions/batch',
@@ -114,29 +198,50 @@ export const transactionsApi = appApi.injectEndpoints({
         body,
       }),
       transformResponse: (r: { data: TransferResult }) => r.data,
-      invalidatesTags: [{ type: 'Material', id: 'LIST' }],
+      invalidatesTags: [
+        { type: 'Material', id: 'LIST' },
+        { type: 'StockBatch', id: 'LIST' },
+        { type: 'Transaction', id: 'LIST' },
+        { type: 'Transaction', id: 'TRANSFER_LEDGER' },
+      ],
     }),
 
-    getDispatchEntry: builder.query<
-      {
-        exists: boolean;
-        lines: any[];
-        transactionIds: string[];
-        notes: string;
-      },
-      { jobId: string; date: string }
-    >({
+    getTransferLedger: builder.query<TransferLedgerItem[], void>({
+      query: () => '/transactions/transfers',
+      transformResponse: (r: { data: TransferLedgerItem[] }) => r.data,
+      providesTags: [{ type: 'Transaction', id: 'TRANSFER_LEDGER' }],
+    }),
+
+    getDispatchEntry: builder.query<DispatchEntryResponse, { jobId: string; date: string }>({
       query: ({ jobId, date }) =>
         `/transactions/dispatch-entry?jobId=${jobId}&date=${date}`,
-      transformResponse: (r: {
-        data: {
-          exists: boolean;
-          lines: any[];
-          transactionIds: string[];
-          notes: string;
-        };
-      }) => r.data,
+      transformResponse: (r: { data: DispatchEntryResponse }) => r.data,
       providesTags: [{ type: 'DispatchEntry' }],
+    }),
+
+    getNonStockReconcileData: builder.query<NonStockReconcileData, { date?: string } | void>({
+      query: (arg) => {
+        const date = arg && 'date' in arg ? arg.date : undefined;
+        return date ? `/transactions/non-stock-reconcile?date=${encodeURIComponent(date)}` : '/transactions/non-stock-reconcile';
+      },
+      transformResponse: (r: { data: NonStockReconcileData }) => r.data,
+      providesTags: [{ type: 'Transaction', id: 'NON_STOCK_RECONCILE' }],
+    }),
+
+    reconcileNonStock: builder.mutation<{ created: number; ids: string[] }, NonStockReconcilePayload>({
+      query: (body) => ({
+        url: '/transactions/non-stock-reconcile',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (r: { data: { created: number; ids: string[] } }) => r.data,
+      invalidatesTags: [
+        { type: 'Material', id: 'LIST' },
+        { type: 'StockBatch', id: 'LIST' },
+        { type: 'Transaction', id: 'LIST' },
+        { type: 'Transaction', id: 'NON_STOCK_RECONCILE' },
+        { type: 'JobMaterials' },
+      ],
     }),
   }),
 });
@@ -147,5 +252,8 @@ export const {
   useAddBatchTransactionMutation,
   useDeleteTransactionMutation,
   useTransferStockMutation,
+  useGetTransferLedgerQuery,
   useGetDispatchEntryQuery,
+  useGetNonStockReconcileDataQuery,
+  useReconcileNonStockMutation,
 } = transactionsApi;

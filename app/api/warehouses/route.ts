@@ -14,10 +14,22 @@ export async function GET(req: Request) {
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
+  const { searchParams } = new URL(req.url);
+  const requestedCompanyId = searchParams.get('companyId')?.trim() || session.user.activeCompanyId;
+  const isCrossCompanyRequest = requestedCompanyId !== session.user.activeCompanyId;
+
+  if (
+    isCrossCompanyRequest &&
+    !session.user.isSuperAdmin &&
+    !session.user.permissions.includes('transaction.transfer')
+  ) {
+    return errorResponse('Forbidden', 403);
+  }
+
   try {
     const warehouses = await prisma.warehouse.findMany({
       where: {
-        companyId: session.user.activeCompanyId,
+        companyId: requestedCompanyId,
         isActive: true,
       },
       orderBy: { name: 'asc' },

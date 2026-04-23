@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -139,6 +139,10 @@ export default function DeliveryNoteCreatePage() {
   const canCreate = isSA || perms.includes('job.create');
 
   const { data: jobMaterials = [] } = useGetJobMaterialsQuery(selectedJob, { skip: !selectedJob });
+  const selectableJobs = useMemo(
+    () => jobs.filter((job) => Boolean(job.parentJobId) && job.status !== 'COMPLETED' && job.status !== 'CANCELLED'),
+    [jobs]
+  );
 
   useEffect(() => {
     if (!selectedJob) {
@@ -597,7 +601,11 @@ export default function DeliveryNoteCreatePage() {
 
         const currentStock = typeof mat.currentStock === 'number' ? mat.currentStock : parseFloat(String(mat.currentStock));
         const baseQty = qtyInBase(mat.materialUoms, line.quantityUomId, qty);
-        if (isNaN(currentStock) || currentStock < baseQty) {
+        if (isNaN(currentStock)) {
+          toast.error(`Invalid stock value for ${mat.name}`);
+          return;
+        }
+        if (!mat.allowNegativeConsumption && currentStock < baseQty) {
           toast.error(
             `Insufficient stock for ${mat.name}. Need ${baseQty.toFixed(3)} ${mat.unit} (from entry). Available: ${currentStock.toFixed(3)} ${mat.unit}`
           );
@@ -830,9 +838,7 @@ export default function DeliveryNoteCreatePage() {
                 value={selectedJob}
                 onChange={(id) => handleJobChange(id)}
                 placeholder="Search jobs by number or customer..."
-                items={jobs
-                  .filter((j) => j.status !== 'COMPLETED' && j.status !== 'CANCELLED')
-                  .map((j) => ({
+                items={selectableJobs.map((j) => ({
                     id: j.id,
                     label: j.jobNumber,
                     searchText: customers.find((c) => c.id === j.customerId)?.name || 'Unknown',

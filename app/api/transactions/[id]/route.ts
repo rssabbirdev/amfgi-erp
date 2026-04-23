@@ -2,12 +2,14 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
+function isReconcileTransaction(notes?: string | null) {
+  const value = (notes ?? '').trim().toLowerCase();
+  return value.startsWith('non-stock reconcile');
+}
+
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_out')) {
-    return errorResponse('Forbidden', 403);
-  }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
@@ -72,6 +74,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       return errorResponse('Unauthorized', 403);
     }
 
+    if (!session.user.isSuperAdmin) {
+      const hasDispatch = session.user.permissions.includes('transaction.stock_out');
+      const hasReconcile = session.user.permissions.includes('transaction.reconcile');
+      const isReconcile = isReconcileTransaction(txn.notes);
+      if ((isReconcile && !hasReconcile) || (!isReconcile && !hasDispatch)) {
+        return errorResponse('Forbidden', 403);
+      }
+    }
+
     const performedById = typeof txn.performedBy === 'string' ? txn.performedBy.trim() : '';
     const performedByUser = performedById
       ? await prisma.user.findUnique({
@@ -101,9 +112,6 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_out')) {
-    return errorResponse('Forbidden', 403);
-  }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
@@ -126,6 +134,15 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
       if (txn.companyId !== companyId) {
         throw new Error('Unauthorized');
+      }
+
+      if (!session.user.isSuperAdmin) {
+        const hasDispatch = session.user.permissions.includes('transaction.stock_out');
+        const hasReconcile = session.user.permissions.includes('transaction.reconcile');
+        const isReconcile = isReconcileTransaction(txn.notes);
+        if ((isReconcile && !hasReconcile) || (!isReconcile && !hasDispatch)) {
+          throw new Error('Unauthorized');
+        }
       }
 
       // Create reversal transaction for audit trail instead of just deleting

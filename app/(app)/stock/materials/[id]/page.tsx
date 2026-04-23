@@ -162,6 +162,7 @@ function MaterialEditor({
   const [category, setCategory] = useState(material?.category ?? '');
   const [warehouse, setWarehouse] = useState(material?.warehouse ?? '');
   const [stockType, setStockType] = useState(material?.stockType ?? '');
+  const [allowNegativeConsumption, setAllowNegativeConsumption] = useState(material?.allowNegativeConsumption ?? false);
   const [externalItemName, setExternalItemName] = useState(material?.externalItemName ?? '');
   const [reorderLevel, setReorderLevel] = useState(material?.reorderLevel?.toString() ?? '');
   const [unitCost, setUnitCost] = useState(material?.unitCost?.toString() ?? '');
@@ -221,6 +222,7 @@ function MaterialEditor({
       category: category.trim() || undefined,
       warehouse: warehouse.trim() || undefined,
       stockType: stockType.trim(),
+      allowNegativeConsumption,
       externalItemName: externalItemName.trim() || undefined,
       ...(isCreateMode && { currentStock: parseFloat(currentStock) || 0 }),
       reorderLevel: reorderLevel ? parseFloat(reorderLevel) : undefined,
@@ -237,6 +239,7 @@ function MaterialEditor({
           category: { from: null, to: category || null },
           warehouse: { from: null, to: warehouse || null },
           stockType: { from: null, to: stockType },
+          allowNegativeConsumption: { from: null, to: allowNegativeConsumption ? 'Yes' : 'No' },
           externalItemName: { from: null, to: externalItemName || null },
         };
 
@@ -281,6 +284,12 @@ function MaterialEditor({
       if (category !== material.category) changes.category = { from: material.category || null, to: category || null };
       if (warehouse !== material.warehouse) changes.warehouse = { from: material.warehouse || null, to: warehouse || null };
       if (stockType !== material.stockType) changes.stockType = { from: material.stockType, to: stockType };
+      if (allowNegativeConsumption !== material.allowNegativeConsumption) {
+        changes.allowNegativeConsumption = {
+          from: material.allowNegativeConsumption ? 'Yes' : 'No',
+          to: allowNegativeConsumption ? 'Yes' : 'No',
+        };
+      }
       if (externalItemName !== material.externalItemName) {
         changes.externalItemName = {
           from: material.externalItemName || null,
@@ -491,8 +500,24 @@ function MaterialEditor({
                   <option value="Finished Goods">Finished Goods</option>
                   <option value="Semi-finished">Semi-finished</option>
                   <option value="Consumable">Consumable</option>
+                  <option value="Non-Stock">Non-Stock</option>
                   <option value="Other">Other</option>
                 </select>
+              </FieldShell>
+
+              <FieldShell
+                label="Negative consumption"
+                hint="Allow dispatching below zero stock. Useful for reconciled or later-costed items."
+              >
+                <label className="flex min-h-[46px] items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
+                  <span>{allowNegativeConsumption ? 'Allowed' : 'Blocked at zero stock'}</span>
+                  <input
+                    type="checkbox"
+                    checked={allowNegativeConsumption}
+                    onChange={(e) => setAllowNegativeConsumption(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                </label>
               </FieldShell>
 
               <FieldShell label="Category">
@@ -962,8 +987,8 @@ export default function MaterialDetailPage() {
       units={units}
       categories={categories}
       warehouses={warehouses}
-      materialLogs={materialLogs as MaterialLogEntry[]}
-      priceLogs={priceLogs as PriceLogEntry[]}
+      materialLogs={materialLogs as unknown as MaterialLogEntry[]}
+      priceLogs={priceLogs as unknown as PriceLogEntry[]}
     />
   );
 }

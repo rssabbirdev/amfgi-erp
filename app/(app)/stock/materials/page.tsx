@@ -6,13 +6,16 @@ import { useSession } from 'next-auth/react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/Button';
 import DataTable from '@/components/ui/DataTable';
-import TransferModal from '@/components/transactions/TransferModal';
 import BulkImportModal from '@/components/materials/BulkImportModal';
 import toast from 'react-hot-toast';
 import type { Column } from '@/components/ui/DataTable';
 import type { ContextMenuOption } from '@/components/ui/ContextMenu';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
-import { useDeleteMaterialMutation, useGetMaterialsQuery } from '@/store/hooks';
+import {
+  useDeleteMaterialMutation,
+  useGetMaterialsQuery,
+  useGetStockValuationQuery,
+} from '@/store/hooks';
 
 interface Material {
   id: string;
@@ -63,15 +66,14 @@ export default function MaterialsPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const { data: materials = [], isFetching } = useGetMaterialsQuery();
+  const { data: stockValuation } = useGetStockValuationQuery();
   const [deleteMaterial, { isLoading: isDeleting }] = useDeleteMaterialMutation();
   const { openMenu: openContextMenu } = useGlobalContextMenu();
 
   const perms = (session?.user?.permissions ?? []) as string[];
   const isSA = session?.user?.isSuperAdmin ?? false;
   const canDelete = isSA || perms.includes('material.delete');
-  const canTransfer = isSA || perms.includes('transaction.transfer');
 
-  const [transferModal, setTransferModal] = useState(false);
   const [importModal, setImportModal] = useState(false);
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
@@ -110,6 +112,8 @@ export default function MaterialsPage() {
       ),
     [activeMaterials]
   );
+
+  const fifoInventoryValue = stockValuation?.summary.fifoStockValue ?? inventoryValue;
 
   const distinctWarehouses = useMemo(
     () => new Set(activeMaterials.map((material) => material.warehouse).filter(Boolean)).size,
@@ -334,19 +338,6 @@ export default function MaterialsPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {canTransfer ? (
-                <Button variant="secondary" onClick={() => setTransferModal(true)}>
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-                    />
-                  </svg>
-                  Transfer
-                </Button>
-              ) : null}
               <Button variant="secondary" onClick={() => setImportModal(true)}>
                 Import Excel
               </Button>
@@ -371,9 +362,9 @@ export default function MaterialsPage() {
               note: 'At or below reorder point',
             },
             {
-              label: 'Inventory value',
-              value: `AED ${inventoryValue.toFixed(2)}`,
-              note: 'Based on current stock x unit cost',
+              label: 'FIFO value',
+              value: `AED ${fifoInventoryValue.toFixed(2)}`,
+              note: 'Preferred inventory valuation method',
             },
             {
               label: 'Warehouse coverage',
@@ -417,8 +408,6 @@ export default function MaterialsPage() {
           onRowClick={(material) => router.push(`/stock/materials/${material.id}`)}
         />
       </section>
-
-      <TransferModal isOpen={transferModal} onClose={() => setTransferModal(false)} onSuccess={() => {}} />
 
       <BulkImportModal isOpen={importModal} onClose={() => setImportModal(false)} existingMaterials={materials} />
 

@@ -10,6 +10,7 @@ const MaterialRowSchema = z.object({
   category: z.string().max(100).optional(),
   warehouse: z.string().max(100).optional(),
   stockType: z.string().min(1).max(50),
+  allowNegativeConsumption: z.boolean().optional(),
   externalItemName: z.string().max(100).optional(),
   unitCost: z.number().min(0).optional(),
   reorderLevel: z.number().min(0).optional(),
@@ -53,6 +54,7 @@ export async function POST(req: Request) {
           category: row.category?.trim() || null,
           warehouse: row.warehouse?.trim() || null,
           stockType: row.stockType.trim(),
+          allowNegativeConsumption: row.allowNegativeConsumption ?? false,
           externalItemName: row.externalItemName?.trim() || null,
           unitCost: row.unitCost ?? null,
           reorderLevel: row.reorderLevel ?? null,
@@ -78,6 +80,7 @@ export async function POST(req: Request) {
         .filter((row) => (row.currentStock ?? 0) > 0)
         .map((row) => {
           const materialId = nameToIdMap.get(row.name.trim().toLowerCase());
+          if (!materialId) return null;
           const quantity = row.currentStock ?? 0;
           const unitCost = row.unitCost ?? 0;
           const totalCost = quantity * unitCost;
@@ -97,11 +100,12 @@ export async function POST(req: Request) {
             expiryDate: null,
             notes: 'Created from bulk import',
           };
-        });
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
       if (stockBatchesToCreate.length > 0) {
         await prisma.stockBatch.createMany({
-          data: stockBatchesToCreate as any,
+          data: stockBatchesToCreate,
         });
       }
 
@@ -133,6 +137,7 @@ export async function POST(req: Request) {
               category: row.category?.trim() || null,
               warehouse: row.warehouse?.trim() || null,
               stockType: row.stockType.trim(),
+              allowNegativeConsumption: row.allowNegativeConsumption ?? false,
               externalItemName: row.externalItemName?.trim() || null,
               unitCost: row.unitCost ?? null,
               reorderLevel: row.reorderLevel ?? null,
