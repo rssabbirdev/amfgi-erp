@@ -1,7 +1,7 @@
 # Graph Report - C:\almuraqib-custom-application\AMFGI  (2026-04-23)
 
 ## Corpus Check
-- 328 files · ~304,108 words
+- 328 files · ~304,098 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -920,11 +920,11 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `String()` connect `Community 1` to `Community 0`, `Community 3`, `Community 5`, `Community 6`, `Community 8`, `Community 9`, `Community 10`, `Community 12`, `Community 13`, `Community 14`, `Community 16`, `Community 19`, `Community 20`, `Community 23`, `Community 24`?**
-  _High betweenness centrality (0.304) - this node is a cross-community bridge._
+  _High betweenness centrality (0.326) - this node is a cross-community bridge._
 - **Why does `GET()` connect `Community 0` to `Community 1`, `Community 4`, `Community 6`, `Community 38`, `Community 8`, `Community 9`, `Community 10`, `Community 13`, `Community 16`, `Community 17`, `Community 21`, `Community 23`, `Community 25`?**
-  _High betweenness centrality (0.257) - this node is a cross-community bridge._
-- **Why does `handleSubmit()` connect `Community 3` to `Community 1`, `Community 2`?**
-  _High betweenness centrality (0.106) - this node is a cross-community bridge._
+  _High betweenness centrality (0.304) - this node is a cross-community bridge._
+- **Why does `POST()` connect `Community 0` to `Community 4`, `Community 9`, `Community 10`, `Community 14`, `Community 19`, `Community 23`, `Community 25`?**
+  _High betweenness centrality (0.103) - this node is a cross-community bridge._
 - **Are the 55 inferred relationships involving `GET()` (e.g. with `DELETE()` and `AttendanceCreatePage()`) actually correct?**
   _`GET()` has 55 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 40 inferred relationships involving `POST()` (e.g. with `errorResponse()` and `successResponse()`) actually correct?**
