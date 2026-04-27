@@ -7,12 +7,15 @@ import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import {
+  useGetCompaniesQuery,
   useDeleteTransactionMutation,
   useGetNonStockReconcileDataQuery,
+  useGetWarehousesQuery,
   useReconcileNonStockMutation,
 } from '@/store/hooks';
 
 type QtyMap = Record<string, string>;
+type WarehouseMap = Record<string, string>;
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 }).format(value);
@@ -34,11 +37,17 @@ export function IssueReconcileForm() {
   const [reconcileNonStock, { isLoading: submitting }] = useReconcileNonStockMutation();
   const [deleteTransaction] = useDeleteTransactionMutation();
   const [qtyMap, setQtyMap] = useState<QtyMap>({});
+  const [warehouseMap, setWarehouseMap] = useState<WarehouseMap>({});
   const [selectedJobs, setSelectedJobs] = useState<string[] | null>(null);
   const [notes, setNotes] = useState('');
+  const { data: companies = [] } = useGetCompaniesQuery();
+  const { data: warehouses = [] } = useGetWarehousesQuery();
   const effectiveSelectedJobs = selectedJobs ?? data?.jobs.map((job) => job.id) ?? [];
   const perms = (session?.user?.permissions ?? []) as string[];
   const canReconcile = (session?.user?.isSuperAdmin ?? false) || perms.includes('transaction.reconcile');
+  const activeCompany = companies.find((company) => company.id === session?.user?.activeCompanyId);
+  const warehouseMode = activeCompany?.warehouseMode ?? 'DISABLED';
+  const showWarehouseColumn = warehouseMode !== 'DISABLED';
 
   useEffect(() => {
     if (!editingTransactionId) return;
@@ -53,6 +62,7 @@ export function IssueReconcileForm() {
         const transaction = json.data as {
           id: string;
           materialId: string;
+          warehouseId?: string | null;
           quantity: number;
           date: string;
           notes?: string | null;
@@ -61,6 +71,7 @@ export function IssueReconcileForm() {
 
         setDate(new Date(transaction.date).toISOString().slice(0, 10));
         setQtyMap({ [transaction.materialId]: String(transaction.quantity) });
+        setWarehouseMap(transaction.warehouseId ? { [transaction.materialId]: transaction.warehouseId } : {});
         setSelectedJobs(transaction.jobId ? [transaction.jobId] : []);
         setNotes(
           (transaction.notes ?? '')
@@ -113,6 +124,10 @@ export function IssueReconcileForm() {
       toast.error('Select at least one job variation');
       return;
     }
+    if (warehouseMode === 'REQUIRED' && activeLines.some((line) => !warehouseMap[line.materialId])) {
+      toast.error('Select a warehouse for each non-stock line');
+      return;
+    }
 
     try {
       if (editingTransactionId) {
@@ -124,6 +139,7 @@ export function IssueReconcileForm() {
         lines: activeLines.map((line) => ({
           materialId: line.materialId,
           quantity: line.quantity,
+          warehouseId: warehouseMap[line.materialId] || undefined,
         })),
         notes: notes.trim() || undefined,
         date,
@@ -135,6 +151,7 @@ export function IssueReconcileForm() {
           : `Created ${result.created} reconcile transaction(s)`
       );
       setQtyMap({});
+      setWarehouseMap({});
       setNotes('');
     } catch (error: unknown) {
       const message =
@@ -224,6 +241,7 @@ export function IssueReconcileForm() {
                   <th className="px-4 py-3">On hand</th>
                   <th className="px-4 py-3">Rule</th>
                   <th className="px-4 py-3">Distribute qty</th>
+                  {showWarehouseColumn ? <th className="px-4 py-3">Warehouse</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -259,11 +277,29 @@ export function IssueReconcileForm() {
                         <span className="text-xs text-slate-500 dark:text-slate-500">{material.unit}</span>
                       </div>
                     </td>
+                    {showWarehouseColumn ? (
+                      <td className="px-4 py-3">
+                        <select
+                          value={warehouseMap[material.id] ?? material.warehouseId ?? ''}
+                          onChange={(e) => setWarehouseMap((prev) => ({ ...prev, [material.id]: e.target.value }))}
+                          className="w-48 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900/80 dark:text-white"
+                        >
+                          <option value="">
+                            {warehouseMode === 'REQUIRED' ? 'Select warehouse...' : 'Use fallback/default'}
+                          </option>
+                          {warehouses.map((warehouse) => (
+                            <option key={warehouse.id} value={warehouse.id}>
+                              {warehouse.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
                 {!isLoading && (data?.materials.length ?? 0) === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
+                    <td colSpan={showWarehouseColumn ? 5 : 4} className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
                       No non-stock items found.
                     </td>
                   </tr>

@@ -409,6 +409,11 @@ export default function GoodsReceiptPage() {
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
                           Batch {material.batchNumber || '-'}
                         </p>
+                        {material.warehouseName ? (
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                            Warehouse: {material.warehouseName}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="text-left md:text-right">
                         <p className="font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">

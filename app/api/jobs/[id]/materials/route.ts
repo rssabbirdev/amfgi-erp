@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -57,9 +58,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     };
 
     if (txn.type === 'STOCK_OUT') {
-      existing.dispatched += txn.quantity;
+      existing.dispatched += decimalToNumberOrZero(txn.quantity);
     } else if (txn.type === 'RETURN') {
-      existing.returned += txn.quantity;
+      existing.returned += decimalToNumberOrZero(txn.quantity);
     }
 
     existing.netConsumed = existing.dispatched - existing.returned;

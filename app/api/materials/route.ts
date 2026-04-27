@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { serializeMaterialUoms } from '@/lib/utils/materialUom';
 import type { MaterialUomWithUnit } from '@/lib/utils/materialUom';
+import { decimalToNumber } from '@/lib/utils/decimal';
+import { ensureCategoryRef, ensureWarehouseRef } from '@/lib/materialMasterData';
 import { z }                 from 'zod';
 
 const MaterialSchema = z.object({
@@ -14,9 +16,9 @@ const MaterialSchema = z.object({
   stockType:           z.string().min(1).max(50),
   allowNegativeConsumption: z.boolean().optional(),
   externalItemName:    z.string().min(1).max(100).optional(),
-  unitCost:            z.number().min(0).optional(),
-  reorderLevel:        z.number().min(0).optional(),
-  currentStock:        z.number().min(0).optional(),
+  unitCost:            z.number().finite().min(0).optional(),
+  reorderLevel:        z.number().finite().min(0).optional(),
+  currentStock:        z.number().finite().min(0).optional(),
 });
 
 export async function GET() {
@@ -77,13 +79,22 @@ export async function POST(req: Request) {
   const companyId = session.user.activeCompanyId;
 
   const material = await prisma.$transaction(async (tx) => {
+    const categoryRef = await ensureCategoryRef(tx, companyId, parsed.data.category);
+    const warehouseRef = await ensureWarehouseRef(tx, companyId, parsed.data.warehouse);
+
     const mat = await tx.material.create({
       data: {
         ...parsed.data,
         allowNegativeConsumption: parsed.data.allowNegativeConsumption ?? false,
         externalItemName: parsed.data.externalItemName ?? null,
         companyId,
-        currentStock: 0,
+        category: categoryRef.categoryName,
+        categoryId: categoryRef.categoryId,
+        warehouse: warehouseRef.warehouseName,
+        warehouseId: warehouseRef.warehouseId,
+        unitCost: decimalToNumber(parsed.data.unitCost) ?? null,
+        reorderLevel: decimalToNumber(parsed.data.reorderLevel) ?? null,
+        currentStock: decimalToNumber(parsed.data.currentStock) ?? 0,
         isActive: true,
       },
     });

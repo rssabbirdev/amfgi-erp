@@ -4,6 +4,7 @@
  */
 
 import { prisma, setupTestContext, teardownTestContext, TestContext } from './setup';
+import { decimalToNumberOrZero } from '../../lib/utils/decimal';
 
 describe('Materials CRUD Operations', () => {
   let ctx: TestContext;
@@ -37,8 +38,8 @@ describe('Materials CRUD Operations', () => {
       expect(material.id).toBeDefined();
       expect(material.name).toBe('Steel Pipe');
       expect(material.companyId).toBe(ctx.amfgiCompany.id);
-      expect(material.currentStock).toBe(100);
-      expect(material.unitCost).toBe(45.50);
+      expect(decimalToNumberOrZero(material.currentStock)).toBe(100);
+      expect(decimalToNumberOrZero(material.unitCost)).toBe(45.50);
       expect(material.isActive).toBe(true);
     });
 
@@ -114,7 +115,7 @@ describe('Materials CRUD Operations', () => {
       });
 
       expect(fetched?.name).toBe('Read Test Material');
-      expect(fetched?.currentStock).toBe(100);
+      expect(decimalToNumberOrZero(fetched?.currentStock)).toBe(100);
     });
 
     it('should list materials for a company', async () => {
@@ -206,8 +207,8 @@ describe('Materials CRUD Operations', () => {
         },
       });
 
-      expect(updated.currentStock).toBe(150);
-      expect(updated.unitCost).toBe(12);
+      expect(decimalToNumberOrZero(updated.currentStock)).toBe(150);
+      expect(decimalToNumberOrZero(updated.unitCost)).toBe(12);
       expect(updated.name).toBe('Update Test'); // unchanged
     });
 
@@ -391,8 +392,8 @@ describe('Materials CRUD Operations', () => {
       });
 
       expect(priceLog.materialId).toBe(material.id);
-      expect(priceLog.previousPrice).toBe(10);
-      expect(priceLog.currentPrice).toBe(12);
+      expect(decimalToNumberOrZero(priceLog.previousPrice)).toBe(10);
+      expect(decimalToNumberOrZero(priceLog.currentPrice)).toBe(12);
     });
   });
 });

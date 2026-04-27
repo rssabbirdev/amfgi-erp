@@ -1,5 +1,6 @@
 import { auth }            from '@/auth';
 import { prisma }          from '@/lib/db/prisma';
+import { assertWarehouseModeTransition, ensureCompanyFallbackWarehouse, normalizeWarehouseMode } from '@/lib/warehouses/companyWarehouseMode';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { normalizeCompanyPrintTemplateShape } from '@/lib/utils/companyPrintTemplates';
 import { z }               from 'zod';
@@ -14,6 +15,7 @@ const UpdateSchema = z.object({
   printTemplates: z.any().optional(),
   externalCompanyId: z.string().max(120).optional().or(z.literal('')),
   jobSourceMode: z.enum(['HYBRID', 'EXTERNAL_ONLY']).optional(),
+  warehouseMode: z.enum(['DISABLED', 'OPTIONAL', 'REQUIRED']).optional(),
 });
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,7 +23,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   if (!session?.user) return errorResponse('Unauthorized', 401);
   const { id } = await params;
 
-  const company = await prisma.company.findUnique({ where: { id } });
+  const company = await prisma.company.findUnique({
+    where: { id },
+    include: {
+      stockFallbackWarehouse: {
+        select: { id: true, name: true },
+      },
+    },
+  });
   if (!company) return errorResponse('Company not found', 404);
 
   return successResponse(normalizeCompanyPrintTemplateShape(company as Record<string, unknown>));
@@ -70,10 +79,30 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (isSA && parsed.data.jobSourceMode !== undefined) {
     update.jobSourceMode = parsed.data.jobSourceMode;
   }
+  if (isSA && parsed.data.warehouseMode !== undefined) {
+    update.warehouseMode = normalizeWarehouseMode(parsed.data.warehouseMode);
+  }
 
-  const company = await prisma.company.update({
-    where: { id },
-    data: update,
+  const company = await prisma.$transaction(async (tx) => {
+    if (isSA && parsed.data.warehouseMode !== undefined) {
+      await assertWarehouseModeTransition(tx, id, normalizeWarehouseMode(parsed.data.warehouseMode));
+    }
+
+    const updated = await tx.company.update({
+      where: { id },
+      data: update,
+    });
+
+    await ensureCompanyFallbackWarehouse(tx, id);
+
+    return tx.company.findUniqueOrThrow({
+      where: { id: updated.id },
+      include: {
+        stockFallbackWarehouse: {
+          select: { id: true, name: true },
+        },
+      },
+    });
   });
 
   if (!company) return errorResponse('Company not found', 404);

@@ -1,10 +1,13 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { buildTransactionActorFields } from '@/lib/utils/auditActor';
+import { decimalEqualsNullable, decimalToNumber, decimalToNumberOrZero } from '@/lib/utils/decimal';
 import { z } from 'zod';
 import { calculateFIFOConsumption } from '@/lib/utils/fifoConsumption';
 import { createBatchData } from '@/lib/utils/stockBatchManagement';
 import { resolveQuantityToBase, resolveFactorToBase } from '@/lib/utils/materialUomDb';
+import { applyMaterialWarehouseDelta, resolveEffectiveWarehouse } from '@/lib/warehouses/stockWarehouses';
 import {
   buildCustomerDriveFolderName,
   buildJobDriveFolderName,
@@ -20,10 +23,11 @@ function parseDeliveryNoteLabel(notes?: string | null): string {
 
 const LineSchema = z.object({
   materialId:     z.string().min(1),
-  quantity:       z.number().min(0.001),
+  quantity:       z.number().finite().min(0.001),
   quantityUomId:  z.string().optional(),
-  unitCost:       z.number().min(0).optional(),
-  returnQty:      z.number().min(0).optional(),
+  unitCost:       z.number().finite().min(0).optional(),
+  returnQty:      z.number().finite().min(0).optional(),
+  warehouseId:    z.string().min(1).optional(),
 });
 
 const BatchSchema = z.object({
@@ -37,12 +41,13 @@ const BatchSchema = z.object({
   date:          z.string().optional(),
   isDeliveryNote: z.boolean().optional(),
   existingTransactionIds: z.array(z.string()).optional(),
-  billAmount:    z.number().optional(),
+  billAmount:    z.number().finite().optional(),
   includeTax:    z.boolean().optional(),
-  taxAmount:     z.number().optional(),
+  taxAmount:     z.number().finite().optional(),
+  warehouseId:   z.string().min(1).optional(),
   materialUpdates: z.array(z.object({
     materialId: z.string(),
-    unitCost: z.number(),
+    unitCost: z.number().finite(),
     quantityUomId: z.string().optional(),
   })).optional(),
 }).refine(
@@ -74,6 +79,7 @@ export async function POST(req: Request) {
     billAmount,
     includeTax,
     taxAmount,
+    warehouseId,
     materialUpdates,
   } = parsed.data;
 
@@ -100,6 +106,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    const actorFields = buildTransactionActorFields(session.user);
     const result = await prisma.$transaction(async (tx) => {
       const created: string[] = [];
       let preservedSignedCopy:
@@ -135,6 +142,18 @@ export async function POST(req: Request) {
                   },
                 },
               });
+              const reversalWarehouse = await resolveEffectiveWarehouse(tx, {
+                companyId,
+                materialId: existingTxn.materialId,
+                warehouseId: existingTxn.warehouseId,
+              });
+              await applyMaterialWarehouseDelta(
+                tx,
+                companyId,
+                existingTxn.materialId,
+                reversalWarehouse.warehouseId,
+                decimalToNumberOrZero(existingTxn.quantity)
+              );
 
               // Restore batch quantities if FIFO data exists
               if (existingTxn.batchesUsed && existingTxn.batchesUsed.length > 0) {
@@ -159,6 +178,18 @@ export async function POST(req: Request) {
                   },
                 },
               });
+              const reversalWarehouse = await resolveEffectiveWarehouse(tx, {
+                companyId,
+                materialId: existingTxn.materialId,
+                warehouseId: existingTxn.warehouseId,
+              });
+              await applyMaterialWarehouseDelta(
+                tx,
+                companyId,
+                existingTxn.materialId,
+                reversalWarehouse.warehouseId,
+                -decimalToNumberOrZero(existingTxn.quantity)
+              );
             }
 
             // Delete any linked RETURN transactions
@@ -179,6 +210,18 @@ export async function POST(req: Request) {
                     },
                   },
                 });
+                const returnWarehouse = await resolveEffectiveWarehouse(tx, {
+                  companyId,
+                  materialId: returnTxn.materialId,
+                  warehouseId: returnTxn.warehouseId,
+                });
+                await applyMaterialWarehouseDelta(
+                  tx,
+                  companyId,
+                  returnTxn.materialId,
+                  returnWarehouse.warehouseId,
+                  -decimalToNumberOrZero(returnTxn.quantity)
+                );
 
                 // Delete the RETURN transaction (cascade will remove batchesUsed)
                 await tx.transaction.delete({
@@ -220,9 +263,14 @@ export async function POST(req: Request) {
           returnQtyInput > 0
             ? await resolveQuantityToBase(tx, line.materialId, returnQtyInput, line.quantityUomId)
             : 0;
+        const effectiveWarehouse = await resolveEffectiveWarehouse(tx, {
+          companyId,
+          materialId: line.materialId,
+          warehouseId: line.warehouseId ?? warehouseId,
+        });
 
         if (type === 'STOCK_OUT') {
-          const fallbackUnitCost = mat.unitCost || 0;
+          const fallbackUnitCost = decimalToNumberOrZero(mat.unitCost);
           const canGoNegative = mat.allowNegativeConsumption;
 
           // FIFO consumption
@@ -230,6 +278,7 @@ export async function POST(req: Request) {
             where: {
               companyId,
               materialId: line.materialId,
+              warehouseId: effectiveWarehouse.warehouseId,
               quantityAvailable: {
                 gt: 0,
               },
@@ -240,16 +289,18 @@ export async function POST(req: Request) {
           });
 
           // If no batches exist but currentStock > 0, create opening balance batch
-          if (batches.length === 0 && mat.currentStock > 0) {
-            const unitCost = mat.unitCost || 0;
-            const totalCost = mat.currentStock * unitCost;
+          const currentStock = decimalToNumberOrZero(mat.currentStock);
+          if (batches.length === 0 && currentStock > 0) {
+            const unitCost = decimalToNumberOrZero(mat.unitCost);
+            const totalCost = currentStock * unitCost;
             const openingBatch = await tx.stockBatch.create({
               data: {
                 companyId,
                 materialId: line.materialId,
+                warehouseId: effectiveWarehouse.warehouseId,
                 batchNumber: `OPENING-${line.materialId}-${Date.now()}`,
-                quantityReceived: mat.currentStock,
-                quantityAvailable: mat.currentStock,
+                quantityReceived: currentStock,
+                quantityAvailable: currentStock,
                 unitCost: unitCost,
                 totalCost: totalCost,
                 receivedDate: new Date('2020-01-01'), // Historical date
@@ -260,11 +311,11 @@ export async function POST(req: Request) {
             batches = [openingBatch];
           }
 
-          if (!canGoNegative && (batches.length === 0 || mat.currentStock < baseQuantity)) {
-            throw new Error(`Insufficient stock for ${mat.name}. Available: ${mat.currentStock}`);
+          if (!canGoNegative && (batches.length === 0 || currentStock < baseQuantity)) {
+            throw new Error(`Insufficient stock for ${mat.name}. Available: ${currentStock}`);
           }
 
-          const availableFromBatches = batches.reduce((sum, batch) => sum + batch.quantityAvailable, 0);
+          const availableFromBatches = batches.reduce((sum, batch) => sum + decimalToNumberOrZero(batch.quantityAvailable), 0);
           const quantityFromBatches = canGoNegative ? Math.min(baseQuantity, availableFromBatches) : baseQuantity;
           const shortfallQuantity = Math.max(0, baseQuantity - quantityFromBatches);
 
@@ -274,8 +325,8 @@ export async function POST(req: Request) {
                   batches.map((b) => ({
                     id: b.id,
                     batchNumber: b.batchNumber,
-                    quantityAvailable: b.quantityAvailable,
-                    unitCost: b.unitCost,
+                    quantityAvailable: decimalToNumberOrZero(b.quantityAvailable),
+                    unitCost: decimalToNumberOrZero(b.unitCost),
                     receivedDate: b.receivedDate,
                   })),
                   quantityFromBatches
@@ -326,6 +377,13 @@ export async function POST(req: Request) {
               },
             },
           });
+          await applyMaterialWarehouseDelta(
+            tx,
+            companyId,
+            line.materialId,
+            effectiveWarehouse.warehouseId,
+            -baseQuantity
+          );
 
           // Create STOCK_OUT transaction with FIFO data
           const stockOutTxn = await tx.transaction.create({
@@ -333,6 +391,7 @@ export async function POST(req: Request) {
               companyId,
               type: 'STOCK_OUT',
               materialId: line.materialId,
+              warehouseId: effectiveWarehouse.warehouseId,
               quantity: baseQuantity,
               jobId: jobId || null,
               totalCost,
@@ -342,7 +401,7 @@ export async function POST(req: Request) {
               signedCopyDriveId: preservedSignedCopy && created.length === 0 ? preservedSignedCopy.signedCopyDriveId : null,
               signedCopyUrl: preservedSignedCopy && created.length === 0 ? preservedSignedCopy.signedCopyUrl : null,
               date: txDate,
-              performedBy: session.user.id,
+              ...actorFields,
             },
           });
 
@@ -373,18 +432,26 @@ export async function POST(req: Request) {
                 },
               },
             });
+            await applyMaterialWarehouseDelta(
+              tx,
+              companyId,
+              line.materialId,
+              effectiveWarehouse.warehouseId,
+              returnBase
+            );
 
             const returnTxn = await tx.transaction.create({
               data: {
                 companyId,
                 type: 'RETURN',
                 materialId: line.materialId,
+                warehouseId: effectiveWarehouse.warehouseId,
                 quantity: returnBase,
                 jobId: jobId || null,
                 parentTransactionId: stockOutTxn.id,
                 notes: notes ? `Return: ${notes}` : 'Return',
                 date: txDate,
-                performedBy: session.user.id,
+                ...actorFields,
               },
             });
 
@@ -392,7 +459,7 @@ export async function POST(req: Request) {
           }
         } else {
           // STOCK_IN: create batch and transaction (unitCost on line = per line UOM when quantityUomId set)
-          let unitCostPerBase = line.unitCost ?? mat.unitCost ?? 0;
+          let unitCostPerBase = decimalToNumber(line.unitCost) ?? decimalToNumberOrZero(mat.unitCost);
           if (line.quantityUomId && line.unitCost != null && line.unitCost > 0) {
             const factor = await resolveFactorToBase(tx, line.materialId, line.quantityUomId);
             unitCostPerBase = line.unitCost / factor;
@@ -412,6 +479,7 @@ export async function POST(req: Request) {
           await tx.stockBatch.create({
             data: {
               companyId,
+              warehouseId: effectiveWarehouse.warehouseId,
               ...batchData,
             },
           });
@@ -425,6 +493,13 @@ export async function POST(req: Request) {
               },
             },
           });
+          await applyMaterialWarehouseDelta(
+            tx,
+            companyId,
+            line.materialId,
+            effectiveWarehouse.warehouseId,
+            baseQuantity
+          );
 
           // Update unit cost if provided (stored per base UOM)
           if (line.unitCost !== undefined) {
@@ -442,10 +517,11 @@ export async function POST(req: Request) {
               companyId,
               type: 'STOCK_IN',
               materialId: line.materialId,
+              warehouseId: effectiveWarehouse.warehouseId,
               quantity: baseQuantity,
               notes: notes || null,
               date: txDate,
-              performedBy: session.user.id,
+              ...actorFields,
             },
           });
 
@@ -461,15 +537,15 @@ export async function POST(req: Request) {
           });
 
           if (material) {
-            const previousPrice = material.unitCost || 0;
-            let currentPrice = update.unitCost;
+            const previousPrice = decimalToNumberOrZero(material.unitCost);
+            let currentPrice = decimalToNumber(update.unitCost) ?? 0;
             if (update.quantityUomId) {
               const factor = await resolveFactorToBase(tx, update.materialId, update.quantityUomId);
               currentPrice = update.unitCost / factor;
             }
 
             // Only create log if price changed
-            if (previousPrice !== currentPrice) {
+            if (!decimalEqualsNullable(previousPrice, currentPrice)) {
               await tx.priceLog.create({
                 data: {
                   companyId,

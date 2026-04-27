@@ -37,6 +37,12 @@ export const suppliersApi = appApi.injectEndpoints({
           : [{ type: 'Supplier', id: 'LIST' }],
     }),
 
+    getSupplierById: builder.query<Supplier, string>({
+      query: (id) => `/suppliers/${id}`,
+      transformResponse: (r: { data: Supplier }) => r.data,
+      providesTags: (result, error, id) => [{ type: 'Supplier', id }],
+    }),
+
     createSupplier: builder.mutation<Supplier, Partial<Supplier>>({
       query: (body) => ({
         url: '/suppliers',
@@ -90,6 +96,7 @@ export const suppliersApi = appApi.injectEndpoints({
 
 export const {
   useGetSuppliersQuery,
+  useGetSupplierByIdQuery,
   useCreateSupplierMutation,
   useUpdateSupplierMutation,
   useDeleteSupplierMutation,

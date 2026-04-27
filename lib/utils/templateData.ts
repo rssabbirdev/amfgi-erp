@@ -1,6 +1,7 @@
 import { formatDate, formatCurrency } from './formatters';
 import type { ItemType } from '@/lib/types/documentTemplate';
 import { convertGoogleDriveUrl } from '@/lib/utils/googleDriveUrl';
+import { decimalToNumber } from './decimal';
 
 export interface TemplateDataContext {
   company: {
@@ -312,12 +313,7 @@ function enrichWithPrimaryContact(
 }
 
 function finiteNumber(v: unknown): number | undefined {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  }
-  return undefined;
+  return decimalToNumber(v);
 }
 
 /** Maps API/Prisma job (partial) to print template `job` slice */

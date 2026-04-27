@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -42,7 +43,10 @@ export async function GET(req: Request) {
     // Group by material and calculate totals
     const consumptionByMaterial: Record<
       string,
-      { totalQuantity: number; material: { name: string; unit: string; unitCost: number | null } }
+      {
+        totalQuantity: number;
+        material: { name: string; unit: string; unitCost: unknown | null };
+      }
     > = {};
 
     for (const txn of currentMonthTransactions) {
@@ -52,7 +56,7 @@ export async function GET(req: Request) {
           material: txn.material,
         };
       }
-      consumptionByMaterial[txn.materialId].totalQuantity += txn.quantity;
+      consumptionByMaterial[txn.materialId].totalQuantity += decimalToNumberOrZero(txn.quantity);
     }
 
     const currentMonthConsumption = Object.entries(consumptionByMaterial)
@@ -60,7 +64,7 @@ export async function GET(req: Request) {
         materialId,
         totalQuantity: data.totalQuantity,
         material: data.material,
-        totalValue: data.totalQuantity * (data.material.unitCost || 0),
+        totalValue: data.totalQuantity * decimalToNumberOrZero(data.material.unitCost),
       }))
       .sort((a, b) => b.totalValue - a.totalValue);
 
@@ -74,7 +78,7 @@ export async function GET(req: Request) {
       name: item.material.name || 'Unknown',
       unit: item.material.unit || '',
       quantity: item.totalQuantity,
-      unitCost: item.material.unitCost || 0,
+      unitCost: decimalToNumberOrZero(item.material.unitCost),
       totalValue: item.totalValue,
     }));
 

@@ -120,7 +120,6 @@ export function customerPartyFormToApiBody(s: CustomerPartyFormState): Record<st
 
 export type SupplierPartyFormState = CustomerPartyFormState & {
   city: string;
-  country: string;
 };
 
 export function supplierToPartyFormState(s: Supplier): SupplierPartyFormState {
@@ -139,7 +138,6 @@ export function supplierToPartyFormState(s: Supplier): SupplierPartyFormState {
       email: s.email,
     }),
     city: s.city ?? '',
-    country: s.country ?? '',
   };
 }
 
@@ -147,7 +145,6 @@ export function emptySupplierPartyFormState(): SupplierPartyFormState {
   return {
     ...emptyCustomerPartyFormState(),
     city: '',
-    country: '',
   };
 }
 
@@ -155,6 +152,5 @@ export function supplierPartyFormToApiBody(s: SupplierPartyFormState): Record<st
   return {
     ...customerPartyFormToApiBody(s),
     city: s.city.trim() || undefined,
-    country: s.country.trim() || undefined,
   };
 }

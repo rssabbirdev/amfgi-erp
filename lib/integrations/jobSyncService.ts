@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/db/prisma';
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
+import { syncExternalCustomersForCompany } from '@/lib/partyListSync';
+import { syncJobContacts } from '@/lib/jobs/jobContacts';
+import { decimalEqualsNullable, decimalToNumber, nullableDecimalToNumber } from '@/lib/utils/decimal';
 
 const ContactSchema = z.object({
   label: z.string().max(80).optional(),
@@ -58,7 +61,7 @@ export const UpsertJobSchema = z.object({
     lpoNumber: z.string().max(120).optional(),
     quotationDate: z.string().optional(),
     lpoDate: z.string().optional(),
-    lpoValue: z.number().optional(),
+    lpoValue: z.number().finite().optional(),
     address: z.string().max(2000).optional(),
     locationName: z.string().max(200).optional(),
     locationLat: z.number().optional(),
@@ -115,10 +118,9 @@ async function resolveCustomerForJobUpsert(
       return { id: byName.id };
     }
 
-    return tx.customer.create({
-      data: { companyId, name, source: 'LOCAL', externalPartyId: extId },
-      select: { id: true },
-    });
+    throw new JobSyncReferenceError(
+      'customerExternalId was not found in AMFGI after party-list sync. Sync or upsert the customer first, then retry the job.'
+    );
   }
 
   let customer = await tx.customer.findFirst({
@@ -156,6 +158,18 @@ export async function processJobUpsert(params: {
 }> {
   const { companyId, credentialId, payload } = params;
   const now = new Date();
+  if (payload.customerExternalId !== undefined) {
+    const existingCustomer = await prisma.customer.findUnique({
+      where: {
+        companyId_externalPartyId: { companyId, externalPartyId: payload.customerExternalId },
+      },
+      select: { id: true },
+    });
+    if (!existingCustomer) {
+      await syncExternalCustomersForCompany(companyId);
+    }
+  }
+
   return prisma.$transaction(async (tx) => {
     const customer = await resolveCustomerForJobUpsert(tx, companyId, payload);
 
@@ -210,14 +224,10 @@ export async function processJobUpsert(params: {
       quotationDate: parseDateOrNull(payload.quotationDate),
       lpoNumber: payload.lpoNumber || null,
       lpoDate: parseDateOrNull(payload.lpoDate),
-      lpoValue: payload.lpoValue ?? null,
+      lpoValue: decimalToNumber(payload.lpoValue) ?? null,
       projectName: payload.projectName || null,
       projectDetails: payload.projectDetails || null,
       contactPerson: payload.contactPerson?.trim() || null,
-      contactsJson:
-        payload.contacts && payload.contacts.length > 0
-          ? (payload.contacts as Prisma.InputJsonValue)
-          : ([] as Prisma.InputJsonValue),
       salesPerson: payload.salesPerson || null,
       source: 'EXTERNAL_API',
       externalUpdatedAt: parseDateOrNull(payload.externalUpdatedAt),
@@ -244,13 +254,19 @@ export async function processJobUpsert(params: {
           select: { id: true, jobNumber: true, externalJobId: true, lpoValue: true, parentJobId: true },
         });
 
-    if (existing && existing.lpoValue !== (payload.lpoValue ?? null)) {
+    await syncJobContacts(tx, {
+      companyId,
+      jobId: job.id,
+      contacts: payload.contacts,
+    });
+
+    if (existing && !decimalEqualsNullable(existing.lpoValue, payload.lpoValue ?? null)) {
       await tx.jobLpoValueHistory.create({
         data: {
           companyId,
           jobId: existing.id,
           previousValue: existing.lpoValue,
-          newValue: payload.lpoValue ?? null,
+          newValue: decimalToNumber(payload.lpoValue) ?? null,
           changedBy: `api:${credentialId}`,
           source: 'external_api',
           note: 'Synced from Project Management API',
@@ -259,6 +275,12 @@ export async function processJobUpsert(params: {
     }
 
     await tx.apiCredential.update({ where: { id: credentialId }, data: { lastUsedAt: now } });
-    return { created: !existing, job };
+    return {
+      created: !existing,
+      job: {
+        ...job,
+        lpoValue: nullableDecimalToNumber(job.lpoValue),
+      },
+    };
   });
 }

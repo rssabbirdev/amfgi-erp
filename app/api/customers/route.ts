@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { serializeCustomerWithContacts, syncCustomerContacts } from '@/lib/partyContacts';
 import {
   partyListPartyFieldsSchema,
   primaryFromPartyContacts,
@@ -27,14 +28,20 @@ export async function GET() {
   }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+  const companyId = session.user.activeCompanyId;
 
   const customers = await prisma.customer.findMany({
     where: {
-      companyId: session.user.activeCompanyId,
+      companyId,
     },
     orderBy: { name: 'asc' },
+    include: {
+      contacts: {
+        orderBy: { sortOrder: 'asc' },
+      },
+    },
   });
-  return successResponse(customers);
+  return successResponse(customers.map(serializeCustomerWithContacts));
 }
 
 export async function POST(req: Request) {
@@ -45,6 +52,7 @@ export async function POST(req: Request) {
   }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+  const companyId = session.user.activeCompanyId;
 
   const body = await req.json();
   const parsed = CustomerSchema.safeParse(body);
@@ -56,26 +64,40 @@ export async function POST(req: Request) {
     const fromContacts = primaryFromPartyContacts(p.contacts);
     const contactPersonFallback = p.contactPerson?.trim() || null;
     const phoneFallback = p.phone?.trim() || null;
-    const customer = await prisma.customer.create({
-      data: {
-        companyId: session.user.activeCompanyId,
-        name: p.name,
-        email: p.email?.trim() ? p.email.trim() : null,
-        address: p.address?.trim() || null,
-        contactPerson: fromContacts.contactPerson ?? contactPersonFallback,
-        phone: fromContacts.phone ?? phoneFallback,
-        tradeLicenseNumber: party.tradeLicenseNumber,
-        tradeLicenseAuthority: party.tradeLicenseAuthority,
-        tradeLicenseExpiry: party.tradeLicenseExpiry,
-        trnNumber: party.trnNumber,
-        trnExpiry: party.trnExpiry,
-        contactsJson: party.contactsJson ?? undefined,
-        isActive: true,
-        source: 'LOCAL',
-        externalPartyId: null,
-      },
+    const customer = await prisma.$transaction(async (tx) => {
+      const created = await tx.customer.create({
+        data: {
+          companyId,
+          name: p.name,
+          email: p.email?.trim() ? p.email.trim() : null,
+          address: p.address?.trim() || null,
+          contactPerson: fromContacts.contactPerson ?? contactPersonFallback,
+          phone: fromContacts.phone ?? phoneFallback,
+          tradeLicenseNumber: party.tradeLicenseNumber,
+          tradeLicenseAuthority: party.tradeLicenseAuthority,
+          tradeLicenseExpiry: party.tradeLicenseExpiry,
+          trnNumber: party.trnNumber,
+          trnExpiry: party.trnExpiry,
+          isActive: true,
+          source: 'LOCAL',
+          externalPartyId: null,
+        },
+      });
+      await syncCustomerContacts(tx, {
+        companyId,
+        customerId: created.id,
+        contacts: party.contacts,
+      });
+      return tx.customer.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          contacts: {
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
     });
-    return successResponse(customer, 201);
+    return successResponse(serializeCustomerWithContacts(customer), 201);
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to create customer';
     if (errorMsg.includes('Unique constraint failed')) {

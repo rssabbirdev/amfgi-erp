@@ -1,6 +1,7 @@
 import { auth }              from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -55,14 +56,14 @@ export async function GET(req: Request) {
     const key = txn.materialId;
     if (summaryMap.has(key)) {
       const existing = summaryMap.get(key)!;
-      existing.totalQuantity += txn.quantity;
+      existing.totalQuantity += decimalToNumberOrZero(txn.quantity);
       existing.transactionCount += 1;
     } else {
       summaryMap.set(key, {
         materialId: txn.materialId,
         materialName: txn.material?.name ?? 'Unknown',
         materialUnit: txn.material?.unit ?? '—',
-        totalQuantity: txn.quantity,
+        totalQuantity: decimalToNumberOrZero(txn.quantity),
         transactionCount: 1,
       });
     }

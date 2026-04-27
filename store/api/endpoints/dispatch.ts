@@ -12,9 +12,12 @@ interface DispatchEntry {
   materials: Array<{
     materialId: string;
     materialName: string;
-    unit: string;
-    dispatchQty: number;
-    returnQty: number;
+    materialUnit: string;
+    warehouseId?: string | null;
+    warehouseName?: string | null;
+    quantity: number;
+    unitCost: number;
+    transactionIds: string[];
   }>;
   transactionIds: string[];
   transactionCount: number;

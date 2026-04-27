@@ -13,6 +13,18 @@ function formatMoney(value: number) {
   })}`;
 }
 
+function splitMoney(value: number) {
+  const formatted = value.toLocaleString('en-AE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return {
+    currency: 'AED',
+    amount: formatted,
+  };
+}
+
 function formatCount(value: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
 }
@@ -43,7 +55,8 @@ export default function StockPage() {
   const canSeeBatches = isSA || perms.includes('material.view') || perms.includes('transaction.stock_in');
   const canSeeTransfers = isSA || perms.includes('transaction.transfer');
   const canSeeReconcile = isSA || perms.includes('transaction.reconcile');
-  const canViewStock = canSeeMaterials || canSeeReceipts || canSeeDispatch || canSeeBatches || canSeeTransfers || canSeeReconcile;
+  const canSeeJobBudget = isSA || (perms.includes('job.view') && perms.includes('material.view'));
+  const canViewStock = canSeeMaterials || canSeeReceipts || canSeeDispatch || canSeeBatches || canSeeTransfers || canSeeReconcile || canSeeJobBudget;
 
   const { data: valuation, isFetching: valuationLoading } = useGetStockValuationQuery(undefined, {
     skip: !canViewStock,
@@ -75,6 +88,12 @@ export default function StockPage() {
   const preferredValue = valuation?.summary.fifoStockValue ?? 0;
   const movingAverageValue = valuation?.summary.movingAverageStockValue ?? 0;
   const currentValue = valuation?.summary.currentStockValue ?? 0;
+  const warehouseMode = valuation?.summary.warehouseMode ?? 'DISABLED';
+  const fallbackWarehouseName = valuation?.summary.fallbackWarehouseName ?? null;
+  const warehouseBreakdown = valuation?.warehouseBreakdown ?? [];
+  const preferredMoney = splitMoney(preferredValue);
+  const movingAverageMoney = splitMoney(movingAverageValue);
+  const currentMoney = splitMoney(currentValue);
 
   const modules = [
     {
@@ -125,6 +144,14 @@ export default function StockPage() {
       meta: 'History and create workspace',
       tone: 'amber' as const,
     },
+    {
+      href: '/stock/job-budget',
+      title: 'Job Budget & Formulas',
+      description: 'Manage formula templates and calculate variation job material budgets.',
+      enabled: canSeeJobBudget,
+      meta: 'Formula library and costing',
+      tone: 'emerald' as const,
+    },
   ].filter((module) => module.enabled);
 
   const workflow = [
@@ -134,7 +161,10 @@ export default function StockPage() {
     },
     {
       label: 'Store',
-      body: 'Materials keep the live current stock, while stock batches keep the open FIFO layers.',
+      body:
+        warehouseMode === 'DISABLED'
+          ? `Materials keep the live current stock, while stock batches stay under the fallback warehouse${fallbackWarehouseName ? ` (${fallbackWarehouseName})` : ''}.`
+          : 'Materials keep the live current stock, while stock batches keep the open FIFO layers by warehouse.',
     },
     {
       label: 'Issue',
@@ -161,69 +191,105 @@ export default function StockPage() {
 
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
-        <div className="border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.08),_transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.92))] px-5 py-5 dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.14),_transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.92))] sm:px-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-3xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-700 dark:text-emerald-300/80">
-                Stock Workspace
-              </p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-[2rem]">
-                Inventory control in one place
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-                Open materials, receipts, dispatch, and batch layers from one page. FIFO stays the system priority, and the comparison cards below show how the same stock looks under other valuation views.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {canSeeReceipts ? (
-                <Link href="/stock/goods-receipt/receive">
-                  <Button>New receipt</Button>
-                </Link>
-              ) : null}
-              {canSeeDispatch ? (
-                <>
-                <Link href="/stock/dispatch/entry">
-                  <Button variant="secondary">New dispatch</Button>
-                  </Link>
-                  <Link href="/stock/dispatch/delivery-note">
-                                  <Button variant="secondary">New Delivery Note</Button>
-                                </Link>
-                </>
-              ) : null}
-            </div>
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+        <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-end 2xl:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700 dark:text-emerald-300/80">
+              Stock Workspace
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
+              Stock workspace
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+              Open materials, receipts, dispatch, and batch layers from one page. FIFO stays the
+              system priority, and the comparison cards below show how the same stock looks under
+              other valuation views.
+            </p>
           </div>
-        </div>
-
-        <div className="grid gap-px bg-slate-200 dark:bg-slate-800 md:grid-cols-3">
-          <div className="bg-white px-5 py-5 dark:bg-slate-950/80">
-            <p className="text-xs uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Preferred</p>
-            <div className="mt-2 flex items-end justify-between gap-3">
-              <div>
-                <p className="text-2xl font-semibold text-slate-900 dark:text-white">
-                  {valuationLoading ? '...' : formatMoney(preferredValue)}
-                </p>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-500">FIFO stock value</p>
+          <div className="grid gap-3 sm:grid-cols-2 2xl:min-w-[44rem] 2xl:grid-cols-4">
+            <div
+              className="rounded-2xl border p-4 shadow-sm dark:border-slate-800"
+              style={{ backgroundColor: 'var(--surface-panel-soft)', borderColor: 'var(--border-strong)' }}
+            >
+              <p className="text-xs uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
+                Preferred
+              </p>
+              <div className="mt-2 flex flex-col gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
+                    {preferredMoney.currency}
+                  </p>
+                  <p className="mt-1 break-words text-xl font-semibold leading-tight tracking-tight text-slate-900 dark:text-white 2xl:text-2xl">
+                    {valuationLoading ? '...' : preferredMoney.amount}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">FIFO stock value</p>
+                </div>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
+                  System priority
+                </span>
               </div>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
-                System priority
-              </span>
             </div>
-          </div>
-          <div className="bg-white px-5 py-5 dark:bg-slate-950/80">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">Comparison</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">
-              {valuationLoading ? '...' : formatMoney(movingAverageValue)}
-            </p>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-500">Moving average value</p>
-          </div>
-          <div className="bg-white px-5 py-5 dark:bg-slate-950/80">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">Comparison</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">
-              {valuationLoading ? '...' : formatMoney(currentValue)}
-            </p>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-500">Current material cost value</p>
+            <div
+              className="rounded-2xl border p-4 shadow-sm dark:border-slate-800"
+              style={{ backgroundColor: 'var(--surface-panel-soft)', borderColor: 'var(--border-strong)' }}
+            >
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
+                Comparison
+              </p>
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
+                {movingAverageMoney.currency}
+              </p>
+              <p className="mt-1 break-words text-xl font-semibold leading-tight tracking-tight text-slate-900 dark:text-white 2xl:text-2xl">
+                {valuationLoading ? '...' : movingAverageMoney.amount}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">Moving average value</p>
+            </div>
+            <div
+              className="rounded-2xl border p-4 shadow-sm dark:border-slate-800"
+              style={{ backgroundColor: 'var(--surface-panel-soft)', borderColor: 'var(--border-strong)' }}
+            >
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
+                Comparison
+              </p>
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
+                {currentMoney.currency}
+              </p>
+              <p className="mt-1 break-words text-xl font-semibold leading-tight tracking-tight text-slate-900 dark:text-white 2xl:text-2xl">
+                {valuationLoading ? '...' : currentMoney.amount}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                Current material cost value
+              </p>
+            </div>
+            <div
+              className="rounded-2xl border p-4 shadow-sm dark:border-slate-800"
+              style={{ backgroundColor: 'var(--surface-panel-soft)', borderColor: 'var(--border-strong)' }}
+            >
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
+                Actions
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {canSeeReceipts ? (
+                  <Link href="/stock/goods-receipt/receive">
+                    <Button size="sm">New receipt</Button>
+                  </Link>
+                ) : null}
+                {canSeeDispatch ? (
+                  <>
+                    <Link href="/stock/dispatch/entry">
+                      <Button size="sm" variant="secondary">
+                        New dispatch
+                      </Button>
+                    </Link>
+                    <Link href="/stock/dispatch/delivery-note">
+                      <Button size="sm" variant="secondary">
+                        Delivery note
+                      </Button>
+                    </Link>
+                  </>
+                ) : null}
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -303,6 +369,10 @@ export default function StockPage() {
                 <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">{formatCount(openBatches.length)}</p>
               </div>
               <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">Warehouse mode</p>
+                <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">{warehouseMode}</p>
+              </div>
+              <div>
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">Low stock watch</p>
                 <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">{formatCount(lowStockCount)}</p>
               </div>
@@ -312,6 +382,29 @@ export default function StockPage() {
                   {valuationLoading ? '...' : formatMoney(valuation?.summary.prevMonthConsumptionValue ?? 0)}
                 </p>
               </div>
+            </div>
+            <div className="mt-4 space-y-2 border-t border-emerald-200/60 pt-4 dark:border-emerald-900/40">
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">
+                Warehouse coverage
+              </p>
+              {warehouseBreakdown.length === 0 ? (
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  {warehouseMode === 'DISABLED'
+                    ? `Stock is currently routed through ${fallbackWarehouseName ?? 'the fallback warehouse'}.`
+                    : 'No warehouse balances have been created yet.'}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {warehouseBreakdown.slice(0, 3).map((warehouse) => (
+                    <div key={warehouse.warehouseId} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate text-slate-700 dark:text-slate-300">{warehouse.warehouseName}</span>
+                      <span className="shrink-0 text-slate-500 dark:text-slate-500">
+                        {formatMoney(warehouse.stockValue)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
         </div>

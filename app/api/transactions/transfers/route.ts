@@ -26,6 +26,12 @@ export async function GET() {
           unit: true,
         },
       },
+      warehouse: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
     orderBy: { date: 'desc' },
   });
@@ -49,6 +55,8 @@ export async function GET() {
       materialName: transaction.material.name,
       unit: transaction.material.unit,
       quantity: transaction.quantity,
+      warehouseId: transaction.warehouse?.id ?? null,
+      warehouseName: transaction.warehouse?.name ?? null,
       counterpartCompanySlug: transaction.counterpartCompany,
       counterpartCompanyName: transaction.counterpartCompany
         ? counterpartNameBySlug.get(transaction.counterpartCompany) ?? transaction.counterpartCompany
@@ -56,7 +64,7 @@ export async function GET() {
       notes: transaction.notes,
       date: transaction.date,
       createdAt: transaction.createdAt,
-      performedBy: transaction.performedBy,
+      performedBy: transaction.performedByName ?? transaction.performedBy,
     }))
   );
 }

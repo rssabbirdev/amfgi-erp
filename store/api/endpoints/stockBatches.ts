@@ -7,6 +7,7 @@ export interface StockBatch {
   materialId: string;
   materialName: string;
   materialUnit: string;
+  warehouseId: string | null;
   warehouse: string | null;
   stockType: string | null;
   supplierId: string | null;

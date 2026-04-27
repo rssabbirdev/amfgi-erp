@@ -551,7 +551,7 @@ export default function CustomersPage() {
       canCreate
         ? {
             label: 'Create job',
-            action: () => router.push(`/jobs/form?mode=create&customerId=${customer.id}`),
+        action: () => router.push(`/customers/jobs/form?mode=create&customerId=${customer.id}`),
           }
         : null,
       canDelete
@@ -587,10 +587,14 @@ export default function CustomersPage() {
     event.preventDefault();
 
     const options = [
+      {
+        label: 'Open job ledger',
+        action: () => router.push(`/customers/jobs/${job.id}`),
+      },
       canEdit
         ? {
             label: 'Edit job',
-            action: () => router.push(`/jobs/form?mode=edit&id=${job.id}`),
+        action: () => router.push(`/customers/jobs/form?mode=edit&id=${job.id}`),
           }
         : null,
       {
@@ -601,7 +605,7 @@ export default function CustomersPage() {
         ? {
             label: 'Create variation',
             action: () =>
-              router.push(`/jobs/form?mode=variation&parentJobId=${job.id}&customerId=${job.customerId}`),
+                  router.push(`/customers/jobs/form?mode=variation&parentJobId=${job.id}&customerId=${job.customerId}`),
           }
         : null,
       canDelete
@@ -912,7 +916,7 @@ export default function CustomersPage() {
                     {canCreate ? (
                       <Button
                         type="button"
-                        onClick={() => router.push(`/jobs/form?mode=create&customerId=${selectedCustomer.id}`)}
+                  onClick={() => router.push(`/customers/jobs/form?mode=create&customerId=${selectedCustomer.id}`)}
                       >
                         Create job
                       </Button>
@@ -974,7 +978,7 @@ export default function CustomersPage() {
                             onClick={() => {
                               if (variations.length > 0) toggleMainJob(job.id);
                             }}
-                            onDoubleClick={() => router.push(`/jobs/${job.id}/consumption-costing`)}
+                            onDoubleClick={() => router.push(`/customers/jobs/${job.id}`)}
                             onContextMenu={(event) => openJobContextMenu(job, event)}
                           >
                             <div className="min-w-0 flex-1">
@@ -1047,9 +1051,7 @@ export default function CustomersPage() {
                                         backgroundColor: 'var(--surface-panel-soft)',
                                         borderColor: 'var(--border-strong)',
                                       }}
-                                      onDoubleClick={() =>
-                                        router.push(`/jobs/${variation.id}/consumption-costing`)
-                                      }
+                                      onDoubleClick={() => router.push(`/customers/jobs/${variation.id}`)}
                                       onContextMenu={(event) => openJobContextMenu(variation, event)}
                                     >
                                       <div className="min-w-0 flex-1">

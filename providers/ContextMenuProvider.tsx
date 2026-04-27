@@ -62,6 +62,9 @@ export function ContextMenuProvider({ children }: Props) {
     // Allow React handlers to fire, but prevent default menu on elements without handlers
     const handleContextMenu = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
+      if (target?.closest('[data-native-context-menu="true"]')) {
+        return;
+      }
       // Only prevent default if the target doesn't have a custom context menu handler
       // React will handle the onContextMenu prop, so we just prevent the browser default
       if (!target?.hasAttribute('data-context-menu')) {

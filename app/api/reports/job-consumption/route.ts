@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -87,9 +88,9 @@ export async function GET(req: Request) {
       }
 
       if (txn.type === 'STOCK_OUT') {
-        grouped[key].dispatched += txn.quantity;
+        grouped[key].dispatched += decimalToNumberOrZero(txn.quantity);
       } else if (txn.type === 'RETURN') {
-        grouped[key].returned += txn.quantity;
+        grouped[key].returned += decimalToNumberOrZero(txn.quantity);
       }
     }
 

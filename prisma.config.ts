@@ -7,7 +7,7 @@ export default defineConfig({
     url: env('DATABASE_URL'),
   },
   migrations: {
-    path: 'prisma/migrations',
+    path: 'prisma/migrations-postgres',
     seed: 'npx tsx scripts/seed.ts',
   },
 });

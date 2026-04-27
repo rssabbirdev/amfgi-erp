@@ -9,10 +9,12 @@ import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 import {
   useAddBatchTransactionMutation,
+  useGetCompaniesQuery,
   useDeleteReceiptEntryMutation,
   useGetMaterialsQuery,
   useGetReceiptEntryQuery,
   useGetSuppliersQuery,
+  useGetWarehousesQuery,
 } from '@/store/hooks';
 
 interface SupplierOption {
@@ -26,6 +28,7 @@ interface LineItem {
   quantity: string;
   quantityUomId: string;
   unitCost: string;
+  warehouseId: string;
 }
 
 const TAX_RATE = 0.05;
@@ -47,7 +50,7 @@ function buildDraftReceiptNumber() {
 }
 
 function emptyLine(): LineItem {
-  return { id: uid(), materialId: '', quantity: '', quantityUomId: '', unitCost: '' };
+  return { id: uid(), materialId: '', quantity: '', quantityUomId: '', unitCost: '', warehouseId: '' };
 }
 
 function isLineEmpty(line: LineItem) {
@@ -108,6 +111,8 @@ function ReceiptEditor({
   const { data: session } = useSession();
   const { data: materialsData = [] } = useGetMaterialsQuery();
   const { data: suppliersData = [] } = useGetSuppliersQuery();
+  const { data: companies = [] } = useGetCompaniesQuery();
+  const { data: warehouses = [] } = useGetWarehousesQuery();
   const [addBatchTransaction] = useAddBatchTransactionMutation();
   const [deleteReceiptEntry] = useDeleteReceiptEntryMutation();
 
@@ -124,6 +129,9 @@ function ReceiptEditor({
   const perms = (session?.user?.permissions ?? []) as string[];
   const isSA = session?.user?.isSuperAdmin ?? false;
   const canPost = isSA || perms.includes('transaction.stock_in');
+  const activeCompany = companies.find((company) => company.id === session?.user?.activeCompanyId);
+  const warehouseMode = activeCompany?.warehouseMode ?? 'DISABLED';
+  const showWarehouseColumn = warehouseMode !== 'DISABLED';
 
   const suppliers = useMemo<SupplierOption[]>(
     () =>
@@ -163,10 +171,14 @@ function ReceiptEditor({
 
           if (field === 'materialId') {
             updated.quantityUomId = '';
+            updated.warehouseId = '';
             if (value) {
               const material = materialsData.find((entry) => entry.id === value);
               if (material?.unitCost !== undefined) {
                 updated.unitCost = String(material.unitCost);
+              }
+              if (material?.warehouseId && warehouses.some((warehouse) => warehouse.id === material.warehouseId)) {
+                updated.warehouseId = material.warehouseId;
               }
             }
           }
@@ -227,6 +239,10 @@ function ReceiptEditor({
       toast.error('Duplicate materials found. Merge them into one row.');
       return;
     }
+    if (warehouseMode === 'REQUIRED' && validLines.some((line) => !line.warehouseId)) {
+      toast.error('Select a warehouse for each receipt line');
+      return;
+    }
 
     setSubmitting(true);
 
@@ -250,6 +266,7 @@ function ReceiptEditor({
           quantity: parseFloat(line.quantity),
           quantityUomId: line.quantityUomId.trim() || undefined,
           unitCost: line.unitCost ? parseFloat(line.unitCost) : undefined,
+          warehouseId: line.warehouseId || undefined,
         })),
         materialUpdates: validLines
           .filter((line) => line.unitCost)
@@ -445,6 +462,11 @@ function ReceiptEditor({
                     <th className="px-2.5 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                       Qty
                     </th>
+                    {showWarehouseColumn ? (
+                      <th className="px-2.5 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Warehouse
+                      </th>
+                    ) : null}
                     <th className="px-2.5 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                       Unit cost
                     </th>
@@ -541,6 +563,24 @@ function ReceiptEditor({
                             className={`${inputClassName()} text-right font-mono`}
                           />
                         </td>
+                        {showWarehouseColumn ? (
+                          <td className="px-2.5 py-1.5 align-top">
+                            <select
+                              value={line.warehouseId}
+                              onChange={(e) => updateLine(line.id, 'warehouseId', e.target.value)}
+                              className={inputClassName()}
+                            >
+                              <option value="">
+                                {warehouseMode === 'REQUIRED' ? 'Select warehouse...' : 'Use fallback/default'}
+                              </option>
+                              {warehouses.map((warehouse) => (
+                                <option key={warehouse.id} value={warehouse.id}>
+                                  {warehouse.name}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        ) : null}
 
                         <td className="px-2.5 py-1.5 align-top">
                           <input
@@ -650,6 +690,7 @@ export default function ReceiveStockPage() {
       quantity: String(line.quantityReceived || ''),
       quantityUomId: '',
       unitCost: String(line.unitCost || ''),
+      warehouseId: '',
     }));
   }, [receiptEntry]);
 

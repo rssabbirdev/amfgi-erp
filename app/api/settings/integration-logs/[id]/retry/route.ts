@@ -9,6 +9,13 @@ import {
   UpsertJobSchema,
   processJobUpsert,
 } from '@/lib/integrations/jobSyncService';
+import {
+  PartySyncConflictError,
+  UpsertCustomerSchema,
+  UpsertSupplierSchema,
+  processCustomerUpsert,
+  processSupplierUpsert,
+} from '@/lib/integrations/partyUpsertService';
 
 function hasManagePermission(user: AppSessionUser) {
   const isSA = user.isSuperAdmin ?? false;
@@ -27,12 +34,9 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
     where: { id, companyId: session.user.activeCompanyId },
   });
   if (!log) return errorResponse('Integration log not found', 404);
-  if (log.entityType !== 'job' || log.direction !== 'inbound') {
-    return errorResponse('Retry is only supported for inbound job sync logs', 400);
+  if (!['job', 'customer', 'supplier'].includes(log.entityType) || log.direction !== 'inbound') {
+    return errorResponse('Retry is only supported for inbound job, customer, and supplier sync logs', 400);
   }
-
-  const parsed = UpsertJobSchema.safeParse(log.requestBody);
-  if (!parsed.success) return errorResponse('Stored request body is invalid for retry', 422);
 
   const credential = log.credentialId
     ? await prisma.apiCredential.findFirst({
@@ -42,31 +46,68 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
     : null;
   if (!credential) return errorResponse('Original credential was revoked or missing', 400);
 
-  const company = await prisma.company.findFirst({
-    where: {
-      id: session.user.activeCompanyId,
-      externalCompanyId: parsed.data.companyExternalId,
-    },
-    select: { id: true },
-  });
-  if (!company) return errorResponse('Company external id no longer matches; cannot retry', 400);
-
   try {
-    const result = await processJobUpsert({
-      companyId: company.id,
-      credentialId: credential.id,
-      payload: parsed.data.job,
-    });
-    await prisma.integrationSyncLog.create({
-      data: {
+    let result: { created: boolean };
+    let parsedData: unknown;
+    let entityKey: string;
+
+    if (log.entityType === 'customer') {
+      const parsed = UpsertCustomerSchema.safeParse(log.requestBody);
+      if (!parsed.success) return errorResponse('Stored request body is invalid for retry', 422);
+      const company = await prisma.company.findFirst({
+        where: { id: session.user.activeCompanyId, externalCompanyId: parsed.data.companyExternalId },
+        select: { id: true },
+      });
+      if (!company) return errorResponse('Company external id no longer matches; cannot retry', 400);
+      result = await processCustomerUpsert({
         companyId: company.id,
         credentialId: credential.id,
+        payload: parsed.data.customer,
+      });
+      parsedData = parsed.data;
+      entityKey = String(parsed.data.customer.externalPartyId ?? parsed.data.customer.name);
+    } else if (log.entityType === 'supplier') {
+      const parsed = UpsertSupplierSchema.safeParse(log.requestBody);
+      if (!parsed.success) return errorResponse('Stored request body is invalid for retry', 422);
+      const company = await prisma.company.findFirst({
+        where: { id: session.user.activeCompanyId, externalCompanyId: parsed.data.companyExternalId },
+        select: { id: true },
+      });
+      if (!company) return errorResponse('Company external id no longer matches; cannot retry', 400);
+      result = await processSupplierUpsert({
+        companyId: company.id,
+        credentialId: credential.id,
+        payload: parsed.data.supplier,
+      });
+      parsedData = parsed.data;
+      entityKey = String(parsed.data.supplier.externalPartyId ?? parsed.data.supplier.name);
+    } else {
+      const parsed = UpsertJobSchema.safeParse(log.requestBody);
+      if (!parsed.success) return errorResponse('Stored request body is invalid for retry', 422);
+      const company = await prisma.company.findFirst({
+        where: { id: session.user.activeCompanyId, externalCompanyId: parsed.data.companyExternalId },
+        select: { id: true },
+      });
+      if (!company) return errorResponse('Company external id no longer matches; cannot retry', 400);
+      result = await processJobUpsert({
+        companyId: company.id,
+        credentialId: credential.id,
+        payload: parsed.data.job,
+      });
+      parsedData = parsed.data;
+      entityKey = parsed.data.job.externalJobId;
+    }
+
+    await prisma.integrationSyncLog.create({
+      data: {
+        companyId: session.user.activeCompanyId,
+        credentialId: credential.id,
         direction: 'inbound',
-        entityType: 'job',
-        entityKey: parsed.data.job.externalJobId,
+        entityType: log.entityType,
+        entityKey,
         status: 'retry_success',
         httpStatus: result.created ? 201 : 200,
-        requestBody: parsed.data as Prisma.InputJsonValue,
+        requestBody: parsedData as Prisma.InputJsonValue,
         responseBody: result as Prisma.InputJsonValue,
       },
     });
@@ -74,17 +115,21 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Retry failed';
     const status =
-      err instanceof JobSyncConflictError ? 409 : err instanceof JobSyncReferenceError ? 400 : 500;
+      err instanceof JobSyncConflictError || err instanceof PartySyncConflictError
+        ? 409
+        : err instanceof JobSyncReferenceError
+          ? 400
+          : 500;
     await prisma.integrationSyncLog.create({
       data: {
         companyId: session.user.activeCompanyId,
         credentialId: credential.id,
         direction: 'inbound',
-        entityType: 'job',
-        entityKey: parsed.data.job.externalJobId,
+        entityType: log.entityType,
+        entityKey: log.entityKey,
         status: 'retry_error',
         httpStatus: status,
-        requestBody: parsed.data as Prisma.InputJsonValue,
+        requestBody: log.requestBody as Prisma.InputJsonValue,
         errorMessage: message,
       },
     });

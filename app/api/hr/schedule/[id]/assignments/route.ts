@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db/prisma';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { nullableDecimalToNumber } from '@/lib/utils/decimal';
 import { z } from 'zod';
 
 const MemberSchema = z.object({
@@ -87,6 +88,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const assignmentRows = incoming.map((a) => ({
     id: crypto.randomUUID(),
+    companyId,
     workScheduleId: scheduleId,
     columnIndex: a.columnIndex,
     label: a.label.trim(),
@@ -104,8 +106,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     shiftStart: a.shiftStart?.trim() || null,
     shiftEnd: a.shiftEnd?.trim() || null,
     breakWindow: a.breakWindow?.trim() || null,
-    targetQty: a.targetQty ?? null,
-    achievedQty: a.achievedQty ?? null,
+    targetQty: nullableDecimalToNumber(a.targetQty),
+    achievedQty: nullableDecimalToNumber(a.achievedQty),
     unit: a.unit?.trim() || null,
     remarks: a.remarks?.trim() || null,
   }));
@@ -119,6 +121,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       if (seen.has(m.employeeId)) return [];
       seen.add(m.employeeId);
       return {
+        companyId,
         workAssignmentId,
         employeeId: m.employeeId,
         role: m.role,

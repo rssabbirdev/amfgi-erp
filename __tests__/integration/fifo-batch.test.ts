@@ -4,6 +4,7 @@
  */
 
 import { prisma, setupTestContext, teardownTestContext, TestContext } from './setup';
+import { decimalToNumberOrZero } from '../../lib/utils/decimal';
 
 describe('FIFO Batch Stock Consumption', () => {
   let ctx: TestContext;
@@ -110,6 +111,7 @@ describe('FIFO Batch Stock Consumption', () => {
         {
           transactionId: transaction.id,
           batchId: batch1.id,
+          batchNumber: batch1.batchNumber,
           quantityFromBatch: 100,
           unitCost: 10,
           costAmount: 1000,
@@ -117,6 +119,7 @@ describe('FIFO Batch Stock Consumption', () => {
         {
           transactionId: transaction.id,
           batchId: batch2.id,
+          batchNumber: batch2.batchNumber,
           quantityFromBatch: 100,
           unitCost: 12,
           costAmount: 1200,
@@ -124,6 +127,7 @@ describe('FIFO Batch Stock Consumption', () => {
         {
           transactionId: transaction.id,
           batchId: batch3.id,
+          batchNumber: batch3.batchNumber,
           quantityFromBatch: 50,
           unitCost: 15,
           costAmount: 750,
@@ -159,17 +163,17 @@ describe('FIFO Batch Stock Consumption', () => {
     const updatedMaterial = await prisma.material.findUnique({ where: { id: material.id } });
     const txBatches = await prisma.transactionBatch.findMany({
       where: { transactionId: transaction.id },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { batchNumber: 'asc' },
     });
 
-    expect(updatedBatch1?.quantityAvailable).toBe(0);
-    expect(updatedBatch2?.quantityAvailable).toBe(0);
-    expect(updatedBatch3?.quantityAvailable).toBe(50);
-    expect(updatedMaterial?.currentStock).toBe(250);
+    expect(decimalToNumberOrZero(updatedBatch1?.quantityAvailable)).toBe(0);
+    expect(decimalToNumberOrZero(updatedBatch2?.quantityAvailable)).toBe(0);
+    expect(decimalToNumberOrZero(updatedBatch3?.quantityAvailable)).toBe(50);
+    expect(decimalToNumberOrZero(updatedMaterial?.currentStock)).toBe(250);
     expect(txBatches).toHaveLength(3);
-    expect(txBatches[0].quantityFromBatch).toBe(100);
-    expect(txBatches[1].quantityFromBatch).toBe(100);
-    expect(txBatches[2].quantityFromBatch).toBe(50);
+    expect(decimalToNumberOrZero(txBatches[0].quantityFromBatch)).toBe(100);
+    expect(decimalToNumberOrZero(txBatches[1].quantityFromBatch)).toBe(100);
+    expect(decimalToNumberOrZero(txBatches[2].quantityFromBatch)).toBe(50);
   });
 
   it('should fail if insufficient stock', async () => {
@@ -220,7 +224,7 @@ describe('FIFO Batch Stock Consumption', () => {
     // For now, verify the transaction would be created
     // (actual validation happens at API level)
     const tx = await txPromise;
-    expect(tx.quantity).toBe(100);
+    expect(decimalToNumberOrZero(tx.quantity)).toBe(100);
   });
 
   it('should calculate correct FIFO cost', async () => {
@@ -300,7 +304,7 @@ describe('FIFO Batch Stock Consumption', () => {
       },
     });
 
-    expect(transaction.totalCost).toBe(1750);
-    expect(transaction.averageCost).toBe(11.67);
+    expect(decimalToNumberOrZero(transaction.totalCost)).toBe(1750);
+    expect(decimalToNumberOrZero(transaction.averageCost)).toBe(11.67);
   });
 });

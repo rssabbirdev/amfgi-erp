@@ -13,6 +13,8 @@ interface Transaction {
   companyId: string;
   type: 'STOCK_IN' | 'STOCK_OUT' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'REVERSAL';
   materialId: string;
+  warehouseId?: string | null;
+  warehouse?: { id: string; name: string } | null;
   quantity: number;
   jobId?: string;
   batchesUsed?: BatchConsumption[];
@@ -29,6 +31,7 @@ interface AddTransactionPayload {
   type: 'STOCK_OUT' | 'RETURN';
   materialId: string;
   quantity: number;
+  warehouseId?: string;
   jobId?: string;
   delta?: number;
   notes?: string;
@@ -36,10 +39,12 @@ interface AddTransactionPayload {
 
 interface TransferPayload {
   sourceCompanyId?: string;
+  sourceWarehouseId?: string;
   materialId: string;
   quantity: number;
   quantityUomId?: string;
   destinationCompanyId: string;
+  destinationWarehouseId?: string;
   destinationWarehouse?: string;
   notes?: string;
   date?: string;
@@ -70,6 +75,8 @@ export interface TransferLedgerItem {
   materialName: string;
   unit: string;
   quantity: number;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
   counterpartCompanySlug?: string | null;
   counterpartCompanyName?: string | null;
   notes?: string | null;
@@ -82,6 +89,8 @@ export interface NonStockReconcileMaterial {
   id: string;
   name: string;
   unit: string;
+  warehouse?: string | null;
+  warehouseId?: string | null;
   currentStock: number;
   allowNegativeConsumption: boolean;
   stockType: string;
@@ -127,11 +136,12 @@ export interface NonStockReconcileData {
 
 export interface NonStockReconcilePayload {
   jobIds: string[];
-  lines: Array<{
-    materialId: string;
-    quantity: number;
-    quantityUomId?: string;
-  }>;
+    lines: Array<{
+      materialId: string;
+      quantity: number;
+      quantityUomId?: string;
+      warehouseId?: string;
+    }>;
   notes?: string;
   date?: string;
 }

@@ -1,6 +1,16 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
+import {
+  serializeJobWithContacts,
+  syncJobContacts,
+} from '@/lib/jobs/jobContacts';
+import {
+  normalizeRequiredExpertiseNames,
+  serializeRequiredExpertises,
+  syncJobRequiredExpertises,
+} from '@/lib/jobs/jobRequiredExpertises';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { decimalEqualsNullable, decimalToNumber } from '@/lib/utils/decimal';
 import { z } from 'zod';
 
 const UpdateSchema = z.object({
@@ -18,13 +28,13 @@ const UpdateSchema = z.object({
   quotationDate:   z.string().optional(),
   lpoNumber:      z.string().max(100).optional(),
   lpoDate:         z.string().optional(),
-  lpoValue:        z.number().optional(),
+  lpoValue:        z.number().finite().optional(),
   projectName:    z.string().max(200).optional(),
   projectDetails: z.string().max(2000).optional(),
   contactPerson:  z.string().max(200).nullable().optional(),
   contactsJson:   z.array(z.any()).optional(),
   salesPerson:    z.string().max(200).optional(),
-  jobWorkValue:   z.number().positive().optional(),
+  jobWorkValue:   z.number().positive().finite().optional(),
   requiredExpertises: z.array(z.string().min(1).max(120)).optional(),
   finishedGoods:  z.array(z.object({
     materialId:   z.string(),
@@ -49,13 +59,25 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       companyId: session.user.activeCompanyId,
     },
     include: {
+      contacts: {
+        orderBy: { sortOrder: 'asc' },
+      },
+      requiredExpertiseLinks: {
+        orderBy: { sortOrder: 'asc' },
+        select: {
+          sortOrder: true,
+          expertise: {
+            select: { name: true },
+          },
+        },
+      },
       customer: {
         select: { id: true, name: true },
       },
     },
   });
   if (!job) return errorResponse('Job not found', 404);
-  return successResponse(job);
+  return successResponse(serializeRequiredExpertises(serializeJobWithContacts(job)));
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -66,11 +88,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+  const companyId = session.user.activeCompanyId;
 
   const { id } = await params;
   const body = await req.json();
   const parsed = UpdateSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
+
+  const requiredExpertises =
+    parsed.data.requiredExpertises === undefined
+      ? undefined
+      : normalizeRequiredExpertiseNames(parsed.data.requiredExpertises);
 
   try {
     const before = await prisma.job.findUnique({
@@ -94,17 +122,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (parsed.data.quotationDate !== undefined) updateData.quotationDate = parsed.data.quotationDate ? new Date(`${parsed.data.quotationDate}T00:00:00Z`) : null;
     if (parsed.data.lpoNumber !== undefined) updateData.lpoNumber = parsed.data.lpoNumber;
     if (parsed.data.lpoDate !== undefined) updateData.lpoDate = parsed.data.lpoDate ? new Date(`${parsed.data.lpoDate}T00:00:00Z`) : null;
-    if (parsed.data.lpoValue !== undefined) updateData.lpoValue = parsed.data.lpoValue;
+    if (parsed.data.lpoValue !== undefined) updateData.lpoValue = decimalToNumber(parsed.data.lpoValue);
     if (parsed.data.projectName !== undefined) updateData.projectName = parsed.data.projectName;
     if (parsed.data.projectDetails !== undefined) updateData.projectDetails = parsed.data.projectDetails;
     if (parsed.data.contactPerson !== undefined) updateData.contactPerson = parsed.data.contactPerson?.trim() || null;
-    if (parsed.data.contactsJson !== undefined) updateData.contactsJson = parsed.data.contactsJson;
     if (parsed.data.salesPerson !== undefined) updateData.salesPerson = parsed.data.salesPerson;
-    if (parsed.data.jobWorkValue !== undefined) updateData.jobWorkValue = parsed.data.jobWorkValue;
-    if (parsed.data.requiredExpertises !== undefined) {
-      updateData.requiredExpertises =
-        parsed.data.requiredExpertises.length > 0 ? parsed.data.requiredExpertises : [];
-    }
+    if (parsed.data.jobWorkValue !== undefined) updateData.jobWorkValue = decimalToNumber(parsed.data.jobWorkValue);
     if (parsed.data.finishedGoods !== undefined) {
       updateData.finishedGoods = (parsed.data.finishedGoods && parsed.data.finishedGoods.length > 0) ? parsed.data.finishedGoods : [];
     }
@@ -114,27 +137,72 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         where: { id },
         data: updateData,
         include: {
+          contacts: {
+            orderBy: { sortOrder: 'asc' },
+          },
+          requiredExpertiseLinks: {
+            orderBy: { sortOrder: 'asc' },
+            select: {
+              sortOrder: true,
+              expertise: {
+                select: { name: true },
+              },
+            },
+          },
           customer: {
             select: { id: true, name: true },
           },
         },
       });
-      if (parsed.data.lpoValue !== undefined && before?.lpoValue !== parsed.data.lpoValue) {
+      if (parsed.data.contactsJson !== undefined) {
+        await syncJobContacts(tx, {
+          companyId,
+          jobId: updated.id,
+          contacts: parsed.data.contactsJson,
+        });
+      }
+      if (requiredExpertises !== undefined) {
+        await syncJobRequiredExpertises(tx, {
+          companyId,
+          jobId: updated.id,
+          names: requiredExpertises,
+        });
+      }
+      if (parsed.data.lpoValue !== undefined && !decimalEqualsNullable(before?.lpoValue, parsed.data.lpoValue)) {
         await tx.jobLpoValueHistory.create({
           data: {
-            companyId: session.user.activeCompanyId!,
+            companyId,
             jobId: updated.id,
             previousValue: before?.lpoValue ?? null,
-            newValue: parsed.data.lpoValue ?? null,
+            newValue: decimalToNumber(parsed.data.lpoValue) ?? null,
             changedBy: session.user.id,
             source: 'manual',
             note: 'Updated from AMFGI job form',
           },
         });
       }
-      return updated;
+      return tx.job.findUniqueOrThrow({
+        where: { id: updated.id },
+        include: {
+          contacts: {
+            orderBy: { sortOrder: 'asc' },
+          },
+          requiredExpertiseLinks: {
+            orderBy: { sortOrder: 'asc' },
+            select: {
+              sortOrder: true,
+              expertise: {
+                select: { name: true },
+              },
+            },
+          },
+          customer: {
+            select: { id: true, name: true },
+          },
+        },
+      });
     });
-    return successResponse(job);
+    return successResponse(serializeRequiredExpertises(serializeJobWithContacts(job)));
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to update job';
     if (errorMsg.includes('not found')) {

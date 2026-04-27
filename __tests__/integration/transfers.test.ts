@@ -4,6 +4,7 @@
  */
 
 import { prisma, setupTestContext, teardownTestContext, TestContext } from './setup';
+import { decimalToNumberOrZero } from '../../lib/utils/decimal';
 
 describe('Inter-Company Stock Transfers', () => {
   let ctx: TestContext;
@@ -87,10 +88,10 @@ describe('Inter-Company Stock Transfers', () => {
       data: { currentStock: 100 }, // 0 + 100
     });
 
-    expect(updatedSource.currentStock).toBe(400);
-    expect(updatedDest.currentStock).toBe(100);
-    expect(transferOut.quantity).toBe(100);
-    expect(transferIn.quantity).toBe(100);
+    expect(decimalToNumberOrZero(updatedSource.currentStock)).toBe(400);
+    expect(decimalToNumberOrZero(updatedDest.currentStock)).toBe(100);
+    expect(decimalToNumberOrZero(transferOut.quantity)).toBe(100);
+    expect(decimalToNumberOrZero(transferIn.quantity)).toBe(100);
   });
 
   it('should fail if source company has insufficient stock', async () => {
@@ -121,7 +122,7 @@ describe('Inter-Company Stock Transfers', () => {
 
     // Transaction is created, but validation happens at API level
     const tx = await txPromise;
-    expect(tx.quantity).toBe(100);
+    expect(decimalToNumberOrZero(tx.quantity)).toBe(100);
   });
 
   it('should prevent transfer to same company', async () => {
@@ -215,6 +216,6 @@ describe('Inter-Company Stock Transfers', () => {
 
     expect(result.out.type).toBe('TRANSFER_OUT');
     expect(result.inTx.type).toBe('TRANSFER_IN');
-    expect(result.out.quantity).toBe(result.inTx.quantity);
+    expect(decimalToNumberOrZero(result.out.quantity)).toBe(decimalToNumberOrZero(result.inTx.quantity));
   });
 });

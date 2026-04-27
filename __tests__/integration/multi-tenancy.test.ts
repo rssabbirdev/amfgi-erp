@@ -4,6 +4,7 @@
  */
 
 import { prisma, setupTestContext, teardownTestContext, TestContext } from './setup';
+import { decimalToNumberOrZero } from '../../lib/utils/decimal';
 
 describe('Multi-Tenancy Data Isolation', () => {
   let ctx: TestContext;
@@ -50,8 +51,8 @@ describe('Multi-Tenancy Data Isolation', () => {
     expect(mat1.id).not.toBe(mat2.id);
     expect(mat1.companyId).toBe(ctx.amfgiCompany.id);
     expect(mat2.companyId).toBe(ctx.kmCompany.id);
-    expect(mat1.currentStock).toBe(100);
-    expect(mat2.currentStock).toBe(200);
+    expect(decimalToNumberOrZero(mat1.currentStock)).toBe(100);
+    expect(decimalToNumberOrZero(mat2.currentStock)).toBe(200);
   });
 
   it('should prevent duplicate material names within same company', async () => {

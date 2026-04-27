@@ -4,6 +4,8 @@ export interface ReceiptMaterial {
   materialId: string;
   materialName: string;
   unit: string;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
   quantityReceived: number;
   quantityAvailable: number;
   unitCost: number;

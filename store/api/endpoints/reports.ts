@@ -17,9 +17,18 @@ interface StockValuationResponse {
     currentStockValue: number;
     preferredMethod: 'FIFO';
     prevMonthConsumptionValue: number;
+    warehouseMode?: 'DISABLED' | 'OPTIONAL' | 'REQUIRED';
+    fallbackWarehouseName?: string | null;
+    warehouseCount?: number;
   };
   topMaterialsByValue: Material[];
   topConsumedItems: Material[];
+  warehouseBreakdown?: Array<{
+    warehouseId: string;
+    warehouseName: string;
+    materialCount: number;
+    stockValue: number;
+  }>;
 }
 
 interface ConsumptionData {

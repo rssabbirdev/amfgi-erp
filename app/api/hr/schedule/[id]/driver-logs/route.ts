@@ -42,6 +42,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     for (const l of parsed.data.logs) {
       await tx.driverRunLog.create({
         data: {
+          companyId,
           workScheduleId: scheduleId,
           driverEmployeeId: l.driverEmployeeId,
           routeText: l.routeText.trim(),

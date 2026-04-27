@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { applyPartialPartyFieldsToUpdate, partyListPartyFieldsSchema } from '@/lib/partyListRecordPayload';
+import { serializeSupplierWithContacts, syncSupplierContacts } from '@/lib/partyContacts';
 import { z } from 'zod';
 
 const UpdateSupplierSchema = z
@@ -25,18 +26,24 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+  const companyId = session.user.activeCompanyId;
 
   try {
     const { id } = await params;
     const supplier = await prisma.supplier.findFirst({
       where: {
         id,
-        companyId: session.user.activeCompanyId,
+        companyId,
+      },
+      include: {
+        contacts: {
+          orderBy: { sortOrder: 'asc' },
+        },
       },
     });
     if (!supplier) return errorResponse('Supplier not found', 404);
 
-    return successResponse(supplier);
+    return successResponse(serializeSupplierWithContacts(supplier));
   } catch (err) {
     return errorResponse('Failed to fetch supplier', 500);
   }
@@ -50,11 +57,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+  const companyId = session.user.activeCompanyId;
 
   try {
     const { id } = await params;
     const existing = await prisma.supplier.findFirst({
-      where: { id, companyId: session.user.activeCompanyId },
+      where: { id, companyId },
     });
     if (!existing) return errorResponse('Supplier not found', 404);
 
@@ -76,13 +84,30 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (d.isActive !== undefined) updateData.isActive = d.isActive;
     applyPartialPartyFieldsToUpdate(d, body, updateData);
 
-    const supplier = await prisma.supplier.update({
-      where: { id },
-      data: updateData,
+    const supplier = await prisma.$transaction(async (tx) => {
+      const updated = await tx.supplier.update({
+        where: { id },
+        data: updateData,
+      });
+      if (Object.prototype.hasOwnProperty.call(body, 'contacts')) {
+        await syncSupplierContacts(tx, {
+          companyId,
+          supplierId: updated.id,
+          contacts: d.contacts,
+        });
+      }
+      return tx.supplier.findUniqueOrThrow({
+        where: { id: updated.id },
+        include: {
+          contacts: {
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
     });
     if (!supplier) return errorResponse('Supplier not found', 404);
 
-    return successResponse(supplier);
+    return successResponse(serializeSupplierWithContacts(supplier));
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to update supplier';
     if (errorMsg.includes('not found')) {

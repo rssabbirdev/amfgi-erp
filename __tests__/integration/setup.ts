@@ -3,10 +3,29 @@
  * Seeds test data and provides utilities for API testing
  */
 
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { createPostgresAdapter } from '../../lib/db/postgresAdapter';
 
-export const prisma = new PrismaClient();
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is not set for integration tests.');
+}
+
+export const prisma = new PrismaClient({
+  adapter: createPostgresAdapter(databaseUrl),
+  log: ['error', 'warn'],
+});
+
+const TEST_COMPANY_SLUG_PREFIXES = ['test-amfgi-', 'test-km-'] as const;
+const TEST_ROLE_SLUG_PREFIX = 'test-';
+const TEST_USER_EMAIL_PREFIX = 'test-';
+
+function createTestToken() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export interface TestUser {
   id: string;
@@ -30,23 +49,41 @@ export interface TestContext {
   kmCompany: TestCompany;
 }
 
+async function listTestCompanyIds() {
+  const companies = await prisma.company.findMany({
+    where: {
+      OR: TEST_COMPANY_SLUG_PREFIXES.map((prefix) => ({
+        slug: { startsWith: prefix },
+      })),
+    },
+    select: { id: true },
+  });
+
+  return companies.map((company) => company.id);
+}
+
 /**
  * Seeds test data and returns context for tests
  */
 export async function setupTestContext(): Promise<TestContext> {
+  // Keep integration runs idempotent when a prior run exits before teardown.
+  await teardownTestContext().catch(() => undefined);
+
+  const token = createTestToken();
+
   // Create companies
   const amfgiCompany = await prisma.company.create({
     data: {
-      name: 'Test AMFGI',
-      slug: 'test-amfgi',
+      name: `Test AMFGI ${token}`,
+      slug: `test-amfgi-${token}`,
       isActive: true,
     },
   });
 
   const kmCompany = await prisma.company.create({
     data: {
-      name: 'Test K&M',
-      slug: 'test-km',
+      name: `Test K&M ${token}`,
+      slug: `test-km-${token}`,
       isActive: true,
     },
   });
@@ -54,8 +91,8 @@ export async function setupTestContext(): Promise<TestContext> {
   // Create roles
   const adminRole = await prisma.role.create({
     data: {
-      name: 'Test Admin',
-      slug: 'test-admin',
+      name: `Test Admin ${token}`,
+      slug: `test-admin-${token}`,
       permissions: [
         'material.view',
         'material.create',
@@ -73,8 +110,8 @@ export async function setupTestContext(): Promise<TestContext> {
 
   const storeKeeperRole = await prisma.role.create({
     data: {
-      name: 'Test Store Keeper',
-      slug: 'test-store-keeper',
+      name: `Test Store Keeper ${token}`,
+      slug: `test-store-keeper-${token}`,
       permissions: [
         'material.view',
         'transaction.stock_out',
@@ -89,7 +126,7 @@ export async function setupTestContext(): Promise<TestContext> {
   const admin = await prisma.user.create({
     data: {
       name: 'Test Admin',
-      email: 'test-admin@example.com',
+      email: `test-admin-${token}@example.com`,
       password: adminHash,
       isSuperAdmin: true,
       isActive: true,
@@ -101,7 +138,7 @@ export async function setupTestContext(): Promise<TestContext> {
   const manager = await prisma.user.create({
     data: {
       name: 'Test Manager',
-      email: 'test-manager@example.com',
+      email: `test-manager-${token}@example.com`,
       password: managerHash,
       isSuperAdmin: false,
       isActive: true,
@@ -119,7 +156,7 @@ export async function setupTestContext(): Promise<TestContext> {
   const storeKeeper = await prisma.user.create({
     data: {
       name: 'Test Store Keeper',
-      email: 'test-sk@example.com',
+      email: `test-sk-${token}@example.com`,
       password: skHash,
       isSuperAdmin: false,
       isActive: true,
@@ -172,20 +209,72 @@ export async function setupTestContext(): Promise<TestContext> {
  * Cleans up test data
  */
 export async function teardownTestContext() {
-  await prisma.transactionBatch.deleteMany({});
-  await prisma.transaction.deleteMany({});
-  await prisma.priceLog.deleteMany({});
-  await prisma.materialLog.deleteMany({});
-  await prisma.stockBatch.deleteMany({});
-  await prisma.job.deleteMany({});
-  await prisma.supplier.deleteMany({});
-  await prisma.customer.deleteMany({});
-  await prisma.material.deleteMany({});
-  await prisma.warehouse.deleteMany({});
-  await prisma.category.deleteMany({});
-  await prisma.unit.deleteMany({});
-  await prisma.userCompanyAccess.deleteMany({});
-  await prisma.user.deleteMany({});
-  await prisma.role.deleteMany({});
-  await prisma.company.deleteMany({});
+  const companyIds = await listTestCompanyIds();
+  const users = await prisma.user.findMany({
+    where: {
+      email: {
+        startsWith: TEST_USER_EMAIL_PREFIX,
+      },
+    },
+    select: { id: true },
+  });
+  const roles = await prisma.role.findMany({
+    where: {
+      slug: {
+        startsWith: TEST_ROLE_SLUG_PREFIX,
+      },
+    },
+    select: { id: true },
+  });
+
+  const userIds = users.map((user) => user.id);
+  const roleIds = roles.map((role) => role.id);
+
+  if (companyIds.length > 0) {
+    await prisma.transactionBatch.deleteMany({
+      where: {
+        transaction: {
+          companyId: { in: companyIds },
+        },
+      },
+    });
+    await prisma.transaction.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.priceLog.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.materialLog.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.stockBatch.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.jobItemAssignment.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.jobItem.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.jobRequiredExpertise.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.jobContact.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.jobLpoValueHistory.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.job.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.supplierContact.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.supplier.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.customerContact.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.customer.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.materialUom.updateMany({
+      where: { companyId: { in: companyIds } },
+      data: { parentUomId: null },
+    });
+    await prisma.materialUom.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.material.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.warehouse.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.category.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.unit.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.userCompanyAccess.deleteMany({ where: { companyId: { in: companyIds } } });
+  }
+
+  if (userIds.length > 0) {
+    await prisma.userCompanyAccess.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+  }
+
+  if (roleIds.length > 0) {
+    await prisma.userCompanyAccess.deleteMany({ where: { roleId: { in: roleIds } } });
+    await prisma.role.deleteMany({ where: { id: { in: roleIds } } });
+  }
+
+  if (companyIds.length > 0) {
+    await prisma.company.deleteMany({ where: { id: { in: companyIds } } });
+  }
 }

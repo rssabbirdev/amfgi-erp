@@ -27,6 +27,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (!warehouse || warehouse.companyId !== companyId) {
       return errorResponse('Warehouse not found', 404);
     }
+    if (warehouse.isSystem) {
+      return errorResponse('System warehouses cannot be edited', 403);
+    }
 
     // Check for name uniqueness (ignore if same name)
     if (parsed.data.name !== warehouse.name) {
@@ -46,7 +49,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       await tx.material.updateMany({
         where: {
           companyId,
-          warehouse: warehouse.name,
+          OR: [
+            { warehouseId: warehouse.id },
+            { warehouse: warehouse.name },
+          ],
         },
         data: {
           warehouse: parsed.data.name.trim(),
@@ -80,17 +86,27 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     // Fetch the warehouse to get its name
     const warehouse = await prisma.warehouse.findUnique({
       where: { id },
+      include: {
+        fallbackForCompanies: {
+          select: { id: true },
+        },
+      },
     });
     if (!warehouse || warehouse.companyId !== companyId) {
       return errorResponse('Warehouse not found', 404);
+    }
+    if (warehouse.isSystem || warehouse.fallbackForCompanies.length > 0) {
+      return errorResponse('System fallback warehouses cannot be deleted', 403);
     }
 
     // Count materials using this warehouse
     const count = await prisma.material.count({
       where: {
         companyId,
-        warehouse: warehouse.name,
-        isActive: true,
+        OR: [
+          { warehouseId: warehouse.id },
+          { warehouse: warehouse.name },
+        ],
       },
     });
 

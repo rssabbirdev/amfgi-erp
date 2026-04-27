@@ -94,10 +94,7 @@ export function mapPartyToCustomerFields(p: PartyListParty) {
     tradeLicenseExpiry: parsePartyListDateInput(p.trade_license_expiry ?? undefined),
     trnNumber: p.trn_number?.trim() || null,
     trnExpiry: parsePartyListDateInput(p.trn_expiry ?? undefined),
-    contactsJson:
-      p.contacts && p.contacts.length > 0
-        ? (JSON.parse(JSON.stringify(p.contacts)) as object)
-        : undefined,
+    contacts: sorted,
   };
 }
 

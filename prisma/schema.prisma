@@ -3,86 +3,103 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
 }
 
 model Company {
-  id                    String                 @id @default(cuid())
-  name                  String                 @unique
-  slug                  String                 @unique
+  id                       String                      @id @default(cuid())
+  name                     String                      @unique
+  slug                     String                      @unique
   /// Stable id shared by external Project Management system
-  externalCompanyId     String?                @unique
+  externalCompanyId        String?                     @unique
   /// HYBRID = local + external parent jobs, EXTERNAL_ONLY = parent jobs from API only
-  jobSourceMode         JobSourceMode          @default(HYBRID)
-  description           String?                @db.Text
-  isActive              Boolean                @default(true)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  address               String?                @db.Text
-  email                 String?
-  letterheadDriveId     String?
-  letterheadUrl         String?
-  printTemplates        Json?
-  hrEmployeeTypeSettings Json?
-  phone                 String?
-  categories            Category[]
-  customers             Customer[]
-  jobs                  Job[]
-  materials             Material[]
-  stockBatches          StockBatch[]
-  suppliers             Supplier[]
-  transactions          Transaction[]
-  units                 Unit[]
-  materialUoms          MaterialUom[]
-  activeForUsers        User[]                 @relation("UserActiveCompany")
-  users                 UserCompanyAccess[]
-  warehouses            Warehouse[]
-  mediaAssets           MediaAsset[]
-  apiCredentials        ApiCredential[]
-  lpoValueChanges       JobLpoValueHistory[]
-  integrationLogs       IntegrationSyncLog[]
-  employees             Employee[]
-  employeeDocumentTypes EmployeeDocumentType[]
-  workSchedules         WorkSchedule[]
-  attendanceEntries     AttendanceEntry[]
-  geofenceZones         GeofenceZone[]
-  geofenceEvents        GeofenceAttendanceEvent[]
-  mobileAccessTokens    EmployeeMobileAccessToken[]
-  visaPeriods           VisaPeriod[]
-  employeeDocuments     EmployeeDocument[]
-  workforceExpertises   WorkforceExpertise[]
+  jobSourceMode            JobSourceMode               @default(HYBRID)
+  description              String?                     @db.Text
+  isActive                 Boolean                     @default(true)
+  jobCostingSettings       Json?
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
+  address                  String?                     @db.Text
+  email                    String?
+  letterheadDriveId        String?
+  letterheadUrl            String?
+  printTemplates           Json?
+  hrEmployeeTypeSettings   Json?
+  phone                    String?
+  warehouseMode            WarehouseMode               @default(DISABLED)
+  stockFallbackWarehouseId String?
+  categories               Category[]
+  customers                Customer[]
+  customerContacts         CustomerContact[]
+  jobs                     Job[]
+  jobContacts              JobContact[]
+  materials                Material[]
+  stockBatches             StockBatch[]
+  suppliers                Supplier[]
+  supplierContacts         SupplierContact[]
+  transactions             Transaction[]
+  units                    Unit[]
+  materialUoms             MaterialUom[]
+  activeForUsers           User[]                      @relation("UserActiveCompany")
+  users                    UserCompanyAccess[]
+  warehouses               Warehouse[]                 @relation("CompanyWarehouses")
+  stockFallbackWarehouse   Warehouse?                  @relation("CompanyStockFallbackWarehouse", fields: [stockFallbackWarehouseId], references: [id], onDelete: SetNull)
+  mediaAssets              MediaAsset[]
+  apiCredentials           ApiCredential[]
+  lpoValueChanges          JobLpoValueHistory[]
+  integrationLogs          IntegrationSyncLog[]
+  formulaLibraries         FormulaLibrary[]
+  jobItems                 JobItem[]
+  jobItemAssignments       JobItemAssignment[]
+  jobRequiredExpertises    JobRequiredExpertise[]
+  employees                Employee[]
+  employeeDocumentTypes    EmployeeDocumentType[]
+  workSchedules            WorkSchedule[]
+  workAssignments          WorkAssignment[]
+  workAssignmentMembers    WorkAssignmentMember[]
+  scheduleAbsences         ScheduleAbsence[]
+  driverRunLogs            DriverRunLog[]
+  attendanceEntries        AttendanceEntry[]
+  geofenceZones            GeofenceZone[]
+  geofenceEvents           GeofenceAttendanceEvent[]
+  mobileAccessTokens       EmployeeMobileAccessToken[]
+  visaPeriods              VisaPeriod[]
+  employeeDocuments        EmployeeDocument[]
+  workforceExpertises      WorkforceExpertise[]
+  materialWarehouseStocks  MaterialWarehouseStock[]
 }
 
 model User {
-  id               String              @id @default(cuid())
-  name             String
-  email            String              @unique
-  password         String?
+  id                    String                      @id @default(cuid())
+  name                  String
+  email                 String                      @unique
+  password              String?
   /**
    * Display URL (e.g. lh3); prefer resolving from imageDriveId when set
    */
-  image            String?
+  image                 String?
   /**
    * Google Drive file id for profile photo — source of truth for display
    */
-  imageDriveId     String?
+  imageDriveId          String?
   /**
    * Legacy / cache; prefer signatureDriveId + lh3 for display
    */
-  signatureUrl     String?             @db.Text
-  signatureDriveId String?
-  isSuperAdmin     Boolean             @default(false)
-  isActive         Boolean             @default(true)
-  activeCompanyId  String?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  activeCompany    Company?            @relation("UserActiveCompany", fields: [activeCompanyId], references: [id])
-  companyAccess    UserCompanyAccess[]
-  uploadedMedia    MediaAsset[]        @relation("MediaAssetUploader")
-  mobileAccessTokens EmployeeMobileAccessToken[]
+  signatureUrl          String?                     @db.Text
+  signatureDriveId      String?
+  isSuperAdmin          Boolean                     @default(false)
+  isActive              Boolean                     @default(true)
+  activeCompanyId       String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  activeCompany         Company?                    @relation("UserActiveCompany", fields: [activeCompanyId], references: [id])
+  companyAccess         UserCompanyAccess[]
+  performedTransactions Transaction[]               @relation("TransactionPerformedBy")
+  uploadedMedia         MediaAsset[]                @relation("MediaAssetUploader")
+  mobileAccessTokens    EmployeeMobileAccessToken[]
   /// When set, this login is the employee self-service account for HR portal
-  linkedEmployeeId String?             @unique
-  linkedEmployee   Employee?           @relation("EmployeeUserLink", fields: [linkedEmployeeId], references: [id], onDelete: SetNull)
+  linkedEmployeeId      String?                     @unique
+  linkedEmployee        Employee?                   @relation("EmployeeUserLink", fields: [linkedEmployeeId], references: [id], onDelete: SetNull)
 
   @@index([activeCompanyId])
 }
@@ -147,29 +164,37 @@ model UserCompanyAccess {
 }
 
 model Material {
-  id               String        @id @default(cuid())
-  companyId        String
-  name             String
-  description      String?       @db.Text
-  unit             String
-  category         String?
-  warehouse        String?
-  stockType        String
-  allowNegativeConsumption Boolean @default(false)
-  externalItemName String?
-  currentStock     Float         @default(0)
-  reorderLevel     Float?
-  unitCost         Float?
-  isActive         Boolean       @default(true)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  company          Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  stockBatches     StockBatch[]
-  transactions     Transaction[]
-  materialUoms     MaterialUom[]
+  id                       String                   @id @default(cuid())
+  companyId                String
+  name                     String
+  description              String?                  @db.Text
+  unit                     String
+  category                 String?
+  categoryId               String?
+  warehouse                String?
+  warehouseId              String?
+  stockType                String
+  allowNegativeConsumption Boolean                  @default(false)
+  externalItemName         String?
+  currentStock             Decimal                  @default(0) @db.Decimal(18, 3)
+  reorderLevel             Decimal?                 @db.Decimal(18, 3)
+  unitCost                 Decimal?                 @db.Decimal(18, 4)
+  isActive                 Boolean                  @default(true)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  company                  Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  categoryRef              Category?                @relation(fields: [companyId, categoryId], references: [companyId, id], onDelete: Restrict)
+  stockBatches             StockBatch[]
+  transactions             Transaction[]
+  materialUoms             MaterialUom[]
+  materialWarehouseStocks  MaterialWarehouseStock[]
+  warehouseRef             Warehouse?               @relation(fields: [companyId, warehouseId], references: [companyId, id], onDelete: Restrict)
 
+  @@unique([companyId, id])
   @@unique([companyId, name])
   @@index([companyId, isActive])
+  @@index([companyId, categoryId])
+  @@index([companyId, warehouseId])
 }
 
 /// Per-material UOM chain: exactly one base (parent null, factor 1). 1 of this row = factorToParent × 1 parent UOM.
@@ -184,7 +209,7 @@ model MaterialUom {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   company        Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  material       Material      @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  material       Material      @relation(fields: [companyId, materialId], references: [companyId, id], onDelete: Cascade)
   unit           Unit          @relation(fields: [unitId], references: [id], onDelete: Restrict)
   parent         MaterialUom?  @relation("MaterialUomParent", fields: [parentUomId], references: [id], onDelete: Restrict)
   children       MaterialUom[] @relation("MaterialUomParent")
@@ -197,11 +222,12 @@ model StockBatch {
   id                String             @id @default(cuid())
   companyId         String
   materialId        String
+  warehouseId       String?
   batchNumber       String
-  quantityReceived  Float
-  quantityAvailable Float
-  unitCost          Float
-  totalCost         Float
+  quantityReceived  Decimal            @db.Decimal(18, 3)
+  quantityAvailable Decimal            @db.Decimal(18, 3)
+  unitCost          Decimal            @db.Decimal(18, 4)
+  totalCost         Decimal            @db.Decimal(18, 4)
   supplier          String?
   supplierId        String?
   receiptNumber     String?
@@ -211,15 +237,17 @@ model StockBatch {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  material          Material           @relation(fields: [materialId], references: [id])
-  supplierRef       Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  material          Material           @relation(fields: [companyId, materialId], references: [companyId, id])
+  warehouse         Warehouse?         @relation(fields: [companyId, warehouseId], references: [companyId, id], onDelete: Restrict)
+  supplierRef       Supplier?          @relation(fields: [companyId, supplierId], references: [companyId, id], onDelete: Restrict)
   transactionLinks  TransactionBatch[]
 
   @@unique([companyId, batchNumber])
   @@index([companyId, materialId, receivedDate])
   @@index([companyId, materialId, quantityAvailable])
+  @@index([companyId, warehouseId, materialId, receivedDate])
   @@index([receiptNumber])
-  @@index([supplierId])
+  @@index([companyId, supplierId])
   @@index([materialId], map: "StockBatch_materialId_fkey")
 }
 
@@ -228,31 +256,39 @@ model Transaction {
   companyId           String
   type                TransactionType
   materialId          String
-  quantity            Float
+  warehouseId         String?
+  quantity            Decimal            @db.Decimal(18, 3)
   jobId               String?
   parentTransactionId String?
   counterpartCompany  String?
   notes               String?            @db.Text
   date                DateTime           @default(now())
   performedBy         String
-  totalCost           Float              @default(0)
-  averageCost         Float              @default(0)
+  performedByUserId   String?
+  performedByName     String?
+  totalCost           Decimal            @default(0) @db.Decimal(18, 4)
+  averageCost         Decimal            @default(0) @db.Decimal(18, 4)
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   isDeliveryNote      Boolean            @default(false)
   signedCopyDriveId   String?
   signedCopyUrl       String?
   company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  job                 Job?               @relation(fields: [jobId], references: [id])
-  material            Material           @relation(fields: [materialId], references: [id])
-  parent              Transaction?       @relation("TxParent", fields: [parentTransactionId], references: [id])
+  job                 Job?               @relation(fields: [companyId, jobId], references: [companyId, id], onDelete: Restrict)
+  material            Material           @relation(fields: [companyId, materialId], references: [companyId, id])
+  warehouse           Warehouse?         @relation(fields: [companyId, warehouseId], references: [companyId, id], onDelete: Restrict)
+  performedByUser     User?              @relation("TransactionPerformedBy", fields: [performedByUserId], references: [id], onDelete: SetNull)
+  parent              Transaction?       @relation("TxParent", fields: [companyId, parentTransactionId], references: [companyId, id], onDelete: Restrict)
   children            Transaction[]      @relation("TxParent")
   batchesUsed         TransactionBatch[]
 
+  @@unique([companyId, id])
   @@index([companyId, date])
   @@index([companyId, jobId, materialId])
   @@index([companyId, materialId, type])
-  @@index([parentTransactionId])
+  @@index([companyId, warehouseId, materialId, date])
+  @@index([companyId, parentTransactionId])
+  @@index([performedByUserId])
   @@index([jobId], map: "Transaction_jobId_fkey")
   @@index([materialId], map: "Transaction_materialId_fkey")
 }
@@ -262,9 +298,9 @@ model TransactionBatch {
   transactionId     String
   batchId           String
   batchNumber       String
-  quantityFromBatch Float
-  unitCost          Float
-  costAmount        Float
+  quantityFromBatch Decimal     @db.Decimal(18, 3)
+  unitCost          Decimal     @db.Decimal(18, 4)
+  costAmount        Decimal     @db.Decimal(18, 4)
   batch             StockBatch  @relation(fields: [batchId], references: [id])
   transaction       Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
@@ -273,55 +309,76 @@ model TransactionBatch {
 }
 
 model Job {
-  id                String               @id @default(cuid())
-  companyId         String
+  id                     String                 @id @default(cuid())
+  companyId              String
   /// External parent-job identifier from Project Management system
-  externalJobId     String?
-  jobNumber         String
-  customerId        String
-  description       String?              @db.Text
-  site              String?
-  address           String?              @db.Text
-  locationName      String?
-  locationLat       Float?
-  locationLng       Float?
-  status            JobStatus            @default(ACTIVE)
-  startDate         DateTime?
-  endDate           DateTime?
-  quotationNumber   String?
-  quotationDate     DateTime?
-  lpoNumber         String?
-  lpoDate           DateTime?
-  lpoValue          Float?
-  projectName       String?
-  projectDetails    String?              @db.Text
+  externalJobId          String?
+  jobNumber              String
+  customerId             String
+  description            String?                @db.Text
+  site                   String?
+  address                String?                @db.Text
+  locationName           String?
+  locationLat            Float?
+  locationLng            Float?
+  status                 JobStatus              @default(ACTIVE)
+  startDate              DateTime?
+  endDate                DateTime?
+  quotationNumber        String?
+  quotationDate          DateTime?
+  lpoNumber              String?
+  lpoDate                DateTime?
+  lpoValue               Decimal?               @db.Decimal(18, 2)
+  projectName            String?
+  projectDetails         String?                @db.Text
   /// Primary site/contact name (same idea as Customer.contactPerson)
-  contactPerson     String?
-  contactsJson      Json?
-  salesPerson       String?
-  jobWorkValue      Float?
-  finishedGoods     Json?
-  requiredExpertises Json?
-  source            JobRecordSource      @default(LOCAL)
-  externalUpdatedAt DateTime?
-  createdBy         String
-  parentJobId       String?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  company           Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer          Customer             @relation(fields: [customerId], references: [id])
-  parentJob         Job?                 @relation("JobVariations", fields: [parentJobId], references: [id], onDelete: Cascade)
-  variations        Job[]                @relation("JobVariations")
-  transactions      Transaction[]
-  lpoValueHistory   JobLpoValueHistory[]
-  workAssignments   WorkAssignment[]
+  contactPerson          String?
+  salesPerson            String?
+  jobWorkValue           Decimal?               @db.Decimal(18, 2)
+  finishedGoods          Json?
+  source                 JobRecordSource        @default(LOCAL)
+  externalUpdatedAt      DateTime?
+  createdBy              String
+  parentJobId            String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  company                Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer               Customer               @relation(fields: [companyId, customerId], references: [companyId, id])
+  parentJob              Job?                   @relation("JobVariations", fields: [companyId, parentJobId], references: [companyId, id], onDelete: Cascade)
+  variations             Job[]                  @relation("JobVariations")
+  transactions           Transaction[]
+  lpoValueHistory        JobLpoValueHistory[]
+  contacts               JobContact[]
+  jobItems               JobItem[]
+  requiredExpertiseLinks JobRequiredExpertise[]
+  workAssignments        WorkAssignment[]
 
+  @@unique([companyId, id])
   @@unique([companyId, jobNumber])
   @@unique([companyId, externalJobId])
   @@index([companyId, status])
-  @@index([customerId])
-  @@index([parentJobId])
+  @@index([companyId, customerId])
+  @@index([companyId, parentJobId])
   @@index([companyId, source])
+}
+
+model JobContact {
+  id          String   @id @default(cuid())
+  companyId   String
+  jobId       String
+  label       String?
+  name        String
+  email       String?
+  number      String?
+  designation String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job     Job     @relation(fields: [companyId, jobId], references: [companyId, id], onDelete: Cascade)
+
+  @@index([companyId, jobId, sortOrder])
 }
 
 model WorkforceExpertise {
@@ -333,10 +390,30 @@ model WorkforceExpertise {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company  Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobLinks JobRequiredExpertise[]
 
+  @@unique([companyId, id])
   @@unique([companyId, name])
   @@index([companyId, isActive, sortOrder])
+}
+
+model JobRequiredExpertise {
+  id          String   @id @default(cuid())
+  companyId   String
+  jobId       String
+  expertiseId String
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job       Job                @relation(fields: [companyId, jobId], references: [companyId, id], onDelete: Cascade)
+  expertise WorkforceExpertise @relation(fields: [companyId, expertiseId], references: [companyId, id], onDelete: Cascade)
+
+  @@unique([jobId, expertiseId])
+  @@index([companyId, jobId, sortOrder])
+  @@index([companyId, expertiseId])
 }
 
 /// One-way inbound credential for integrations; only hash is stored.
@@ -365,17 +442,17 @@ model JobLpoValueHistory {
   id            String   @id @default(cuid())
   companyId     String
   jobId         String
-  previousValue Float?
-  newValue      Float?
+  previousValue Decimal? @db.Decimal(18, 2)
+  newValue      Decimal? @db.Decimal(18, 2)
   changedBy     String
   source        String   @default("manual")
   note          String?
   createdAt     DateTime @default(now())
   company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  job           Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job           Job      @relation(fields: [companyId, jobId], references: [companyId, id], onDelete: Cascade)
 
   @@index([companyId, createdAt])
-  @@index([jobId, createdAt])
+  @@index([companyId, jobId, createdAt])
 }
 
 model IntegrationSyncLog {
@@ -420,16 +497,37 @@ model Customer {
   tradeLicenseExpiry    DateTime?
   trnNumber             String?
   trnExpiry             DateTime?
-  contactsJson          Json?
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
   company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contacts              CustomerContact[]
   jobs                  Job[]
 
+  @@unique([companyId, id])
   @@unique([companyId, externalPartyId])
   @@index([companyId, name])
   @@index([companyId, isActive])
   @@index([companyId, source])
+}
+
+model CustomerContact {
+  id                String   @id @default(cuid())
+  companyId         String
+  customerId        String
+  externalContactId Int?
+  contactName       String
+  email             String?
+  phone             String?
+  sortOrder         Int      @default(0)
+  externalCreatedAt String?  @db.VarChar(80)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [companyId, customerId], references: [companyId, id], onDelete: Cascade)
+
+  @@index([companyId, customerId, sortOrder])
+  @@index([companyId, externalContactId])
 }
 
 model Supplier {
@@ -451,16 +549,37 @@ model Supplier {
   tradeLicenseExpiry    DateTime?
   trnNumber             String?
   trnExpiry             DateTime?
-  contactsJson          Json?
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
   company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contacts              SupplierContact[]
   stockBatches          StockBatch[]
 
+  @@unique([companyId, id])
   @@unique([companyId, externalPartyId])
   @@index([companyId, name])
   @@index([companyId, isActive])
   @@index([companyId, source])
+}
+
+model SupplierContact {
+  id                String   @id @default(cuid())
+  companyId         String
+  supplierId        String
+  externalContactId Int?
+  contactName       String
+  email             String?
+  phone             String?
+  sortOrder         Int      @default(0)
+  externalCreatedAt String?  @db.VarChar(80)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [companyId, supplierId], references: [companyId, id], onDelete: Cascade)
+
+  @@index([companyId, supplierId, sortOrder])
+  @@index([companyId, externalContactId])
 }
 
 model Unit {
@@ -478,30 +597,55 @@ model Unit {
 }
 
 model Category {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   companyId String
   name      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  materials Material[]
 
+  @@unique([companyId, id])
   @@unique([companyId, name])
   @@index([companyId, isActive])
 }
 
 model Warehouse {
-  id        String   @id @default(cuid())
-  companyId String
-  name      String
-  location  String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                      String                   @id @default(cuid())
+  companyId               String
+  name                    String
+  location                String?
+  isActive                Boolean                  @default(true)
+  isSystem                Boolean                  @default(false)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  company                 Company                  @relation("CompanyWarehouses", fields: [companyId], references: [id], onDelete: Cascade)
+  materials               Material[]
+  fallbackForCompanies    Company[]                @relation("CompanyStockFallbackWarehouse")
+  stockBatches            StockBatch[]
+  transactions            Transaction[]
+  materialWarehouseStocks MaterialWarehouseStock[]
 
+  @@unique([companyId, id])
   @@unique([companyId, name])
   @@index([companyId, isActive])
+}
+
+model MaterialWarehouseStock {
+  companyId    String
+  materialId   String
+  warehouseId  String
+  currentStock Decimal  @default(0) @db.Decimal(18, 3)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  material  Material  @relation(fields: [companyId, materialId], references: [companyId, id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [companyId, warehouseId], references: [companyId, id], onDelete: Cascade)
+
+  @@id([companyId, materialId, warehouseId])
+  @@index([companyId, warehouseId])
 }
 
 model MaterialLog {
@@ -520,8 +664,8 @@ model PriceLog {
   id            String      @id @default(cuid())
   companyId     String
   materialId    String
-  previousPrice Float
-  currentPrice  Float
+  previousPrice Decimal     @db.Decimal(18, 4)
+  currentPrice  Decimal     @db.Decimal(18, 4)
   source        PriceSource
   changedBy     String
   billId        String?
@@ -529,6 +673,70 @@ model PriceLog {
   timestamp     DateTime    @default(now())
 
   @@index([companyId, materialId, timestamp])
+}
+
+model FormulaLibrary {
+  id                  String   @id @default(cuid())
+  companyId           String
+  name                String
+  slug                String
+  fabricationType     String
+  description         String?  @db.Text
+  specificationSchema Json?
+  formulaConfig       Json
+  isActive            Boolean  @default(true)
+  createdBy           String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobItems JobItem[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, slug])
+  @@index([companyId, fabricationType, isActive])
+}
+
+model JobItem {
+  id               String   @id @default(cuid())
+  companyId        String
+  jobId            String
+  formulaLibraryId String
+  name             String
+  description      String?  @db.Text
+  specifications   Json
+  sortOrder        Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdBy        String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job               Job                 @relation(fields: [companyId, jobId], references: [companyId, id], onDelete: Cascade)
+  formulaLibrary    FormulaLibrary      @relation(fields: [companyId, formulaLibraryId], references: [companyId, id], onDelete: Restrict)
+  assignedEmployees JobItemAssignment[]
+
+  @@unique([companyId, id])
+  @@index([companyId, jobId, isActive])
+  @@index([companyId, formulaLibraryId])
+}
+
+model JobItemAssignment {
+  id         String   @id @default(cuid())
+  companyId  String
+  jobItemId  String
+  employeeId String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobItem  JobItem  @relation(fields: [companyId, jobItemId], references: [companyId, id], onDelete: Cascade)
+  employee Employee @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
+
+  @@unique([jobItemId, employeeId])
+  @@index([companyId, jobItemId, sortOrder])
+  @@index([companyId, employeeId])
 }
 
 // ── HR / Workforce (employees, schedule, attendance) ─────────────────────────
@@ -627,8 +835,8 @@ model Employee {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
-  company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  userLink              User?                  @relation("EmployeeUserLink")
+  company               Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userLink              User?                       @relation("EmployeeUserLink")
   visaPeriods           VisaPeriod[]
   documents             EmployeeDocument[]
   assignmentMembers     WorkAssignmentMember[]
@@ -637,10 +845,12 @@ model Employee {
   attendanceEntries     AttendanceEntry[]
   geofenceEvents        GeofenceAttendanceEvent[]
   mobileAccessTokens    EmployeeMobileAccessToken[]
-  teamLeaderAssignments WorkAssignment[]       @relation("WorkAssignmentTeamLeader")
-  driver1Assignments    WorkAssignment[]       @relation("WorkAssignmentDriver1")
-  driver2Assignments    WorkAssignment[]       @relation("WorkAssignmentDriver2")
+  jobItemAssignments    JobItemAssignment[]
+  teamLeaderAssignments WorkAssignment[]            @relation("WorkAssignmentTeamLeader")
+  driver1Assignments    WorkAssignment[]            @relation("WorkAssignmentDriver1")
+  driver2Assignments    WorkAssignment[]            @relation("WorkAssignmentDriver2")
 
+  @@unique([companyId, id])
   @@unique([companyId, employeeCode])
   @@unique([companyId, email])
   @@index([companyId, status])
@@ -662,9 +872,10 @@ model VisaPeriod {
   updatedAt   DateTime         @updatedAt
 
   company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  employee  Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee  Employee           @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
   documents EmployeeDocument[]
 
+  @@unique([companyId, id])
   @@index([companyId, employeeId])
   @@index([employeeId, status])
   @@index([companyId, endDate])
@@ -686,6 +897,7 @@ model EmployeeDocumentType {
   company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   documents EmployeeDocument[]
 
+  @@unique([companyId, id])
   @@unique([companyId, slug])
   @@index([companyId, isActive])
 }
@@ -707,13 +919,14 @@ model EmployeeDocument {
   updatedAt        DateTime  @updatedAt
 
   company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  employee     Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  visaPeriod   VisaPeriod?          @relation(fields: [visaPeriodId], references: [id], onDelete: SetNull)
-  documentType EmployeeDocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Restrict)
+  employee     Employee             @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
+  visaPeriod   VisaPeriod?          @relation(fields: [companyId, visaPeriodId], references: [companyId, id], onDelete: Restrict)
+  documentType EmployeeDocumentType @relation(fields: [companyId, documentTypeId], references: [companyId, id], onDelete: Restrict)
 
   @@index([companyId, employeeId])
   @@index([companyId, expiryDate])
-  @@index([documentTypeId])
+  @@index([companyId, visaPeriodId])
+  @@index([companyId, documentTypeId])
 }
 
 model WorkSchedule {
@@ -735,12 +948,14 @@ model WorkSchedule {
   absences    ScheduleAbsence[]
   driverLogs  DriverRunLog[]
 
+  @@unique([companyId, id])
   @@unique([companyId, workDate])
   @@index([companyId, status])
 }
 
 model WorkAssignment {
   id                     String                 @id @default(cuid())
+  companyId              String
   workScheduleId         String
   columnIndex            Int
   label                  String
@@ -758,69 +973,82 @@ model WorkAssignment {
   shiftStart             String?
   shiftEnd               String?
   breakWindow            String?
-  targetQty              Float?
-  achievedQty            Float?
+  targetQty              Decimal?               @db.Decimal(18, 3)
+  achievedQty            Decimal?               @db.Decimal(18, 3)
   unit                   String?
   remarks                String?                @db.Text
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
-  workSchedule      WorkSchedule           @relation(fields: [workScheduleId], references: [id], onDelete: Cascade)
-  job               Job?                   @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  teamLeader        Employee?              @relation("WorkAssignmentTeamLeader", fields: [teamLeaderEmployeeId], references: [id], onDelete: SetNull)
-  driver1           Employee?              @relation("WorkAssignmentDriver1", fields: [driver1EmployeeId], references: [id], onDelete: SetNull)
-  driver2           Employee?              @relation("WorkAssignmentDriver2", fields: [driver2EmployeeId], references: [id], onDelete: SetNull)
+  company           Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workSchedule      WorkSchedule           @relation(fields: [companyId, workScheduleId], references: [companyId, id], onDelete: Cascade)
+  job               Job?                   @relation(fields: [companyId, jobId], references: [companyId, id], onDelete: Restrict)
+  teamLeader        Employee?              @relation("WorkAssignmentTeamLeader", fields: [companyId, teamLeaderEmployeeId], references: [companyId, id], onDelete: Restrict)
+  driver1           Employee?              @relation("WorkAssignmentDriver1", fields: [companyId, driver1EmployeeId], references: [companyId, id], onDelete: Restrict)
+  driver2           Employee?              @relation("WorkAssignmentDriver2", fields: [companyId, driver2EmployeeId], references: [companyId, id], onDelete: Restrict)
   members           WorkAssignmentMember[]
   attendanceEntries AttendanceEntry[]
 
+  @@unique([companyId, id])
   @@unique([workScheduleId, columnIndex])
-  @@index([workScheduleId])
-  @@index([jobId])
+  @@index([companyId, workScheduleId])
+  @@index([companyId, jobId])
+  @@index([companyId, teamLeaderEmployeeId])
+  @@index([companyId, driver1EmployeeId])
+  @@index([companyId, driver2EmployeeId])
 }
 
 model WorkAssignmentMember {
   id               String               @id @default(cuid())
+  companyId        String
   workAssignmentId String
   employeeId       String
   role             AssignmentMemberRole @default(WORKER)
   slot             Int                  @default(0)
   createdAt        DateTime             @default(now())
 
-  workAssignment WorkAssignment @relation(fields: [workAssignmentId], references: [id], onDelete: Cascade)
-  employee       Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workAssignment WorkAssignment @relation(fields: [companyId, workAssignmentId], references: [companyId, id], onDelete: Cascade)
+  employee       Employee       @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
 
   @@unique([workAssignmentId, employeeId])
-  @@index([employeeId])
+  @@index([companyId, workAssignmentId])
+  @@index([companyId, employeeId])
 }
 
 model ScheduleAbsence {
   id             String   @id @default(cuid())
+  companyId      String
   workScheduleId String
   employeeId     String
   reason         String?
   notes          String?  @db.Text
   createdAt      DateTime @default(now())
 
-  workSchedule WorkSchedule @relation(fields: [workScheduleId], references: [id], onDelete: Cascade)
-  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workSchedule WorkSchedule @relation(fields: [companyId, workScheduleId], references: [companyId, id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
 
   @@unique([workScheduleId, employeeId])
-  @@index([employeeId])
+  @@index([companyId, workScheduleId])
+  @@index([companyId, employeeId])
 }
 
 model DriverRunLog {
   id               String   @id @default(cuid())
+  companyId        String
   workScheduleId   String
   driverEmployeeId String
   routeText        String   @db.Text
   sequence         Int      @default(0)
   createdAt        DateTime @default(now())
 
-  workSchedule WorkSchedule @relation(fields: [workScheduleId], references: [id], onDelete: Cascade)
-  driver       Employee     @relation(fields: [driverEmployeeId], references: [id], onDelete: Cascade)
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workSchedule WorkSchedule @relation(fields: [companyId, workScheduleId], references: [companyId, id], onDelete: Cascade)
+  driver       Employee     @relation(fields: [companyId, driverEmployeeId], references: [companyId, id], onDelete: Cascade)
 
-  @@index([workScheduleId])
-  @@index([driverEmployeeId])
+  @@index([companyId, workScheduleId])
+  @@index([companyId, driverEmployeeId])
 }
 
 model AttendanceEntry {
@@ -847,11 +1075,12 @@ model AttendanceEntry {
   updatedAt          DateTime                 @updatedAt
 
   company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  employee       Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  workAssignment WorkAssignment? @relation(fields: [workAssignmentId], references: [id], onDelete: SetNull)
+  employee       Employee        @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
+  workAssignment WorkAssignment? @relation(fields: [companyId, workAssignmentId], references: [companyId, id], onDelete: Restrict)
 
   @@index([companyId, workDate])
   @@index([companyId, employeeId, workDate])
+  @@index([companyId, workAssignmentId])
   @@index([workflowStatus])
 }
 
@@ -874,62 +1103,63 @@ model GeofenceZone {
   company Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   events  GeofenceAttendanceEvent[]
 
-  @@index([companyId, isActive])
+  @@unique([companyId, id])
   @@unique([companyId, name])
+  @@index([companyId, isActive])
 }
 
 model GeofenceAttendanceEvent {
-  id                   String                    @id @default(cuid())
+  id                   String                      @id @default(cuid())
   companyId            String
   zoneId               String
   employeeId           String?
-  workDate             DateTime?                 @db.Date
+  workDate             DateTime?                   @db.Date
   eventType            GeofenceAttendanceEventType
   validationStatus     GeofenceValidationStatus
   latitude             Float
   longitude            Float
   accuracyMeters       Float?
   distanceToGateMeters Float?
-  insidePolygon        Boolean                   @default(false)
-  withinGateRadius     Boolean                   @default(false)
+  insidePolygon        Boolean                     @default(false)
+  withinGateRadius     Boolean                     @default(false)
   devicePlatform       String?
   deviceIdentifier     String?
-  notes                String?                   @db.Text
+  notes                String?                     @db.Text
   metadata             Json?
   occurredAt           DateTime
-  createdAt            DateTime                  @default(now())
+  createdAt            DateTime                    @default(now())
 
-  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  zone     GeofenceZone  @relation(fields: [zoneId], references: [id], onDelete: Cascade)
-  employee Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  zone     GeofenceZone @relation(fields: [companyId, zoneId], references: [companyId, id], onDelete: Cascade)
+  employee Employee?    @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Restrict)
 
   @@index([companyId, occurredAt])
-  @@index([zoneId, occurredAt])
-  @@index([employeeId, occurredAt])
+  @@index([companyId, zoneId, occurredAt])
+  @@index([companyId, employeeId, occurredAt])
   @@index([companyId, workDate])
 }
 
 model EmployeeMobileAccessToken {
-  id         String   @id @default(cuid())
-  companyId  String
-  userId     String
-  employeeId String
-  tokenLabel String?
+  id          String    @id @default(cuid())
+  companyId   String
+  userId      String
+  employeeId  String
+  tokenLabel  String?
   tokenPrefix String
-  tokenHash  String
-  expiresAt  DateTime?
-  lastUsedAt DateTime?
-  revokedAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  tokenHash   String
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
 
+  @@unique([companyId, tokenPrefix])
   @@index([companyId, employeeId])
   @@index([userId, revokedAt])
-  @@unique([companyId, tokenPrefix])
 }
 
 enum TransactionType {
@@ -971,4 +1201,10 @@ enum JobRecordSource {
 enum JobSourceMode {
   HYBRID
   EXTERNAL_ONLY
+}
+
+enum WarehouseMode {
+  DISABLED
+  OPTIONAL
+  REQUIRED
 }

@@ -1,11 +1,17 @@
 import { adminApi } from '../adminApi';
 
-interface Company {
+export interface Company {
   id: string;
   name: string;
   slug: string;
   description?: string;
   isActive: boolean;
+  warehouseMode?: 'DISABLED' | 'OPTIONAL' | 'REQUIRED';
+  stockFallbackWarehouseId?: string | null;
+  stockFallbackWarehouse?: {
+    id: string;
+    name: string;
+  } | null;
   createdAt: Date | string;
   updatedAt?: Date | string;
 }

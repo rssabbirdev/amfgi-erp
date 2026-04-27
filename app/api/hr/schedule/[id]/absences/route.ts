@@ -41,6 +41,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     for (const a of parsed.data.absences) {
       await tx.scheduleAbsence.create({
         data: {
+          companyId,
           workScheduleId: scheduleId,
           employeeId: a.employeeId,
           reason: a.reason?.trim() || null,

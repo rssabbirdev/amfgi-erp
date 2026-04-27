@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { serializeSupplierWithContacts, syncSupplierContacts } from '@/lib/partyContacts';
 import {
   partyListPartyFieldsSchema,
   primaryFromPartyContacts,
@@ -29,16 +30,22 @@ export async function GET(req: Request) {
   }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+  const companyId = session.user.activeCompanyId;
 
   try {
     const suppliers = await prisma.supplier.findMany({
       where: {
-        companyId: session.user.activeCompanyId,
+        companyId,
         isActive: true,
       },
       orderBy: { name: 'asc' },
+      include: {
+        contacts: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
     });
-    return successResponse(suppliers);
+    return successResponse(suppliers.map(serializeSupplierWithContacts));
   } catch (err) {
     return errorResponse('Failed to fetch suppliers', 500);
   }
@@ -52,6 +59,7 @@ export async function POST(req: Request) {
   }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+  const companyId = session.user.activeCompanyId;
 
   try {
     const body = await req.json();
@@ -65,28 +73,42 @@ export async function POST(req: Request) {
     const fromContacts = primaryFromPartyContacts(p.contacts);
     const contactPersonFallback = p.contactPerson?.trim() || null;
     const phoneFallback = p.phone?.trim() || null;
-    const supplier = await prisma.supplier.create({
-      data: {
-        companyId: session.user.activeCompanyId,
-        name: p.name,
-        email: p.email?.trim() ? p.email.trim() : null,
-        address: p.address?.trim() || null,
-        city: p.city?.trim() || null,
-        country: p.country?.trim() || null,
-        contactPerson: fromContacts.contactPerson ?? contactPersonFallback,
-        phone: fromContacts.phone ?? phoneFallback,
-        tradeLicenseNumber: party.tradeLicenseNumber,
-        tradeLicenseAuthority: party.tradeLicenseAuthority,
-        tradeLicenseExpiry: party.tradeLicenseExpiry,
-        trnNumber: party.trnNumber,
-        trnExpiry: party.trnExpiry,
-        contactsJson: party.contactsJson ?? undefined,
-        isActive: p.isActive ?? true,
-        source: 'LOCAL',
-        externalPartyId: null,
-      },
+    const supplier = await prisma.$transaction(async (tx) => {
+      const created = await tx.supplier.create({
+        data: {
+          companyId,
+          name: p.name,
+          email: p.email?.trim() ? p.email.trim() : null,
+          address: p.address?.trim() || null,
+          city: p.city?.trim() || null,
+          country: p.country?.trim() || null,
+          contactPerson: fromContacts.contactPerson ?? contactPersonFallback,
+          phone: fromContacts.phone ?? phoneFallback,
+          tradeLicenseNumber: party.tradeLicenseNumber,
+          tradeLicenseAuthority: party.tradeLicenseAuthority,
+          tradeLicenseExpiry: party.tradeLicenseExpiry,
+          trnNumber: party.trnNumber,
+          trnExpiry: party.trnExpiry,
+          isActive: p.isActive ?? true,
+          source: 'LOCAL',
+          externalPartyId: null,
+        },
+      });
+      await syncSupplierContacts(tx, {
+        companyId,
+        supplierId: created.id,
+        contacts: party.contacts,
+      });
+      return tx.supplier.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          contacts: {
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
     });
-    return successResponse(supplier, 201);
+    return successResponse(serializeSupplierWithContacts(supplier), 201);
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to create supplier';
     if (errorMsg.includes('Unique constraint failed')) {

@@ -4,6 +4,17 @@ module.exports = {
   roots: ['<rootDir>/__tests__'],
   testMatch: ['**/__tests__/**/*.test.ts'],
   moduleFileExtensions: ['ts', 'js', 'json'],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
+  },
+  transform: {
+    '^.+\\.ts$': ['ts-jest', {
+      tsconfig: {
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+      },
+    }],
+  },
   collectCoverageFrom: [
     'app/api/**/*.ts',
     '!app/api/**/*.d.ts',
@@ -11,12 +22,4 @@ module.exports = {
   ],
   setupFilesAfterEnv: [],
   testTimeout: 30000,
-  globals: {
-    'ts-jest': {
-      tsconfig: {
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-      },
-    },
-  },
 };

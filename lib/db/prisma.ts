@@ -19,7 +19,7 @@
  *   // Throws inside the callback → automatic rollback.
  */
 import { PrismaClient } from '@prisma/client';
-import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import { createPostgresAdapter } from './postgresAdapter';
 
 declare global {
   var _prisma: PrismaClient | undefined;
@@ -33,7 +33,7 @@ if (!databaseUrl) {
   throw new Error('DATABASE_URL is not set.');
 }
 
-const prismaAdapter = new PrismaMariaDb(databaseUrl);
+const prismaAdapter = createPostgresAdapter(databaseUrl);
 
 // After `prisma generate`, Next dev can still hold a pre-generate client on `global._prisma` (no `mediaAsset`).
 const existingPrisma: PrismaClient | undefined = global._prisma;

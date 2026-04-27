@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { serializeMaterialUoms } from '@/lib/utils/materialUom';
 import type { MaterialUomWithUnit } from '@/lib/utils/materialUom';
+import { decimalToNumber } from '@/lib/utils/decimal';
+import { ensureCategoryRef, ensureWarehouseRef } from '@/lib/materialMasterData';
 import { z }                 from 'zod';
 
 const UpdateSchema = z.object({
@@ -14,8 +16,8 @@ const UpdateSchema = z.object({
   stockType:           z.string().min(1).max(50).optional(),
   allowNegativeConsumption: z.boolean().optional(),
   externalItemName:    z.string().min(1).max(100).optional(),
-  unitCost:            z.number().min(0).optional(),
-  reorderLevel:        z.number().min(0).optional(),
+  unitCost:            z.number().finite().min(0).optional(),
+  reorderLevel:        z.number().finite().min(0).optional(),
 });
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -86,9 +88,26 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   try {
     await prisma.$transaction(async (tx) => {
+      const categoryRef =
+        parsed.data.category !== undefined
+          ? await ensureCategoryRef(tx, companyId, parsed.data.category)
+          : null;
+      const warehouseRef =
+        parsed.data.warehouse !== undefined
+          ? await ensureWarehouseRef(tx, companyId, parsed.data.warehouse)
+          : null;
+
       await tx.material.update({
         where: { id },
-        data: parsed.data,
+        data: {
+          ...parsed.data,
+          category: categoryRef ? categoryRef.categoryName : undefined,
+          categoryId: categoryRef ? categoryRef.categoryId : undefined,
+          warehouse: warehouseRef ? warehouseRef.warehouseName : undefined,
+          warehouseId: warehouseRef ? warehouseRef.warehouseId : undefined,
+          unitCost: parsed.data.unitCost !== undefined ? decimalToNumber(parsed.data.unitCost) ?? null : undefined,
+          reorderLevel: parsed.data.reorderLevel !== undefined ? decimalToNumber(parsed.data.reorderLevel) ?? null : undefined,
+        },
       });
 
       if (parsed.data.unit !== undefined) {

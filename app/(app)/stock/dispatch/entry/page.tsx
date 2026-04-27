@@ -3,16 +3,19 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link                               from 'next/link';
 import { useSearchParams }                from 'next/navigation';
+import { useSession }                     from 'next-auth/react';
 import { Button }                         from '@/components/ui/Button';
 import SearchSelect                       from '@/components/ui/SearchSelect';
 import toast                              from 'react-hot-toast';
 import {
+  useGetCompaniesQuery,
   useGetMaterialsQuery,
   useGetJobsQuery,
   useGetDispatchEntryQuery,
   useGetJobMaterialsQuery,
   useGetCustomersQuery,
   useAddBatchTransactionMutation,
+  useGetWarehousesQuery,
   type MaterialUomDto,
 } from '@/store/hooks';
 
@@ -33,6 +36,7 @@ interface Line {
   dispatchQty: string;
   returnQty:   string;
   quantityUomId: string;
+  warehouseId: string;
   originalDispatchQty?: number; // Track original qty for editing validation
 }
 
@@ -52,6 +56,7 @@ function emptyLine(jobId = ''): Line {
     dispatchQty: '',
     returnQty: '',
     quantityUomId: '',
+    warehouseId: '',
   };
 }
 
@@ -60,7 +65,8 @@ function isLineEmpty(line: Line) {
     !line.materialId &&
     !line.dispatchQty &&
     !line.returnQty &&
-    !line.quantityUomId
+    !line.quantityUomId &&
+    !line.warehouseId
   );
 }
 
@@ -90,11 +96,17 @@ function parseJobContacts(value: unknown): Array<{ name: string; number?: string
 }
 
 export default function DispatchMaterialsPage() {
+  const { data: session } = useSession();
   const searchParams = useSearchParams();
   const { data: materials = [] } = useGetMaterialsQuery();
   const { data: jobs = [] } = useGetJobsQuery();
   const { data: customers = [] } = useGetCustomersQuery();
+  const { data: companies = [] } = useGetCompaniesQuery();
+  const { data: warehouses = [] } = useGetWarehousesQuery();
   const [addBatchTransaction] = useAddBatchTransactionMutation();
+  const activeCompany = companies.find((company) => company.id === session?.user?.activeCompanyId);
+  const warehouseMode = activeCompany?.warehouseMode ?? 'DISABLED';
+  const showWarehouseColumn = warehouseMode !== 'DISABLED';
 
   const [lines,        setLines]        = useState<Line[]>(() => normalizeLines([emptyLine()]));
   const [selectedJob,  setSelectedJob]  = useState('');
@@ -147,6 +159,7 @@ export default function DispatchMaterialsPage() {
           dispatchQty: line.quantity.toString(),
           returnQty: line.returnQty ? line.returnQty.toString() : '',
           quantityUomId: '',
+          warehouseId: '',
           originalDispatchQty: line.quantity,
         }));
 
@@ -251,7 +264,12 @@ export default function DispatchMaterialsPage() {
             ...l,
             jobId: selectedJob,
             [field]: value,
-            ...(field === 'materialId' ? { quantityUomId: '' } : {}),
+            ...(field === 'materialId'
+              ? {
+                  quantityUomId: '',
+                  warehouseId: materials.find((m) => m.id === value)?.warehouseId ?? '',
+                }
+              : {}),
           };
         }),
         selectedJob
@@ -273,6 +291,7 @@ export default function DispatchMaterialsPage() {
           quantity: parseFloat(l.dispatchQty),
           quantityUomId: l.quantityUomId.trim() || undefined,
           returnQty: l.returnQty ? parseFloat(l.returnQty) : undefined,
+          warehouseId: l.warehouseId || undefined,
         })),
       }).unwrap();
 
@@ -295,6 +314,10 @@ export default function DispatchMaterialsPage() {
 
     if (validLines.length === 0) {
       toast.error('Add at least one material');
+      return;
+    }
+    if (warehouseMode === 'REQUIRED' && validLines.some((line) => !line.warehouseId)) {
+      toast.error('Select a warehouse for each dispatch line');
       return;
     }
 
@@ -502,6 +525,9 @@ export default function DispatchMaterialsPage() {
                 <th className="w-[120px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">In Stock</th>
                 <th className="w-[138px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Dispatch Qty</th>
                 <th className="w-[138px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Return Qty</th>
+                {showWarehouseColumn ? (
+                  <th className="w-[180px] px-2 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Warehouse</th>
+                ) : null}
                 <th className="w-[56px] px-2 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Clr</th>
               </tr>
             </thead>
@@ -606,6 +632,25 @@ export default function DispatchMaterialsPage() {
                           className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-right text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                         />
                       </td>
+                      {showWarehouseColumn ? (
+                        <td className="px-2 py-2">
+                          <select
+                            value={line.warehouseId}
+                            onChange={(e) => updateLine(line.id, 'warehouseId', e.target.value)}
+                            disabled={!selectedJob}
+                            className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                          >
+                            <option value="">
+                              {warehouseMode === 'REQUIRED' ? 'Select warehouse...' : 'Use fallback/default'}
+                            </option>
+                            {warehouses.map((warehouse) => (
+                              <option key={warehouse.id} value={warehouse.id}>
+                                {warehouse.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      ) : null}
 
                       <td className="px-2 py-2 text-center">
                         <button

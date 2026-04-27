@@ -31,6 +31,7 @@ export async function GET(req: Request) {
       where: {
         companyId: requestedCompanyId,
         isActive: true,
+        isSystem: false,
       },
       orderBy: { name: 'asc' },
     });

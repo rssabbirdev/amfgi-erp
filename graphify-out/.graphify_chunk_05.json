@@ -1,0 +1,72 @@
+{
+  "nodes": [
+    {
+      "id": "vercel_vercel_svg_root",
+      "label": "Vercel SVG Root",
+      "file_type": "image",
+      "source_file": "public/vercel.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "vercel_triangle_path",
+      "label": "Triangle Path",
+      "file_type": "image",
+      "source_file": "public/vercel.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "vercel_white_fill_color",
+      "label": "White Fill Color",
+      "file_type": "image",
+      "source_file": "public/vercel.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "vercel_vercel_svg_root",
+      "target": "vercel_triangle_path",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "public/vercel.svg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "vercel_triangle_path",
+      "target": "vercel_white_fill_color",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "public/vercel.svg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "vercel_vercel_svg_root",
+      "target": "vercel_white_fill_color",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.88,
+      "source_file": "public/vercel.svg",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

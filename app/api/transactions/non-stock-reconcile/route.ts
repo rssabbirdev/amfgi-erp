@@ -1,14 +1,18 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { buildTransactionActorFields } from '@/lib/utils/auditActor';
 import { calculateFIFOConsumption } from '@/lib/utils/fifoConsumption';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 import { resolveQuantityToBase } from '@/lib/utils/materialUomDb';
+import { applyMaterialWarehouseDelta, resolveEffectiveWarehouse } from '@/lib/warehouses/stockWarehouses';
 import { z } from 'zod';
 
 const ReconcileLineSchema = z.object({
   materialId: z.string().min(1),
   quantity: z.number().min(0.001),
   quantityUomId: z.string().optional(),
+  warehouseId: z.string().min(1).optional(),
 });
 
 const ReconcileSchema = z.object({
@@ -213,6 +217,7 @@ export async function POST(req: Request) {
   if (selectedLines.length === 0) return errorResponse('Enter at least one quantity to distribute', 422);
 
   try {
+    const actorFields = buildTransactionActorFields(session.user);
     const result = await prisma.$transaction(async (tx) => {
       const jobs = await tx.job.findMany({
         where: {
@@ -251,25 +256,33 @@ export async function POST(req: Request) {
         }
 
         const baseQuantity = await resolveQuantityToBase(tx, line.materialId, line.quantity, line.quantityUomId);
+        const effectiveWarehouse = await resolveEffectiveWarehouse(tx, {
+          companyId,
+          materialId: line.materialId,
+          warehouseId: line.warehouseId,
+        });
         let batches = await tx.stockBatch.findMany({
           where: {
             companyId,
             materialId: line.materialId,
+            warehouseId: effectiveWarehouse.warehouseId,
             quantityAvailable: { gt: 0 },
           },
           orderBy: { receivedDate: 'asc' },
         });
 
-        if (batches.length === 0 && material.currentStock > 0) {
-          const unitCost = material.unitCost || 0;
-          const totalCost = material.currentStock * unitCost;
+        const currentStock = decimalToNumberOrZero(material.currentStock);
+        if (batches.length === 0 && currentStock > 0) {
+          const unitCost = decimalToNumberOrZero(material.unitCost);
+          const totalCost = currentStock * unitCost;
           const openingBatch = await tx.stockBatch.create({
             data: {
               companyId,
               materialId: line.materialId,
+              warehouseId: effectiveWarehouse.warehouseId,
               batchNumber: `OPENING-${line.materialId}-${Date.now()}`,
-              quantityReceived: material.currentStock,
-              quantityAvailable: material.currentStock,
+              quantityReceived: currentStock,
+              quantityAvailable: currentStock,
               unitCost,
               totalCost,
               receivedDate: new Date('2020-01-01'),
@@ -280,12 +293,12 @@ export async function POST(req: Request) {
           batches = [openingBatch];
         }
 
-        if (!material.allowNegativeConsumption && material.currentStock < baseQuantity) {
-          throw new Error(`Insufficient stock for ${material.name}. Available: ${material.currentStock.toFixed(3)} ${material.unit}`);
+        if (!material.allowNegativeConsumption && currentStock < baseQuantity) {
+          throw new Error(`Insufficient stock for ${material.name}. Available: ${currentStock.toFixed(3)} ${material.unit}`);
         }
 
-        const fallbackUnitCost = material.unitCost || 0;
-        const availableFromBatches = batches.reduce((sum, batch) => sum + batch.quantityAvailable, 0);
+        const fallbackUnitCost = decimalToNumberOrZero(material.unitCost);
+        const availableFromBatches = batches.reduce((sum, batch) => sum + decimalToNumberOrZero(batch.quantityAvailable), 0);
         const quantityFromBatches = material.allowNegativeConsumption
           ? Math.min(baseQuantity, availableFromBatches)
           : baseQuantity;
@@ -296,8 +309,8 @@ export async function POST(req: Request) {
                 batches.map((batch) => ({
                   id: batch.id,
                   batchNumber: batch.batchNumber,
-                  quantityAvailable: batch.quantityAvailable,
-                  unitCost: batch.unitCost,
+                  quantityAvailable: decimalToNumberOrZero(batch.quantityAvailable),
+                  unitCost: decimalToNumberOrZero(batch.unitCost),
                   receivedDate: batch.receivedDate,
                 })),
                 quantityFromBatches
@@ -331,6 +344,13 @@ export async function POST(req: Request) {
             },
           },
         });
+        await applyMaterialWarehouseDelta(
+          tx,
+          companyId,
+          line.materialId,
+          effectiveWarehouse.warehouseId,
+          -baseQuantity
+        );
 
         const jobQuantities = splitQuantityEvenly(baseQuantity, jobs.length);
         const batchPools: BatchPool[] = fifoResult.batchesUsed.map((entry) => ({
@@ -356,6 +376,7 @@ export async function POST(req: Request) {
               companyId,
               type: 'STOCK_OUT',
               materialId: line.materialId,
+              warehouseId: effectiveWarehouse.warehouseId,
               quantity: jobQuantity,
               jobId: job.id,
               totalCost,
@@ -364,7 +385,7 @@ export async function POST(req: Request) {
                 ? `Non-stock reconcile. ${parsed.data.notes.trim()}`
                 : 'Non-stock reconcile',
               date: txDate,
-              performedBy: session.user.id,
+              ...actorFields,
             },
           });
 

@@ -1,561 +1,521 @@
 'use client';
 
-import { useState } from 'react';
+import Link from 'next/link';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import toast from 'react-hot-toast';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
-import DataTable, { type Column } from '@/components/ui/DataTable';
-import { ContextMenu, type ContextMenuOption } from '@/components/ui/ContextMenu';
 import { TableSkeleton } from '@/components/ui/skeleton/TableSkeleton';
-import { Badge } from '@/components/ui/Badge';
-import toast from 'react-hot-toast';
 import {
-  useGetSuppliersQuery,
-  useCreateSupplierMutation,
-  useUpdateSupplierMutation,
   useDeleteSupplierMutation,
+  useGetSuppliersQuery,
   useSyncSuppliersFromPartyApiMutation,
   type Supplier,
 } from '@/store/hooks';
-import {
-  emptySupplierPartyFormState,
-  supplierPartyFormToApiBody,
-  supplierToPartyFormState,
-  type PartyContactRow,
-  type SupplierPartyFormState,
-} from '@/lib/partyFormUi';
+
+type SupplierSourceFilter = 'all' | 'local' | 'synced';
+
+type DeleteCheck = {
+  source: string;
+  canDelete: boolean;
+  canHardDelete: boolean;
+  canDeactivate: boolean;
+  deleteBlockedReason?: string;
+  linkedBatchesCount: number;
+};
+
+function summaryCardStyle() {
+  return {
+    backgroundColor: 'var(--surface-panel-soft)',
+    borderColor: 'var(--border-strong)',
+  };
+}
+
+function mutedTextStyle() {
+  return { color: 'var(--foreground-muted)' };
+}
+
+function strongTextStyle() {
+  return { color: 'var(--foreground)' };
+}
+
+function bodyTextStyle() {
+  return { color: 'var(--foreground-soft)' };
+}
+
+function extractApiErrorMessage(error: unknown, fallback: string) {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'data' in error &&
+    typeof (error as { data?: { error?: unknown } }).data?.error === 'string'
+  ) {
+    return (error as { data: { error: string } }).data.error;
+  }
+
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback;
+}
+
+function compactNumber(value: number) {
+  return new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatDate(value?: string | Date | null) {
+  if (!value) return 'Not set';
+  const parsed = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(parsed.getTime())) return 'Not set';
+  return parsed.toLocaleDateString();
+}
+
+function sourceBadge(source?: string) {
+  return source === 'PARTY_API_SYNC'
+    ? { label: 'Synced', variant: 'blue' as const }
+    : { label: 'Local', variant: 'gray' as const };
+}
+
+function deleteModalCopy(check: DeleteCheck | null) {
+  if (!check) return 'Checking delete rules...';
+  if (check.deleteBlockedReason === 'synced_from_party_api') {
+    return 'This supplier came from the party API. It cannot be deleted here; edit the record and deactivate it if needed.';
+  }
+  if (check.canHardDelete) {
+    return 'This supplier is not linked to stock batches and will be permanently deleted.';
+  }
+  if (check.canDeactivate) {
+    return `This supplier is linked to ${check.linkedBatchesCount} stock batch(es), so it will be marked inactive instead of being removed.`;
+  }
+  return 'This supplier cannot be deleted from here.';
+}
 
 export default function SuppliersPage() {
   const { data: session } = useSession();
   const isSA = session?.user?.isSuperAdmin ?? false;
   const perms = (session?.user?.permissions ?? []) as string[];
-  const canStockIn = isSA || perms.includes('transaction.stock_in');
+  const canManage = isSA || perms.includes('transaction.stock_in');
 
   const { data: suppliers = [], isFetching, error } = useGetSuppliersQuery();
-  const [createSupplier, { isLoading: isCreating }] = useCreateSupplierMutation();
-  const [updateSupplier, { isLoading: isUpdating }] = useUpdateSupplierMutation();
   const [deleteSupplier, { isLoading: isDeleting }] = useDeleteSupplierMutation();
   const [syncPartySuppliers, { isLoading: isSyncingParty }] = useSyncSuppliersFromPartyApiMutation();
 
-  const [showModal, setShowModal] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<Supplier | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; supplier: Supplier } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<SupplierSourceFilter>('all');
+  const [cityFilter, setCityFilter] = useState('');
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    supplier: Supplier | null;
+    check: DeleteCheck | null;
+    loading: boolean;
+  }>({ open: false, supplier: null, check: null, loading: false });
 
-  // Filter states
-  const [searchName, setSearchName] = useState('');
-  const [filterCity, setFilterCity] = useState('');
-  const [filterCountry, setFilterCountry] = useState('');
+  const deferredQuery = useDeferredValue(searchQuery.trim().toLowerCase());
 
-  const [partyForm, setPartyForm] = useState<SupplierPartyFormState>(emptySupplierPartyFormState());
+  const cities = useMemo(
+    () =>
+      Array.from(new Set(suppliers.map((supplier) => supplier.city).filter(Boolean) as string[])).sort(),
+    [suppliers],
+  );
 
-  // Get unique cities and countries for filter dropdowns
-  const cities = Array.from(new Set(suppliers.filter(s => s.city).map(s => s.city!)));
-  const countries = Array.from(new Set(suppliers.filter(s => s.country).map(s => s.country!)));
-
-  // Filter suppliers
-  const filtered = suppliers.filter((s) => {
-    if (!s.isActive) return false;
-    if (searchName && !s.name.toLowerCase().includes(searchName.toLowerCase())) return false;
-    if (filterCity && s.city !== filterCity) return false;
-    if (filterCountry && s.country !== filterCountry) return false;
-    return true;
-  });
-
-  const openCreate = () => {
-    setEditingId(null);
-    setPartyForm(emptySupplierPartyFormState());
-    setShowModal(true);
-  };
-
-  const openEdit = (supplier: Supplier) => {
-    setContextMenu(null);
-    setEditingId(supplier.id);
-    setPartyForm(supplierToPartyFormState(supplier));
-    setShowModal(true);
-  };
-
-  const updateContactRow = (index: number, patch: Partial<PartyContactRow>) => {
-    setPartyForm((prev) => {
-      const contacts = [...prev.contacts];
-      contacts[index] = { ...contacts[index], ...patch, sort_order: index };
-      return { ...prev, contacts };
-    });
-  };
-
-  const addContactRow = () => {
-    setPartyForm((prev) => ({
-      ...prev,
-      contacts: [
-        ...prev.contacts,
-        { contact_name: '', email: '', phone: '', sort_order: prev.contacts.length },
-      ],
-    }));
-  };
-
-  const removeContactRow = (index: number) => {
-    setPartyForm((prev) => ({
-      ...prev,
-      contacts: prev.contacts.filter((_, i) => i !== index).map((c, i) => ({ ...c, sort_order: i })),
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const data = supplierPartyFormToApiBody(partyForm);
-    try {
-      if (editingId) {
-        await updateSupplier({ id: editingId, data }).unwrap();
-        toast.success('Supplier updated');
-      } else {
-        await createSupplier(data).unwrap();
-        toast.success('Supplier created');
+  const filteredSuppliers = useMemo(() => {
+    return suppliers.filter((supplier) => {
+      if (!supplier.isActive) return false;
+      if (
+        deferredQuery &&
+        ![
+          supplier.name,
+          supplier.email,
+          supplier.contactPerson,
+          supplier.phone,
+          supplier.externalPartyId?.toString() ?? '',
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(deferredQuery)
+      ) {
+        return false;
       }
-      setShowModal(false);
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Failed to save supplier');
-    }
-  };
+      if (sourceFilter === 'local' && supplier.source === 'PARTY_API_SYNC') return false;
+      if (sourceFilter === 'synced' && supplier.source !== 'PARTY_API_SYNC') return false;
+      if (cityFilter && supplier.city !== cityFilter) return false;
+      return true;
+    });
+  }, [cityFilter, deferredQuery, sourceFilter, suppliers]);
 
-  const handleDelete = async (supplier: Supplier) => {
-    setContextMenu(null);
-    setDeleteConfirm(supplier);
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteConfirm) return;
-    try {
-      const res = await deleteSupplier(deleteConfirm.id).unwrap();
-      toast.success(res.message ?? (res.permanent ? 'Supplier deleted' : 'Supplier deactivated'));
-      setDeleteConfirm(null);
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Failed to delete supplier');
-    }
-  };
+  const summary = useMemo(() => {
+    const synced = suppliers.filter((supplier) => supplier.source === 'PARTY_API_SYNC').length;
+    const local = suppliers.length - synced;
+    return {
+      total: suppliers.length,
+      synced,
+      local,
+      withCompliance: suppliers.filter((supplier) => supplier.tradeLicenseNumber || supplier.trnNumber).length,
+    };
+  }, [suppliers]);
 
   const handleSyncPartySuppliers = async () => {
     try {
-      const r = await syncPartySuppliers().unwrap();
-      toast.success(
-        `Synced: ${r.created} new, ${r.updated} updated (${r.totalFromApi} from API)`
-      );
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Sync failed — check PARTY_LISTS_API_* env vars');
+      const result = await syncPartySuppliers().unwrap();
+      toast.success(`Synced ${result.created} new and ${result.updated} updated suppliers`);
+    } catch (error) {
+      toast.error(extractApiErrorMessage(error, 'Sync failed - check PARTY_LISTS_API_* env vars'));
     }
   };
 
-  const handleRowContextMenu = (supplier: Supplier, e: React.MouseEvent) => {
-    e.preventDefault();
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
+  const openDeleteModal = async (supplier: Supplier) => {
+    setDeleteModal({
+      open: true,
       supplier,
+      check: null,
+      loading: true,
     });
+
+    try {
+      const response = await fetch(`/api/suppliers/${supplier.id}/check-delete`, { cache: 'no-store' });
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || 'Failed to check delete rules');
+      }
+      setDeleteModal({
+        open: true,
+        supplier,
+        check: json.data as DeleteCheck,
+        loading: false,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to check delete rules');
+      setDeleteModal({
+        open: true,
+        supplier,
+        check: null,
+        loading: false,
+      });
+    }
   };
 
-  const columns: Column<Supplier>[] = [
-    {
-      key: '_source',
-      header: '',
-      sortable: false,
-      render: (row) =>
-        row.source === 'PARTY_API_SYNC' ? <Badge label="Synced" variant="blue" /> : null,
-    },
-    {
-      key: 'name',
-      header: 'Supplier Name',
-      sortable: true,
-    },
-    {
-      key: 'tradeLicenseNumber',
-      header: 'trade_license_number',
-      sortable: true,
-      render: (row) =>
-        row.tradeLicenseNumber ? (
-          <span className="text-slate-200">{row.tradeLicenseNumber}</span>
-        ) : (
-          <span className="text-slate-500">—</span>
-        ),
-    },
-    {
-      key: 'contactPerson',
-      header: 'contact (primary)',
-      sortable: true,
-    },
-    {
-      key: 'email',
-      header: 'Email',
-      render: (row) => (
-        row.email ? (
-          <a href={`mailto:${row.email}`} className="text-emerald-400 hover:underline">
-            {row.email}
-          </a>
-        ) : (
-          <span className="text-slate-500">—</span>
-        )
-      ),
-    },
-    {
-      key: 'phone',
-      header: 'Phone',
-      render: (row) => row.phone || <span className="text-slate-500">—</span>,
-    },
-    {
-      key: 'city',
-      header: 'City',
-      render: (row) => row.city || <span className="text-slate-500">—</span>,
-    },
-    {
-      key: 'country',
-      header: 'Country',
-      render: (row) => row.country || <span className="text-slate-500">—</span>,
-    },
-  ];
+  const confirmDelete = async () => {
+    if (!deleteModal.supplier) return;
 
-  const contextMenuOptions: ContextMenuOption[] = contextMenu ? [
-    {
-      label: 'Edit',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-        </svg>
-      ),
-      action: () => openEdit(contextMenu.supplier),
-    },
-    {
-      divider: true,
-    },
-    ...(contextMenu.supplier.source === 'PARTY_API_SYNC'
-      ? [
-          {
-            label: 'Delete (not available for synced)',
-            icon: (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            ),
-            action: () =>
-              toast.error(
-                'Suppliers from the party lists API cannot be deleted here. Deactivate via Edit if needed.'
-              ),
-          },
-        ]
-      : [
-          {
-            label: 'Delete',
-            icon: (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            ),
-            danger: true,
-            action: () => handleDelete(contextMenu.supplier),
-          },
-        ]),
-  ] : [];
+    try {
+      const result = await deleteSupplier(deleteModal.supplier.id).unwrap();
+      toast.success(result.message ?? (result.permanent ? 'Supplier deleted' : 'Supplier deactivated'));
+      setDeleteModal({ open: false, supplier: null, check: null, loading: false });
+    } catch (error) {
+      toast.error(extractApiErrorMessage(error, 'Failed to delete supplier'));
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Suppliers</h1>
-          <p className="text-slate-400 text-sm mt-1">{filtered.length} suppliers</p>
+      <section
+        className="rounded-3xl border p-6 shadow-sm"
+        style={summaryCardStyle()}
+      >
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300/80">Master data</p>
+            <h1 className="mt-2 text-3xl font-semibold" style={strongTextStyle()}>
+              Supplier directory
+            </h1>
+            <p className="mt-3 text-sm leading-6" style={mutedTextStyle()}>
+              Manage local suppliers, review synced party records, and open dedicated create and edit pages for full compliance field entry.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[34rem] xl:grid-cols-4">
+            <div className="rounded-2xl border p-4 shadow-sm" style={summaryCardStyle()}>
+              <p className="text-[11px] uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+                Suppliers
+              </p>
+              <p className="mt-2 text-2xl font-semibold" style={strongTextStyle()}>
+                {compactNumber(summary.total)}
+              </p>
+              <p className="mt-1 text-xs" style={mutedTextStyle()}>
+                Records in this company
+              </p>
+            </div>
+            <div className="rounded-2xl border p-4 shadow-sm" style={summaryCardStyle()}>
+              <p className="text-[11px] uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+                Synced
+              </p>
+              <p className="mt-2 text-2xl font-semibold" style={strongTextStyle()}>
+                {compactNumber(summary.synced)}
+              </p>
+              <p className="mt-1 text-xs" style={mutedTextStyle()}>
+                From party API
+              </p>
+            </div>
+            <div className="rounded-2xl border p-4 shadow-sm" style={summaryCardStyle()}>
+              <p className="text-[11px] uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+                Local
+              </p>
+              <p className="mt-2 text-2xl font-semibold" style={strongTextStyle()}>
+                {compactNumber(summary.local)}
+              </p>
+              <p className="mt-1 text-xs" style={mutedTextStyle()}>
+                Manual AMFGI records
+              </p>
+            </div>
+            <div className="rounded-2xl border p-4 shadow-sm" style={summaryCardStyle()}>
+              <p className="text-[11px] uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+                Compliance
+              </p>
+              <p className="mt-2 text-2xl font-semibold" style={strongTextStyle()}>
+                {compactNumber(summary.withCompliance)}
+              </p>
+              <p className="mt-1 text-xs" style={mutedTextStyle()}>
+                License or TRN saved
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canStockIn && (
-            <Button
-              variant="secondary"
-              onClick={handleSyncPartySuppliers}
-              disabled={isSyncingParty}
-            >
-              {isSyncingParty ? 'Syncing…' : '↻ Sync from party API'}
-            </Button>
-          )}
-          <Button onClick={openCreate}>+ Add Supplier</Button>
-        </div>
-      </div>
+      </section>
 
-      {/* Advanced Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-800 border border-slate-700 rounded-lg p-4">
-        <div>
-          <label className="block text-xs font-medium text-slate-400 mb-2">Search by name</label>
-          <input
-            type="text"
-            placeholder="Supplier name..."
-            value={searchName}
-            onChange={(e) => setSearchName(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-400 mb-2">Filter by city</label>
-          <select
-            value={filterCity}
-            onChange={(e) => setFilterCity(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="">All Cities</option>
-            {cities.map((city) => (
-              <option key={city} value={city}>
-                {city}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-400 mb-2">Filter by country</label>
-          <select
-            value={filterCountry}
-            onChange={(e) => setFilterCountry(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="">All Countries</option>
-            {countries.map((country) => (
-              <option key={country} value={country}>
-                {country}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Error State */}
-      {error && (
-        <div className="text-center py-12 bg-red-950/30 border border-red-900 rounded-lg">
-          <p className="text-red-400">Failed to load suppliers. Please try again.</p>
-        </div>
-      )}
-
-      {/* Table */}
-      {!error && isFetching && filtered.length === 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-700">
-          <table className="w-full text-sm text-slate-300">
-            <thead>
-              <tr className="bg-slate-800/80 border-b border-slate-700">
-                {columns.map((col) => (
-                  <th key={col.key} className="px-4 py-3 text-left font-medium text-slate-400">
-                    {col.header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <TableSkeleton rows={5} columns={columns.length} />
-            </tbody>
-          </table>
-        </div>
-      ) : !error && filtered.length === 0 && suppliers.length === 0 ? (
-        <div className="text-center py-12 bg-slate-800 border border-slate-700 rounded-lg">
-          <p className="text-slate-400">No suppliers found. Create your first supplier to get started.</p>
-        </div>
-      ) : !error && filtered.length === 0 ? (
-        <div className="text-center py-12 bg-slate-800 border border-slate-700 rounded-lg">
-          <p className="text-slate-400">No suppliers match your filters.</p>
-        </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={filtered}
-          loading={isFetching}
-          emptyText="No suppliers match your filters."
-          onRowContextMenu={handleRowContextMenu}
-        />
-      )}
-
-      {/* Context Menu */}
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          options={contextMenuOptions}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
-
-      {/* Add/Edit Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Supplier' : 'Add Supplier'}>
-        <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-          <p className="text-xs text-slate-500">
-            Party API fields use the same names as API-party-lists.md. <strong>city</strong> and{' '}
-            <strong>country</strong> are AMFGI-only (not returned by the party API).
-          </p>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">name *</label>
+      <section className="rounded-2xl border p-5 shadow-sm" style={summaryCardStyle()}>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="grid flex-1 gap-4 md:grid-cols-[minmax(0,1.6fr)_12rem_12rem]">
+            <label className="space-y-2 text-sm" style={bodyTextStyle()}>
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+              Search
+            </span>
             <input
-              required
-              value={partyForm.name}
-              onChange={(e) => setPartyForm((p) => ({ ...p, name: e.target.value }))}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              placeholder="e.g. ABC Supplies Ltd"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by name, email, contact, phone, or external ID"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-600"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">email</label>
-            <input
-              type="email"
-              value={partyForm.email}
-              onChange={(e) => setPartyForm((p) => ({ ...p, email: e.target.value }))}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">trade_license_number</label>
-              <input
-                value={partyForm.trade_license_number}
-                onChange={(e) =>
-                  setPartyForm((p) => ({ ...p, trade_license_number: e.target.value }))
-                }
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">trade_license_authority</label>
-              <input
-                value={partyForm.trade_license_authority}
-                onChange={(e) =>
-                  setPartyForm((p) => ({ ...p, trade_license_authority: e.target.value }))
-                }
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">trade_license_expiry</label>
-              <input
-                type="date"
-                value={partyForm.trade_license_expiry}
-                onChange={(e) =>
-                  setPartyForm((p) => ({ ...p, trade_license_expiry: e.target.value }))
-                }
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">trn_number</label>
-              <input
-                value={partyForm.trn_number}
-                onChange={(e) => setPartyForm((p) => ({ ...p, trn_number: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">trn_expiry</label>
-              <input
-                type="date"
-                value={partyForm.trn_expiry}
-                onChange={(e) => setPartyForm((p) => ({ ...p, trn_expiry: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">city (AMFGI)</label>
-              <input
-                value={partyForm.city}
-                onChange={(e) => setPartyForm((p) => ({ ...p, city: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">country (AMFGI)</label>
-              <input
-                value={partyForm.country}
-                onChange={(e) => setPartyForm((p) => ({ ...p, country: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">address (AMFGI)</label>
-            <textarea
-              value={partyForm.address}
-              onChange={(e) => setPartyForm((p) => ({ ...p, address: e.target.value }))}
-              rows={2}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
-            />
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-slate-300">contacts</label>
-              <button
-                type="button"
-                onClick={addContactRow}
-                className="text-xs text-emerald-400 hover:text-emerald-300"
+            </label>
+
+            <label className="space-y-2 text-sm" style={bodyTextStyle()}>
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+                Source
+              </span>
+              <select
+                value={sourceFilter}
+                onChange={(event) => setSourceFilter(event.target.value as SupplierSourceFilter)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
               >
-                + Add contact
-              </button>
-            </div>
-            <div className="space-y-3">
-              {partyForm.contacts.map((row, idx) => (
-                <div
-                  key={idx}
-                  className="rounded-lg border border-slate-600 bg-slate-900/40 p-3 space-y-2"
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-500">sort_order {idx}</span>
-                    {partyForm.contacts.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeContactRow(idx)}
-                        className="text-xs text-red-400 hover:text-red-300"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  <input
-                    placeholder="contact_name"
-                    value={row.contact_name}
-                    onChange={(e) => updateContactRow(idx, { contact_name: e.target.value })}
-                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="email"
-                      placeholder="email"
-                      value={row.email}
-                      onChange={(e) => updateContactRow(idx, { email: e.target.value })}
-                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
-                    />
-                    <input
-                      placeholder="phone"
-                      value={row.phone}
-                      onChange={(e) => updateContactRow(idx, { phone: e.target.value })}
-                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-white text-sm"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+                <option value="all">All sources</option>
+                <option value="local">Local only</option>
+                <option value="synced">Synced only</option>
+              </select>
+            </label>
+
+            <label className="space-y-2 text-sm" style={bodyTextStyle()}>
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+                City
+              </span>
+              <select
+                value={cityFilter}
+                onChange={(event) => setCityFilter(event.target.value)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              >
+                <option value="">All cities</option>
+                {cities.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setShowModal(false)} fullWidth>
-              Cancel
-            </Button>
-            <Button type="submit" loading={isCreating || isUpdating} fullWidth>
-              {editingId ? 'Update' : 'Create'}
-            </Button>
+          <div className="flex flex-wrap gap-2">
+            {canManage ? (
+              <Button variant="secondary" onClick={handleSyncPartySuppliers} disabled={isSyncingParty}>
+                {isSyncingParty ? 'Syncing...' : 'Sync from party API'}
+              </Button>
+            ) : null}
+            <Link
+              href="/suppliers/new"
+              className="inline-flex items-center justify-center rounded-md border border-transparent bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700"
+            >
+              New Supplier
+            </Link>
           </div>
-        </form>
-      </Modal>
+        </div>
+      </section>
 
-      {/* Delete Confirmation Modal */}
-      <Modal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Delete Supplier">
+      {error ? (
+        <section className="rounded-[1.75rem] border border-red-200 bg-red-50 p-8 text-center dark:border-red-500/30 dark:bg-red-500/10">
+          <p className="text-sm font-medium text-red-700 dark:text-red-300">
+            Failed to load suppliers. Please try again.
+          </p>
+        </section>
+      ) : isFetching && suppliers.length === 0 ? (
+        <section className="overflow-hidden rounded-[1.75rem] border shadow-sm" style={summaryCardStyle()}>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead style={{ backgroundColor: 'var(--surface-subtle)' }}>
+                <tr>
+                  {['Supplier', 'Source', 'External ID', 'Primary contact', 'Compliance', 'Location', 'Actions'].map((header) => (
+                    <th
+                      key={header}
+                      className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                      style={mutedTextStyle()}
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <TableSkeleton rows={6} columns={7} />
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : filteredSuppliers.length === 0 ? (
+        <section className="rounded-[1.75rem] border p-10 text-center shadow-sm" style={summaryCardStyle()}>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em]" style={mutedTextStyle()}>
+            Suppliers
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold" style={strongTextStyle()}>
+            {suppliers.length === 0 ? 'No suppliers yet' : 'No suppliers match these filters'}
+          </h2>
+          <p className="mt-2 text-sm" style={bodyTextStyle()}>
+            {suppliers.length === 0
+              ? 'Create a supplier or sync from the party API to start building your supplier master.'
+              : 'Adjust the filters or search query to widen the results.'}
+          </p>
+          {suppliers.length === 0 ? (
+            <div className="mt-5 flex justify-center gap-3">
+              {canManage ? (
+                <Button variant="secondary" onClick={handleSyncPartySuppliers} disabled={isSyncingParty}>
+                  {isSyncingParty ? 'Syncing...' : 'Sync from party API'}
+                </Button>
+              ) : null}
+              <Link
+                href="/suppliers/new"
+                className="inline-flex items-center justify-center rounded-md border border-transparent bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700"
+              >
+                Create Supplier
+              </Link>
+            </div>
+          ) : null}
+        </section>
+      ) : (
+        <section className="overflow-hidden rounded-[1.75rem] border shadow-sm" style={summaryCardStyle()}>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead style={{ backgroundColor: 'var(--surface-subtle)' }}>
+                <tr>
+                  {['Supplier', 'Source', 'External ID', 'Primary contact', 'Compliance', 'Location', 'Actions'].map((header) => (
+                    <th
+                      key={header}
+                      className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                      style={mutedTextStyle()}
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSuppliers.map((supplier) => {
+                  const badge = sourceBadge(supplier.source);
+                  return (
+                    <tr
+                      key={supplier.id}
+                      className="border-t border-slate-200/80 align-top transition hover:bg-slate-50/70 dark:border-slate-800 dark:hover:bg-slate-900/40"
+                    >
+                      <td className="px-4 py-4">
+                        <div className="space-y-1">
+                          <p className="font-semibold text-slate-900 dark:text-white">{supplier.name}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {supplier.email || supplier.phone || 'No email or phone'}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          <Badge label={badge.label} variant={badge.variant} />
+                          {!supplier.isActive ? <Badge label="Inactive" variant="yellow" /> : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <p className="font-mono text-xs text-slate-900 dark:text-slate-200">
+                          {supplier.externalPartyId ?? 'Not linked'}
+                        </p>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="space-y-1">
+                          <p className="text-sm text-slate-900 dark:text-white">
+                            {supplier.contactPerson || 'Not set'}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {supplier.phone || supplier.email || 'No direct contact'}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="space-y-1">
+                          <p className="text-sm text-slate-900 dark:text-white">
+                            {supplier.tradeLicenseNumber || 'No trade license'}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            TRN: {supplier.trnNumber || 'Not set'}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            License expiry: {formatDate(supplier.tradeLicenseExpiry)}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="space-y-1">
+                          <p className="text-sm text-slate-900 dark:text-white">{supplier.city || 'No city'}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{supplier.address || 'No address'}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          <Link
+                            href={`/suppliers/${supplier.id}/edit`}
+                            className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-emerald-500 dark:hover:text-emerald-300"
+                          >
+                            Edit
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => openDeleteModal(supplier)}
+                            className="inline-flex items-center justify-center rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:border-red-300 hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300 dark:hover:border-red-400 dark:hover:bg-red-500/15"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      <Modal
+        isOpen={deleteModal.open}
+        onClose={() => setDeleteModal({ open: false, supplier: null, check: null, loading: false })}
+        title="Delete Supplier"
+      >
         <div className="space-y-4">
-          <p className="text-slate-300">
-            Are you sure you want to delete <span className="font-semibold">{deleteConfirm?.name}</span>?
+          <p className="text-sm text-slate-300">
+            {deleteModal.supplier ? (
+              <>
+                You are about to remove <span className="font-semibold">{deleteModal.supplier.name}</span>.
+              </>
+            ) : (
+              'You are about to remove this supplier.'
+            )}
           </p>
-          <p className="text-sm text-slate-400">
-            If this supplier is used on stock batches, they will be kept and the supplier will only be
-            marked inactive.
-          </p>
-          <div className="flex gap-3 pt-4">
+          <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
+            <p className="text-sm text-slate-300">{deleteModal.loading ? 'Checking delete rules...' : deleteModalCopy(deleteModal.check)}</p>
+          </div>
+          <div className="flex gap-3 pt-2">
             <Button
               type="button"
               variant="ghost"
-              onClick={() => setDeleteConfirm(null)}
+              onClick={() => setDeleteModal({ open: false, supplier: null, check: null, loading: false })}
               fullWidth
               disabled={isDeleting}
             >
@@ -567,8 +527,9 @@ export default function SuppliersPage() {
               onClick={confirmDelete}
               fullWidth
               loading={isDeleting}
+              disabled={deleteModal.loading || deleteModal.check?.canDelete === false}
             >
-              Delete
+              {deleteModal.check?.canDeactivate ? 'Deactivate' : 'Delete'}
             </Button>
           </div>
         </div>

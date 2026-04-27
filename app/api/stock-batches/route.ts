@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { errorResponse, successResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 export async function GET() {
   const session = await auth();
@@ -24,8 +25,13 @@ export async function GET() {
             id: true,
             name: true,
             unit: true,
-            warehouse: true,
             stockType: true,
+          },
+        },
+        warehouse: {
+          select: {
+            id: true,
+            name: true,
           },
         },
         supplierRef: {
@@ -56,7 +62,9 @@ export async function GET() {
     });
 
     const data = rows.map((row) => {
-      const consumedQty = row.quantityReceived - row.quantityAvailable;
+      const quantityReceived = decimalToNumberOrZero(row.quantityReceived);
+      const quantityAvailable = decimalToNumberOrZero(row.quantityAvailable);
+      const consumedQty = quantityReceived - quantityAvailable;
       const latestUsage = row.transactionLinks[0]?.transaction;
       const issueLinkCount = row.transactionLinks.filter(
         (link) => link.transaction.type === 'STOCK_OUT'
@@ -69,15 +77,16 @@ export async function GET() {
         materialId: row.materialId,
         materialName: row.material?.name ?? 'Unknown',
         materialUnit: row.material?.unit ?? '-',
-        warehouse: row.material?.warehouse ?? null,
+        warehouseId: row.warehouse?.id ?? null,
+        warehouse: row.warehouse?.name ?? null,
         stockType: row.material?.stockType ?? null,
         supplierId: row.supplierRef?.id ?? null,
         supplierName: row.supplierRef?.name ?? row.supplier ?? null,
-        quantityReceived: row.quantityReceived,
-        quantityAvailable: row.quantityAvailable,
+        quantityReceived,
+        quantityAvailable,
         quantityConsumed: consumedQty,
-        unitCost: row.unitCost,
-        totalCost: row.totalCost,
+        unitCost: decimalToNumberOrZero(row.unitCost),
+        totalCost: decimalToNumberOrZero(row.totalCost),
         receivedDate: row.receivedDate,
         expiryDate: row.expiryDate,
         notes: row.notes,

@@ -1,6 +1,8 @@
-import { auth }              from '@/auth';
+import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
-import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { serializeJobWithContacts } from '@/lib/jobs/jobContacts';
+import { errorResponse, successResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -29,7 +31,6 @@ export async function GET(req: Request) {
     endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
   }
 
-  // Fetch all dispatch transactions within the date range
   const transactions = await prisma.transaction.findMany({
     where: {
       companyId,
@@ -41,6 +42,8 @@ export async function GET(req: Request) {
       companyId: true,
       type: true,
       performedBy: true,
+      performedByUserId: true,
+      performedByName: true,
       materialId: true,
       quantity: true,
       jobId: true,
@@ -49,14 +52,21 @@ export async function GET(req: Request) {
       date: true,
       totalCost: true,
       signedCopyUrl: true,
-      material: { select: { id: true, name: true, unit: true, unitCost: true } },
+      warehouse: {
+        select: { id: true, name: true },
+      },
+      material: {
+        select: { id: true, name: true, unit: true, unitCost: true },
+      },
       job: {
         select: {
           id: true,
           jobNumber: true,
           description: true,
           contactPerson: true,
-          contactsJson: true,
+          contacts: {
+            orderBy: { sortOrder: 'asc' },
+          },
         },
       },
     },
@@ -64,11 +74,7 @@ export async function GET(req: Request) {
   });
 
   const creatorIds = Array.from(
-    new Set(
-      transactions
-        .map((txn) => (typeof txn.performedBy === 'string' ? txn.performedBy.trim() : ''))
-        .filter(Boolean)
-    )
+    new Set(transactions.map((txn) => txn.performedByUserId?.trim() ?? '').filter(Boolean))
   );
 
   const creators = creatorIds.length
@@ -79,40 +85,36 @@ export async function GET(req: Request) {
     : [];
   const creatorsById = new Map(creators.map((u) => [u.id, u]));
 
-  // Group transactions by jobId and calendar day
-  // For delivery notes, each submission is a separate entry
-  // For dispatch notes, group by jobId-date
   const groupedMap = new Map<string, typeof transactions>();
   for (const txn of transactions) {
     const dateOnly = txn.date.toISOString().split('T')[0];
-    // Delivery notes: each submission gets a unique key using the transaction ID as a unique identifier
-    // Dispatch notes: group by jobId-date as before
     const isDeliveryNote = txn.isDeliveryNote ?? false;
-    const key = isDeliveryNote
-      ? `${txn.jobId}-${dateOnly}-dn-${txn.id}`  // Unique per delivery note submission
-      : `${txn.jobId}-${dateOnly}`;               // Group dispatch notes by date
+    const key = isDeliveryNote ? `${txn.jobId}-${dateOnly}-dn-${txn.id}` : `${txn.jobId}-${dateOnly}`;
     if (!groupedMap.has(key)) {
       groupedMap.set(key, []);
     }
     groupedMap.get(key)!.push(txn);
   }
 
-  // Enrich each entry with material details and calculate net quantities
   const enrichedEntries = await Promise.all(
-    Array.from(groupedMap.entries()).map(async ([groupKey, groupedTxns]) => {
-      const materialsMap = new Map<string, {
-        materialId: string;
-        materialName: string;
-        materialUnit: string;
-        quantity: number;
-        unitCost: number;
-        transactionIds: string[];
-      }>();
+    Array.from(groupedMap.entries()).map(async ([, groupedTxns]) => {
+      const materialsMap = new Map<
+        string,
+        {
+          materialId: string;
+          materialName: string;
+          materialUnit: string;
+          warehouseId: string | null;
+          warehouseName: string | null;
+          quantity: number;
+          unitCost: number;
+          transactionIds: string[];
+        }
+      >();
       let totalNetQuantity = 0;
       let totalValuation = 0;
 
       for (const txn of groupedTxns) {
-        // Find any linked RETURN transactions
         const returnTxns = await prisma.transaction.findMany({
           where: {
             companyId,
@@ -121,14 +123,13 @@ export async function GET(req: Request) {
           },
         });
 
-        const returnQuantity = returnTxns.reduce((sum, rt) => sum + rt.quantity, 0);
-        const netQuantity = txn.quantity - returnQuantity;
+        const returnQuantity = returnTxns.reduce((sum, rt) => sum + decimalToNumberOrZero(rt.quantity), 0);
+        const netQuantity = decimalToNumberOrZero(txn.quantity) - returnQuantity;
         totalNetQuantity += netQuantity;
 
         const key = txn.materialId;
-        const unitCost = txn.material?.unitCost ?? 0;
-        const materialValuation = netQuantity * unitCost;
-        totalValuation += materialValuation;
+        const unitCost = decimalToNumberOrZero(txn.material?.unitCost);
+        totalValuation += netQuantity * unitCost;
 
         if (materialsMap.has(key)) {
           const existing = materialsMap.get(key)!;
@@ -138,7 +139,9 @@ export async function GET(req: Request) {
           materialsMap.set(key, {
             materialId: txn.materialId,
             materialName: txn.material?.name ?? 'Unknown',
-            materialUnit: txn.material?.unit ?? '—',
+            materialUnit: txn.material?.unit ?? '-',
+            warehouseId: txn.warehouse?.id ?? null,
+            warehouseName: txn.warehouse?.name ?? null,
             quantity: netQuantity,
             unitCost,
             transactionIds: [txn.id],
@@ -147,13 +150,11 @@ export async function GET(req: Request) {
       }
 
       const firstTxn = groupedTxns[0];
+      const serializedJob = firstTxn.job ? serializeJobWithContacts(firstTxn.job) : null;
       const dateOnly = firstTxn.date.toISOString().split('T')[0];
       const isDeliveryNote = firstTxn.isDeliveryNote ?? false;
-      // For delivery notes, use transaction ID to make each submission unique
-      // For dispatch notes, use jobId-date
-      const entryId = isDeliveryNote
-        ? `${firstTxn.jobId}-${dateOnly}-dn-${firstTxn.id}`
-        : `${firstTxn.jobId}-${dateOnly}`;
+      const entryId = isDeliveryNote ? `${firstTxn.jobId}-${dateOnly}-dn-${firstTxn.id}` : `${firstTxn.jobId}-${dateOnly}`;
+
       return {
         id: entryId,
         _id: entryId,
@@ -161,34 +162,34 @@ export async function GET(req: Request) {
         jobId: firstTxn.jobId,
         jobNumber: firstTxn.job?.jobNumber ?? 'N/A',
         jobDescription: firstTxn.job?.description ?? '',
-        jobContactPerson: firstTxn.job?.contactPerson ?? undefined,
-        jobContactsJson: firstTxn.job?.contactsJson ?? undefined,
+        jobContactPerson: serializedJob?.contactPerson ?? undefined,
+        jobContactsJson: serializedJob?.contactsJson ?? undefined,
         dispatchDate: firstTxn.date,
         totalQuantity: totalNetQuantity,
         totalValuation,
         materialsCount: materialsMap.size,
         materials: Array.from(materialsMap.values()),
-        transactionIds: groupedTxns.map(t => t.id),
+        transactionIds: groupedTxns.map((t) => t.id),
         transactionCount: groupedTxns.length,
         notes: firstTxn.notes ?? undefined,
         isDeliveryNote: firstTxn.isDeliveryNote ?? false,
         signedCopyUrl: firstTxn.signedCopyUrl ?? undefined,
-        createdByUserId: firstTxn.performedBy ?? undefined,
+        createdByUserId: firstTxn.performedByUserId ?? undefined,
         createdByName:
-          (firstTxn.performedBy ? creatorsById.get(firstTxn.performedBy)?.name : undefined) ??
+          (firstTxn.performedByUserId ? creatorsById.get(firstTxn.performedByUserId)?.name : undefined) ??
+          firstTxn.performedByName ??
           firstTxn.performedBy ??
           undefined,
         createdByEmail:
-          (firstTxn.performedBy ? creatorsById.get(firstTxn.performedBy)?.email : undefined) ??
+          (firstTxn.performedByUserId ? creatorsById.get(firstTxn.performedByUserId)?.email : undefined) ??
           undefined,
         createdBySignatureUrl:
-          (firstTxn.performedBy ? creatorsById.get(firstTxn.performedBy)?.signatureUrl : undefined) ??
+          (firstTxn.performedByUserId ? creatorsById.get(firstTxn.performedByUserId)?.signatureUrl : undefined) ??
           undefined,
       };
     })
   );
 
-  // Sort by dispatchDate descending
   enrichedEntries.sort((a, b) => b.dispatchDate.getTime() - a.dispatchDate.getTime());
 
   return successResponse({

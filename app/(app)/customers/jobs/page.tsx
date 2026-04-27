@@ -37,6 +37,7 @@ interface Customer {
 }
 
 type JobStatusFilter = 'ALL' | 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED';
+type JobScopeFilter = 'ALL' | 'PARENT_ONLY' | 'VARIATION_ONLY';
 
 function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(' ');
@@ -97,6 +98,7 @@ export default function CustomerJobsPage() {
   const canDelete = isSA || perms.includes('job.delete');
 
   const [statusFilter, setStatusFilter] = useState<JobStatusFilter>('ALL');
+  const [scopeFilter, setScopeFilter] = useState<JobScopeFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [jobSourceMode, setJobSourceMode] = useState<'HYBRID' | 'EXTERNAL_ONLY'>('HYBRID');
   const [deleteModal, setDeleteModal] = useState<{
@@ -131,7 +133,9 @@ export default function CustomerJobsPage() {
     [customers]
   );
 
+  const jobById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
   const rootJobs = useMemo(() => jobs.filter((job) => !job.parentJobId), [jobs]);
+  const variationJobs = useMemo(() => jobs.filter((job) => Boolean(job.parentJobId)), [jobs]);
   const variationsByParent = useMemo(() => {
     const map = new Map<string, Job[]>();
     for (const job of jobs) {
@@ -142,25 +146,32 @@ export default function CustomerJobsPage() {
     }
     return map;
   }, [jobs]);
+  const orderedJobRows = useMemo(() => {
+    if (scopeFilter === 'PARENT_ONLY') return rootJobs;
+    if (scopeFilter === 'VARIATION_ONLY') return variationJobs;
+    return rootJobs.flatMap((job) => [job, ...(variationsByParent.get(job.id) ?? [])]);
+  }, [rootJobs, scopeFilter, variationJobs, variationsByParent]);
 
   const filteredJobs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return rootJobs.filter((job) => {
+    return orderedJobRows.filter((job) => {
+      const parentJob = job.parentJobId ? jobById.get(job.parentJobId) : null;
       if (statusFilter !== 'ALL' && job.status !== statusFilter) return false;
       if (!query) return true;
       const customerName = customerNameById.get(job.customerId) ?? '';
-      const haystack = [job.jobNumber, job.description, job.site, customerName].join(' ').toLowerCase();
+      const parentNumber = parentJob?.jobNumber ?? '';
+      const haystack = [job.jobNumber, parentNumber, job.description, job.site, customerName].join(' ').toLowerCase();
       return haystack.includes(query);
     });
-  }, [customerNameById, rootJobs, searchQuery, statusFilter]);
+  }, [customerNameById, jobById, orderedJobRows, searchQuery, statusFilter]);
 
   const totalVariations = useMemo(
-    () => jobs.filter((job) => Boolean(job.parentJobId)).length,
-    [jobs]
+    () => variationJobs.length,
+    [variationJobs]
   );
   const activeJobs = useMemo(
-    () => rootJobs.filter((job) => job.status === 'ACTIVE').length,
-    [rootJobs]
+    () => jobs.filter((job) => job.status === 'ACTIVE').length,
+    [jobs]
   );
   const apiJobs = useMemo(
     () => rootJobs.filter((job) => job.source === 'EXTERNAL_API').length,
@@ -168,15 +179,15 @@ export default function CustomerJobsPage() {
   );
 
   const handleCreateJob = () => {
-    router.push('/jobs/form?mode=create');
+    router.push('/customers/jobs/form?mode=create');
   };
 
   const handleEditJob = (job: Job) => {
-    router.push(`/jobs/form?mode=edit&id=${job.id}`);
+    router.push(`/customers/jobs/form?mode=edit&id=${job.id}`);
   };
 
   const handleCreateVariation = (job: Job) => {
-    router.push(`/jobs/form?mode=variation&parentJobId=${job.id}&customerId=${job.customerId}`);
+    router.push(`/customers/jobs/form?mode=variation&parentJobId=${job.id}&customerId=${job.customerId}`);
   };
 
   const closeDeleteModal = () =>
@@ -200,8 +211,16 @@ export default function CustomerJobsPage() {
     const options: ContextMenuOption[] = [
       {
         label: 'Open Job Ledger',
-        action: () => router.push(`/jobs/${job.id}`),
+        action: () => router.push(`/customers/jobs/${job.id}`),
       },
+      ...(job.parentJobId
+        ? [
+            {
+              label: 'Budget',
+              action: () => router.push(`/stock/job-budget/${job.id}`),
+            } satisfies ContextMenuOption,
+          ]
+        : []),
       {
         label: 'Consumption & Costing',
         action: () => router.push(`/jobs/${job.id}/consumption-costing`),
@@ -216,11 +235,13 @@ export default function CustomerJobsPage() {
       });
     }
 
-    options.push({ divider: true });
-    options.push({
-      label: 'Create Variation',
-      action: () => handleCreateVariation(job),
-    });
+    if (!job.parentJobId) {
+      options.push({ divider: true });
+      options.push({
+        label: 'Create Variation',
+        action: () => handleCreateVariation(job),
+      });
+    }
 
     if (canDelete) {
       options.push({ divider: true });
@@ -252,18 +273,18 @@ export default function CustomerJobsPage() {
 
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
-        <div className="border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.10),_transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] px-5 py-6 dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.14),_transparent_32%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.92))] sm:px-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+        <div className="border-b border-slate-200 px-5 py-5 dark:border-slate-800 sm:px-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-3xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-sky-700 dark:text-sky-300/80">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-700 dark:text-sky-300/80">
                 Customer Jobs
               </p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-[2.2rem]">
-                Project ledger grouped around customer work
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                Jobs
               </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-                Track parent jobs, linked variations, and costing entry points in one compact customer-facing queue.
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+                Track parent jobs, linked variations, and costing entry points in one compact customer queue.
               </p>
             </div>
 
@@ -280,14 +301,14 @@ export default function CustomerJobsPage() {
 
         <div className="grid gap-px bg-slate-200 dark:bg-slate-800 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            { label: 'Parent jobs', value: compactNumber(rootJobs.length), note: `${compactNumber(totalVariations)} variations linked` },
-            { label: 'Active jobs', value: compactNumber(activeJobs), note: 'Currently running work' },
+            { label: 'All jobs', value: compactNumber(jobs.length), note: `${compactNumber(rootJobs.length)} parents, ${compactNumber(totalVariations)} variations` },
+            { label: 'Active rows', value: compactNumber(activeJobs), note: 'Parents and variations currently running' },
             { label: 'API parents', value: compactNumber(apiJobs), note: 'Externally synced job records' },
-            { label: 'Customers covered', value: compactNumber(new Set(rootJobs.map((job) => job.customerId)).size), note: `${compactNumber(filteredJobs.length)} shown in current filter` },
+            { label: 'Rows shown', value: compactNumber(filteredJobs.length), note: scopeFilter === 'ALL' ? 'All matching work rows' : scopeFilter === 'PARENT_ONLY' ? 'Parent jobs only' : 'Variations only' },
           ].map((item) => (
-            <div key={item.label} className="bg-white px-5 py-4 dark:bg-slate-950/80">
+            <div key={item.label} className="bg-white px-5 py-3.5 dark:bg-slate-950/80">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">{item.label}</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{item.value}</p>
+              <p className="mt-1.5 text-2xl font-semibold text-slate-900 dark:text-white">{item.value}</p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">{item.note}</p>
             </div>
           ))}
@@ -301,17 +322,31 @@ export default function CustomerJobsPage() {
       ) : null}
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70 sm:p-5">
-        <div className="grid gap-3 border-b border-slate-200 pb-4 dark:border-slate-800 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="grid gap-3 border-b border-slate-200 pb-4 dark:border-slate-800 xl:grid-cols-[minmax(0,1fr)_220px_220px]">
           <div>
             <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">
-              Search Jobs
+              Search Jobs & Variations
             </label>
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by number, customer, site, or description..."
+              placeholder="Search by job number, parent number, customer, site, or description..."
               className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">
+              Job Type
+            </label>
+            <select
+              value={scopeFilter}
+              onChange={(e) => setScopeFilter(e.target.value as JobScopeFilter)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            >
+              <option value="ALL">All jobs and variations</option>
+              <option value="PARENT_ONLY">Parent only</option>
+              <option value="VARIATION_ONLY">Variation only</option>
+            </select>
           </div>
           <div>
             <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">
@@ -332,14 +367,6 @@ export default function CustomerJobsPage() {
         </div>
 
         <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800">
-          <div className="grid grid-cols-[180px_minmax(0,1.1fr)_minmax(0,0.9fr)_130px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:bg-slate-800 dark:text-slate-500">
-            {['Job', 'Customer & Scope', 'Site & Variations', 'Status', 'Actions'].map((label) => (
-              <div key={label} className="bg-slate-50 px-4 py-3 dark:bg-slate-900/80">
-                {label}
-              </div>
-            ))}
-          </div>
-
           {jobsLoading && jobs.length === 0 ? (
             <div className="px-6 py-10 text-center text-sm text-slate-500 dark:text-slate-400">Loading jobs...</div>
           ) : filteredJobs.length === 0 ? (
@@ -348,44 +375,74 @@ export default function CustomerJobsPage() {
             <div className="divide-y divide-slate-200 dark:divide-slate-800">
               {filteredJobs.map((job) => {
                 const variations = variationsByParent.get(job.id) ?? [];
+                const parentJob = job.parentJobId ? jobById.get(job.parentJobId) : null;
+                const isVariation = Boolean(job.parentJobId);
                 const customerName = customerNameById.get(job.customerId) ?? 'Unknown customer';
 
                 return (
                   <div
                     key={job.id}
-                    className="grid grid-cols-[180px_minmax(0,1.1fr)_minmax(0,0.9fr)_130px_130px] gap-0 bg-white transition hover:bg-slate-50/80 dark:bg-slate-950/70 dark:hover:bg-slate-900/60"
+                    className={cx(
+                      'grid gap-0 bg-white transition hover:bg-slate-50/80 dark:bg-slate-950/70 dark:hover:bg-slate-900/60 xl:grid-cols-[minmax(12rem,0.7fr)_minmax(0,1.2fr)_minmax(13rem,0.85fr)_8.5rem_13rem]',
+                      isVariation && 'bg-sky-50/35 dark:bg-sky-950/20'
+                    )}
                     onContextMenu={(e) => handleJobContextMenu(job, e)}
                   >
                     <button
                       type="button"
-                      onClick={() => router.push(`/jobs/${job.id}`)}
+                      onClick={() => router.push(`/customers/jobs/${job.id}`)}
                       className="px-4 py-4 text-left"
                     >
-                      <p className="font-semibold text-slate-900 dark:text-white">{job.jobNumber}</p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
-                        {job.source === 'EXTERNAL_API' ? 'API parent' : 'Local record'}
-                      </p>
+                      <div className="flex items-start gap-3">
+                        <span className={cx(
+                          'mt-1 h-8 w-1.5 shrink-0 rounded-full',
+                          isVariation ? 'bg-sky-400 dark:bg-sky-300' : 'bg-slate-300 dark:bg-slate-600'
+                        )} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold text-slate-900 dark:text-white">{job.jobNumber}</span>
+                          <span className={cx(
+                            'mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]',
+                            isVariation
+                              ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200'
+                              : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                          )}>
+                            {isVariation ? 'Variation' : job.source === 'EXTERNAL_API' ? 'API parent' : 'Parent'}
+                          </span>
+                          {parentJob ? (
+                            <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-500">
+                              Parent: {parentJob.jobNumber}
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => router.push(`/jobs/${job.id}`)}
+                      onClick={() => router.push(`/customers/jobs/${job.id}`)}
                       className="px-4 py-4 text-left"
                     >
                       <p className="text-sm font-medium text-slate-900 dark:text-white">{customerName}</p>
                       <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
                         {job.description || 'No job description added yet.'}
                       </p>
+                      {parentJob ? (
+                        <p className="mt-2 text-xs text-sky-700 dark:text-sky-300">
+                          Part of parent scope {parentJob.jobNumber}
+                        </p>
+                      ) : null}
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => router.push(`/jobs/${job.id}`)}
+                      onClick={() => router.push(`/customers/jobs/${job.id}`)}
                       className="px-4 py-4 text-left"
                     >
                       <p className="text-sm text-slate-900 dark:text-white">{job.site || 'Site not set'}</p>
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
-                        {variations.length > 0
+                        {isVariation
+                          ? 'Budget and dispatch should run on this variation'
+                          : variations.length > 0
                           ? `${compactNumber(variations.length)} variation${variations.length === 1 ? '' : 's'} linked`
                           : 'No variations yet'}
                       </p>
@@ -400,10 +457,8 @@ export default function CustomerJobsPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 px-4 py-4">
-                      <Button variant="secondary" onClick={() => router.push(`/jobs/${job.id}/consumption-costing`)}>
-                        Costing
-                      </Button>
+                    <div className="px-4 py-4 text-xs text-slate-500 dark:text-slate-500">
+                      Right-click for ledger, budget, costing, variation, edit, and delete actions.
                     </div>
                   </div>
                 );

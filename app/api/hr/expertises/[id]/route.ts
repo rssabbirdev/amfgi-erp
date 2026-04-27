@@ -12,11 +12,6 @@ const PatchSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-function jobUsesExpertise(job: { requiredExpertises: unknown }, name: string): boolean {
-  if (!Array.isArray(job.requiredExpertises)) return false;
-  return job.requiredExpertises.some((x) => String(x ?? '').trim().toLowerCase() === name.toLowerCase());
-}
-
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
@@ -69,12 +64,13 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     return errorResponse('Cannot delete: expertise is linked to one or more employees.', 409);
   }
 
-  const jobs = await prisma.job.findMany({
-    where: { companyId },
-    select: { id: true, requiredExpertises: true },
+  const jobLinkedCount = await prisma.jobRequiredExpertise.count({
+    where: {
+      companyId,
+      expertiseId: id,
+    },
   });
-  const jobLinked = jobs.some((j) => jobUsesExpertise(j, name));
-  if (jobLinked) {
+  if (jobLinkedCount > 0) {
     return errorResponse('Cannot delete: expertise is linked to one or more jobs.', 409);
   }
 

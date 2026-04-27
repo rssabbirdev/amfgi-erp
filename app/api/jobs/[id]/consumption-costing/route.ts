@@ -1,31 +1,33 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 function resolveTransactionUnitCost(
   txn: {
-    averageCost: number;
-    material?: { unitCost?: number | null } | null;
-    batchesUsed: Array<{ quantityFromBatch: number; unitCost: number; batch: { unitCost: number } }>;
+    averageCost: unknown;
+    material?: { unitCost?: unknown } | null;
+    batchesUsed: Array<{ quantityFromBatch: unknown; unitCost: unknown; batch: { unitCost: unknown } }>;
   },
   costingMethod: string
 ) {
   if (costingMethod === 'CURRENT_PRICE') {
-    return txn.material?.unitCost || txn.averageCost || 0;
+    return decimalToNumberOrZero(txn.material?.unitCost) || decimalToNumberOrZero(txn.averageCost);
   }
 
   if (txn.batchesUsed.length > 0) {
     let totalCostAmount = 0;
     let totalQty = 0;
     for (const tb of txn.batchesUsed) {
-      const batchUnitCost = costingMethod === 'FIFO' ? tb.batch.unitCost : tb.unitCost;
-      totalCostAmount += batchUnitCost * tb.quantityFromBatch;
-      totalQty += tb.quantityFromBatch;
+      const batchUnitCost = costingMethod === 'FIFO' ? decimalToNumberOrZero(tb.batch.unitCost) : decimalToNumberOrZero(tb.unitCost);
+      const quantityFromBatch = decimalToNumberOrZero(tb.quantityFromBatch);
+      totalCostAmount += batchUnitCost * quantityFromBatch;
+      totalQty += quantityFromBatch;
     }
     if (totalQty > 0) return totalCostAmount / totalQty;
   }
 
-  return txn.averageCost || txn.material?.unitCost || 0;
+  return decimalToNumberOrZero(txn.averageCost) || decimalToNumberOrZero(txn.material?.unitCost);
 }
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -122,14 +124,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const consumption = consumptionMap.get(materialId)!;
     const unitCost = resolveTransactionUnitCost(txn, costingMethod);
 
-    const cost = txn.quantity * unitCost;
-    consumption.totalQuantity += txn.type === 'STOCK_OUT' ? txn.quantity : -txn.quantity;
+    const quantity = decimalToNumberOrZero(txn.quantity);
+    const cost = quantity * unitCost;
+    consumption.totalQuantity += txn.type === 'STOCK_OUT' ? quantity : -quantity;
     consumption.totalCost += txn.type === 'STOCK_OUT' ? cost : -cost;
 
     consumption.transactions.push({
       id: txn.id,
       type: txn.type,
-      quantity: txn.quantity,
+      quantity,
       date: txn.date,
       cost,
       method: costingMethod,

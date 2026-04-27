@@ -45,7 +45,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       await tx.material.updateMany({
         where: {
           companyId,
-          category: category.name,
+          OR: [
+            { categoryId: category.id },
+            { category: category.name },
+          ],
         },
         data: {
           category: parsed.data.name.trim(),
@@ -85,8 +88,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const count = await prisma.material.count({
       where: {
         companyId,
-        category: category.name,
-        isActive: true,
+        OR: [
+          { categoryId: category.id },
+          { category: category.name },
+        ],
       },
     });
 

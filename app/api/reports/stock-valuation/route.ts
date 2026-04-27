@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 export async function GET() {
   const session = await auth();
@@ -11,7 +12,19 @@ export async function GET() {
   try {
     const companyId = session.user.activeCompanyId;
 
-    const [materials, stockBatches] = await Promise.all([
+    const [company, materials, stockBatches, warehouseStocks] = await Promise.all([
+      prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          warehouseMode: true,
+          stockFallbackWarehouse: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      }),
       prisma.material.findMany({
         where: {
           companyId,
@@ -29,17 +42,43 @@ export async function GET() {
         where: { companyId },
         select: {
           materialId: true,
+          warehouseId: true,
+          warehouse: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
           quantityReceived: true,
           quantityAvailable: true,
           unitCost: true,
           totalCost: true,
         },
       }),
+      prisma.materialWarehouseStock.findMany({
+        where: { companyId },
+        select: {
+          warehouseId: true,
+          currentStock: true,
+          materialId: true,
+          warehouse: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          material: {
+            select: {
+              unitCost: true,
+            },
+          },
+        },
+      }),
     ]);
 
     const fifoValueByMaterial = new Map<string, number>();
     for (const batch of stockBatches) {
-      const openValue = batch.quantityAvailable * batch.unitCost;
+      const openValue = decimalToNumberOrZero(batch.quantityAvailable) * decimalToNumberOrZero(batch.unitCost);
       fifoValueByMaterial.set(
         batch.materialId,
         (fifoValueByMaterial.get(batch.materialId) ?? 0) + openValue
@@ -49,8 +88,8 @@ export async function GET() {
     const movingAverageAccumulator = new Map<string, { quantity: number; cost: number }>();
     for (const batch of stockBatches) {
       const bucket = movingAverageAccumulator.get(batch.materialId) ?? { quantity: 0, cost: 0 };
-      bucket.quantity += batch.quantityReceived;
-      bucket.cost += batch.totalCost;
+      bucket.quantity += decimalToNumberOrZero(batch.quantityReceived);
+      bucket.cost += decimalToNumberOrZero(batch.totalCost);
       movingAverageAccumulator.set(batch.materialId, bucket);
     }
 
@@ -60,17 +99,17 @@ export async function GET() {
     }
 
     const fifoStockValue = materials.reduce(
-      (sum, mat) => sum + (fifoValueByMaterial.get(mat.id) ?? (mat.currentStock || 0) * (mat.unitCost || 0)),
+      (sum, mat) => sum + (fifoValueByMaterial.get(mat.id) ?? decimalToNumberOrZero(mat.currentStock) * decimalToNumberOrZero(mat.unitCost)),
       0
     );
 
     const movingAverageStockValue = materials.reduce((sum, mat) => {
-      const movingAverageCost = movingAverageByMaterial.get(mat.id) ?? (mat.unitCost || 0);
-      return sum + (mat.currentStock || 0) * movingAverageCost;
+      const movingAverageCost = movingAverageByMaterial.get(mat.id) ?? decimalToNumberOrZero(mat.unitCost);
+      return sum + decimalToNumberOrZero(mat.currentStock) * movingAverageCost;
     }, 0);
 
     const currentStockValue = materials.reduce((sum, mat) => {
-      const value = (mat.currentStock || 0) * (mat.unitCost || 0);
+      const value = decimalToNumberOrZero(mat.currentStock) * decimalToNumberOrZero(mat.unitCost);
       return sum + value;
     }, 0);
 
@@ -105,7 +144,10 @@ export async function GET() {
     // Group by material and calculate totals
     const consumptionByMaterial: Record<
       string,
-      { totalQuantity: number; material: { name: string; unit: string; unitCost: number | null } }
+      {
+        totalQuantity: number;
+        material: { name: string; unit: string; unitCost: unknown | null };
+      }
     > = {};
 
     for (const txn of prevMonthTransactions) {
@@ -115,7 +157,7 @@ export async function GET() {
           material: txn.material,
         };
       }
-      consumptionByMaterial[txn.materialId].totalQuantity += txn.quantity;
+      consumptionByMaterial[txn.materialId].totalQuantity += decimalToNumberOrZero(txn.quantity);
     }
 
     const prevMonthConsumption = Object.entries(consumptionByMaterial)
@@ -123,7 +165,7 @@ export async function GET() {
         materialId,
         totalQuantity: data.totalQuantity,
         material: data.material,
-        totalValue: data.totalQuantity * (data.material.unitCost || 0),
+        totalValue: data.totalQuantity * decimalToNumberOrZero(data.material.unitCost),
       }))
       .sort((a, b) => b.totalValue - a.totalValue);
 
@@ -135,10 +177,10 @@ export async function GET() {
         id: mat.id,
         name: mat.name,
         unit: mat.unit,
-        quantity: mat.currentStock || 0,
-        unitCost: mat.unitCost || 0,
+        quantity: decimalToNumberOrZero(mat.currentStock),
+        unitCost: decimalToNumberOrZero(mat.unitCost),
         totalValue:
-          fifoValueByMaterial.get(mat.id) ?? (mat.currentStock || 0) * (mat.unitCost || 0),
+          fifoValueByMaterial.get(mat.id) ?? decimalToNumberOrZero(mat.currentStock) * decimalToNumberOrZero(mat.unitCost),
       }))
       .sort((a, b) => b.totalValue - a.totalValue)
       .slice(0, 30);
@@ -149,9 +191,37 @@ export async function GET() {
       name: item.material.name || 'Unknown',
       unit: item.material.unit || '',
       quantity: item.totalQuantity,
-      unitCost: item.material.unitCost || 0,
+      unitCost: decimalToNumberOrZero(item.material.unitCost),
       totalValue: item.totalValue,
     }));
+
+    const warehouseBreakdownMap = new Map<
+      string,
+      { warehouseId: string; warehouseName: string; materialIds: Set<string>; stockValue: number }
+    >();
+
+    for (const row of warehouseStocks) {
+      const warehouseId = row.warehouseId;
+      const warehouseName = row.warehouse.name;
+      const current = warehouseBreakdownMap.get(warehouseId) ?? {
+        warehouseId,
+        warehouseName,
+        materialIds: new Set<string>(),
+        stockValue: 0,
+      };
+      current.materialIds.add(row.materialId);
+      current.stockValue += decimalToNumberOrZero(row.currentStock) * decimalToNumberOrZero(row.material.unitCost);
+      warehouseBreakdownMap.set(warehouseId, current);
+    }
+
+    const warehouseBreakdown = Array.from(warehouseBreakdownMap.values())
+      .map((row) => ({
+        warehouseId: row.warehouseId,
+        warehouseName: row.warehouseName,
+        materialCount: row.materialIds.size,
+        stockValue: row.stockValue,
+      }))
+      .sort((a, b) => b.stockValue - a.stockValue);
 
     return successResponse({
       summary: {
@@ -161,9 +231,13 @@ export async function GET() {
         currentStockValue,
         preferredMethod: 'FIFO',
         prevMonthConsumptionValue: prevMonthValue,
+        warehouseMode: company?.warehouseMode ?? 'DISABLED',
+        fallbackWarehouseName: company?.stockFallbackWarehouse?.name ?? null,
+        warehouseCount: warehouseBreakdown.length,
       },
       topMaterialsByValue,
       topConsumedItems,
+      warehouseBreakdown,
     });
   } catch (err) {
     console.error('Stock valuation error:', err);

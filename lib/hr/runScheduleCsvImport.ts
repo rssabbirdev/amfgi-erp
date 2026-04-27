@@ -123,6 +123,7 @@ export async function runScheduleCsvImport(
     for (const a of assignmentsPayload) {
       const asg = await tx.workAssignment.create({
         data: {
+          companyId,
           workScheduleId: scheduleId,
           columnIndex: a.columnIndex,
           label: a.label,
@@ -145,6 +146,7 @@ export async function runScheduleCsvImport(
         seen.add(m.employeeId);
         await tx.workAssignmentMember.create({
           data: {
+            companyId,
             workAssignmentId: asg.id,
             employeeId: m.employeeId,
             role: m.role,
@@ -162,7 +164,7 @@ export async function runScheduleCsvImport(
         continue;
       }
       await tx.scheduleAbsence.create({
-        data: { workScheduleId: scheduleId, employeeId: hit.id, reason: 'ON_LEAVE' },
+        data: { companyId, workScheduleId: scheduleId, employeeId: hit.id, reason: 'ON_LEAVE' },
       });
     }
 
@@ -176,6 +178,7 @@ export async function runScheduleCsvImport(
       }
       await tx.driverRunLog.create({
         data: {
+          companyId,
           workScheduleId: scheduleId,
           driverEmployeeId: hit.id,
           routeText: row.routeText,

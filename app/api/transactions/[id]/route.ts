@@ -1,6 +1,10 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
+import { serializeJobWithContacts } from '@/lib/jobs/jobContacts';
+import { buildTransactionActorFields } from '@/lib/utils/auditActor';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
+import { applyMaterialWarehouseDelta, resolveEffectiveWarehouse } from '@/lib/warehouses/stockWarehouses';
 
 function isReconcileTransaction(notes?: string | null) {
   const value = (notes ?? '').trim().toLowerCase();
@@ -21,6 +25,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       where: { id },
       include: {
         material: { select: { id: true, name: true, unit: true, currentStock: true, unitCost: true } },
+        warehouse: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         job: {
           select: {
             id: true,
@@ -43,7 +53,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
             projectDetails: true,
             jobWorkValue: true,
             contactPerson: true,
-            contactsJson: true,
+            contacts: {
+              orderBy: { sortOrder: 'asc' },
+            },
             salesPerson: true,
             source: true,
             externalJobId: true,
@@ -63,6 +75,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
           },
         },
         batchesUsed: true,
+        performedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            signatureUrl: true,
+            imageDriveId: true,
+            signatureDriveId: true,
+          },
+        },
       },
     });
 
@@ -83,25 +106,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       }
     }
 
-    const performedById = typeof txn.performedBy === 'string' ? txn.performedBy.trim() : '';
-    const performedByUser = performedById
-      ? await prisma.user.findUnique({
-          where: { id: performedById },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-            signatureUrl: true,
-            imageDriveId: true,
-            signatureDriveId: true,
-          },
-        })
-      : null;
-
     return successResponse({
       ...txn,
-      performedByUser: performedByUser ?? null,
+      job: txn.job ? serializeJobWithContacts(txn.job) : null,
+      performedByUser: txn.performedByUser ?? null,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to fetch transaction';
@@ -119,6 +127,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const companyId = session.user.activeCompanyId;
 
   try {
+    const actorFields = buildTransactionActorFields(session.user);
     const result = await prisma.$transaction(async (tx) => {
       // Get the transaction
       const txn = await tx.transaction.findUnique({
@@ -156,6 +165,20 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
             },
           },
         });
+        const reversalWarehouse = await resolveEffectiveWarehouse(tx, {
+          companyId,
+          materialId: txn.materialId,
+          warehouseId: txn.warehouseId,
+        });
+        await applyMaterialWarehouseDelta(
+          tx,
+          companyId,
+          txn.materialId,
+          reversalWarehouse.warehouseId,
+          txn.type === 'STOCK_OUT'
+            ? decimalToNumberOrZero(txn.quantity)
+            : -decimalToNumberOrZero(txn.quantity)
+        );
 
         // Restore batch quantities for STOCK_OUT
         if (txn.type === 'STOCK_OUT' && txn.batchesUsed && txn.batchesUsed.length > 0) {
@@ -177,12 +200,13 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
             companyId,
             type: 'REVERSAL',
             materialId: txn.materialId,
+            warehouseId: reversalWarehouse.warehouseId,
             quantity: txn.quantity,
             jobId: txn.jobId,
             parentTransactionId: txn.id,
             notes: `Reversal of ${txn.type} - ${txn.notes || ''}`,
             date: new Date(),
-            performedBy: session.user.id,
+            ...actorFields,
           },
         });
       }
@@ -213,6 +237,18 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
               },
             },
           });
+          const returnWarehouse = await resolveEffectiveWarehouse(tx, {
+            companyId,
+            materialId: returnTxn.materialId,
+            warehouseId: returnTxn.warehouseId,
+          });
+          await applyMaterialWarehouseDelta(
+            tx,
+            companyId,
+            returnTxn.materialId,
+            returnWarehouse.warehouseId,
+            -decimalToNumberOrZero(returnTxn.quantity)
+          );
 
           // Create reversal for RETURN transaction
           await tx.transaction.create({
@@ -220,12 +256,13 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
               companyId,
               type: 'REVERSAL',
               materialId: returnTxn.materialId,
+              warehouseId: returnWarehouse.warehouseId,
               quantity: returnTxn.quantity,
               jobId: returnTxn.jobId,
               parentTransactionId: returnTxn.id,
               notes: `Reversal of RETURN - ${returnTxn.notes || ''}`,
               date: new Date(),
-              performedBy: session.user.id,
+              ...actorFields,
             },
           });
 

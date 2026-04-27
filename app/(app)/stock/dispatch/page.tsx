@@ -19,6 +19,8 @@ interface Material {
   materialId: string;
   materialName: string;
   materialUnit: string;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
   quantity: number;
   unitCost: number;
   transactionIds: string[];
@@ -628,6 +630,7 @@ export default function DispatchPage() {
                           <tr className="bg-slate-800/80 border-b border-slate-700">
                             <th className="px-3 py-2 text-left text-xs font-semibold text-slate-400 uppercase w-8">#</th>
                             <th className="px-3 py-2 text-left text-xs font-semibold text-slate-400 uppercase">Material</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-slate-400 uppercase">Warehouse</th>
                             <th className="px-3 py-2 text-right text-xs font-semibold text-slate-400 uppercase w-24">Qty</th>
                             <th className="px-3 py-2 text-right text-xs font-semibold text-slate-400 uppercase w-24">Unit Cost</th>
                             <th className="px-3 py-2 text-right text-xs font-semibold text-slate-400 uppercase w-28">Valuation</th>
@@ -641,6 +644,9 @@ export default function DispatchPage() {
                                 <td className="px-3 py-2.5 text-slate-500 text-xs font-mono">{idx + 1}</td>
                                 <td className="px-3 py-2.5">
                                   <p className="font-medium text-white">{material.materialName}</p>
+                                </td>
+                                <td className="px-3 py-2.5 text-slate-400">
+                                  {material.warehouseName || 'Fallback'}
                                 </td>
                                 <td className="px-3 py-2.5 text-right font-mono text-slate-200">
                                   {material.quantity.toFixed(3)} <span className="text-slate-500 text-xs">{material.materialUnit}</span>

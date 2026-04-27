@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useCallback, useEffect, Suspense, use } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -53,6 +53,58 @@ const SETTINGS_TABS = [
 
 type SettingsTabId = (typeof SETTINGS_TABS)[number]['id'];
 
+function buildJobSyncPlaygroundPayload(kind: 'parent' | 'variation' = 'parent') {
+  const today = new Date().toISOString().slice(0, 10);
+  return JSON.stringify(
+    {
+      job: {
+        externalJobId: kind === 'parent' ? 'PM-PARENT-001' : 'PM-VAR-001',
+        ...(kind === 'variation' ? { parentExternalJobId: 'PM-PARENT-001' } : {}),
+        jobNumber: kind === 'parent' ? 'JOB-2026-001' : 'JOB-2026-001-1',
+        customerExternalId: 10001,
+        customerName: 'Demo Customer LLC',
+        description: kind === 'parent' ? 'Main project reporting container' : 'Variation 1 - GRP lining scope',
+        site: 'Jebel Ali Site',
+        address: 'Plot 12, Jebel Ali Industrial Area 1, Dubai',
+        locationName: 'Site gate A',
+        locationLat: 25.0048,
+        locationLng: 55.1428,
+        projectName: 'Demo Swimming Pool Project',
+        projectDetails: 'Parent job holds reporting details; local variations hold budget and dispatch costing.',
+        status: 'ACTIVE',
+        startDate: today,
+        endDate: '2026-12-31',
+        quotationNumber: 'QTN-2026-001',
+        quotationDate: today,
+        lpoNumber: 'LPO-2026-001',
+        lpoDate: today,
+        lpoValue: 125000,
+        contactPerson: 'John Smith',
+        contacts: [
+          {
+            label: 'site',
+            name: 'John Smith',
+            number: '+971500000000',
+            email: 'john@example.com',
+            designation: 'Site Engineer',
+          },
+          {
+            label: 'commercial',
+            name: 'Aisha Khan',
+            number: '+971501112233',
+            email: 'aisha@example.com',
+            designation: 'Procurement',
+          },
+        ],
+        salesPerson: 'Ali Khan',
+        externalUpdatedAt: new Date().toISOString(),
+      },
+    },
+    null,
+    2
+  );
+}
+
 function SettingsPageContent() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -69,10 +121,14 @@ function SettingsPageContent() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
+    if (tab === 'api') {
+      router.replace('/settings/api', { scroll: false });
+      return;
+    }
     if (SETTINGS_TABS.some((item) => item.id === tab)) {
       setActiveTab(tab as SettingsTabId);
     }
-  }, [searchParams]);
+  }, [router, searchParams]);
 
   useEffect(() => { 
     router.replace(`/settings?tab=${activeTab}`, { scroll: false });
@@ -86,6 +142,7 @@ function SettingsPageContent() {
     email: '',
     externalCompanyId: '',
     jobSourceMode: 'HYBRID' as 'HYBRID' | 'EXTERNAL_ONLY',
+    warehouseMode: 'DISABLED' as 'DISABLED' | 'OPTIONAL' | 'REQUIRED',
   });
   const [driveStatus, setDriveStatus] = useState<{
     connected: boolean;
@@ -116,40 +173,7 @@ function SettingsPageContent() {
   const [playgroundOrigin, setPlaygroundOrigin] = useState('');
   const [playgroundCompanyExternalId, setPlaygroundCompanyExternalId] = useState('');
   const [playgroundIdempotencyKey, setPlaygroundIdempotencyKey] = useState('');
-  const [playgroundPayload, setPlaygroundPayload] = useState(
-    JSON.stringify(
-      {
-        job: {
-          externalJobId: 'PM-JOB-001',
-          jobNumber: 'JOB-2026-001',
-          customerExternalId: 10001,
-          customerName: 'Demo Customer',
-          description: 'Synced from PM',
-          site: 'Demo Site',
-          projectName: 'Demo Project',
-          projectDetails: 'Phase 1',
-          status: 'ACTIVE',
-          startDate: new Date().toISOString().slice(0, 10),
-          quotationNumber: 'QTN-001',
-          lpoNumber: 'LPO-001',
-          lpoValue: 10000,
-          contactPerson: 'John Smith',
-          contacts: [
-            {
-              label: 'site',
-              name: 'John Smith',
-              number: '+971500000000',
-              email: 'john@example.com',
-              designation: 'Site Engineer',
-            },
-          ],
-          salesPerson: 'Ali',
-        },
-      },
-      null,
-      2
-    )
-  );
+  const [playgroundPayload, setPlaygroundPayload] = useState(() => buildJobSyncPlaygroundPayload('parent'));
   const [playgroundResponse, setPlaygroundResponse] = useState('');
   const [playgroundLoading, setPlaygroundLoading] = useState(false);
   const [integrationLogs, setIntegrationLogs] = useState<Array<{
@@ -255,6 +279,7 @@ function SettingsPageContent() {
             email: company.email || '',
             externalCompanyId: company.externalCompanyId || '',
             jobSourceMode: company.jobSourceMode || 'HYBRID',
+            warehouseMode: company.warehouseMode || 'DISABLED',
           });
           const parsedTemplates = readCompanyDocumentTemplates(company.printTemplates);
           if (parsedTemplates.length > 0) {
@@ -934,63 +959,69 @@ function SettingsPageContent() {
         </div>
       ) : (
         <>
-      <section className="rounded-3xl border border-slate-700 bg-slate-900/70 p-5 shadow-sm sm:p-6">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.85fr)]">
-          <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300/80">Administration</p>
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900/70 sm:p-6">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700 dark:text-emerald-300/80">Administration</p>
             <div>
-              <h1 className="text-3xl font-semibold text-white">Settings workspace</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+              <h1 className="text-3xl font-semibold text-slate-900 dark:text-white">Settings workspace</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
                 Manage company master data, templates, media, and integration controls from one focused workspace.
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-700 bg-slate-950/40 p-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-950/40">
               <div className="flex flex-wrap gap-2">
-                {SETTINGS_TABS.map((tab) => (
+                {SETTINGS_TABS.filter((tab) => tab.id !== 'api').map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
                     className={`rounded-xl px-3 py-2 text-left text-sm transition ${
                       activeTab === tab.id
-                        ? 'bg-emerald-500/15 text-white ring-1 ring-emerald-500/40'
-                        : 'bg-transparent text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'
+                        ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-white dark:ring-emerald-500/40'
+                        : 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-slate-200'
                     }`}
                   >
                     {tab.label}
                   </button>
                 ))}
+                <Link
+                  href="/settings/api"
+                  className="rounded-xl px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-slate-200"
+                >
+                  API Center
+                </Link>
               </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 dark:border-slate-800">
                 <div>
-                  <p className="text-sm font-medium text-white">{activeTabMeta.label}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">{activeTabMeta.label}</p>
                   <p className="mt-1 text-xs text-slate-500">{activeTabMeta.description}</p>
                 </div>
-                <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                  {SETTINGS_TABS.length} sections
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+                  {SETTINGS_TABS.filter((tab) => tab.id !== 'api').length} sections
                 </span>
               </div>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[30rem]">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-950/60">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Units</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{units.length}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{units.length}</p>
               <p className="mt-1 text-xs text-slate-500">Material measurement labels</p>
             </div>
-            <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-950/60">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Categories</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{categories.length}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{categories.length}</p>
               <p className="mt-1 text-xs text-slate-500">Master data groupings</p>
             </div>
-            <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-950/60">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Warehouses</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{warehouses.length}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{warehouses.length}</p>
               <p className="mt-1 text-xs text-slate-500">Stock locations</p>
             </div>
-            <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-950/60">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Print formats</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{templates.length}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{templates.length}</p>
               <p className="mt-1 text-xs text-slate-500">Saved document layouts</p>
             </div>
           </div>
@@ -1072,6 +1103,14 @@ function SettingsPageContent() {
               + Add Warehouse
             </Button>
           </div>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-4 text-sm text-slate-400">
+            <p>
+              Current mode: <span className="text-slate-200">{companyForm.warehouseMode}</span>.{' '}
+              {companyForm.warehouseMode === 'DISABLED'
+                ? 'New stock movements are routed through the fallback warehouse until warehouse tracking is enabled.'
+                : 'These warehouses can now participate in stock routing and reporting.'}
+            </p>
+          </div>
           {warehousesFetching && warehouses.length === 0 ? (
             <div className="overflow-x-auto rounded-xl border border-slate-700">
               <table className="w-full">
@@ -1114,7 +1153,17 @@ function SettingsPageContent() {
                   if (res.ok) {
                     toast.success('Company information saved');
                     const data = await res.json();
-                    setCompanyData(data.data);
+                    const company = data.data;
+                    setCompanyData(company);
+                    setCompanyForm((prev) => ({
+                      ...prev,
+                      address: company.address || '',
+                      phone: company.phone || '',
+                      email: company.email || '',
+                      externalCompanyId: company.externalCompanyId || '',
+                      jobSourceMode: company.jobSourceMode || 'HYBRID',
+                      warehouseMode: company.warehouseMode || 'DISABLED',
+                    }));
                   } else {
                     const err = await res.json();
                     toast.error(err.error || 'Failed to save');
@@ -1190,6 +1239,43 @@ function SettingsPageContent() {
                     </select>
                     <p className="text-xs text-slate-400 mt-1">
                       Variations remain local in both modes.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                      Warehouse Tracking
+                    </label>
+                    <select
+                      value={companyForm.warehouseMode}
+                      onChange={(e) =>
+                        setCompanyForm({
+                          ...companyForm,
+                          warehouseMode: e.target.value as 'DISABLED' | 'OPTIONAL' | 'REQUIRED',
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    >
+                      <option value="DISABLED">Disabled</option>
+                      <option value="OPTIONAL">Optional</option>
+                      <option value="REQUIRED">Required</option>
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Disabled keeps stock on the company fallback warehouse. Optional lets teams start assigning
+                      warehouses gradually. Required enforces warehouse selection on future stock movements.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-slate-700 bg-slate-800/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Fallback warehouse</p>
+                    <p className="mt-2 text-sm font-medium text-white">
+                      {typeof companyData?.stockFallbackWarehouse === 'object' &&
+                      companyData?.stockFallbackWarehouse &&
+                      'name' in companyData.stockFallbackWarehouse
+                        ? String((companyData.stockFallbackWarehouse as { name?: string }).name || 'System Default')
+                        : 'System Default'}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      The system routes stock here whenever warehouse mode is disabled or a movement has no explicit
+                      warehouse yet.
                     </p>
                   </div>
                 </>
@@ -1315,7 +1401,7 @@ function SettingsPageContent() {
           <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 space-y-4">
             <h2 className="text-lg font-semibold text-white">Integration API Key</h2>
             <p className="text-sm text-slate-400">
-              Generate a key for your external Project Management system to upsert parent jobs. Keys only apply to{' '}
+              Generate a key for your external Project Management system to create or update customer jobs and variations. Keys only apply to{' '}
               <code className="text-emerald-400/90">/api/integrations/*</code> - not the rest of the ERP (those routes still
               need a normal signed-in user).
             </p>
@@ -1367,6 +1453,92 @@ function SettingsPageContent() {
             </div>
           </div>
 
+          <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900">
+            <div className="border-b border-slate-700 bg-slate-950/60 p-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300">Job creation API</p>
+              <h3 className="mt-1 text-lg font-semibold text-white">Current job sync structure</h3>
+              <p className="mt-1 text-sm text-slate-400">
+                Use this API for external Project Management job creation. Parent jobs are reporting containers; variations are the budget,
+                dispatch, costing, and ledger scopes used inside AMFGI.
+              </p>
+            </div>
+            <div className="grid gap-px bg-slate-800 lg:grid-cols-3">
+              {[
+                {
+                  title: '1. Sync parent first',
+                  body: 'Send externalJobId, jobNumber, customer, site, commercial, contact, and location fields. This creates the reporting job.',
+                },
+                {
+                  title: '2. Sync variation next',
+                  body: 'Send a new externalJobId plus parentExternalJobId pointing to the parent externalJobId. This links the row as a variation.',
+                },
+                {
+                  title: '3. Budget happens inside AMFGI',
+                  body: 'After the variation exists, use Customer Jobs or Stock Job Budget pages for formulas, material budgets, and actual costing.',
+                },
+              ].map((item) => (
+                <div key={item.title} className="bg-slate-900 p-4">
+                  <h4 className="text-sm font-semibold text-white">{item.title}</h4>
+                  <p className="mt-2 text-xs leading-5 text-slate-400">{item.body}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="rounded-2xl border border-slate-700 bg-slate-950/50 p-4">
+                <h4 className="text-sm font-semibold text-white">Accepted job fields</h4>
+                <div className="mt-3 grid gap-2 text-xs text-slate-400 sm:grid-cols-2">
+                  {[
+                    'externalJobId',
+                    'parentExternalJobId',
+                    'jobNumber',
+                    'customerExternalId',
+                    'customerName',
+                    'description',
+                    'site',
+                    'address',
+                    'locationName',
+                    'locationLat / locationLng',
+                    'projectName',
+                    'projectDetails',
+                    'status',
+                    'startDate / endDate',
+                    'quotationNumber / quotationDate',
+                    'lpoNumber / lpoDate / lpoValue',
+                    'contactPerson',
+                    'contacts[]',
+                    'salesPerson',
+                    'externalUpdatedAt',
+                  ].map((field) => (
+                    <code key={field} className="rounded-lg border border-slate-800 bg-slate-900 px-2 py-1 text-slate-300">
+                      {field}
+                    </code>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-700 bg-slate-950/50 p-4">
+                <h4 className="text-sm font-semibold text-white">Important rules</h4>
+                <div className="mt-3 space-y-3 text-xs leading-5 text-slate-400">
+                  <p>
+                    <code className="text-emerald-300">companyExternalId</code> is required at the request root and must match the
+                    company linked to the API key.
+                  </p>
+                  <p>
+                    <code className="text-emerald-300">customerExternalId</code> maps to the customer party ID. If omitted, the system
+                    matches or creates the customer by name.
+                  </p>
+                  <p>
+                    <code className="text-emerald-300">parentExternalJobId</code> must reference an existing parent job. Sync the parent
+                    first, then sync variations.
+                  </p>
+                  <p>
+                    In <code className="text-emerald-300">EXTERNAL_ONLY</code> source mode, parent jobs must come from this API. Local
+                    variations are still allowed from the Customer Jobs page.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="bg-slate-900 border border-slate-700 rounded-lg p-6">
             <h3 className="text-white font-medium mb-3">Existing credentials</h3>
             <div className="space-y-2">
@@ -1412,10 +1584,22 @@ function SettingsPageContent() {
           </div>
 
           <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 space-y-3">
-            <h3 className="text-white font-medium">Integration Playground</h3>
-            <p className="text-xs text-slate-400">
-              Quick local test for <code>POST /api/integrations/jobs/upsert</code>.
-            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-white font-medium">Integration Playground</h3>
+                <p className="mt-1 text-xs text-slate-400">
+                  Quick local test for <code>POST /api/integrations/jobs/upsert</code>. The company external ID is added at request root.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" onClick={() => setPlaygroundPayload(buildJobSyncPlaygroundPayload('parent'))}>
+                  Parent sample
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setPlaygroundPayload(buildJobSyncPlaygroundPayload('variation'))}>
+                  Variation sample
+                </Button>
+              </div>
+            </div>
             <input
               value={playgroundKey}
               onChange={(e) => setPlaygroundKey(e.target.value)}

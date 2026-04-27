@@ -44,3 +44,4 @@ next-env.d.ts
 
 # commit graph outputs, ignore the extraction cache
 graphify-out/cache/
+schema-out/

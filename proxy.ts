@@ -8,6 +8,7 @@ import { isEmployeeSelfServiceUser } from '@/lib/auth/selfService';
 const ROUTE_PERMISSIONS: Array<{ prefix: string; perm: Permission }> = [
   { prefix: '/admin', perm: 'user.view' },
   { prefix: '/reports', perm: 'report.view' },
+  { prefix: '/stock/job-budget', perm: 'job.view' },
   { prefix: '/stock/issue-reconcile', perm: 'transaction.reconcile' },
   { prefix: '/stock/non-stock-reconcile', perm: 'transaction.reconcile' },
   { prefix: '/customers/jobs', perm: 'job.view' },
@@ -27,11 +28,11 @@ export async function proxy(req: NextRequest) {
 
   if (
     pathname.startsWith('/login') ||
+    pathname.startsWith('/docs/api') ||
     pathname.startsWith('/privacy-policy') ||
     pathname.startsWith('/terms-of-service') ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/integrations/') ||
-    pathname.startsWith('/docs') ||
     pathname === '/unauthorized'
   ) {
     return NextResponse.next();

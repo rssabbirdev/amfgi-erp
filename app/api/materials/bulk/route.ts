@@ -1,6 +1,8 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumber, decimalToNumberOrZero } from '@/lib/utils/decimal';
+import { ensureCategoryRef, ensureWarehouseRef } from '@/lib/materialMasterData';
 import { z } from 'zod';
 
 const MaterialRowSchema = z.object({
@@ -12,9 +14,9 @@ const MaterialRowSchema = z.object({
   stockType: z.string().min(1).max(50),
   allowNegativeConsumption: z.boolean().optional(),
   externalItemName: z.string().max(100).optional(),
-  unitCost: z.number().min(0).optional(),
-  reorderLevel: z.number().min(0).optional(),
-  currentStock: z.number().min(0).optional(),
+  unitCost: z.number().finite().min(0).optional(),
+  reorderLevel: z.number().finite().min(0).optional(),
+  currentStock: z.number().finite().min(0).optional(),
 });
 
 const BulkSchema = z.object({
@@ -45,23 +47,31 @@ export async function POST(req: Request) {
 
     // ──────────── CREATE NEW ROWS (with StockBatch for opening stock) ────────────
     if (newRows.length > 0) {
-      // Create materials
-      await prisma.material.createMany({
-        data: newRows.map((row) => ({
-          name: row.name.trim(),
-          description: row.description?.trim() || null,
-          unit: row.unit.trim(),
-          category: row.category?.trim() || null,
-          warehouse: row.warehouse?.trim() || null,
-          stockType: row.stockType.trim(),
-          allowNegativeConsumption: row.allowNegativeConsumption ?? false,
-          externalItemName: row.externalItemName?.trim() || null,
-          unitCost: row.unitCost ?? null,
-          reorderLevel: row.reorderLevel ?? null,
-          currentStock: row.currentStock ?? 0,
-          companyId,
-          isActive: true,
-        })),
+      await prisma.$transaction(async (tx) => {
+        for (const row of newRows) {
+          const categoryRef = await ensureCategoryRef(tx, companyId, row.category);
+          const warehouseRef = await ensureWarehouseRef(tx, companyId, row.warehouse);
+
+          await tx.material.create({
+            data: {
+              name: row.name.trim(),
+              description: row.description?.trim() || null,
+              unit: row.unit.trim(),
+              category: categoryRef.categoryName,
+              categoryId: categoryRef.categoryId,
+              warehouse: warehouseRef.warehouseName,
+              warehouseId: warehouseRef.warehouseId,
+              stockType: row.stockType.trim(),
+              allowNegativeConsumption: row.allowNegativeConsumption ?? false,
+              externalItemName: row.externalItemName?.trim() || null,
+              unitCost: decimalToNumber(row.unitCost) ?? null,
+              reorderLevel: decimalToNumber(row.reorderLevel) ?? null,
+              currentStock: decimalToNumber(row.currentStock) ?? 0,
+              companyId,
+              isActive: true,
+            },
+          });
+        }
       });
 
       // Create StockBatch records for rows with opening stock
@@ -77,12 +87,12 @@ export async function POST(req: Request) {
       const nameToIdMap = new Map(createdMaterialsList.map((m) => [m.name.toLowerCase(), m.id]));
 
       const stockBatchesToCreate = newRows
-        .filter((row) => (row.currentStock ?? 0) > 0)
+        .filter((row) => decimalToNumberOrZero(row.currentStock) > 0)
         .map((row) => {
           const materialId = nameToIdMap.get(row.name.trim().toLowerCase());
           if (!materialId) return null;
-          const quantity = row.currentStock ?? 0;
-          const unitCost = row.unitCost ?? 0;
+          const quantity = decimalToNumberOrZero(row.currentStock);
+          const unitCost = decimalToNumberOrZero(row.unitCost);
           const totalCost = quantity * unitCost;
           const now = new Date();
 
@@ -129,18 +139,23 @@ export async function POST(req: Request) {
       for (const row of updateRows) {
         const materialId = nameToIdMap.get(row.name.trim().toLowerCase());
         if (materialId) {
+          const categoryRef = await ensureCategoryRef(prisma, companyId, row.category);
+          const warehouseRef = await ensureWarehouseRef(prisma, companyId, row.warehouse);
+
           await prisma.material.update({
             where: { id: materialId },
             data: {
               description: row.description?.trim() || null,
               unit: row.unit.trim(),
-              category: row.category?.trim() || null,
-              warehouse: row.warehouse?.trim() || null,
+              category: categoryRef.categoryName,
+              categoryId: categoryRef.categoryId,
+              warehouse: warehouseRef.warehouseName,
+              warehouseId: warehouseRef.warehouseId,
               stockType: row.stockType.trim(),
               allowNegativeConsumption: row.allowNegativeConsumption ?? false,
               externalItemName: row.externalItemName?.trim() || null,
-              unitCost: row.unitCost ?? null,
-              reorderLevel: row.reorderLevel ?? null,
+              unitCost: decimalToNumber(row.unitCost) ?? null,
+              reorderLevel: decimalToNumber(row.reorderLevel) ?? null,
               // NOTE: currentStock is intentionally excluded - opening stock is not updated for duplicates
             },
           });

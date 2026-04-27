@@ -72,7 +72,7 @@ export function prismaPartyFieldsFromBody(
   tradeLicenseExpiry: Date | null;
   trnNumber: string | null;
   trnExpiry: Date | null;
-  contactsJson: object | undefined;
+  contacts: PartyListContactInput[];
 } {
   return {
     tradeLicenseNumber: strOrNull(party.trade_license_number ?? undefined),
@@ -80,10 +80,7 @@ export function prismaPartyFieldsFromBody(
     tradeLicenseExpiry: parsePartyListDateInput(party.trade_license_expiry ?? undefined),
     trnNumber: strOrNull(party.trn_number ?? undefined),
     trnExpiry: parsePartyListDateInput(party.trn_expiry ?? undefined),
-    contactsJson: (() => {
-      const arr = contactsToJson(party.contacts);
-      return arr ? (JSON.parse(JSON.stringify(arr)) as object) : undefined;
-    })(),
+    contacts: sortContacts(party.contacts ?? []),
   };
 }
 
@@ -113,14 +110,9 @@ export function applyPartialPartyFieldsToUpdate(
   if (Object.prototype.hasOwnProperty.call(rawBody, 'contacts')) {
     const list = d.contacts;
     if (!list?.length) {
-      updateData.contactsJson = null;
       updateData.contactPerson = null;
       updateData.phone = null;
     } else {
-      const arr = contactsToJson(list);
-      updateData.contactsJson = arr
-        ? (JSON.parse(JSON.stringify(arr)) as object)
-        : null;
       const prim = primaryFromPartyContacts(list);
       updateData.contactPerson = prim.contactPerson;
       updateData.phone = prim.phone;

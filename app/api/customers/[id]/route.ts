@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { applyPartialPartyFieldsToUpdate, partyListPartyFieldsSchema } from '@/lib/partyListRecordPayload';
+import { serializeCustomerWithContacts, syncCustomerContacts } from '@/lib/partyContacts';
 import { z } from 'zod';
 
 const UpdateSchema = z
@@ -23,16 +24,22 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+  const companyId = session.user.activeCompanyId;
 
   const { id } = await params;
   const customer = await prisma.customer.findFirst({
     where: {
       id,
-      companyId: session.user.activeCompanyId,
+      companyId,
+    },
+    include: {
+      contacts: {
+        orderBy: { sortOrder: 'asc' },
+      },
     },
   });
   if (!customer) return errorResponse('Customer not found', 404);
-  return successResponse(customer);
+  return successResponse(serializeCustomerWithContacts(customer));
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -43,6 +50,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+  const companyId = session.user.activeCompanyId;
 
   const { id } = await params;
   const body = (await req.json()) as Record<string, unknown>;
@@ -61,15 +69,32 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     applyPartialPartyFieldsToUpdate(d, body, updateData);
 
     const existing = await prisma.customer.findFirst({
-      where: { id, companyId: session.user.activeCompanyId },
+      where: { id, companyId },
     });
     if (!existing) return errorResponse('Customer not found', 404);
 
-    const updated = await prisma.customer.update({
-      where: { id },
-      data: updateData,
+    const updated = await prisma.$transaction(async (tx) => {
+      const customer = await tx.customer.update({
+        where: { id },
+        data: updateData,
+      });
+      if (Object.prototype.hasOwnProperty.call(body, 'contacts')) {
+        await syncCustomerContacts(tx, {
+          companyId,
+          customerId: customer.id,
+          contacts: d.contacts,
+        });
+      }
+      return tx.customer.findUniqueOrThrow({
+        where: { id: customer.id },
+        include: {
+          contacts: {
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
     });
-    return successResponse(updated);
+    return successResponse(serializeCustomerWithContacts(updated));
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to update customer';
     if (errorMsg.includes('not found')) {

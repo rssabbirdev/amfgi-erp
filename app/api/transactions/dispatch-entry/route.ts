@@ -41,6 +41,13 @@ export async function GET(req: Request) {
       select: {
         id: true,
         materialId: true,
+        warehouseId: true,
+        warehouse: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         quantity: true,
         notes: true,
         material: {
@@ -80,6 +87,8 @@ export async function GET(req: Request) {
           materialId: txn.materialId,
           materialName: txn.material?.name ?? 'Unknown',
           unit: txn.material?.unit ?? '',
+          warehouseId: txn.warehouse?.id ?? txn.warehouseId ?? null,
+          warehouseName: txn.warehouse?.name ?? null,
           quantity: txn.quantity,
           returnQty: returnTxn?.quantity ?? 0,
           transactionId: txn.id,

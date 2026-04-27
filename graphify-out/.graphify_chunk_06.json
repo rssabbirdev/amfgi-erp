@@ -1,0 +1,97 @@
+{
+  "nodes": [
+    {
+      "id": "file:public/window.svg",
+      "label": "public/window.svg",
+      "type": "FILE",
+      "properties": {
+        "language": "SVG",
+        "format": "vector_icon"
+      }
+    },
+    {
+      "id": "asset:window.svg",
+      "label": "window",
+      "type": "ASSET",
+      "properties": {
+        "asset_kind": "icon",
+        "source_file": "public/window.svg"
+      }
+    },
+    {
+      "id": "svg:root",
+      "label": "svg",
+      "type": "SVG_ELEMENT",
+      "properties": {
+        "tag": "svg",
+        "viewBox": "0 0 16 16",
+        "fill": "none"
+      }
+    },
+    {
+      "id": "svg:path:main",
+      "label": "path",
+      "type": "SVG_ELEMENT",
+      "properties": {
+        "tag": "path",
+        "fill": "#666",
+        "fill_rule": "evenodd",
+        "clip_rule": "evenodd"
+      }
+    },
+    {
+      "id": "concept:window_ui",
+      "label": "window UI metaphor",
+      "type": "CONCEPT",
+      "properties": {
+        "domain": "user_interface"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:public/window.svg",
+      "target": "asset:window.svg",
+      "type": "DEFINES_ASSET",
+      "extraction_method": "EXTRACTED",
+      "confidence_score": 1
+    },
+    {
+      "source": "file:public/window.svg",
+      "target": "svg:root",
+      "type": "CONTAINS",
+      "extraction_method": "EXTRACTED",
+      "confidence_score": 1
+    },
+    {
+      "source": "svg:root",
+      "target": "svg:path:main",
+      "type": "CONTAINS",
+      "extraction_method": "EXTRACTED",
+      "confidence_score": 1
+    },
+    {
+      "source": "asset:window.svg",
+      "target": "concept:window_ui",
+      "type": "REPRESENTS",
+      "extraction_method": "INFERRED",
+      "confidence_score": 0.92
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "hyperedge:window_icon_composition",
+      "type": "ICON_COMPOSITION",
+      "members": [
+        "file:public/window.svg",
+        "asset:window.svg",
+        "svg:root",
+        "svg:path:main"
+      ],
+      "extraction_method": "EXTRACTED",
+      "confidence_score": 0.99
+    }
+  ],
+  "input_tokens": 118,
+  "output_tokens": 414
+}

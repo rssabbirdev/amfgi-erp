@@ -20,7 +20,8 @@ interface TransferLine {
   materialId: string;
   quantity: string;
   quantityUomId: string;
-  destinationWarehouse: string;
+  sourceWarehouseId: string;
+  destinationWarehouseId: string;
 }
 
 function createLine(): TransferLine {
@@ -29,12 +30,13 @@ function createLine(): TransferLine {
     materialId: '',
     quantity: '',
     quantityUomId: '',
-    destinationWarehouse: '',
+    sourceWarehouseId: '',
+    destinationWarehouseId: '',
   };
 }
 
 function isLineEmpty(line: TransferLine) {
-  return !line.materialId && !line.quantity && !line.quantityUomId && !line.destinationWarehouse;
+  return !line.materialId && !line.quantity && !line.quantityUomId && !line.sourceWarehouseId && !line.destinationWarehouseId;
 }
 
 function normalizeLines(lines: TransferLine[]) {
@@ -54,7 +56,8 @@ function sameLineValues(a: TransferLine[], b: TransferLine[]) {
       line.materialId === other.materialId &&
       line.quantity === other.quantity &&
       line.quantityUomId === other.quantityUomId &&
-      line.destinationWarehouse === other.destinationWarehouse
+      line.sourceWarehouseId === other.sourceWarehouseId &&
+      line.destinationWarehouseId === other.destinationWarehouseId
     );
   });
 }
@@ -64,6 +67,7 @@ type SelectMaterial = {
   name: string;
   unit: string;
   warehouse?: string;
+  warehouseId?: string | null;
   currentStock: number;
   materialUoms?: MaterialUomDto[];
   isActive: boolean;
@@ -95,11 +99,20 @@ export default function MultiInterCompanyTransferPage() {
   const { data: destinationWarehouses = [] } = useGetWarehousesQuery(destinationCompanyId || undefined, {
     skip: !canTransfer || !destinationCompanyId,
   });
+  const { data: sourceWarehouses = [] } = useGetWarehousesQuery(sourceCompanyId || undefined, {
+    skip: !canTransfer || !sourceCompanyId,
+  });
 
   const selectableCompanies = useMemo(
     () => companies.filter((company) => company.isActive),
     [companies]
   );
+  const sourceCompany = selectableCompanies.find((company) => company.id === sourceCompanyId);
+  const destinationCompany = selectableCompanies.find((company) => company.id === destinationCompanyId);
+  const sourceWarehouseMode = sourceCompany?.warehouseMode ?? 'DISABLED';
+  const destinationWarehouseMode = destinationCompany?.warehouseMode ?? 'DISABLED';
+  const showSourceWarehouseColumn = sourceWarehouseMode !== 'DISABLED';
+  const showDestinationWarehouseColumn = destinationWarehouseMode !== 'DISABLED';
 
   const sourceMaterials = useMemo<SelectMaterial[]>(() => {
     if (!sourceIsReady) return [];
@@ -109,10 +122,6 @@ export default function MultiInterCompanyTransferPage() {
 
   const sourceCompanyName = selectableCompanies.find((company) => company.id === sourceCompanyId)?.name || '';
   const destinationCompanyName = selectableCompanies.find((company) => company.id === destinationCompanyId)?.name || '';
-  const destinationWarehouseOptions = useMemo(
-    () => destinationWarehouses.map((warehouse) => warehouse.name),
-    [destinationWarehouses]
-  );
 
   const updateLine = (id: string, field: keyof TransferLine, value: string) => {
     setLines((prev) =>
@@ -122,15 +131,12 @@ export default function MultiInterCompanyTransferPage() {
           if (field === 'materialId' && !value) return createLine();
           if (field === 'materialId') {
             const nextMaterial = sourceMaterials.find((material) => material.id === value);
-            const presetWarehouse =
-              nextMaterial?.warehouse && destinationWarehouseOptions.includes(nextMaterial.warehouse)
-                ? nextMaterial.warehouse
-                : '';
             return {
               ...line,
               materialId: value,
               quantityUomId: '',
-              destinationWarehouse: presetWarehouse,
+              sourceWarehouseId: nextMaterial?.warehouseId ?? '',
+              destinationWarehouseId: '',
             };
           }
           return {
@@ -152,27 +158,39 @@ export default function MultiInterCompanyTransferPage() {
     setLines((prev) => {
       const next = prev.map((line) => {
         if (!line.materialId) {
-          return line.destinationWarehouse ? { ...line, destinationWarehouse: '' } : line;
-        }
-        if (line.destinationWarehouse && destinationWarehouseOptions.includes(line.destinationWarehouse)) {
-          return line;
+          return line.sourceWarehouseId || line.destinationWarehouseId
+            ? { ...line, sourceWarehouseId: '', destinationWarehouseId: '' }
+            : line;
         }
         const material = sourceMaterials.find((item) => item.id === line.materialId);
-        const presetWarehouse =
-          material?.warehouse && destinationWarehouseOptions.includes(material.warehouse)
-            ? material.warehouse
+        const nextSourceWarehouseId =
+          material?.warehouseId && sourceWarehouses.some((warehouse) => warehouse.id === material.warehouseId)
+            ? material.warehouseId
             : '';
-        if (line.destinationWarehouse === presetWarehouse) {
+
+        const sourceWarehouseValid =
+          !line.sourceWarehouseId || sourceWarehouses.some((warehouse) => warehouse.id === line.sourceWarehouseId);
+        const destinationWarehouseValid =
+          !line.destinationWarehouseId ||
+          destinationWarehouses.some((warehouse) => warehouse.id === line.destinationWarehouseId);
+
+        if (
+          line.sourceWarehouseId === nextSourceWarehouseId &&
+          sourceWarehouseValid &&
+          destinationWarehouseValid
+        ) {
           return line;
         }
+
         return {
           ...line,
-          destinationWarehouse: presetWarehouse,
+          sourceWarehouseId: sourceWarehouseValid ? line.sourceWarehouseId || nextSourceWarehouseId : nextSourceWarehouseId,
+          destinationWarehouseId: destinationWarehouseValid ? line.destinationWarehouseId : '',
         };
       });
       return sameLineValues(prev, next) ? prev : next;
     });
-  }, [destinationCompanyId, destinationWarehouseOptions, sourceMaterials]);
+  }, [destinationWarehouses, sourceMaterials, sourceWarehouses]);
 
   const validLines = useMemo(
     () => lines.filter((line) => line.materialId && Number.parseFloat(line.quantity) > 0),
@@ -198,8 +216,12 @@ export default function MultiInterCompanyTransferPage() {
       toast.error('Add at least one material line');
       return;
     }
-    if (validLines.some((line) => !line.destinationWarehouse)) {
+    if (destinationWarehouseMode === 'REQUIRED' && validLines.some((line) => !line.destinationWarehouseId)) {
       toast.error('Select a destination warehouse for each material');
+      return;
+    }
+    if (sourceWarehouseMode === 'REQUIRED' && validLines.some((line) => !line.sourceWarehouseId)) {
+      toast.error('Select a source warehouse for each material');
       return;
     }
 
@@ -208,8 +230,11 @@ export default function MultiInterCompanyTransferPage() {
       for (const line of validLines) {
         await transferStock({
           sourceCompanyId,
+          sourceWarehouseId: line.sourceWarehouseId || undefined,
           destinationCompanyId,
-          destinationWarehouse: line.destinationWarehouse || undefined,
+          destinationWarehouseId: line.destinationWarehouseId || undefined,
+          destinationWarehouse:
+            destinationWarehouses.find((warehouse) => warehouse.id === line.destinationWarehouseId)?.name || undefined,
           materialId: line.materialId,
           quantity: Number.parseFloat(line.quantity),
           quantityUomId: line.quantityUomId.trim() || undefined,
@@ -261,7 +286,7 @@ export default function MultiInterCompanyTransferPage() {
                 Move multiple items between companies
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-                Choose the source company, destination company, then assign a destination warehouse per item before posting.
+                Choose the source company, destination company, then route stock through warehouses only where the selected companies require it.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -275,7 +300,7 @@ export default function MultiInterCompanyTransferPage() {
         <div className="grid gap-px bg-slate-200 dark:bg-slate-800 sm:grid-cols-2 xl:grid-cols-4">
           {[
             { label: 'Source', value: sourceCompanyName || 'Choose', note: 'Company stock will be reduced' },
-            { label: 'Destination', value: destinationCompanyName || 'Choose', note: `${validLines.filter((line) => line.destinationWarehouse).length} warehouse selections ready` },
+            { label: 'Destination', value: destinationCompanyName || 'Choose', note: `${validLines.filter((line) => line.destinationWarehouseId).length} destination warehouse selections ready` },
             { label: 'Prepared lines', value: String(validLines.length), note: 'Rows with material and quantity' },
             { label: 'Entered qty', value: totalQty.toFixed(3), note: 'Raw entered transfer quantity' },
           ].map((item) => (
@@ -358,7 +383,12 @@ export default function MultiInterCompanyTransferPage() {
                   <th className="w-10 px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">#</th>
                   <th className="min-w-[320px] px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Material</th>
                   <th className="w-[170px] px-2 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">UOM</th>
-                  <th className="w-[190px] px-2 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Dest Warehouse</th>
+                  {showSourceWarehouseColumn ? (
+                    <th className="w-[190px] px-2 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Source Warehouse</th>
+                  ) : null}
+                  {showDestinationWarehouseColumn ? (
+                    <th className="w-[190px] px-2 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Dest Warehouse</th>
+                  ) : null}
                   <th className="w-[120px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Available</th>
                   <th className="w-[150px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Transfer Qty</th>
                   <th className="w-[56px] px-2 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Clr</th>
@@ -413,32 +443,53 @@ export default function MultiInterCompanyTransferPage() {
                           <span className="text-xs text-slate-500 dark:text-slate-400">{material?.unit ?? '-'}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2">
-                        <select
-                          value={line.destinationWarehouse}
-                          onChange={(e) => updateLine(line.id, 'destinationWarehouse', e.target.value)}
-                          disabled={!destinationCompanyId || destinationWarehouseOptions.length === 0}
-                          className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
-                        >
-                          <option value="">
-                            {!destinationCompanyId
-                              ? 'Select destination company'
-                              : destinationWarehouseOptions.length === 0
-                              ? 'No warehouses available'
-                              : 'Select warehouse...'}
-                          </option>
-                          {destinationWarehouses.map((warehouse) => (
-                            <option key={warehouse.id} value={warehouse.name}>
-                              {warehouse.name}
+                      {showSourceWarehouseColumn ? (
+                        <td className="px-2 py-2">
+                          <select
+                            value={line.sourceWarehouseId}
+                            onChange={(e) => updateLine(line.id, 'sourceWarehouseId', e.target.value)}
+                            disabled={!sourceCompanyId || sourceWarehouses.length === 0}
+                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                          >
+                            <option value="">
+                              {sourceWarehouseMode === 'REQUIRED' ? 'Select warehouse...' : 'Use fallback/default'}
                             </option>
-                          ))}
-                        </select>
-                        {material?.warehouse && (
-                          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                            Material default: {material.warehouse}
-                          </p>
-                        )}
-                      </td>
+                            {sourceWarehouses.map((warehouse) => (
+                              <option key={warehouse.id} value={warehouse.id}>
+                                {warehouse.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      ) : null}
+                      {showDestinationWarehouseColumn ? (
+                        <td className="px-2 py-2">
+                          <select
+                            value={line.destinationWarehouseId}
+                            onChange={(e) => updateLine(line.id, 'destinationWarehouseId', e.target.value)}
+                            disabled={!destinationCompanyId || destinationWarehouses.length === 0}
+                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                          >
+                            <option value="">
+                              {!destinationCompanyId
+                                ? 'Select destination company'
+                                : destinationWarehouseMode === 'REQUIRED'
+                                ? 'Select warehouse...'
+                                : 'Use fallback/default'}
+                            </option>
+                            {destinationWarehouses.map((warehouse) => (
+                              <option key={warehouse.id} value={warehouse.id}>
+                                {warehouse.name}
+                              </option>
+                            ))}
+                          </select>
+                          {material?.warehouse && (
+                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              Material default: {material.warehouse}
+                            </p>
+                          )}
+                        </td>
+                      ) : null}
                       <td className="px-2 py-2 text-right font-mono text-sm text-slate-900 dark:text-white">
                         {material ? material.currentStock.toFixed(3) : '-'}
                       </td>

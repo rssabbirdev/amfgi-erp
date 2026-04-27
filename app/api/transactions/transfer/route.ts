@@ -6,13 +6,19 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { calculateFIFOConsumption } from '@/lib/utils/fifoConsumption';
+import { buildTransactionActorFields } from '@/lib/utils/auditActor';
+import { decimalEqualsNullable, decimalToNumberOrZero } from '@/lib/utils/decimal';
 import { resolveQuantityToBase } from '@/lib/utils/materialUomDb';
 import { createBatchData } from '@/lib/utils/stockBatchManagement';
+import { ensureCategoryRef, ensureWarehouseRef } from '@/lib/materialMasterData';
+import { applyMaterialWarehouseDelta, resolveEffectiveWarehouse } from '@/lib/warehouses/stockWarehouses';
 import { z } from 'zod';
 
 const TransferSchema = z.object({
   sourceCompanyId: z.string().optional(),
   destinationCompanyId: z.string().min(1),
+  sourceWarehouseId: z.string().optional(),
+  destinationWarehouseId: z.string().optional(),
   destinationWarehouse: z.string().max(100).optional(),
   materialId: z.string().min(1),
   quantity: z.number().min(0.001),
@@ -22,16 +28,6 @@ const TransferSchema = z.object({
 });
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
-
-async function ensureCategory(tx: Tx, companyId: string, categoryName?: string | null) {
-  const name = categoryName?.trim();
-  if (!name) return null;
-  return tx.category.upsert({
-    where: { companyId_name: { companyId, name } },
-    update: { isActive: true },
-    create: { companyId, name, isActive: true },
-  });
-}
 
 async function getWarehouseNameIfExists(tx: Tx, companyId: string, warehouseName?: string | null) {
   const name = warehouseName?.trim();
@@ -120,6 +116,8 @@ export async function POST(req: Request) {
   const {
     sourceCompanyId,
     destinationCompanyId,
+    sourceWarehouseId,
+    destinationWarehouseId,
     destinationWarehouse,
     materialId,
     quantity,
@@ -132,6 +130,7 @@ export async function POST(req: Request) {
   const srcCompanyId = sourceCompanyId || session.user.activeCompanyId;
 
   try {
+    const actorFields = buildTransactionActorFields(session.user);
     const result = await prisma.$transaction(async (tx) => {
       const srcCompany = await tx.company.findUnique({ where: { id: srcCompanyId } });
       if (!srcCompany) throw new Error('Source company not found');
@@ -159,31 +158,39 @@ export async function POST(req: Request) {
       }
 
       const qtyBase = await resolveQuantityToBase(tx, materialId, quantity, quantityUomId);
-      if (srcMaterial.currentStock < qtyBase) {
-        throw new Error(`Insufficient stock. Available: ${srcMaterial.currentStock} ${srcMaterial.unit}`);
+      const sourceCurrentStock = decimalToNumberOrZero(srcMaterial.currentStock);
+      if (sourceCurrentStock < qtyBase) {
+        throw new Error(`Insufficient stock. Available: ${sourceCurrentStock} ${srcMaterial.unit}`);
       }
+      const sourceWarehouse = await resolveEffectiveWarehouse(tx, {
+        companyId: srcCompanyId,
+        materialId,
+        warehouseId: sourceWarehouseId,
+      });
 
       let sourceBatches = await tx.stockBatch.findMany({
         where: {
           companyId: srcCompanyId,
           materialId,
+          warehouseId: sourceWarehouse.warehouseId,
           quantityAvailable: { gt: 0 },
         },
         orderBy: [{ receivedDate: 'asc' }, { createdAt: 'asc' }],
       });
 
-      if (sourceBatches.length === 0 && srcMaterial.currentStock > 0) {
-        const openingUnitCost = srcMaterial.unitCost ?? 0;
+      if (sourceBatches.length === 0 && sourceCurrentStock > 0) {
+        const openingUnitCost = decimalToNumberOrZero(srcMaterial.unitCost);
         sourceBatches = [
           await tx.stockBatch.create({
             data: {
               companyId: srcCompanyId,
               materialId,
+              warehouseId: sourceWarehouse.warehouseId,
               batchNumber: `OPENING-${materialId}-${Date.now()}`,
-              quantityReceived: srcMaterial.currentStock,
-              quantityAvailable: srcMaterial.currentStock,
+              quantityReceived: sourceCurrentStock,
+              quantityAvailable: sourceCurrentStock,
               unitCost: openingUnitCost,
-              totalCost: srcMaterial.currentStock * openingUnitCost,
+              totalCost: sourceCurrentStock * openingUnitCost,
               receivedDate: new Date('2020-01-01'),
               supplier: 'Opening Balance',
               notes: 'Auto-created opening balance for inter-company transfer',
@@ -196,8 +203,8 @@ export async function POST(req: Request) {
         sourceBatches.map((batch) => ({
           id: batch.id,
           batchNumber: batch.batchNumber,
-          quantityAvailable: batch.quantityAvailable,
-          unitCost: batch.unitCost,
+          quantityAvailable: decimalToNumberOrZero(batch.quantityAvailable),
+          unitCost: decimalToNumberOrZero(batch.unitCost),
           receivedDate: batch.receivedDate,
         })),
         qtyBase
@@ -206,19 +213,12 @@ export async function POST(req: Request) {
       if (fifoResult.batchesUsed.length === 0) {
         throw new Error(`Cannot fulfill ${qtyBase} ${srcMaterial.unit} of ${srcMaterial.name}`);
       }
-      const consumedQty = fifoResult.batchesUsed.reduce((sum, batch) => sum + batch.quantityFromBatch, 0);
+      const consumedQty = fifoResult.batchesUsed.reduce((sum, batch) => sum + decimalToNumberOrZero(batch.quantityFromBatch), 0);
       if (consumedQty < qtyBase) {
         throw new Error(`Insufficient FIFO batches for ${srcMaterial.name}. Available in batches: ${consumedQty} ${srcMaterial.unit}`);
       }
 
-      const requestedWarehouse = destinationWarehouse?.trim() || null;
-      if (requestedWarehouse) {
-        const selectedWarehouse = await getWarehouseNameIfExists(tx, destinationCompanyId, requestedWarehouse);
-        if (!selectedWarehouse) {
-          throw new Error(`Selected warehouse not found in destination company: ${requestedWarehouse}`);
-        }
-      }
-      await ensureCategory(tx, destinationCompanyId, srcMaterial.category);
+      const categoryRef = await ensureCategoryRef(tx, destinationCompanyId, srcMaterial.category);
       await ensureUnit(tx, destinationCompanyId, srcMaterial.unit);
 
       let destMaterial = await tx.material.findFirst({
@@ -229,13 +229,20 @@ export async function POST(req: Request) {
       });
 
       const inboundWarehouse =
-        requestedWarehouse ??
-        (await getWarehouseNameIfExists(tx, destinationCompanyId, destMaterial?.warehouse)) ??
-        (await getWarehouseNameIfExists(tx, destinationCompanyId, srcMaterial.warehouse)) ??
+        destinationWarehouse?.trim() ||
+        (await getWarehouseNameIfExists(tx, destinationCompanyId, destMaterial?.warehouse)) ||
+        (await getWarehouseNameIfExists(tx, destinationCompanyId, srcMaterial.warehouse)) ||
         null;
+      const warehouseRef = await ensureWarehouseRef(tx, destinationCompanyId, inboundWarehouse);
+      const destinationWarehouseResolved = await resolveEffectiveWarehouse(tx, {
+        companyId: destinationCompanyId,
+        materialId: destMaterial?.id,
+        warehouseId: destinationWarehouseId ?? warehouseRef.warehouseId ?? undefined,
+        warehouseName: destinationWarehouse,
+      });
 
-      const previousPrice = destMaterial?.unitCost ?? 0;
-      const nextPrice = fifoResult.averageCost || srcMaterial.unitCost || 0;
+      const previousPrice = decimalToNumberOrZero(destMaterial?.unitCost);
+      const nextPrice = decimalToNumberOrZero(fifoResult.averageCost) || decimalToNumberOrZero(srcMaterial.unitCost);
 
       if (!destMaterial) {
         destMaterial = await tx.material.create({
@@ -245,8 +252,10 @@ export async function POST(req: Request) {
             unit: srcMaterial.unit,
             description: srcMaterial.description,
             unitCost: nextPrice,
-            category: srcMaterial.category,
-            warehouse: inboundWarehouse,
+            category: categoryRef.categoryName,
+            categoryId: categoryRef.categoryId,
+            warehouse: warehouseRef.warehouseName,
+            warehouseId: warehouseRef.warehouseId,
             stockType: srcMaterial.stockType,
             allowNegativeConsumption: srcMaterial.allowNegativeConsumption,
             externalItemName: srcMaterial.externalItemName,
@@ -261,8 +270,10 @@ export async function POST(req: Request) {
           data: {
             description: srcMaterial.description,
             unit: srcMaterial.unit,
-            category: srcMaterial.category,
-            warehouse: inboundWarehouse ?? destMaterial.warehouse,
+            category: categoryRef.categoryName,
+            categoryId: categoryRef.categoryId,
+            warehouse: warehouseRef.warehouseName ?? destMaterial.warehouse,
+            warehouseId: warehouseRef.warehouseId ?? destMaterial.warehouseId,
             stockType: srcMaterial.stockType,
             allowNegativeConsumption: srcMaterial.allowNegativeConsumption,
             externalItemName: srcMaterial.externalItemName,
@@ -275,7 +286,6 @@ export async function POST(req: Request) {
 
       await syncMaterialUoms(tx, srcMaterial.id, destMaterial.id, srcCompanyId, destinationCompanyId);
 
-      const performedBy = session.user.id;
       const changedBy = session.user.name || session.user.email || session.user.id;
 
       const transferOutTxn = await tx.transaction.create({
@@ -283,11 +293,12 @@ export async function POST(req: Request) {
           companyId: srcCompanyId,
           type: 'TRANSFER_OUT',
           materialId,
+          warehouseId: sourceWarehouse.warehouseId,
           quantity: qtyBase,
           counterpartCompany: destCompany.slug,
           notes: notes || null,
           date: txDate,
-          performedBy,
+          ...actorFields,
           totalCost: fifoResult.totalCost,
           averageCost: fifoResult.averageCost,
         },
@@ -323,6 +334,7 @@ export async function POST(req: Request) {
           },
         },
       });
+      await applyMaterialWarehouseDelta(tx, srcCompanyId, materialId, sourceWarehouse.warehouseId, -qtyBase);
 
       await tx.material.update({
         where: { id: destMaterial.id },
@@ -333,17 +345,25 @@ export async function POST(req: Request) {
           unitCost: nextPrice,
         },
       });
+      await applyMaterialWarehouseDelta(
+        tx,
+        destinationCompanyId,
+        destMaterial.id,
+        destinationWarehouseResolved.warehouseId,
+        qtyBase
+      );
 
       const transferInTxn = await tx.transaction.create({
         data: {
           companyId: destinationCompanyId,
           type: 'TRANSFER_IN',
           materialId: destMaterial.id,
+          warehouseId: destinationWarehouseResolved.warehouseId,
           quantity: qtyBase,
           counterpartCompany: srcCompany.slug,
           notes: notes || null,
           date: txDate,
-          performedBy,
+          ...actorFields,
           totalCost: fifoResult.totalCost,
           averageCost: fifoResult.averageCost,
         },
@@ -353,6 +373,7 @@ export async function POST(req: Request) {
         const inboundBatch = await tx.stockBatch.create({
           data: {
             companyId: destinationCompanyId,
+            warehouseId: destinationWarehouseResolved.warehouseId,
             ...createBatchData({
               materialId: destMaterial.id,
               quantity: batchUsed.quantityFromBatch,
@@ -378,7 +399,7 @@ export async function POST(req: Request) {
         });
       }
 
-      if (previousPrice !== nextPrice) {
+      if (!decimalEqualsNullable(previousPrice, nextPrice)) {
         await tx.priceLog.create({
           data: {
             companyId: destinationCompanyId,

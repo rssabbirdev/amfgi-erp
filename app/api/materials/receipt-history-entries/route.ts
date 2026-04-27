@@ -1,6 +1,7 @@
 import { auth }              from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -39,7 +40,12 @@ export async function GET(req: Request) {
           lte: endDate,
         },
       },
-      include: { material: true },
+      include: {
+        material: true,
+        warehouse: {
+          select: { id: true, name: true },
+        },
+      },
       orderBy: { receivedDate: 'desc' },
     });
 
@@ -60,6 +66,8 @@ export async function GET(req: Request) {
         materialId: line.materialId,
         materialName: line.material?.name ?? 'Unknown',
         unit: line.material?.unit ?? '—',
+        warehouseId: line.warehouse?.id ?? null,
+        warehouseName: line.warehouse?.name ?? null,
         quantityReceived: line.quantityReceived,
         quantityAvailable: line.quantityAvailable,
         unitCost: line.unitCost,
@@ -67,7 +75,7 @@ export async function GET(req: Request) {
         batchNumber: line.batchNumber,
       }));
 
-      const totalValue = lines.reduce((sum, line) => sum + line.totalCost, 0);
+      const totalValue = lines.reduce((sum, line) => sum + decimalToNumberOrZero(line.totalCost), 0);
       const firstLine = lines[0];
 
       return {

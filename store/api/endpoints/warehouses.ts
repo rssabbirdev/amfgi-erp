@@ -6,6 +6,7 @@ export interface Warehouse {
   name: string;
   location?: string;
   isActive: boolean;
+  isSystem?: boolean;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }

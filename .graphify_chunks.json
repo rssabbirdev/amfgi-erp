@@ -1,0 +1,28 @@
+[
+  [
+    "AGENTS.md",
+    "API-job-sync.md",
+    "API-party-lists.md",
+    "DEVELOPER_GUIDE.md",
+    "README.md",
+    "docs\\hr-geofence-expo-guide.md",
+    "graphify-out\\graph.html",
+    "graphify-out\\GRAPH_REPORT.md",
+    "__tests__\\README.md"
+  ],
+  [
+    "public\\file.svg"
+  ],
+  [
+    "public\\globe.svg"
+  ],
+  [
+    "public\\next.svg"
+  ],
+  [
+    "public\\vercel.svg"
+  ],
+  [
+    "public\\window.svg"
+  ]
+]
