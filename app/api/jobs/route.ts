@@ -9,6 +9,7 @@ import {
   serializeRequiredExpertises,
   syncJobRequiredExpertises,
 } from '@/lib/jobs/jobRequiredExpertises';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { decimalToNumber } from '@/lib/utils/decimal';
 import { z } from 'zod';
@@ -178,6 +179,12 @@ export async function POST(req: Request) {
           },
         },
       });
+    });
+    publishLiveUpdate({
+      companyId,
+      channel: 'jobs',
+      entity: 'job',
+      action: 'created',
     });
     return successResponse(serializeRequiredExpertises(serializeJobWithContacts(job)), 201);
   } catch (err: unknown) {

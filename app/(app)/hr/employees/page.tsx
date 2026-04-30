@@ -1,51 +1,14 @@
 ﻿'use client';
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
-
-async function readApiJson<T>(res: Response): Promise<T | null> {
-  const text = await res.text();
-  if (!text.trim()) return null;
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
+import { useGetHrEmployeesQuery } from '@/store/api/endpoints/hr';
 
 type EmployeeStatus = 'ACTIVE' | 'ON_LEAVE' | 'SUSPENDED' | 'EXITED';
-
-type Employee = {
-  id: string;
-  employeeCode: string;
-  fullName: string;
-  preferredName: string | null;
-  email: string | null;
-  phone: string | null;
-  designation: string | null;
-  department: string | null;
-  status: EmployeeStatus;
-  portalEnabled: boolean;
-  employeeType: string;
-  basicHoursPerDay: number;
-  defaultTiming:
-    | {
-        dutyStart: string | null;
-        dutyEnd: string | null;
-        breakStart: string | null;
-        breakEnd: string | null;
-      }
-    | null;
-};
-
-type EmployeeResponse = {
-  success?: boolean;
-  data?: Employee[];
-};
 
 const STATUS_OPTIONS: Array<{ value: 'ALL' | EmployeeStatus; label: string }> = [
   { value: 'ALL', label: 'All statuses' },
@@ -104,12 +67,8 @@ export default function HrEmployeesPage() {
   const router = useRouter();
   const { openMenu } = useGlobalContextMenu();
   const { data: session } = useSession();
-  const [list, setList] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<'ALL' | EmployeeStatus>('ALL');
-  const hasLoadedRef = useRef(false);
 
   const deferredQuery = useDeferredValue(q);
 
@@ -118,45 +77,17 @@ export default function HrEmployeesPage() {
   const canView = isSA || perms.includes('hr.employee.view');
   const canEdit = isSA || perms.includes('hr.employee.edit');
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (!canView) {
-        if (!cancelled) setLoading(false);
-        return;
-      }
-
-      if (!cancelled) {
-        if (hasLoadedRef.current) setRefreshing(true);
-        else setLoading(true);
-      }
-
-      try {
-        const query = new URLSearchParams();
-        if (deferredQuery.trim()) query.set('q', deferredQuery.trim());
-        if (status !== 'ALL') query.set('status', status);
-
-        const res = await fetch(`/api/hr/employees?${query.toString()}`, { cache: 'no-store' });
-        const json = await readApiJson<EmployeeResponse>(res);
-
-        if (!cancelled && res.ok && json?.success && Array.isArray(json.data)) {
-          setList(json.data);
-          hasLoadedRef.current = true;
-        } else if (!cancelled) {
-          setList([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setRefreshing(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canView, deferredQuery, status]);
+  const {
+    data: list = [],
+    isLoading: loading,
+    isFetching: refreshing,
+  } = useGetHrEmployeesQuery(
+    {
+      q: deferredQuery,
+      status,
+    },
+    { skip: !canView }
+  );
 
   const totals = useMemo(() => {
     const active = list.filter((employee) => employee.status === 'ACTIVE').length;

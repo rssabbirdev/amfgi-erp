@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
-import { useGetMaterialsQuery, useGetStockBatchesQuery, useGetStockValuationQuery } from '@/store/hooks';
+import { useGetMaterialsQuery, useGetStockBatchesQuery, useGetStockIntegrityQuery, useGetStockValuationQuery } from '@/store/hooks';
 
 function formatMoney(value: number) {
   return `AED ${value.toLocaleString('en-AE', {
@@ -55,8 +55,9 @@ export default function StockPage() {
   const canSeeBatches = isSA || perms.includes('material.view') || perms.includes('transaction.stock_in');
   const canSeeTransfers = isSA || perms.includes('transaction.transfer');
   const canSeeReconcile = isSA || perms.includes('transaction.reconcile');
+  const canSeeAdjustments = isSA || perms.includes('transaction.adjust');
   const canSeeJobBudget = isSA || (perms.includes('job.view') && perms.includes('material.view'));
-  const canViewStock = canSeeMaterials || canSeeReceipts || canSeeDispatch || canSeeBatches || canSeeTransfers || canSeeReconcile || canSeeJobBudget;
+  const canViewStock = canSeeMaterials || canSeeReceipts || canSeeDispatch || canSeeBatches || canSeeTransfers || canSeeReconcile || canSeeAdjustments || canSeeJobBudget;
 
   const { data: valuation, isFetching: valuationLoading } = useGetStockValuationQuery(undefined, {
     skip: !canViewStock,
@@ -66,6 +67,9 @@ export default function StockPage() {
   });
   const { data: batches = [], isFetching: batchesLoading } = useGetStockBatchesQuery(undefined, {
     skip: !canSeeBatches,
+  });
+  const { data: stockIntegrity, isFetching: integrityLoading } = useGetStockIntegrityQuery(undefined, {
+    skip: !canViewStock,
   });
 
   const activeMaterials = useMemo(
@@ -84,11 +88,12 @@ export default function StockPage() {
       ).length,
     [activeMaterials]
   );
+  const integrityExceptionCount = stockIntegrity?.summary.materialsWithExceptions ?? 0;
 
   const preferredValue = valuation?.summary.fifoStockValue ?? 0;
   const movingAverageValue = valuation?.summary.movingAverageStockValue ?? 0;
   const currentValue = valuation?.summary.currentStockValue ?? 0;
-  const warehouseMode = valuation?.summary.warehouseMode ?? 'DISABLED';
+  const warehouseMode = valuation?.summary.warehouseMode ?? 'REQUIRED';
   const fallbackWarehouseName = valuation?.summary.fallbackWarehouseName ?? null;
   const warehouseBreakdown = valuation?.warehouseBreakdown ?? [];
   const preferredMoney = splitMoney(preferredValue);
@@ -129,6 +134,22 @@ export default function StockPage() {
       tone: 'slate' as const,
     },
     {
+      href: '/stock/inventory-by-warehouse',
+      title: 'Inventory by warehouse',
+      description: 'See each material’s quantity split across warehouses from live warehouse balances.',
+      enabled: canSeeBatches,
+      meta: 'Per-item warehouse quantities',
+      tone: 'emerald' as const,
+    },
+    {
+      href: '/stock/integrity',
+      title: 'Stock Integrity',
+      description: 'Compare company stock, warehouse balances, and open FIFO batches to catch drift early.',
+      enabled: canViewStock,
+      meta: integrityLoading ? 'Checking integrity...' : `${formatCount(integrityExceptionCount)} materials with exceptions`,
+      tone: 'amber' as const,
+    },
+    {
       href: '/stock/inter-company-transfers',
       title: 'Inter-Company Transfers',
       description: 'Review transfer history and move stock between companies in a dedicated workspace.',
@@ -143,6 +164,22 @@ export default function StockPage() {
       enabled: canSeeReconcile,
       meta: 'History and create workspace',
       tone: 'amber' as const,
+    },
+    {
+      href: '/stock/manual-adjustments',
+      title: 'Manual Adjustments',
+      description: 'Submit controlled stock corrections that go through approval before touching on-hand balances.',
+      enabled: canSeeAdjustments,
+      meta: 'Request and review adjustments',
+      tone: 'amber' as const,
+    },
+    {
+      href: '/stock/count-session',
+      title: 'Stock Count Session',
+      description: 'Load a warehouse count sheet, enter counted stock, and turn only the variances into an adjustment request.',
+      enabled: canSeeAdjustments,
+      meta: 'Count, review variance, submit',
+      tone: 'emerald' as const,
     },
     {
       href: '/stock/job-budget',
@@ -162,9 +199,7 @@ export default function StockPage() {
     {
       label: 'Store',
       body:
-        warehouseMode === 'DISABLED'
-          ? `Materials keep the live current stock, while stock batches stay under the fallback warehouse${fallbackWarehouseName ? ` (${fallbackWarehouseName})` : ''}.`
-          : 'Materials keep the live current stock, while stock batches keep the open FIFO layers by warehouse.',
+        'Materials keep the live current stock, while stock batches keep the open FIFO layers by warehouse.',
     },
     {
       label: 'Issue',
@@ -389,8 +424,8 @@ export default function StockPage() {
               </p>
               {warehouseBreakdown.length === 0 ? (
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {warehouseMode === 'DISABLED'
-                    ? `Stock is currently routed through ${fallbackWarehouseName ?? 'the fallback warehouse'}.`
+                  {fallbackWarehouseName
+                    ? `No warehouse balances have been created yet. System reference: ${fallbackWarehouseName}.`
                     : 'No warehouse balances have been created yet.'}
                 </p>
               ) : (

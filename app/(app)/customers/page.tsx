@@ -251,8 +251,12 @@ function CustomerReadOnlyDetails({ customer }: { customer: Customer }) {
 export default function CustomersPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const { data: customers = [], isFetching: isFetchingCustomers } = useGetCustomersQuery();
-  const { data: jobs = [], isFetching: isFetchingJobs } = useGetJobsQuery();
+  const { data: customers = [], isFetching: isFetchingCustomers } = useGetCustomersQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const { data: jobs = [], isFetching: isFetchingJobs } = useGetJobsQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
   const { openMenu: openContextMenu } = useGlobalContextMenu();
   const [createCustomer, { isLoading: isCreating }] = useCreateCustomerMutation();
   const [updateCustomer, { isLoading: isUpdating }] = useUpdateCustomerMutation();

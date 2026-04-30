@@ -231,7 +231,7 @@ export async function GET() {
         currentStockValue,
         preferredMethod: 'FIFO',
         prevMonthConsumptionValue: prevMonthValue,
-        warehouseMode: company?.warehouseMode ?? 'DISABLED',
+        warehouseMode: 'REQUIRED',
         fallbackWarehouseName: company?.stockFallbackWarehouse?.name ?? null,
         warehouseCount: warehouseBreakdown.length,
       },

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { hasPerm, requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { errorResponse, successResponse } from '@/lib/utils/apiResponse';
@@ -43,6 +44,12 @@ export async function POST(req: Request) {
         sortOrder: parsed.data.sortOrder ?? 0,
         isActive: parsed.data.isActive ?? true,
       },
+    });
+    publishLiveUpdate({
+      companyId,
+      channel: 'hr',
+      entity: 'expertise',
+      action: 'created',
     });
     return successResponse(row, 201);
   } catch (e) {

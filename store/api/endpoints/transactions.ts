@@ -11,7 +11,7 @@ interface BatchConsumption {
 interface Transaction {
   id: string;
   companyId: string;
-  type: 'STOCK_IN' | 'STOCK_OUT' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'REVERSAL';
+  type: 'STOCK_IN' | 'STOCK_OUT' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'REVERSAL' | 'ADJUSTMENT';
   materialId: string;
   warehouseId?: string | null;
   warehouse?: { id: string; name: string } | null;
@@ -59,6 +59,37 @@ interface TransferResult {
 }
 
 type BatchTransactionPayload = Record<string, unknown>;
+
+function extractBatchMaterialIds(arg: BatchTransactionPayload | undefined): string[] {
+  if (!arg) return [];
+  const ids = new Set<string>();
+
+  const lines = Array.isArray(arg.lines) ? arg.lines : [];
+  for (const line of lines) {
+    if (
+      line &&
+      typeof line === 'object' &&
+      'materialId' in line &&
+      typeof (line as { materialId?: unknown }).materialId === 'string'
+    ) {
+      ids.add((line as { materialId: string }).materialId);
+    }
+  }
+
+  const materialUpdates = Array.isArray(arg.materialUpdates) ? arg.materialUpdates : [];
+  for (const update of materialUpdates) {
+    if (
+      update &&
+      typeof update === 'object' &&
+      'materialId' in update &&
+      typeof (update as { materialId?: unknown }).materialId === 'string'
+    ) {
+      ids.add((update as { materialId: string }).materialId);
+    }
+  }
+
+  return [...ids];
+}
 
 type DispatchEntryResponse = {
   exists: boolean;
@@ -136,14 +167,44 @@ export interface NonStockReconcileData {
 
 export interface NonStockReconcilePayload {
   jobIds: string[];
-    lines: Array<{
-      materialId: string;
-      quantity: number;
-      quantityUomId?: string;
-      warehouseId?: string;
-    }>;
+  lines: Array<{
+    materialId: string;
+    quantity: number;
+    quantityUomId?: string;
+    warehouseId?: string;
+  }>;
+  allocations: Array<{
+    jobId: string;
+    materialId: string;
+    quantity: number;
+  }>;
   notes?: string;
   date?: string;
+}
+
+export interface ManualStockAdjustmentLinePayload {
+  materialId: string;
+  warehouseId: string;
+  quantityDelta: number;
+  unitCost?: number;
+}
+
+export interface ManualStockAdjustmentPayload {
+  lines: ManualStockAdjustmentLinePayload[];
+  reason: string;
+  evidenceType: 'PHYSICAL_COUNT' | 'DAMAGE_REPORT' | 'SUPPLIER_CLAIM' | 'CUSTOMER_RETURN' | 'OTHER';
+  evidenceReference: string;
+  evidenceNotes?: string;
+  notes?: string;
+}
+
+interface ManualStockAdjustmentPolicySummary {
+  positiveLineCount: number;
+  negativeLineCount: number;
+  highEvidenceNegativeLineCount: number;
+  largestNegativeQty: number;
+  requiresEnhancedEvidence: boolean;
+  requiresDecisionNote: boolean;
 }
 
 export const transactionsApi = appApi.injectEndpoints({
@@ -165,8 +226,15 @@ export const transactionsApi = appApi.injectEndpoints({
       transformResponse: (r: { data: Transaction }) => r.data,
       invalidatesTags: (result, error, arg) => [
         { type: 'Transaction', id: arg.jobId || 'LIST' },
+        { type: 'Transaction', id: 'LIST' },
         { type: 'JobMaterials', id: arg.jobId || 'LIST' },
         { type: 'Material', id: arg.materialId },
+        { type: 'Material', id: 'LIST' },
+        { type: 'StockBatch', id: 'LIST' },
+        { type: 'StockValuation' },
+        { type: 'DispatchEntry' },
+        { type: 'Consumption' },
+        { type: 'StockExceptionApproval' },
       ],
     }),
 
@@ -180,12 +248,22 @@ export const transactionsApi = appApi.injectEndpoints({
         body,
       }),
       transformResponse: (r: { data: { created: number; ids: string[] } }) => r.data,
-      invalidatesTags: [
-        { type: 'Material', id: 'LIST' },
-        { type: 'Transaction', id: 'LIST' },
-        { type: 'DispatchEntry' },
-        { type: 'JobMaterials' },
-      ],
+      invalidatesTags: (result, error, arg) => {
+        const materialIds = extractBatchMaterialIds(arg);
+        return [
+          { type: 'Material', id: 'LIST' },
+          ...materialIds.map((id) => ({ type: 'Material' as const, id })),
+          ...materialIds.map((id) => ({ type: 'PriceLog' as const, id })),
+          { type: 'Transaction', id: 'LIST' },
+          { type: 'ReceiptEntry' },
+          { type: 'StockBatch', id: 'LIST' },
+          { type: 'StockValuation' },
+          { type: 'DispatchEntry' },
+          { type: 'JobMaterials' },
+          { type: 'Consumption' },
+          { type: 'StockExceptionApproval' },
+        ];
+      },
     }),
 
     deleteTransaction: builder.mutation<{ deleted: boolean }, string>({
@@ -198,6 +276,11 @@ export const transactionsApi = appApi.injectEndpoints({
         { type: 'DispatchEntry' },
         { type: 'Transaction', id: 'LIST' },
         { type: 'Material', id: 'LIST' },
+        { type: 'StockBatch', id: 'LIST' },
+        { type: 'StockValuation' },
+        { type: 'ReceiptEntry' },
+        { type: 'Consumption' },
+        { type: 'StockExceptionApproval' },
       ],
     }),
 
@@ -213,6 +296,10 @@ export const transactionsApi = appApi.injectEndpoints({
         { type: 'StockBatch', id: 'LIST' },
         { type: 'Transaction', id: 'LIST' },
         { type: 'Transaction', id: 'TRANSFER_LEDGER' },
+        { type: 'StockValuation' },
+        { type: 'DispatchEntry' },
+        { type: 'ReceiptEntry' },
+        { type: 'Consumption' },
       ],
     }),
 
@@ -251,6 +338,52 @@ export const transactionsApi = appApi.injectEndpoints({
         { type: 'Transaction', id: 'LIST' },
         { type: 'Transaction', id: 'NON_STOCK_RECONCILE' },
         { type: 'JobMaterials' },
+        { type: 'StockValuation' },
+        { type: 'DispatchEntry' },
+        { type: 'ReceiptEntry' },
+        { type: 'Consumption' },
+      ],
+    }),
+
+    requestManualStockAdjustment: builder.mutation<
+      {
+        requested: boolean;
+        id: string;
+        referenceId: string;
+        referenceNumber: string;
+        status: 'PENDING' | 'APPROVED';
+        appliedTransactionIds: string[];
+        lineCount: number;
+        policySummary?: ManualStockAdjustmentPolicySummary;
+      },
+      ManualStockAdjustmentPayload
+    >({
+      query: (body) => ({
+        url: '/transactions/manual-adjustment',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (r: {
+        data: {
+          requested: boolean;
+          id: string;
+          referenceId: string;
+          referenceNumber: string;
+          status: 'PENDING' | 'APPROVED';
+          appliedTransactionIds: string[];
+          lineCount: number;
+          policySummary?: ManualStockAdjustmentPolicySummary;
+        };
+      }) => r.data,
+      invalidatesTags: [
+        { type: 'Material', id: 'LIST' },
+        { type: 'Warehouse', id: 'LIST' },
+        { type: 'StockBatch', id: 'LIST' },
+        { type: 'Transaction', id: 'LIST' },
+        { type: 'StockValuation' },
+        { type: 'StockIntegrity' },
+        { type: 'StockExceptionApproval' },
+        { type: 'ReceiptEntry' },
       ],
     }),
   }),
@@ -266,4 +399,5 @@ export const {
   useGetDispatchEntryQuery,
   useGetNonStockReconcileDataQuery,
   useReconcileNonStockMutation,
+  useRequestManualStockAdjustmentMutation,
 } = transactionsApi;

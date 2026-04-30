@@ -86,8 +86,12 @@ function statusClasses(status: Job['status']) {
 export default function CustomerJobsPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const { data: jobs = [], isFetching: jobsLoading } = useGetJobsQuery();
-  const { data: customers = [] } = useGetCustomersQuery();
+  const { data: jobs = [], isFetching: jobsLoading } = useGetJobsQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const { data: customers = [] } = useGetCustomersQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
   const { openMenu: openContextMenu } = useGlobalContextMenu();
   const [deleteJob, { isLoading: isDeleting }] = useDeleteJobMutation();
 

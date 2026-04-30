@@ -1,0 +1,59 @@
+# Lib Utils and Media
+
+> 42 nodes · cohesion 0.10
+
+## Key Concepts
+
+- **googleDrive.ts** (22 connections) — `lib\utils\googleDrive.ts`
+- **sanitizeFolderName()** (11 connections) — `lib\utils\googleDrive.ts`
+- **companyPrintTemplates.ts** (10 connections) — `lib\utils\companyPrintTemplates.ts`
+- **ensureFolderPath()** (10 connections) — `lib\utils\googleDrive.ts`
+- **moveDriveFile()** (9 connections) — `lib\utils\googleDrive.ts`
+- **convertGoogleDriveUrl()** (8 connections) — `lib\utils\googleDriveUrl.ts`
+- **explainGoogleDriveError()** (7 connections) — `lib\utils\googleDrive.ts`
+- **normalizeCompanyPrintTemplateShape()** (6 connections) — `lib\utils\companyPrintTemplates.ts`
+- **createOAuthClient()** (6 connections) — `lib\utils\googleDrive.ts`
+- **getDriveClientForCompany()** (6 connections) — `lib\utils\googleDrive.ts`
+- **uploadToDrive()** (6 connections) — `lib\utils\googleDrive.ts`
+- **deleteFromDrive()** (6 connections) — `lib\utils\googleDrive.ts`
+- **driveFileIdToDisplayUrl()** (6 connections) — `lib\utils\googleDriveUrl.ts`
+- **readCompanyDocumentTemplates()** (5 connections) — `lib\utils\companyPrintTemplates.ts`
+- **readCompanyGoogleDriveOAuthConfig()** (5 connections) — `lib\utils\companyPrintTemplates.ts`
+- **finalizeUserMediaUpload()** (4 connections) — `lib\media\userScopedMedia.ts`
+- **toObjectRoot()** (4 connections) — `lib\utils\companyPrintTemplates.ts`
+- **writeCompanyGoogleDriveOAuthConfig()** (4 connections) — `lib\utils\companyPrintTemplates.ts`
+- **readCompanyGoogleDriveFolderRegistry()** (4 connections) — `lib\utils\companyPrintTemplates.ts`
+- **ensureChildFolder()** (4 connections) — `lib\utils\googleDrive.ts`
+- **renameFolderIfNeeded()** (4 connections) — `lib\utils\googleDrive.ts`
+- **googleDriveUrl.ts** (4 connections) — `lib\utils\googleDriveUrl.ts`
+- **writeCompanyGoogleDriveFolderRegistry()** (3 connections) — `lib\utils\companyPrintTemplates.ts`
+- **loadCompanyDriveOAuthConfig()** (3 connections) — `lib\utils\googleDrive.ts`
+- **buildEmployeeDriveFolderName()** (3 connections) — `lib\utils\googleDrive.ts`
+- *... and 17 more nodes in this community*
+
+## Relationships
+
+- [[API HR, Materials, and Transactions]] (22 shared connections)
+- [[Lib, Scripts, and Profile]] (4 shared connections)
+- [[HR, Components, and Print]] (3 shared connections)
+- [[Settings API]] (2 shared connections)
+- [[Lib Utils]] (1 shared connections)
+
+## Source Files
+
+- `app\(app)\profile\page.tsx`
+- `app\(app)\settings\page.tsx`
+- `lib\media\userScopedMedia.ts`
+- `lib\utils\companyPrintTemplates.ts`
+- `lib\utils\googleDrive.ts`
+- `lib\utils\googleDriveUrl.ts`
+
+## Audit Trail
+
+- EXTRACTED: 153 (76%)
+- INFERRED: 47 (24%)
+- AMBIGUOUS: 0 (0%)
+
+---
+
+*Part of the graphify knowledge wiki. See [[index]] to navigate.*

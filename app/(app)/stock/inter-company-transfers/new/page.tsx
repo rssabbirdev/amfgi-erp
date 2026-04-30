@@ -107,12 +107,8 @@ export default function MultiInterCompanyTransferPage() {
     () => companies.filter((company) => company.isActive),
     [companies]
   );
-  const sourceCompany = selectableCompanies.find((company) => company.id === sourceCompanyId);
-  const destinationCompany = selectableCompanies.find((company) => company.id === destinationCompanyId);
-  const sourceWarehouseMode = sourceCompany?.warehouseMode ?? 'DISABLED';
-  const destinationWarehouseMode = destinationCompany?.warehouseMode ?? 'DISABLED';
-  const showSourceWarehouseColumn = sourceWarehouseMode !== 'DISABLED';
-  const showDestinationWarehouseColumn = destinationWarehouseMode !== 'DISABLED';
+  const showSourceWarehouseColumn = true;
+  const showDestinationWarehouseColumn = true;
 
   const sourceMaterials = useMemo<SelectMaterial[]>(() => {
     if (!sourceIsReady) return [];
@@ -216,11 +212,11 @@ export default function MultiInterCompanyTransferPage() {
       toast.error('Add at least one material line');
       return;
     }
-    if (destinationWarehouseMode === 'REQUIRED' && validLines.some((line) => !line.destinationWarehouseId)) {
+    if (validLines.some((line) => !line.destinationWarehouseId)) {
       toast.error('Select a destination warehouse for each material');
       return;
     }
-    if (sourceWarehouseMode === 'REQUIRED' && validLines.some((line) => !line.sourceWarehouseId)) {
+    if (validLines.some((line) => !line.sourceWarehouseId)) {
       toast.error('Select a source warehouse for each material');
       return;
     }
@@ -286,7 +282,7 @@ export default function MultiInterCompanyTransferPage() {
                 Move multiple items between companies
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-                Choose the source company, destination company, then route stock through warehouses only where the selected companies require it.
+                Choose the source company and destination company, then route stock through required source and destination warehouses.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -451,9 +447,7 @@ export default function MultiInterCompanyTransferPage() {
                             disabled={!sourceCompanyId || sourceWarehouses.length === 0}
                             className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                           >
-                            <option value="">
-                              {sourceWarehouseMode === 'REQUIRED' ? 'Select warehouse...' : 'Use fallback/default'}
-                            </option>
+                            <option value="">Select warehouse...</option>
                             {sourceWarehouses.map((warehouse) => (
                               <option key={warehouse.id} value={warehouse.id}>
                                 {warehouse.name}
@@ -471,11 +465,7 @@ export default function MultiInterCompanyTransferPage() {
                             className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                           >
                             <option value="">
-                              {!destinationCompanyId
-                                ? 'Select destination company'
-                                : destinationWarehouseMode === 'REQUIRED'
-                                ? 'Select warehouse...'
-                                : 'Use fallback/default'}
+                              {!destinationCompanyId ? 'Select destination company' : 'Select warehouse...'}
                             </option>
                             {destinationWarehouses.map((warehouse) => (
                               <option key={warehouse.id} value={warehouse.id}>

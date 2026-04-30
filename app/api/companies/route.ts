@@ -1,5 +1,6 @@
 import { auth }            from '@/auth';
 import { prisma }          from '@/lib/db/prisma';
+import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
 import { ensureCompanyFallbackWarehouse, normalizeWarehouseMode } from '@/lib/warehouses/companyWarehouseMode';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }                from 'zod';
@@ -26,7 +27,6 @@ const CreateSchema = z.object({
   description:       z.string().max(300).optional(),
   externalCompanyId: z.string().max(120).optional(),
   jobSourceMode:     z.enum(['HYBRID', 'EXTERNAL_ONLY']).optional(),
-  warehouseMode:     z.enum(['DISABLED', 'OPTIONAL', 'REQUIRED']).optional(),
 });
 
 export async function POST(req: Request) {
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         description: parsed.data.description,
         externalCompanyId: parsed.data.externalCompanyId || null,
         jobSourceMode: parsed.data.jobSourceMode || 'HYBRID',
-        warehouseMode: normalizeWarehouseMode(parsed.data.warehouseMode),
+        warehouseMode: normalizeWarehouseMode(undefined),
         isActive:    true,
       },
     });
@@ -71,5 +71,11 @@ export async function POST(req: Request) {
     });
   });
 
+  publishLiveUpdate({
+    companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
+    channel: 'admin',
+    entity: 'company',
+    action: 'created',
+  });
   return successResponse(company, 201);
 }

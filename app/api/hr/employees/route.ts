@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import type { Prisma } from '@prisma/client';
 import { provisionEmployeeUser } from '@/lib/hr/provisionEmployeeUser';
 import {
@@ -170,6 +171,13 @@ export async function POST(req: Request) {
       },
     });
 
+    publishLiveUpdate({
+      companyId,
+      channel: 'hr',
+      entity: 'employee',
+      action: 'created',
+    });
+
     return successResponse(
       {
         ...full,
@@ -190,4 +198,5 @@ export async function POST(req: Request) {
     }
     throw e;
   }
+
 }

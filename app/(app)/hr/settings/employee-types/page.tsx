@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { WORKFORCE_EMPLOYEE_TYPE_OPTIONS, type WorkforceEmployeeType } from '@/lib/hr/workforceProfile';
 import toast from 'react-hot-toast';
+import { useGetHrEmployeeTypeSettingsQuery } from '@/store/api/endpoints/hr';
 
 type SettingsMap = Record<
   WorkforceEmployeeType,
@@ -13,15 +14,13 @@ type SettingsMap = Record<
 export default function EmployeeTypeSettingsPage() {
   const [settings, setSettings] = useState<SettingsMap | null>(null);
   const [saving, setSaving] = useState(false);
+  const { data, isLoading, refetch } = useGetHrEmployeeTypeSettingsQuery();
 
   useEffect(() => {
-    void (async () => {
-      const res = await fetch('/api/hr/employee-type-settings', { cache: 'no-store' });
-      const json = await res.json();
-      if (res.ok && json?.success) setSettings(json.data as SettingsMap);
-      else toast.error(json?.error ?? 'Failed to load employee-type settings');
-    })();
-  }, []);
+    if (data) {
+      setSettings(data);
+    }
+  }, [data]);
 
   const update = (type: WorkforceEmployeeType, key: keyof SettingsMap[WorkforceEmployeeType], value: string) => {
     setSettings((prev) => {
@@ -52,9 +51,11 @@ export default function EmployeeTypeSettingsPage() {
       return;
     }
     toast.success('Employee-type timing settings saved');
+    await refetch();
   };
 
-  if (!settings) return <div className="text-slate-400">Loading...</div>;
+  if (isLoading && !settings) return <div className="text-slate-400">Loading...</div>;
+  if (!settings) return <div className="text-slate-400">Unable to load settings</div>;
 
   return (
     <div className="space-y-6">

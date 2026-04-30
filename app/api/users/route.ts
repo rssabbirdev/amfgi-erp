@@ -1,5 +1,6 @@
 import { auth }            from '@/auth';
 import { prisma }          from '@/lib/db/prisma';
+import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }               from 'zod';
 import bcrypt              from 'bcryptjs';
@@ -94,5 +95,11 @@ export async function POST(req: Request) {
     throw err;
   }
 
+  publishLiveUpdate({
+    companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
+    channel: 'admin',
+    entity: 'user',
+    action: 'created',
+  });
   return successResponse(user, 201);
 }

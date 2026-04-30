@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import * as XLSX from 'xlsx';
-import Modal from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
+import { useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
-import { useBulkCreateMaterialsMutation, useGetMaterialsQuery, type Material } from '@/store/hooks';
+import * as XLSX from 'xlsx';
+import { Button } from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
+import { useBulkCreateMaterialsMutation, useGetWarehousesQuery, type Material } from '@/store/hooks';
 
 interface Props {
   isOpen: boolean;
@@ -14,67 +14,158 @@ interface Props {
 }
 
 interface MaterialRow {
+  id?: string;
   name: string;
   description?: string;
   unit: string;
   category?: string;
+  categoryId?: string;
   warehouse?: string;
+  warehouseId?: string;
   stockType: string;
+  allowNegativeConsumption?: boolean;
   externalItemName?: string;
   unitCost?: number;
   reorderLevel?: number;
   currentStock?: number;
-  [key: string]: any;
 }
 
-interface MappedRow extends MaterialRow {
+type MappedRow = Partial<MaterialRow> & {
   __rowIndex: number;
   __errors: string[];
-}
+};
 
-interface PreviewRow extends MappedRow {
+type PreviewRow = MappedRow & {
   __isDuplicate: boolean;
+  __duplicateReason?: string;
   __action: 'update' | 'skip';
-}
+};
+
+type InvalidRow = MappedRow & {
+  __sourceValues: string[];
+};
 
 const SYSTEM_FIELDS = [
+  { key: 'id', label: 'Material ID', required: false },
   { key: 'name', label: 'Item Name', required: true },
+  { key: 'description', label: 'Description', required: false },
   { key: 'unit', label: 'Unit', required: true },
   { key: 'stockType', label: 'Stock Type', required: true },
   { key: 'category', label: 'Category', required: false },
+  { key: 'categoryId', label: 'Category ID', required: false },
   { key: 'warehouse', label: 'Warehouse', required: false },
-  { key: 'description', label: 'Description', required: false },
+  { key: 'warehouseId', label: 'Warehouse ID', required: false },
+  { key: 'allowNegativeConsumption', label: 'Allow Negative Consumption', required: false },
   { key: 'externalItemName', label: 'External Item Name', required: false },
   { key: 'unitCost', label: 'Unit Cost', required: false },
   { key: 'reorderLevel', label: 'Reorder Level', required: false },
   { key: 'currentStock', label: 'Opening Stock', required: false },
-  { key: '__skip__', label: '— Skip column —', required: false },
-];
+  { key: '__skip__', label: 'Skip Column', required: false },
+] as const;
 
-function autoMap(header: string): string {
-  const h = header.toLowerCase().trim();
+function autoMap(header: string) {
+  const normalized = header.toLowerCase().trim();
   const match = SYSTEM_FIELDS.find(
-    (f) => f.key.toLowerCase() === h || f.label.toLowerCase() === h
+    (field) => field.key.toLowerCase() === normalized || field.label.toLowerCase() === normalized
   );
   return match?.key ?? '__skip__';
 }
 
-export default function BulkImportModal({ isOpen, onClose, existingMaterials }: Props) {
-  const { data: materials = [] } = useGetMaterialsQuery();
-  const [bulkCreate, { isLoading: isSubmitting }] = useBulkCreateMaterialsMutation();
+function parseOptionalNumber(value: string | number | boolean | null | undefined) {
+  if (value === null || value === undefined || value === '') return undefined;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  const parsed = Number.parseFloat(String(value).trim());
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
 
-  // ──────────── STEP 0: Upload ────────────
+function parseOptionalBoolean(value: string | number | boolean | null | undefined) {
+  if (value === null || value === undefined || value === '') return undefined;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+
+  const normalized = String(value).trim().toLowerCase();
+  if (['true', 'yes', 'y', '1', 'allowed'].includes(normalized)) return true;
+  if (['false', 'no', 'n', '0', 'blocked'].includes(normalized)) return false;
+  return undefined;
+}
+
+function hasRowContent(row: (string | number | boolean | null)[]) {
+  return row.some((value) => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    return true;
+  });
+}
+
+function downloadTemplate() {
+  const instructionRows = [
+    ['Field', 'Required', 'Instructions'],
+    ['Material ID', 'No', 'Leave blank for new rows. Use the existing material ID when you want duplicate detection by ID.'],
+    ['Item Name', 'Yes', 'Primary material name. Required for every non-empty row.'],
+    ['Description', 'No', 'Optional free-text note.'],
+    ['Unit', 'Yes', 'Base stock unit, such as KG, PCS, MTR, or LTR.'],
+    ['Stock Type', 'Yes', 'Example values: Raw Material, Consumable, Finished Goods.'],
+    ['Category', 'No', 'Category name. If Category ID is provided, ID takes priority.'],
+    ['Category ID', 'No', 'Existing category ID from the system, if known.'],
+    ['Warehouse', 'No', 'Default warehouse name. If Warehouse ID is provided, ID takes priority.'],
+    ['Warehouse ID', 'No', 'Existing warehouse ID from the system, if known.'],
+    ['Allow Negative Consumption', 'No', 'Use TRUE/FALSE, YES/NO, 1/0, or Allowed/Blocked.'],
+    ['External Item Name', 'No', 'Optional external system item name.'],
+    ['Unit Cost', 'No', 'Numeric only. Example: 12.5'],
+    ['Reorder Level', 'No', 'Numeric only. Example: 25'],
+    ['Opening Stock', 'No', 'Numeric only. Only applied for new materials.'],
+  ];
+
+  const templateRows = [
+    {
+      'Material ID': '',
+      'Item Name': 'Fiberglass Mat 300gsm',
+      Description: 'Sample import row',
+      Unit: 'PCS',
+      'Stock Type': 'Raw Material',
+      Category: 'Fiberglass',
+      'Category ID': '',
+      Warehouse: 'Main Warehouse',
+      'Warehouse ID': '',
+      'Allow Negative Consumption': 'FALSE',
+      'External Item Name': 'FG-MAT-300',
+      'Unit Cost': 18.75,
+      'Reorder Level': 50,
+      'Opening Stock': 120,
+    },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  const instructionsSheet = XLSX.utils.aoa_to_sheet(instructionRows);
+  const templateSheet = XLSX.utils.json_to_sheet(templateRows);
+
+  XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Instructions');
+  XLSX.utils.book_append_sheet(workbook, templateSheet, 'Template');
+  XLSX.writeFile(workbook, 'materials-import-template.xlsx');
+}
+
+export default function BulkImportModal({ isOpen, onClose, existingMaterials }: Props) {
+  const [bulkCreate, { isLoading: isSubmitting }] = useBulkCreateMaterialsMutation();
+  const { data: warehouses = [] } = useGetWarehousesQuery();
   const [step, setStep] = useState(0);
   const [rawRows, setRawRows] = useState<(string | number | boolean | null)[][]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
-
-  // ──────────── STEP 1: Mapping ────────────
   const [mapping, setMapping] = useState<Record<number, string>>({});
   const [autoMapped, setAutoMapped] = useState<Set<number>>(new Set());
-
-  // ──────────── STEP 2: Preview ────────────
-  const [previewTab, setPreviewTab] = useState<'new' | 'duplicates'>('new');
+  const [previewTab, setPreviewTab] = useState<'new' | 'duplicates' | 'invalid'>('new');
   const [allRows, setAllRows] = useState<PreviewRow[]>([]);
+  const [invalidRows, setInvalidRows] = useState<InvalidRow[]>([]);
+
+  const resetState = useCallback(() => {
+    setStep(0);
+    setRawRows([]);
+    setHeaders([]);
+    setMapping({});
+    setAutoMapped(new Set());
+    setAllRows([]);
+    setInvalidRows([]);
+    setPreviewTab('new');
+  }, []);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -93,89 +184,179 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
           return;
         }
 
-        const excelHeaders = String(rows[0]).split(',').map((h) => String(h).trim());
-        const dataRows = rows.slice(1);
+        const excelHeaders = rows[0].map((cell) => String(cell ?? '').trim());
+        const dataRows = rows.slice(1).filter((row) => hasRowContent(row));
+        const nextMapping: Record<number, string> = {};
+        const nextAutoMapped = new Set<number>();
+
+        excelHeaders.forEach((header, idx) => {
+          const mapped = autoMap(header);
+          nextMapping[idx] = mapped;
+          if (mapped !== '__skip__') nextAutoMapped.add(idx);
+        });
 
         setHeaders(excelHeaders);
         setRawRows(dataRows);
-
-        // Auto-map
-        const newMapping: Record<number, string> = {};
-        const newAutoMapped = new Set<number>();
-        excelHeaders.forEach((header, idx) => {
-          const mapped = autoMap(header);
-          newMapping[idx] = mapped;
-          if (mapped !== '__skip__') {
-            newAutoMapped.add(idx);
-          }
-        });
-
-        setMapping(newMapping);
-        setAutoMapped(newAutoMapped);
+        setMapping(nextMapping);
+        setAutoMapped(nextAutoMapped);
         setStep(1);
-      } catch (err) {
+      } catch {
         toast.error('Failed to parse Excel file');
       }
     };
+
     reader.readAsArrayBuffer(file);
   }, []);
 
   const canAdvanceFromMapping = useCallback(() => {
-    const requiredFields = SYSTEM_FIELDS.filter((f) => f.required).map((f) => f.key);
-    const mappedFields = Object.values(mapping).filter((k) => k !== '__skip__');
+    const requiredFields = SYSTEM_FIELDS.filter((field) => field.required).map((field) => field.key);
+    const mappedFields = Object.values(mapping).filter((key) => key !== '__skip__');
     return requiredFields.every((field) => mappedFields.includes(field));
   }, [mapping]);
 
   const handlePreview = useCallback(() => {
-    const existingNamesLower = new Set(materials.map((m) => m.name.toLowerCase()));
+    const existingNameMap = new Map(existingMaterials.map((material) => [material.name.toLowerCase(), material.name]));
+    const existingIdMap = new Map(existingMaterials.map((material) => [material.id, material.name]));
+    const warehouseNamesLower = new Set(warehouses.map((warehouse) => warehouse.name.toLowerCase()));
+    const warehouseIds = new Set(warehouses.map((warehouse) => warehouse.id));
 
-    const parsedRows: MappedRow[] = rawRows
-      .map((row, rowIndex) => {
-        const parsed: MappedRow = { __rowIndex: rowIndex, __errors: [] } as any;
+    const parsedResults = rawRows.map((row, rowIndex) => {
+      const parsed: MappedRow = { __rowIndex: rowIndex, __errors: [] };
+      const parsedValues = parsed as MappedRow & Record<string, string | number | boolean | undefined>;
 
-        headers.forEach((_, colIndex) => {
-          const fieldKey = mapping[colIndex];
-          if (fieldKey === '__skip__') return;
+      headers.forEach((_, colIndex) => {
+        const fieldKey = mapping[colIndex];
+        if (!fieldKey || fieldKey === '__skip__') return;
 
-          const value = row[colIndex];
-          const fieldDef = SYSTEM_FIELDS.find((f) => f.key === fieldKey);
-          if (!fieldDef) return;
+        const value = row[colIndex];
+        const fieldDef = SYSTEM_FIELDS.find((field) => field.key === fieldKey);
+        if (!fieldDef) return;
 
-          if (fieldDef.required && !value) {
-            parsed.__errors.push(`Missing required field: ${fieldDef.label}`);
+        if (fieldDef.required && !value) {
+          parsed.__errors.push(`Missing required field: ${fieldDef.label}`);
+          return;
+        }
+
+        if (fieldKey === 'unitCost' || fieldKey === 'reorderLevel' || fieldKey === 'currentStock') {
+          if (value === null || value === undefined || value === '') {
+            parsedValues[fieldKey] = undefined;
+            return;
           }
 
-          if (fieldKey === 'unitCost' || fieldKey === 'reorderLevel' || fieldKey === 'currentStock') {
-            parsed[fieldKey] = typeof value === 'number' ? value : parseFloat(String(value));
-          } else {
-            parsed[fieldKey] = String(value || '').trim();
+          const numericValue = parseOptionalNumber(value);
+          if (numericValue === undefined) {
+            parsed.__errors.push(`Invalid number for ${fieldDef.label}`);
+            return;
           }
-        });
 
-        return parsed;
-      })
-      .filter((row) => row.__errors.length === 0); // Exclude rows with errors
+          parsedValues[fieldKey] = numericValue;
+          return;
+        }
 
-    const errorCount = rawRows.length - parsedRows.length;
+        if (fieldKey === 'allowNegativeConsumption') {
+          if (value === null || value === undefined || value === '') {
+            parsedValues[fieldKey] = undefined;
+            return;
+          }
 
-    const previewRows: PreviewRow[] = parsedRows.map((row) => ({
+          const booleanValue = parseOptionalBoolean(value);
+          if (booleanValue === undefined) {
+            parsed.__errors.push(`Invalid boolean for ${fieldDef.label}`);
+            return;
+          }
+
+          parsedValues[fieldKey] = booleanValue;
+          return;
+        }
+
+        parsedValues[fieldKey] = String(value ?? '').trim();
+      });
+
+      if (parsed.warehouseId && !warehouseIds.has(parsed.warehouseId)) {
+        parsed.__errors.push(`Warehouse ID not found: ${parsed.warehouseId}`);
+      } else if (
+        parsed.warehouse &&
+        typeof parsed.warehouse === 'string' &&
+        !warehouseNamesLower.has(parsed.warehouse.toLowerCase())
+      ) {
+        parsed.__errors.push(`Warehouse not found: ${parsed.warehouse}`);
+      }
+
+      return {
+        parsed,
+        sourceValues: headers.map((_, colIndex) => String(row[colIndex] ?? '').trim()),
+      };
+    });
+
+    const parsedRows = parsedResults
+      .map((result) => result.parsed)
+      .filter((row) => row.__errors.length === 0);
+    const parsedNameCounts = new Map<string, number>();
+    const parsedIdCounts = new Map<string, number>();
+
+    for (const row of parsedRows) {
+      const normalizedName = row.name?.trim().toLowerCase();
+      if (normalizedName) {
+        parsedNameCounts.set(normalizedName, (parsedNameCounts.get(normalizedName) ?? 0) + 1);
+      }
+
+      const normalizedId = row.id?.trim();
+      if (normalizedId) {
+        parsedIdCounts.set(normalizedId, (parsedIdCounts.get(normalizedId) ?? 0) + 1);
+      }
+    }
+
+    for (const result of parsedResults) {
+      const normalizedName = result.parsed.name?.trim().toLowerCase();
+      const normalizedId = result.parsed.id?.trim();
+
+      if (!result.parsed.__errors.length && normalizedName && (parsedNameCounts.get(normalizedName) ?? 0) > 1) {
+        result.parsed.__errors.push(`Duplicate item name in this file: ${result.parsed.name}`);
+      }
+
+      if (!result.parsed.__errors.length && normalizedId && (parsedIdCounts.get(normalizedId) ?? 0) > 1) {
+        result.parsed.__errors.push(`Duplicate material ID in this file: ${normalizedId}`);
+      }
+    }
+
+    const validParsedRows = parsedResults
+      .map((result) => result.parsed)
+      .filter((row) => row.__errors.length === 0);
+    const nextInvalidRows: InvalidRow[] = parsedResults
+      .filter((result) => result.parsed.__errors.length > 0)
+      .map((result) => ({
+        ...result.parsed,
+        __sourceValues: result.sourceValues,
+      }));
+
+    const previewRows: PreviewRow[] = validParsedRows.map((row) => ({
       ...row,
-      __isDuplicate: existingNamesLower.has(String(row.name || '').toLowerCase()),
-      __action: 'skip' as const,
+      __isDuplicate: Boolean(
+        (typeof row.id === 'string' && row.id.length > 0 && existingIdMap.has(row.id)) ||
+          existingNameMap.has(String(row.name || '').toLowerCase())
+      ),
+      __duplicateReason:
+        typeof row.id === 'string' && row.id.length > 0 && existingIdMap.has(row.id)
+          ? `Matches existing material ID: ${row.id} (${existingIdMap.get(row.id)})`
+          : existingNameMap.has(String(row.name || '').toLowerCase())
+            ? `Matches existing material name: ${existingNameMap.get(String(row.name || '').toLowerCase())}`
+            : undefined,
+      __action: 'skip',
     }));
 
-    setAllRows(previewRows);
-    if (errorCount > 0) {
-      toast.error(`${errorCount} row(s) excluded due to validation errors`);
+    if (nextInvalidRows.length > 0) {
+      toast.error(`${nextInvalidRows.length} row(s) failed validation`);
     }
-    setPreviewTab('new');
+
+    setAllRows(previewRows);
+    setInvalidRows(nextInvalidRows);
+    setPreviewTab(previewRows.length > 0 ? 'new' : nextInvalidRows.length > 0 ? 'invalid' : 'new');
     setStep(2);
-  }, [rawRows, headers, mapping, materials]);
+  }, [existingMaterials, headers, mapping, rawRows, warehouses]);
 
-  const newRows = allRows.filter((r) => !r.__isDuplicate);
-  const duplicateRows = allRows.filter((r) => r.__isDuplicate);
-
-  const selectedForUpdate = duplicateRows.filter((r) => r.__action === 'update');
+  const newRows = allRows.filter((row) => !row.__isDuplicate);
+  const duplicateRows = allRows.filter((row) => row.__isDuplicate);
+  const selectedForUpdate = duplicateRows.filter((row) => row.__action === 'update');
 
   const handleSubmit = async () => {
     if (newRows.length === 0 && selectedForUpdate.length === 0) {
@@ -184,7 +365,7 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
     }
 
     const cleanRows = (rows: PreviewRow[]): MaterialRow[] =>
-      rows.map(({ __rowIndex, __errors, __isDuplicate, __action, ...rest }) => rest);
+      rows.map(({ __rowIndex, __errors, __isDuplicate, __action, ...rest }) => rest as MaterialRow);
 
     try {
       const result = await bulkCreate({
@@ -193,27 +374,38 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
       }).unwrap();
 
       toast.success(`Imported ${result.created} new, updated ${result.updated}`);
-      setStep(0);
-      setRawRows([]);
-      setHeaders([]);
-      setMapping({});
-      setAutoMapped(new Set());
-      setAllRows([]);
-      setPreviewTab('new');
+      resetState();
       onClose();
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Import failed');
+    } catch (err: unknown) {
+      const message =
+        typeof err === 'object' &&
+        err !== null &&
+        'data' in err &&
+        typeof (err as { data?: { error?: unknown } }).data?.error === 'string'
+          ? (err as { data: { error: string } }).data.error
+          : 'Import failed';
+
+      toast.error(message);
     }
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Bulk Import Materials" size="xl">
       <div className="space-y-4">
-        {/* ────────────── STEP 0: Upload ─────────────── */}
-        {step === 0 && (
+        {step === 0 ? (
           <div className="space-y-4">
-            <p className="text-sm text-slate-400">Upload an Excel file with your materials list</p>
-            <div className="border-2 border-dashed border-slate-600 rounded-lg p-6 text-center">
+            <div className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-900/60 p-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm text-slate-300">Upload an Excel file with your materials list.</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Blank rows are ignored. Use the template to see the accepted columns and example values.
+                </p>
+              </div>
+              <Button type="button" variant="secondary" onClick={downloadTemplate}>
+                Download Template
+              </Button>
+            </div>
+            <div className="rounded-lg border-2 border-dashed border-slate-600 p-6 text-center">
               <input
                 type="file"
                 accept=".xlsx,.xls,.csv"
@@ -221,26 +413,34 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
                 className="hidden"
                 id="file-input"
               />
-              <label htmlFor="file-input" className="cursor-pointer block">
-                <svg className="h-12 w-12 mx-auto text-slate-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+              <label htmlFor="file-input" className="block cursor-pointer">
+                <svg className="mx-auto mb-2 h-12 w-12 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
+                  />
                 </svg>
-                <p className="text-white font-medium">Click to upload or drag and drop</p>
-                <p className="text-sm text-slate-400 mt-1">Excel (.xlsx, .xls) or CSV files</p>
+                <p className="font-medium text-white">Click to upload or drag and drop</p>
+                <p className="mt-1 text-sm text-slate-400">Excel (.xlsx, .xls) or CSV files</p>
               </label>
             </div>
           </div>
-        )}
+        ) : null}
 
-        {/* ────────────── STEP 1: Mapping ─────────────── */}
-        {step === 1 && (
+        {step === 1 ? (
           <div className="space-y-4">
-            <p className="text-sm text-slate-400">Map your Excel columns to system fields</p>
-            <div className="bg-slate-900 rounded-lg overflow-y-auto max-h-80">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-400">Map your spreadsheet columns to material fields.</p>
+              <Button type="button" variant="secondary" onClick={downloadTemplate}>
+                Download Template
+              </Button>
+            </div>
+            <div className="max-h-80 overflow-y-auto rounded-lg bg-slate-900">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-800 border-b border-slate-700">
+                  <tr className="border-b border-slate-700 bg-slate-800">
                     <th className="px-4 py-2 text-left text-slate-300">Excel Column</th>
                     <th className="px-4 py-2 text-left text-slate-300">Map To</th>
                   </tr>
@@ -250,7 +450,9 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
                     <tr key={idx} className="border-b border-slate-700 hover:bg-slate-800/50">
                       <td className="px-4 py-2">
                         <div className="text-white">{header}</div>
-                        {autoMapped.has(idx) && <div className="text-xs text-emerald-400 mt-1">Auto-matched</div>}
+                        {autoMapped.has(idx) ? (
+                          <div className="mt-1 text-xs text-emerald-400">Auto-matched</div>
+                        ) : null}
                       </td>
                       <td className="px-4 py-2">
                         <select
@@ -261,7 +463,7 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
                               setAutoMapped((prev) => new Set(prev).add(idx));
                             }
                           }}
-                          className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                          className="w-full rounded border border-slate-600 bg-slate-700 px-2 py-1 text-sm text-white focus:ring-2 focus:ring-emerald-500"
                         >
                           <option value="">-- Select --</option>
                           {SYSTEM_FIELDS.map((field) => (
@@ -277,47 +479,30 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
               </table>
             </div>
 
-            {!canAdvanceFromMapping() && (
-              <div className="bg-red-950/30 border border-red-900 rounded-lg p-3">
+            {!canAdvanceFromMapping() ? (
+              <div className="rounded-lg border border-red-900 bg-red-950/30 p-3">
                 <p className="text-sm text-red-300">Required fields not mapped: Item Name, Unit, Stock Type</p>
               </div>
-            )}
+            ) : null}
 
-            <div className="flex gap-3 pt-2 border-t border-slate-700">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setStep(0);
-                  setRawRows([]);
-                  setHeaders([]);
-                }}
-                fullWidth
-              >
+            <div className="flex gap-3 border-t border-slate-700 pt-2">
+              <Button type="button" variant="ghost" onClick={resetState} fullWidth>
                 Back
               </Button>
-              <Button
-                type="button"
-                onClick={handlePreview}
-                disabled={!canAdvanceFromMapping()}
-                fullWidth
-              >
+              <Button type="button" onClick={handlePreview} disabled={!canAdvanceFromMapping()} fullWidth>
                 Preview
               </Button>
             </div>
           </div>
-        )}
+        ) : null}
 
-        {/* ────────────── STEP 2: Preview ─────────────── */}
-        {step === 2 && (
+        {step === 2 ? (
           <div className="space-y-4">
             <div className="flex gap-2 border-b border-slate-700">
               <button
                 onClick={() => setPreviewTab('new')}
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  previewTab === 'new'
-                    ? 'border-b-2 border-emerald-500 text-white'
-                    : 'text-slate-400 hover:text-white'
+                  previewTab === 'new' ? 'border-b-2 border-emerald-500 text-white' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 New ({newRows.length})
@@ -332,17 +517,26 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
               >
                 Duplicates ({duplicateRows.length})
               </button>
+              <button
+                onClick={() => setPreviewTab('invalid')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  previewTab === 'invalid'
+                    ? 'border-b-2 border-emerald-500 text-white'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Invalid ({invalidRows.length})
+              </button>
             </div>
 
-            {/* New Tab */}
-            {previewTab === 'new' && (
-              <div className="bg-slate-900 rounded-lg overflow-x-auto max-h-64">
+            {previewTab === 'new' ? (
+              <div className="max-h-64 overflow-x-auto rounded-lg bg-slate-900">
                 {newRows.length === 0 ? (
-                  <p className="text-center py-8 text-slate-400 text-sm">No new materials</p>
+                  <p className="py-8 text-center text-sm text-slate-400">No new materials</p>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-slate-800 border-b border-slate-700 sticky top-0">
+                      <tr className="sticky top-0 border-b border-slate-700 bg-slate-800">
                         <th className="px-3 py-2 text-left text-slate-300">Item Name</th>
                         <th className="px-3 py-2 text-left text-slate-300">Unit</th>
                         <th className="px-3 py-2 text-left text-slate-300">Stock Type</th>
@@ -357,28 +551,27 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
                           <td className="px-3 py-2 text-white">{row.name}</td>
                           <td className="px-3 py-2 text-slate-300">{row.unit}</td>
                           <td className="px-3 py-2 text-slate-300">{row.stockType}</td>
-                          <td className="px-3 py-2 text-slate-300">{row.category || '—'}</td>
-                          <td className="px-3 py-2 text-slate-300">{row.warehouse || '—'}</td>
-                          <td className="px-3 py-2 text-right text-slate-300">{row.unitCost?.toFixed(2) || '—'}</td>
+                          <td className="px-3 py-2 text-slate-300">{row.category || '-'}</td>
+                          <td className="px-3 py-2 text-slate-300">{row.warehouse || '-'}</td>
+                          <td className="px-3 py-2 text-right text-slate-300">
+                            {typeof row.unitCost === 'number' ? row.unitCost.toFixed(2) : '-'}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 )}
               </div>
-            )}
-
-            {/* Duplicates Tab */}
-            {previewTab === 'duplicates' && (
+            ) : previewTab === 'duplicates' ? (
               <div className="space-y-3">
                 {duplicateRows.length === 0 ? (
-                  <p className="text-center py-8 text-slate-400 text-sm">No duplicate materials</p>
+                  <p className="py-8 text-center text-sm text-slate-400">No duplicate materials</p>
                 ) : (
                   <>
-                    <div className="bg-blue-950/30 border border-blue-900 rounded-lg p-3">
+                    <div className="rounded-lg border border-blue-900 bg-blue-950/30 p-3">
                       <p className="text-sm text-blue-300">
-                        ℹ️ When updating duplicates, the <strong>Opening Stock</strong> field will NOT be modified.
-                        Only other fields (Unit, Category, etc.) will be updated.
+                        When updating duplicates, the <strong>Opening Stock</strong> field is ignored. Only schema
+                        fields such as unit, category, warehouse, costing, and stock rules are updated.
                       </p>
                     </div>
 
@@ -387,20 +580,21 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
                       size="sm"
                       onClick={() => {
                         setAllRows((prev) =>
-                          prev.map((r) => (r.__isDuplicate ? { ...r, __action: 'update' as const } : r))
+                          prev.map((row) => (row.__isDuplicate ? { ...row, __action: 'update' } : row))
                         );
                       }}
                     >
-                      Select All → Update
+                      Select All to Update
                     </Button>
 
-                    <div className="bg-slate-900 rounded-lg overflow-x-auto max-h-64">
+                    <div className="max-h-64 overflow-x-auto rounded-lg bg-slate-900">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="bg-slate-800 border-b border-slate-700 sticky top-0">
+                          <tr className="sticky top-0 border-b border-slate-700 bg-slate-800">
                             <th className="px-3 py-2 text-left text-slate-300">Item Name</th>
                             <th className="px-3 py-2 text-left text-slate-300">Unit</th>
                             <th className="px-3 py-2 text-left text-slate-300">Stock Type</th>
+                            <th className="px-3 py-2 text-left text-slate-300">Matched Existing Record</th>
                             <th className="px-3 py-2 text-center text-slate-300">Action</th>
                           </tr>
                         </thead>
@@ -410,19 +604,20 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
                               <td className="px-3 py-2 text-white">{row.name}</td>
                               <td className="px-3 py-2 text-slate-300">{row.unit}</td>
                               <td className="px-3 py-2 text-slate-300">{row.stockType}</td>
+                              <td className="px-3 py-2 text-xs text-amber-200">{row.__duplicateReason || '-'}</td>
                               <td className="px-3 py-2 text-center">
                                 <div className="flex justify-center gap-2">
                                   <button
                                     onClick={() => {
                                       setAllRows((prev) =>
-                                        prev.map((r) =>
-                                          r.__rowIndex === row.__rowIndex
-                                            ? { ...r, __action: 'update' as const }
-                                            : r
+                                        prev.map((entry) =>
+                                          entry.__rowIndex === row.__rowIndex
+                                            ? { ...entry, __action: 'update' }
+                                            : entry
                                         )
                                       );
                                     }}
-                                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                                    className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
                                       row.__action === 'update'
                                         ? 'bg-emerald-600 text-white'
                                         : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -433,14 +628,14 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
                                   <button
                                     onClick={() => {
                                       setAllRows((prev) =>
-                                        prev.map((r) =>
-                                          r.__rowIndex === row.__rowIndex
-                                            ? { ...r, __action: 'skip' as const }
-                                            : r
+                                        prev.map((entry) =>
+                                          entry.__rowIndex === row.__rowIndex
+                                            ? { ...entry, __action: 'skip' }
+                                            : entry
                                         )
                                       );
                                     }}
-                                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                                    className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
                                       row.__action === 'skip'
                                         ? 'bg-slate-600 text-white'
                                         : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -458,23 +653,75 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
                   </>
                 )}
               </div>
+            ) : (
+              <div className="space-y-3">
+                {invalidRows.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-slate-400">No invalid rows</p>
+                ) : (
+                  <>
+                    <div className="rounded-lg border border-amber-900 bg-amber-950/30 p-3">
+                      <p className="text-sm text-amber-300">
+                        These rows were excluded from import. Fix the listed validation issues in the source file and upload again.
+                      </p>
+                    </div>
+
+                    <div className="max-h-72 overflow-x-auto rounded-lg bg-slate-900">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="sticky top-0 border-b border-slate-700 bg-slate-800">
+                            <th className="px-3 py-2 text-left text-slate-300">Row</th>
+                            <th className="px-3 py-2 text-left text-slate-300">Item Name</th>
+                            <th className="px-3 py-2 text-left text-slate-300">Validation Errors</th>
+                            <th className="px-3 py-2 text-left text-slate-300">Source Data</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invalidRows.map((row) => (
+                            <tr key={row.__rowIndex} className="border-b border-slate-700 align-top hover:bg-slate-800/50">
+                              <td className="px-3 py-2 text-slate-300">{row.__rowIndex + 2}</td>
+                              <td className="px-3 py-2 text-white">{row.name || '-'}</td>
+                              <td className="px-3 py-2">
+                                <div className="space-y-1">
+                                  {row.__errors.map((error) => (
+                                    <div key={error} className="rounded bg-red-950/40 px-2 py-1 text-xs text-red-200">
+                                      {error}
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-xs text-slate-400">
+                                <div className="space-y-1">
+                                  {headers.map((header, index) => (
+                                    <div key={`${row.__rowIndex}-${header}-${index}`}>
+                                      <span className="text-slate-500">{header}:</span>{' '}
+                                      <span>{row.__sourceValues[index] || '-'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
 
-            <div className="bg-slate-800/50 rounded-lg p-3 text-sm text-slate-300 space-y-2">
-              <p>Ready to import: <span className="font-semibold">{newRows.length}</span> new + <span className="font-semibold">{selectedForUpdate.length}</span> updates</p>
-              <div className="text-xs text-slate-400 space-y-1">
-                <p>• <strong>New items:</strong> Opening Stock creates StockBatch records for inventory tracking</p>
-                <p>• <strong>Updates:</strong> Opening Stock field will NOT be changed for existing materials</p>
+            <div className="space-y-2 rounded-lg bg-slate-800/50 p-3 text-sm text-slate-300">
+              <p>
+                Ready to import: <span className="font-semibold">{newRows.length}</span> new +{' '}
+                <span className="font-semibold">{selectedForUpdate.length}</span> updates
+              </p>
+              <div className="space-y-1 text-xs text-slate-400">
+                <p>New items create base UOMs and opening-stock batches.</p>
+                <p>Duplicate updates preserve live stock and only refresh the master data.</p>
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2 border-t border-slate-700">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setStep(1)}
-                fullWidth
-              >
+            <div className="flex gap-3 border-t border-slate-700 pt-2">
+              <Button type="button" variant="ghost" onClick={() => setStep(1)} fullWidth>
                 Back
               </Button>
               <Button
@@ -488,7 +735,7 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
               </Button>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </Modal>
   );

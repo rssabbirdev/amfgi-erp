@@ -26,10 +26,18 @@ export type FormulaAreaRule = {
   labor: FormulaLaborRule[];
 };
 
+export type FormulaConstant = {
+  key: string;
+  label: string;
+  value: number | string;
+  unit?: string;
+};
+
 export type FormulaConfig = {
   version: number;
   unitSystem?: 'METRIC';
   variables?: Record<string, number | string>;
+  constants?: FormulaConstant[];
   areas: FormulaAreaRule[];
 };
 

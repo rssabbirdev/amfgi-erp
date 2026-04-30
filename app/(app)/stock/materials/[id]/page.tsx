@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
@@ -170,6 +170,20 @@ function MaterialEditor({
   const [deriveUnitId, setDeriveUnitId] = useState('');
   const [deriveParentId, setDeriveParentId] = useState('');
   const [deriveFactor, setDeriveFactor] = useState('');
+
+  useEffect(() => {
+    if (!material) return;
+    setName(material.name ?? '');
+    setDescription(material.description ?? '');
+    setUnit(material.unit ?? '');
+    setCategory(material.category ?? '');
+    setWarehouse(material.warehouse ?? '');
+    setStockType(material.stockType ?? '');
+    setAllowNegativeConsumption(material.allowNegativeConsumption ?? false);
+    setExternalItemName(material.externalItemName ?? '');
+    setReorderLevel(material.reorderLevel?.toString() ?? '');
+    setUnitCost(material.unitCost?.toString() ?? '');
+  }, [material?.id, material?.updatedAt, material?.unitCost, material?.currentStock]);
 
   const materialUoms = material?.materialUoms ?? [];
   const availableDerivedUnits = units.filter((entry) => !materialUoms.some((uom) => uom.unitId === entry.id));
@@ -536,7 +550,10 @@ function MaterialEditor({
                 </div>
               </FieldShell>
 
-              <FieldShell label="Warehouse">
+              <FieldShell
+                label="Default warehouse"
+                hint="Used as the default in receipts/dispatch lines. You can still override per line."
+              >
                 <div className="flex gap-2">
                   <select value={warehouse} onChange={(e) => setWarehouse(e.target.value)} className={inputClassName()}>
                     <option value="">Select warehouse</option>
@@ -965,12 +982,25 @@ export default function MaterialDetailPage() {
 
   const { data: material, isLoading: isLoadingMaterial } = useGetMaterialByIdQuery(materialId, {
     skip: isCreateMode,
+    refetchOnMountOrArgChange: 30,
   });
-  const { data: units = [] } = useGetUnitsQuery();
-  const { data: categories = [] } = useGetCategoriesQuery();
-  const { data: warehouses = [] } = useGetWarehousesQuery();
-  const { data: materialLogs = [] } = useGetMaterialLogsQuery(materialId, { skip: isCreateMode });
-  const { data: priceLogs = [] } = useGetPriceLogsQuery(materialId, { skip: isCreateMode });
+  const { data: units = [] } = useGetUnitsQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const { data: categories = [] } = useGetCategoriesQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const { data: warehouses = [] } = useGetWarehousesQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const { data: materialLogs = [] } = useGetMaterialLogsQuery(materialId, {
+    skip: isCreateMode,
+    refetchOnMountOrArgChange: 30,
+  });
+  const { data: priceLogs = [] } = useGetPriceLogsQuery(materialId, {
+    skip: isCreateMode,
+    refetchOnMountOrArgChange: 30,
+  });
 
   if (!isCreateMode && isLoadingMaterial) {
     return <div className="text-sm text-slate-600 dark:text-slate-300">Loading material...</div>;

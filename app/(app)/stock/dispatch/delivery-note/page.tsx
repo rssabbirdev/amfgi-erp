@@ -6,16 +6,21 @@ import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import SearchSelect from '@/components/ui/SearchSelect';
+import DispatchLineGrid from '@/components/stock/DispatchLineGrid';
 import { Badge } from '@/components/ui/Badge';
 import toast from 'react-hot-toast';
 import {
   useGetJobsQuery,
   useGetCustomersQuery,
+  useGetDispatchBudgetWarningMutation,
   useGetMaterialsQuery,
+  useGetWarehousesQuery,
   useGetJobMaterialsQuery,
   useAddBatchTransactionMutation,
   useUpdateJobMutation,
+  type DispatchBudgetWarningResult,
   type MaterialUomDto,
+  type Material,
 } from '@/store/hooks';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -42,7 +47,77 @@ interface Line {
   dispatchQty: string;
   returnQty: string;
   quantityUomId: string;
+  warehouseId: string;
   originalDispatchQty?: number;
+  originalWarehouseId?: string;
+}
+
+function getSelectedUom(material: Material | undefined, quantityUomId: string) {
+  if (!material) return null;
+  if (!quantityUomId.trim()) {
+    return {
+      id: '',
+      unitName: material.unit,
+      factorToBase: 1,
+    };
+  }
+  const selected = material.materialUoms?.find((uom) => uom.id === quantityUomId);
+  return selected
+    ? {
+        id: selected.id,
+        unitName: selected.unitName,
+        factorToBase: selected.factorToBase,
+      }
+    : {
+        id: '',
+        unitName: material.unit,
+        factorToBase: 1,
+      };
+}
+
+function getWarehouseBaseStock(material: Material | undefined, warehouseId: string) {
+  if (!material || !warehouseId) return 0;
+  return material.materialWarehouseStocks?.find((stock) => stock.warehouseId === warehouseId)?.currentStock ?? 0;
+}
+
+function formatWarehouseStock(material: Material | undefined, warehouseId: string, quantityUomId: string) {
+  const selectedUom = getSelectedUom(material, quantityUomId);
+  const baseStock = getWarehouseBaseStock(material, warehouseId);
+  if (!selectedUom) {
+    return { quantity: 0, unitName: '' };
+  }
+  return {
+    quantity: baseStock / selectedUom.factorToBase,
+    unitName: selectedUom.unitName,
+  };
+}
+
+function showBaseStockLine(quantityUomId: string) {
+  return quantityUomId.trim().length > 0;
+}
+
+function getMaterialUomOptions(material: Material | undefined) {
+  if (!material) return [];
+  const extraUoms = (material.materialUoms ?? []).filter((uom) => !uom.isBase);
+  return [
+    {
+      value: '',
+      label: `${material.unit} (base)`,
+    },
+    ...extraUoms.map((uom) => ({
+      value: uom.id,
+      label: `${uom.unitName} (=${uom.factorToBase} ${material.unit})`,
+    })),
+  ];
+}
+
+function parseOverrideReason(notesText: string) {
+  const match = notesText.match(/\[OVERRIDE_REASON:([^\]]+)\]/);
+  return match?.[1]?.trim() ?? '';
+}
+
+function stripOverrideReason(notesText: string) {
+  return notesText.replace(/\[OVERRIDE_REASON:[^\]]+\]\n?/g, '').trim();
 }
 
 interface PendingChange {
@@ -69,8 +144,11 @@ export default function DeliveryNoteCreatePage() {
   const { data: jobs = [] } = useGetJobsQuery();
   const { data: customers = [] } = useGetCustomersQuery();
   const { data: materials = [] } = useGetMaterialsQuery();
+  const { data: warehouses = [] } = useGetWarehousesQuery();
   const [addBatchTransaction] = useAddBatchTransactionMutation();
+  const [getDispatchBudgetWarning, { isLoading: budgetWarningLoading }] = useGetDispatchBudgetWarningMutation();
   const [updateJob] = useUpdateJobMutation();
+  const showWarehouseColumn = true;
 
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
@@ -79,6 +157,7 @@ export default function DeliveryNoteCreatePage() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deliveryNoteNumber, setDeliveryNoteNumber] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
+  const [overrideReason, setOverrideReason] = useState('');
   const [skipMaterialDispatch, setSkipMaterialDispatch] = useState(false);
   const [customItems, setCustomItems] = useState<CustomItem[]>([
     { id: generateId(), name: '', description: '', unit: '', qty: '' },
@@ -91,6 +170,7 @@ export default function DeliveryNoteCreatePage() {
       dispatchQty: '',
       returnQty: '',
       quantityUomId: '',
+      warehouseId: '',
     },
     {
       id: generateId(),
@@ -99,6 +179,7 @@ export default function DeliveryNoteCreatePage() {
       dispatchQty: '',
       returnQty: '',
       quantityUomId: '',
+      warehouseId: '',
     },
     {
       id: generateId(),
@@ -107,9 +188,11 @@ export default function DeliveryNoteCreatePage() {
       dispatchQty: '',
       returnQty: '',
       quantityUomId: '',
+      warehouseId: '',
     },
   ]);
   const [submitting, setSubmitting] = useState(false);
+  const [budgetWarning, setBudgetWarning] = useState<DispatchBudgetWarningResult | null>(null);
   const [signedCopyUrl, setSignedCopyUrl] = useState<string | null>(null);
   const [uploadingSignedCopy, setUploadingSignedCopy] = useState(false);
   const [changeWarningModal, setChangeWarningModal] = useState<{ open: boolean; pendingChange: PendingChange | null }>({
@@ -143,6 +226,53 @@ export default function DeliveryNoteCreatePage() {
     () => jobs.filter((job) => Boolean(job.parentJobId) && job.status !== 'COMPLETED' && job.status !== 'CANCELLED'),
     [jobs]
   );
+  const budgetWarningLines = useMemo(
+    () =>
+      skipMaterialDispatch
+        ? []
+        : lines
+            .filter((line) => line.materialId && line.dispatchQty)
+            .map((line) => ({
+              materialId: line.materialId,
+              quantity: Number.parseFloat(line.dispatchQty) || 0,
+              quantityUomId: line.quantityUomId || undefined,
+              returnQty: line.returnQty ? Number.parseFloat(line.returnQty) || 0 : undefined,
+            }))
+            .filter((line) => line.quantity > 0),
+    [lines, skipMaterialDispatch]
+  );
+
+  const overrideSignals = useMemo(() => {
+    if (skipMaterialDispatch) {
+      return {
+        negativeStockLineCount: 0,
+        budgetWarningCount: 0,
+        requiresReason: false,
+      };
+    }
+
+    let negativeStockLineCount = 0;
+    for (const line of lines) {
+      if (!line.materialId || !line.dispatchQty || !line.warehouseId) continue;
+      const qty = Number.parseFloat(line.dispatchQty);
+      const mat = materials.find((entry) => entry.id === line.materialId);
+      if (!mat || !mat.allowNegativeConsumption || !Number.isFinite(qty) || qty <= 0) continue;
+      const baseQty = qtyInBase(mat.materialUoms, line.quantityUomId, qty);
+      const originalQty = line.originalDispatchQty ? parseFloat(String(line.originalDispatchQty)) : 0;
+      const originalWarehouseMatches = line.originalWarehouseId && line.originalWarehouseId === line.warehouseId;
+      const availableStock = getWarehouseBaseStock(mat, line.warehouseId) + (originalWarehouseMatches ? originalQty : 0);
+      if (availableStock + 0.0005 < baseQty) {
+        negativeStockLineCount += 1;
+      }
+    }
+
+    const budgetWarningCount = budgetWarning?.warningCount ?? 0;
+    return {
+      negativeStockLineCount,
+      budgetWarningCount,
+      requiresReason: negativeStockLineCount > 0 || budgetWarningCount > 0,
+    };
+  }, [budgetWarning, lines, materials, skipMaterialDispatch]);
 
   useEffect(() => {
     if (!selectedJob) {
@@ -296,9 +426,10 @@ export default function DeliveryNoteCreatePage() {
             // Parse custom items from notes
             const customItemsParsed = parseCustomItems(txn.notes || '');
             setCustomItems(customItemsParsed);
+            setOverrideReason(parseOverrideReason(txn.notes || ''));
 
             // Extract base notes (without delivery note headers)
-            let baseNotes = (txn.notes || '')
+            let baseNotes = stripOverrideReason((txn.notes || ''))
               .replace(/--- DELIVERY NOTE #\d+\n?/g, '')
               .replace(/--- DELIVERY CONTACT PERSON:[^\n\r]*\r?\n?/g, '')
               .replace(/--- DELIVERY NOTE ITEMS \(For Printing\) ---[\s\S]*?(?=\n--- |$)/g, '')
@@ -318,7 +449,9 @@ export default function DeliveryNoteCreatePage() {
                   dispatchQty: txn.quantity.toString(),
                   returnQty: '',
                   quantityUomId: '',
+                  warehouseId: txn.warehouseId ?? '',
                   originalDispatchQty: txn.quantity,
+                  originalWarehouseId: txn.warehouseId ?? '',
                 },
               ]);
             }
@@ -400,6 +533,38 @@ export default function DeliveryNoteCreatePage() {
     }
   };
 
+  useEffect(() => {
+    if (!selectedJob || budgetWarningLines.length === 0) {
+      setBudgetWarning(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await getDispatchBudgetWarning({
+            jobId: selectedJob,
+            postingDate: date,
+            lines: budgetWarningLines,
+          }).unwrap();
+          if (!cancelled) {
+            setBudgetWarning(result.warningCount > 0 ? result : null);
+          }
+        } catch {
+          if (!cancelled) {
+            setBudgetWarning(null);
+          }
+        }
+      })();
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [budgetWarningLines, date, getDispatchBudgetWarning, selectedJob]);
+
   const handleDateChange = (newDate: string) => {
     if (hasData()) {
       setChangeWarningModal({
@@ -425,6 +590,7 @@ export default function DeliveryNoteCreatePage() {
       dispatchQty: '',
       returnQty: '',
       quantityUomId: '',
+      warehouseId: '',
     })));
     setNotes('');
     setSkipMaterialDispatch(false);
@@ -465,6 +631,7 @@ export default function DeliveryNoteCreatePage() {
       dispatchQty: '',
       returnQty: '',
       quantityUomId: '',
+      warehouseId: '',
     }]);
   };
 
@@ -476,7 +643,16 @@ export default function DeliveryNoteCreatePage() {
     setLines((prev) =>
       prev.map((l) =>
         l.id === id
-          ? { ...l, [field]: value, ...(field === 'materialId' ? { quantityUomId: '' } : {}) }
+          ? {
+              ...l,
+              [field]: value,
+              ...(field === 'materialId'
+                ? {
+                    quantityUomId: '',
+                    warehouseId: materials.find((m) => m.id === value)?.warehouseId ?? '',
+                  }
+                : {}),
+            }
           : l
       )
     );
@@ -585,6 +761,10 @@ export default function DeliveryNoteCreatePage() {
 
     // Validate material quantities (skip if skipping material dispatch)
     if (!skipMaterialDispatch) {
+      if (validLines.some((line) => !line.warehouseId)) {
+        toast.error('Select a warehouse for each delivery line');
+        return;
+      }
       for (const line of validLines) {
         let qty = parseFloat(line.dispatchQty);
         const mat = getMaterial(line.materialId);
@@ -599,15 +779,20 @@ export default function DeliveryNoteCreatePage() {
           return;
         }
 
-        const currentStock = typeof mat.currentStock === 'number' ? mat.currentStock : parseFloat(String(mat.currentStock));
         const baseQty = qtyInBase(mat.materialUoms, line.quantityUomId, qty);
-        if (isNaN(currentStock)) {
-          toast.error(`Invalid stock value for ${mat.name}`);
+        const selectedWarehouseStock = getWarehouseBaseStock(mat, line.warehouseId);
+        if (!mat.allowNegativeConsumption && selectedWarehouseStock < 0) {
+          toast.error(`Invalid warehouse stock value for ${mat.name}`);
           return;
         }
-        if (!mat.allowNegativeConsumption && currentStock < baseQty) {
+
+        const originalQty = line.originalDispatchQty ? parseFloat(String(line.originalDispatchQty)) : 0;
+        const originalWarehouseMatches = line.originalWarehouseId && line.originalWarehouseId === line.warehouseId;
+        const availableStock = selectedWarehouseStock + (originalWarehouseMatches ? originalQty : 0);
+        if (!mat.allowNegativeConsumption && availableStock < baseQty) {
+          const warehouseName = warehouses.find((warehouse) => warehouse.id === line.warehouseId)?.name || 'selected warehouse';
           toast.error(
-            `Insufficient stock for ${mat.name}. Need ${baseQty.toFixed(3)} ${mat.unit} (from entry). Available: ${currentStock.toFixed(3)} ${mat.unit}`
+            `Insufficient stock for ${mat.name} in ${warehouseName}. Need ${baseQty.toFixed(3)} ${mat.unit} (from entry). Available: ${availableStock.toFixed(3)} ${mat.unit}`
           );
           return;
         }
@@ -628,6 +813,11 @@ export default function DeliveryNoteCreatePage() {
           }
         }
       }
+    }
+
+    if (overrideSignals.requiresReason && !overrideReason.trim()) {
+      toast.error('Enter an override reason before saving this delivery note');
+      return;
     }
 
     setSubmitting(true);
@@ -660,12 +850,14 @@ export default function DeliveryNoteCreatePage() {
         quantity: parseFloat(l.dispatchQty),
         quantityUomId: l.quantityUomId.trim() || undefined,
         returnQty: l.returnQty ? parseFloat(l.returnQty) : undefined,
+        warehouseId: l.warehouseId || undefined,
       }));
 
       await addBatchTransaction({
         type: 'STOCK_OUT',
         jobId: selectedJob,
         notes: finalNotes || undefined,
+        overrideReason: overrideReason.trim() || undefined,
         date,
         isDeliveryNote: true,
         existingTransactionIds: editingTransactionId ? [editingTransactionId] : undefined,
@@ -678,6 +870,7 @@ export default function DeliveryNoteCreatePage() {
       setSelectedJob('');
       setSelectedContactPerson('');
       setNotes('');
+      setOverrideReason('');
       setSkipMaterialDispatch(false);
       setCustomItems([{ id: generateId(), name: '', description: '', unit: '', qty: '' }]);
       setLines(Array.from({ length: 3 }, () => ({
@@ -687,6 +880,7 @@ export default function DeliveryNoteCreatePage() {
         dispatchQty: '',
         returnQty: '',
         quantityUomId: '',
+        warehouseId: '',
       })));
       setEditingTransactionId(null);
       setDeliveryNoteNumber(null);
@@ -763,6 +957,7 @@ export default function DeliveryNoteCreatePage() {
       dispatchQty: '',
       returnQty: '',
       quantityUomId: '',
+      warehouseId: '',
     })));
 
     // Clear editing state immediately so save creates a new entry instead of updating
@@ -828,9 +1023,46 @@ export default function DeliveryNoteCreatePage() {
       </div>
 
       <form ref={formRef} onSubmit={handleSubmit} className="space-y-0">
+        {budgetWarning && (
+          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-600/10 p-4">
+            <p className="text-sm font-medium text-amber-300">
+              Budget warning: this delivery may exceed the variation job material budget.
+            </p>
+            <div className="mt-3 space-y-2">
+              {budgetWarning.rows.slice(0, 4).map((row) => (
+                <div key={row.materialId} className="rounded-md bg-slate-950/30 px-3 py-2 text-xs text-slate-200">
+                  <span className="font-semibold text-white">{row.materialName}</span>
+                  {' · '}
+                  projected {row.projectedIssuedBaseQuantity.toFixed(3)} {row.baseUnit}
+                  {' vs budget '}
+                  {row.estimatedBaseQuantity.toFixed(3)} {row.baseUnit}
+                  {row.quantityOverrun > 0.0005 ? ` · over by ${row.quantityOverrun.toFixed(3)} ${row.baseUnit}` : ''}
+                </div>
+              ))}
+              {budgetWarning.warningCount > 4 && (
+                <p className="text-xs text-amber-200">+{budgetWarning.warningCount - 4} more material warning(s)</p>
+              )}
+            </div>
+            <p className="mt-3 text-xs text-amber-200/90">
+              Enter an override reason below if this extra issue is intentional.
+            </p>
+          </div>
+        )}
+
+        {overrideSignals.negativeStockLineCount > 0 && (
+          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-600/10 p-4">
+            <p className="text-sm font-medium text-red-300">
+              Override required: {overrideSignals.negativeStockLineCount} line(s) exceed available warehouse FIFO stock on a negative-consumption material.
+            </p>
+            <p className="mt-2 text-xs text-red-200/90">
+              Saving will be blocked unless you capture the reason for this stock exception.
+            </p>
+          </div>
+        )}
+
         {/* Header */}
         <div className="rounded-t-3xl border border-slate-200 border-b-0 bg-white p-5 dark:border-slate-800 dark:bg-slate-950/70">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
             <div>
               <SearchSelect
                 label="Job"
@@ -870,6 +1102,16 @@ export default function DeliveryNoteCreatePage() {
                 <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
                   <span className="font-semibold text-blue-700 dark:text-blue-300">
                   {deliveryNoteNumber ? `DN #${deliveryNoteNumber}` : 'Loading...'}
+                </span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">
+                Budget Warnings
+              </label>
+              <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                <span className="font-semibold text-amber-700 dark:text-amber-300">
+                  {budgetWarningLoading ? 'Checking...' : `${budgetWarning?.warningCount ?? 0} warning(s)`}
                 </span>
               </div>
             </div>
@@ -972,6 +1214,22 @@ export default function DeliveryNoteCreatePage() {
             rows={2}
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           />
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">
+              Override Reason
+            </label>
+            <textarea
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              placeholder={overrideSignals.requiresReason ? 'Required for this delivery note' : 'Only needed for exceptions'}
+              rows={2}
+              className={`w-full rounded-xl border px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 dark:text-white ${
+                overrideSignals.requiresReason
+                  ? 'border-amber-400 bg-amber-50 focus:ring-amber-500 dark:border-amber-500/40 dark:bg-amber-500/10'
+                  : 'border-slate-200 bg-slate-50 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900'
+              }`}
+            />
+          </div>
         </div>
 
         {/* Skip Materials Toggle */}
@@ -1008,7 +1266,7 @@ export default function DeliveryNoteCreatePage() {
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Materials for Dispatch</h3>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Add materials to be dispatched. This section affects inventory.</p>
           </div>
-          <table className="w-full text-sm">
+                    <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/80">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide w-8">#</th>
@@ -1017,19 +1275,25 @@ export default function DeliveryNoteCreatePage() {
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-28">In Stock</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Dispatch Qty</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide w-32">Return Qty</th>
-                <th className="px-2 py-3 w-20"></th>
+                {showWarehouseColumn ? (
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide min-w-[170px]">Warehouse</th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
               {lines.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-sm">
+                  <td colSpan={showWarehouseColumn ? 7 : 6} className="px-4 py-8 text-center text-slate-500 text-sm">
                     No materials added yet. Click "+ Add Material" to start.
                   </td>
                 </tr>
               ) : (
                 lines.map((line, idx) => {
                   const mat = getMaterial(line.materialId);
+                  const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === line.warehouseId);
+                  const stockDisplay = formatWarehouseStock(mat, line.warehouseId, line.quantityUomId);
+                  const selectedUom = getSelectedUom(mat, line.quantityUomId);
+                  const selectedWarehouseBaseStock = getWarehouseBaseStock(mat, line.warehouseId);
                   return (
                     <tr key={line.id} className="border-b border-slate-200 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-900/40">
                       <td className="px-4 py-2.5 font-mono text-xs text-slate-500 dark:text-slate-500">{idx + 1}</td>
@@ -1040,6 +1304,9 @@ export default function DeliveryNoteCreatePage() {
                           onChange={(id) => updateLine(line.id, 'materialId', id)}
                           placeholder="Search materials..."
                           disabled={!selectedJob}
+                          allowClearButton={false}
+                          clearOnEmptyInput
+                          openOnFocus
                           items={materials
                             .filter((m) => m.isActive)
                             .map((m) => ({
@@ -1057,26 +1324,32 @@ export default function DeliveryNoteCreatePage() {
                       </td>
 
                       <td className="px-3 py-2 text-center text-slate-400 text-xs min-w-[120px]">
-                        {mat?.materialUoms && mat.materialUoms.length > 0 ? (
-                          <select
+                        {line.materialId ? (
+                          <SearchSelect
                             value={line.quantityUomId}
-                            onChange={(e) => updateLine(line.id, 'quantityUomId', e.target.value)}
-                            className="w-full max-w-44 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
-                          >
-                            {mat.materialUoms.map((u) => (
-                              <option key={u.id} value={u.isBase ? '' : u.id}>
-                                {u.unitName}
-                                {u.isBase ? ' (base)' : ` (=${u.factorToBase} ${mat.unit})`}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(id) => updateLine(line.id, 'quantityUomId', id)}
+                            placeholder="UOM"
+                            disabled={!selectedJob}
+                            items={getMaterialUomOptions(mat).map((uom) => ({
+                              id: uom.value,
+                              label: uom.label,
+                            }))}
+                            dropdownInPortal
+                            allowClearButton={false}
+                            clearOnEmptyInput
+                            openOnFocus
+                            clearInputOnFocus
+                            inputProps={{
+                              className: 'max-w-44 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white',
+                            }}
+                          />
                         ) : (
                           <span>{mat?.unit ?? '—'}</span>
                         )}
                       </td>
 
                       <td className="px-3 py-2 text-right font-mono text-sm text-emerald-700 dark:text-emerald-300">
-                        {mat?.currentStock ?? '—'}
+                        {line.warehouseId && selectedUom ? `${stockDisplay.quantity.toFixed(3)} ${stockDisplay.unitName}` : '—'}
                       </td>
 
                       <td className="px-3 py-2">
@@ -1084,11 +1357,18 @@ export default function DeliveryNoteCreatePage() {
                           type="number"
                           min="0.001"
                           step="any"
-                          disabled={!selectedJob || !mat}
+                          disabled={!selectedJob || !mat || !line.warehouseId}
                           value={line.dispatchQty}
                           onChange={(e) => updateLine(line.id, 'dispatchQty', e.target.value)}
+                          title={
+                            !mat
+                              ? ''
+                              : !line.warehouseId
+                                ? 'Select warehouse first'
+                                : ''
+                          }
                           placeholder="0.00"
-                          className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-right text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                          className="w-full [appearance:textfield] rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-right text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                         />
                       </td>
 
@@ -1101,36 +1381,63 @@ export default function DeliveryNoteCreatePage() {
                           onChange={(e) => updateLine(line.id, 'returnQty', e.target.value)}
                           placeholder="0.00"
                           disabled={!selectedJob}
-                          className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-right text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                          className="w-full [appearance:textfield] rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-right text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                         />
                       </td>
+                      {showWarehouseColumn ? (
+                        <td className="px-3 py-2">
+                          <SearchSelect
+                            value={line.warehouseId}
+                            onChange={(id) => updateLine(line.id, 'warehouseId', id)}
+                            placeholder="Select warehouse..."
+                            disabled={!selectedJob || !mat}
+                            dropdownInPortal
+                            allowClearButton={false}
+                            clearOnEmptyInput
+                            openOnFocus
+                            items={warehouses.map((warehouse) => {
+                              const warehouseStock = formatWarehouseStock(mat, warehouse.id, line.quantityUomId);
+                              return {
+                                id: warehouse.id,
+                                label: warehouse.name,
+                                searchText: `${warehouseStock.quantity.toFixed(3)} ${warehouseStock.unitName}${mat?.warehouseId === warehouse.id ? ' default' : ''}`,
+                              };
+                            })}
+                            renderItem={(item) => (
+                              <div className="flex w-full min-w-0 items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate font-medium text-slate-900 dark:text-white">{item.label}</div>
+                                  {mat?.warehouseId === item.id ? (
+                                    <div className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300">
+                                      Default warehouse
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                  {item.searchText}
+                                </span>
+                              </div>
+                            )}
+                          />
+                          {selectedWarehouse && selectedUom ? (
+                            <div className="mt-1 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                              {/* {mat?.warehouseId && line.warehouseId === mat.warehouseId ? (
+                                <p className="text-emerald-700 dark:text-emerald-300">Using material default warehouse</p>
+                              ) : null} */}
+                              <p>
+                                {selectedWarehouse.name}: {stockDisplay.quantity.toFixed(3)} {selectedUom.unitName} available
+                              </p>
+                            </div>
+                          ) : null}
+                        </td>
+                      ) : null}
 
-                      <td className="px-2 py-2">
-                        <button
-                          type="button"
-                          onClick={() => removeLine(line.id)}
-                          className="p-1 text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </td>
                     </tr>
                   );
                 })
               )}
             </tbody>
           </table>
-          <div className="border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/70">
-            <button
-              type="button"
-              onClick={addLine}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              + Add Material
-            </button>
-          </div>
         </div>
         )}
 
@@ -1472,3 +1779,5 @@ export default function DeliveryNoteCreatePage() {
     </div>
   );
 }
+
+

@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { serializeCustomerWithContacts, syncCustomerContacts } from '@/lib/partyContacts';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import {
   partyListPartyFieldsSchema,
   primaryFromPartyContacts,
@@ -96,6 +97,12 @@ export async function POST(req: Request) {
           },
         },
       });
+    });
+    publishLiveUpdate({
+      companyId,
+      channel: 'customers',
+      entity: 'customer',
+      action: 'created',
     });
     return successResponse(serializeCustomerWithContacts(customer), 201);
   } catch (err: unknown) {

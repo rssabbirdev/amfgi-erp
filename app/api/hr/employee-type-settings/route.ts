@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -79,5 +80,11 @@ export async function PUT(req: Request) {
     },
   });
 
+  publishLiveUpdate({
+    companyId,
+    channel: 'hr',
+    entity: 'employee-type-settings',
+    action: 'updated',
+  });
   return successResponse(nextSettings);
 }

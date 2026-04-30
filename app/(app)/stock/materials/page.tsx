@@ -22,9 +22,12 @@ interface Material {
   name: string;
   description?: string;
   unit: string;
-  category?: string;
-  warehouse?: string;
+  category?: string | null;
+  categoryId?: string | null;
+  warehouse?: string | null;
+  warehouseId?: string | null;
   stockType: string;
+  allowNegativeConsumption: boolean;
   externalItemName?: string;
   currentStock: number;
   reorderLevel?: number;
@@ -62,11 +65,28 @@ function formatCount(value: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 }).format(value);
 }
 
+function formatDate(value?: string | Date) {
+  if (!value) {
+    return '-';
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString();
+}
+
+function formatBoolean(value: boolean) {
+  return value ? 'Yes' : 'No';
+}
+
 export default function MaterialsPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const { data: materials = [], isFetching } = useGetMaterialsQuery();
-  const { data: stockValuation } = useGetStockValuationQuery();
+  const { data: materials = [], isFetching } = useGetMaterialsQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const { data: stockValuation } = useGetStockValuationQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
   const [deleteMaterial, { isLoading: isDeleting }] = useDeleteMaterialMutation();
   const { openMenu: openContextMenu } = useGlobalContextMenu();
 
@@ -122,12 +142,16 @@ export default function MaterialsPage() {
 
   const handleExport = () => {
     const exportData = activeMaterials.map((material) => ({
+      'Material ID': material.id,
       'Item Name': material.name,
+      Description: material.description || '',
       Unit: material.unit,
       'Stock Type': material.stockType,
       Category: material.category || '',
+      'Category ID': material.categoryId || '',
       Warehouse: material.warehouse || '',
-      Description: material.description || '',
+      'Warehouse ID': material.warehouseId || '',
+      'Allow Negative Consumption': material.allowNegativeConsumption,
       'External Item Name': material.externalItemName || '',
       'Unit Cost': material.unitCost ?? '',
       'Reorder Level': material.reorderLevel ?? '',
@@ -239,86 +263,177 @@ export default function MaterialsPage() {
     }
   };
 
-  const columns: Column<Material>[] = [
-    {
-      key: 'name',
-      header: 'Material',
-      sortable: true,
-      render: (material) => (
-        <div className="min-w-[220px]">
-          <div className="font-medium text-slate-900 dark:text-white">{material.name}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <span>{material.unit}</span>
-            <span className="text-slate-300 dark:text-slate-600">/</span>
-            <span>{material.stockType}</span>
-            {material.externalItemName ? (
-              <>
-                <span className="text-slate-300 dark:text-slate-600">/</span>
-                <span className="text-slate-400 dark:text-slate-500">{material.externalItemName}</span>
-              </>
-            ) : null}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'category',
-      header: 'Category',
-      sortable: true,
-      render: (material) => material.category || <span className="text-slate-400 dark:text-slate-500">Unassigned</span>,
-    },
-    {
-      key: 'warehouse',
-      header: 'Warehouse',
-      render: (material) => material.warehouse || <span className="text-slate-400 dark:text-slate-500">Not set</span>,
-    },
-    {
-      key: 'currentStock',
-      header: 'Stock',
-      sortable: true,
-      render: (material) => {
-        const isLow =
-          typeof material.reorderLevel === 'number' && material.currentStock <= material.reorderLevel;
-        return (
-          <div className="min-w-[120px]">
-            <div className={isLow ? 'font-semibold text-amber-700 dark:text-amber-300' : 'font-semibold text-emerald-700 dark:text-emerald-300'}>
-              {formatCount(material.currentStock)}
-            </div>
-            <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">
-              Reorder {material.reorderLevel !== undefined ? formatCount(material.reorderLevel) : '-'}
+  const columns: Column<Material>[] = useMemo(
+    () => [
+      {
+        key: 'id',
+        header: 'Material ID',
+        sortable: true,
+        hiddenByDefault: true,
+        render: (material) => (
+          <span className="font-mono text-xs text-slate-600 dark:text-slate-300">{material.id}</span>
+        ),
+      },
+      {
+        key: 'name',
+        header: 'Material',
+        sortable: true,
+        render: (material) => (
+          <div className="min-w-[220px]">
+            <div className="font-medium text-slate-900 dark:text-white">{material.name}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span>{material.unit}</span>
+              <span className="text-slate-300 dark:text-slate-600">/</span>
+              <span>{material.stockType}</span>
+              {material.externalItemName ? (
+                <>
+                  <span className="text-slate-300 dark:text-slate-600">/</span>
+                  <span className="text-slate-400 dark:text-slate-500">{material.externalItemName}</span>
+                </>
+              ) : null}
             </div>
           </div>
-        );
+        ),
       },
-    },
-    {
-      key: 'unitCost',
-      header: 'Unit Cost',
-      render: (material) => (
-        <div className="min-w-[120px] text-sm text-slate-700 dark:text-slate-200">{formatMoney(material.unitCost)}</div>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (material) => {
-        const isLow =
-          typeof material.reorderLevel === 'number' && material.currentStock <= material.reorderLevel;
-        return (
-          <span
-            className={[
-              'inline-flex rounded-full border px-2.5 py-1 text-xs font-medium',
-              isLow
-                ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'
-                : 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200',
-            ].join(' ')}
-          >
-            {isLow ? 'Low stock' : 'Healthy'}
-          </span>
-        );
+      {
+        key: 'category',
+        header: 'Category',
+        sortable: true,
+        hiddenByDefault: true,
+        render: (material) => material.category || <span className="text-slate-400 dark:text-slate-500">Unassigned</span>,
       },
-    },
-  ];
+      {
+        key: 'description',
+        header: 'Description',
+        hiddenByDefault: true,
+        render: (material) => material.description || <span className="text-slate-400 dark:text-slate-500">-</span>,
+      },
+      {
+        key: 'unit',
+        header: 'Unit',
+        sortable: true,
+        hiddenByDefault: true,
+      },
+      {
+        key: 'stockType',
+        header: 'Stock Type',
+        sortable: true,
+        hiddenByDefault: true,
+      },
+      {
+        key: 'categoryId',
+        header: 'Category ID',
+        hiddenByDefault: true,
+        render: (material) =>
+          material.categoryId ? (
+            <span className="font-mono text-xs text-slate-600 dark:text-slate-300">{material.categoryId}</span>
+          ) : (
+            <span className="text-slate-400 dark:text-slate-500">-</span>
+          ),
+      },
+      {
+        key: 'warehouse',
+        header: 'Default Warehouse',
+        hiddenByDefault: true,
+        render: (material) => material.warehouse || <span className="text-slate-400 dark:text-slate-500">Not set</span>,
+      },
+      {
+        key: 'warehouseId',
+        header: 'Warehouse ID',
+        hiddenByDefault: true,
+        render: (material) =>
+          material.warehouseId ? (
+            <span className="font-mono text-xs text-slate-600 dark:text-slate-300">{material.warehouseId}</span>
+          ) : (
+            <span className="text-slate-400 dark:text-slate-500">-</span>
+          ),
+      },
+      {
+        key: 'currentStock',
+        header: 'Stock',
+        sortable: true,
+        render: (material) => {
+          const isLow =
+            typeof material.reorderLevel === 'number' && material.currentStock <= material.reorderLevel;
+          return (
+            <div className="min-w-[120px]">
+              <div className={isLow ? 'font-semibold text-amber-700 dark:text-amber-300' : 'font-semibold text-emerald-700 dark:text-emerald-300'}>
+                {formatCount(material.currentStock)}
+              </div>
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                Reorder {material.reorderLevel !== undefined ? formatCount(material.reorderLevel) : '-'}
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        key: 'unitCost',
+        header: 'Unit Cost',
+        sortable: true,
+        hiddenByDefault: true,
+        render: (material) => (
+          <div className="min-w-[120px] text-sm text-slate-700 dark:text-slate-200">{formatMoney(material.unitCost)}</div>
+        ),
+      },
+      {
+        key: 'reorderLevel',
+        header: 'Reorder Level',
+        sortable: true,
+        hiddenByDefault: true,
+        render: (material) =>
+          material.reorderLevel !== undefined ? formatCount(material.reorderLevel) : <span className="text-slate-400 dark:text-slate-500">-</span>,
+      },
+      {
+        key: 'allowNegativeConsumption',
+        header: 'Allow Negative',
+        sortable: true,
+        hiddenByDefault: true,
+        render: (material) => formatBoolean(material.allowNegativeConsumption),
+      },
+      {
+        key: 'externalItemName',
+        header: 'External Item Name',
+        hiddenByDefault: true,
+        render: (material) => material.externalItemName || <span className="text-slate-400 dark:text-slate-500">-</span>,
+      },
+      {
+        key: 'isActive',
+        header: 'Active',
+        sortable: true,
+        hiddenByDefault: true,
+        render: (material) => formatBoolean(material.isActive),
+      },
+      {
+        key: 'createdAt',
+        header: 'Created',
+        sortable: true,
+        hiddenByDefault: true,
+        render: (material) => formatDate(material.createdAt),
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        render: (material) => {
+          const isLow =
+            typeof material.reorderLevel === 'number' && material.currentStock <= material.reorderLevel;
+          return (
+            <span
+              className={[
+                'inline-flex rounded-full border px-2.5 py-1 text-xs font-medium',
+                isLow
+                  ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'
+                  : 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200',
+              ].join(' ')}
+            >
+              {isLow ? 'Low stock' : 'Healthy'}
+            </span>
+          );
+        },
+      },
+    ],
+    []
+  );
 
   return (
     <div className="space-y-4">
@@ -393,7 +508,9 @@ export default function MaterialsPage() {
           </div>
           <div className="flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-500">
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-transparent">Double-click to open</span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-transparent">Search by name, category, unit</span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-transparent">Search all fields or one field</span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-transparent">Fuzzy, contains, or exact match</span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-transparent">Columns save to your profile</span>
           </div>
         </div>
 
@@ -402,7 +519,13 @@ export default function MaterialsPage() {
           data={activeMaterials}
           loading={isFetching && materials.length === 0}
           emptyText="No materials found. Add your first material."
-          searchKeys={['name', 'category', 'unit']}
+          searchKeys={['name', 'description', 'category', 'externalItemName']}
+          fuzzySearch
+          enableSearchOptions
+          enableColumnDisplayOptions
+          preferenceKey="stock-materials-table"
+          initialPageSize={50}
+          pageSizeOptions={[50, 100, 200]}
           onRowContextMenu={handleMaterialContextMenu}
           onRowDoubleClick={(material) => router.push(`/stock/materials/${material.id}`)}
           onRowClick={(material) => router.push(`/stock/materials/${material.id}`)}

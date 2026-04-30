@@ -1,0 +1,51 @@
+# Components, Job Costing, and Formula Builder Editor
+
+> 27 nodes · cohesion 0.12
+
+## Key Concepts
+
+- **FormulaBuilderEditor.tsx** (26 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **uid()** (7 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **parseFormula()** (5 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **buildPlaygroundPreview()** (5 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **evaluatePlaygroundExpression()** (4 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **slugify()** (3 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **isRecord()** (3 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **newArea()** (3 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **parseField()** (3 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **parsePlaygroundNumber()** (3 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **buildPlaygroundNumericValues()** (3 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **newField()** (2 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **newMaterialRule()** (2 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **newLaborRule()** (2 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **suggestUniqueSlug()** (2 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **escapeRegExp()** (2 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **FormulaBuilderEditor()** (2 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **normalizeSlugInput()** (1 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **normalizeFormulaKey()** (1 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **buildPayload()** (1 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **validate()** (1 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **formatPreviewMoney()** (1 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **formatPreviewQty()** (1 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **buildFormulaTokens()** (1 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- **getExpressionTokenQuery()** (1 connections) — `components\job-costing\FormulaBuilderEditor.tsx`
+- *... and 2 more nodes in this community*
+
+## Relationships
+
+- [[API HR, Materials, and Transactions]] (2 shared connections)
+- [[HR, Components, and Print]] (1 shared connections)
+
+## Source Files
+
+- `components\job-costing\FormulaBuilderEditor.tsx`
+
+## Audit Trail
+
+- EXTRACTED: 84 (97%)
+- INFERRED: 3 (3%)
+- AMBIGUOUS: 0 (0%)
+
+---
+
+*Part of the graphify knowledge wiki. See [[index]] to navigate.*

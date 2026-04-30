@@ -5,9 +5,10 @@ import { buildTransactionActorFields } from '@/lib/utils/auditActor';
 import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 import { resolveQuantityToBase } from '@/lib/utils/materialUomDb';
 import { applyMaterialWarehouseDelta, resolveEffectiveWarehouse } from '@/lib/warehouses/stockWarehouses';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { z } from 'zod';
 
-type TransactionFilterType = 'STOCK_IN' | 'STOCK_OUT' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT';
+type TransactionFilterType = 'STOCK_IN' | 'STOCK_OUT' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'ADJUSTMENT';
 
 const TransactionSchema = z.object({
   type: z.enum(['STOCK_IN', 'STOCK_OUT', 'RETURN', 'TRANSFER_IN', 'TRANSFER_OUT']),
@@ -28,7 +29,8 @@ export async function GET(req: Request) {
     !session.user.isSuperAdmin &&
     !session.user.permissions.includes('transaction.stock_in') &&
     !session.user.permissions.includes('transaction.stock_out') &&
-    !session.user.permissions.includes('transaction.return')
+    !session.user.permissions.includes('transaction.return') &&
+    !session.user.permissions.includes('transaction.adjust')
   ) {
     return errorResponse('Forbidden', 403);
   }
@@ -134,26 +136,47 @@ export async function POST(req: Request) {
         warehouseId,
       });
 
+      let canGoNegative = false;
       if (type === 'STOCK_OUT') {
         const mat = await tx.material.findUnique({
           where: { id: materialId },
         });
         if (!mat) throw new Error('Material not found');
+        canGoNegative = mat.allowNegativeConsumption;
         const currentStock = decimalToNumberOrZero(mat.currentStock);
-        if (!mat.allowNegativeConsumption && currentStock < qtyBase) {
+        if (!canGoNegative && currentStock < qtyBase) {
           throw new Error(`Insufficient stock. Available: ${currentStock} ${mat.unit}`);
         }
       }
 
       // Update material stock
-      await tx.material.update({
-        where: { id: materialId },
-        data: {
-          currentStock: {
-            increment: delta,
+      if (type === 'STOCK_OUT' && !canGoNegative) {
+        const stockUpdateResult = await tx.material.updateMany({
+          where: {
+            id: materialId,
+            currentStock: {
+              gte: qtyBase,
+            },
           },
-        },
-      });
+          data: {
+            currentStock: {
+              increment: delta,
+            },
+          },
+        });
+        if (stockUpdateResult.count === 0) {
+          throw new Error('Insufficient stock. Stock changed by another user; refresh and retry.');
+        }
+      } else {
+        await tx.material.update({
+          where: { id: materialId },
+          data: {
+            currentStock: {
+              increment: delta,
+            },
+          },
+        });
+      }
       await applyMaterialWarehouseDelta(tx, companyId, materialId, effectiveWarehouse.warehouseId, delta);
 
       // Create transaction
@@ -186,6 +209,13 @@ export async function POST(req: Request) {
       });
 
       return newTxn;
+    });
+
+    publishLiveUpdate({
+      companyId,
+      channel: 'stock',
+      entity: 'transaction',
+      action: 'created',
     });
 
     return successResponse(result, 201);

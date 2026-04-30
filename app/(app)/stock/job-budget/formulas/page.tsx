@@ -60,6 +60,24 @@ export default function StockFormulaLibraryPage() {
       await deleteFormula(id).unwrap();
       toast.success('Formula deleted');
     } catch (error) {
+      const details =
+        typeof error === 'object' &&
+        error !== null &&
+        'data' in error &&
+        typeof (error as { data?: { details?: unknown } }).data?.details === 'object' &&
+        (error as { data: { details: unknown } }).data.details !== null
+          ? (error as {
+              data: {
+                details: {
+                  linkedJobItemCount?: number;
+                  linkedJobItems?: Array<{
+                    jobNumber?: string;
+                    itemName?: string;
+                  }>;
+                };
+              };
+            }).data.details
+          : null;
       const message =
         typeof error === 'object' &&
         error !== null &&
@@ -67,6 +85,16 @@ export default function StockFormulaLibraryPage() {
         typeof (error as { data?: { error?: unknown } }).data?.error === 'string'
           ? (error as { data: { error: string } }).data.error
           : 'Failed to delete formula';
+      if (details && Array.isArray(details.linkedJobItems) && details.linkedJobItems.length > 0) {
+        const preview = details.linkedJobItems
+          .slice(0, 5)
+          .map((item) => `${item.jobNumber || 'Job'} - ${item.itemName || 'Item'}`)
+          .join('\n');
+        toast.error(`${message}\n${preview}${details.linkedJobItemCount && details.linkedJobItemCount > 5 ? '\n...' : ''}`, {
+          duration: 7000,
+        });
+        return;
+      }
       toast.error(message);
     }
   };

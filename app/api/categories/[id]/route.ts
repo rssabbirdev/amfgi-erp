@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
@@ -61,6 +62,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       });
     });
 
+    publishLiveUpdate({
+      companyId,
+      channel: 'settings',
+      entity: 'category',
+      action: 'updated',
+    });
     return successResponse(updated);
   } catch (err: unknown) {
     return errorResponse(err instanceof Error ? err.message : 'Update failed', 400);
@@ -105,6 +112,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     // Delete the category
     await prisma.category.delete({ where: { id } });
 
+    publishLiveUpdate({
+      companyId,
+      channel: 'settings',
+      entity: 'category',
+      action: 'deleted',
+    });
     return successResponse({ deleted: true });
   } catch (err: unknown) {
     return errorResponse(err instanceof Error ? err.message : 'Delete failed', 400);

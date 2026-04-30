@@ -49,63 +49,56 @@ export async function resolveEffectiveWarehouse(
   tx: Tx,
   input: ResolveWarehouseInput
 ): Promise<EffectiveWarehouse> {
-  const config = await ensureCompanyFallbackWarehouse(tx, input.companyId);
+  await ensureCompanyFallbackWarehouse(tx, input.companyId);
   const requestedId = input.warehouseId?.trim();
   const requestedName = input.warehouseName?.trim();
 
-  if (config.warehouseMode !== WarehouseMode.DISABLED) {
-    if (requestedId) {
-      const warehouse = await findWarehouseById(tx, input.companyId, requestedId);
-      if (!warehouse) throw new Error('Selected warehouse not found');
+  if (requestedId) {
+    const warehouse = await findWarehouseById(tx, input.companyId, requestedId);
+    if (!warehouse) throw new Error('Selected warehouse not found');
+    return {
+      warehouseMode: WarehouseMode.REQUIRED,
+      warehouseId: warehouse.id,
+      warehouseName: warehouse.name,
+      source: 'explicit',
+    };
+  }
+
+  if (requestedName) {
+    const warehouse = await findWarehouseByName(tx, input.companyId, requestedName);
+    if (!warehouse) throw new Error(`Selected warehouse not found: ${requestedName}`);
+    return {
+      warehouseMode: WarehouseMode.REQUIRED,
+      warehouseId: warehouse.id,
+      warehouseName: warehouse.name,
+      source: 'explicit',
+    };
+  }
+
+  if (input.materialId) {
+    const material = await tx.material.findFirst({
+      where: {
+        id: input.materialId,
+        companyId: input.companyId,
+        warehouseId: { not: null },
+      },
+      select: {
+        warehouseId: true,
+        warehouse: true,
+      },
+    });
+
+    if (material?.warehouseId && material.warehouse) {
       return {
-        warehouseMode: config.warehouseMode,
-        warehouseId: warehouse.id,
-        warehouseName: warehouse.name,
-        source: 'explicit',
+        warehouseMode: WarehouseMode.REQUIRED,
+        warehouseId: material.warehouseId,
+        warehouseName: material.warehouse,
+        source: 'material-default',
       };
-    }
-
-    if (requestedName) {
-      const warehouse = await findWarehouseByName(tx, input.companyId, requestedName);
-      if (!warehouse) throw new Error(`Selected warehouse not found: ${requestedName}`);
-      return {
-        warehouseMode: config.warehouseMode,
-        warehouseId: warehouse.id,
-        warehouseName: warehouse.name,
-        source: 'explicit',
-      };
-    }
-
-    if (input.materialId) {
-      const material = await tx.material.findFirst({
-        where: {
-          id: input.materialId,
-          companyId: input.companyId,
-          warehouseId: { not: null },
-        },
-        select: {
-          warehouseId: true,
-          warehouse: true,
-        },
-      });
-
-      if (material?.warehouseId && material.warehouse) {
-        return {
-          warehouseMode: config.warehouseMode,
-          warehouseId: material.warehouseId,
-          warehouseName: material.warehouse,
-          source: 'material-default',
-        };
-      }
     }
   }
 
-  return {
-    warehouseMode: config.warehouseMode,
-    warehouseId: config.stockFallbackWarehouseId,
-    warehouseName: config.stockFallbackWarehouseName,
-    source: 'fallback',
-  };
+  throw new Error('Warehouse is required for all stock transactions.');
 }
 
 export async function applyMaterialWarehouseDelta(

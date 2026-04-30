@@ -231,6 +231,21 @@ export async function teardownTestContext() {
   const roleIds = roles.map((role) => role.id);
 
   if (companyIds.length > 0) {
+    await prisma.stockCountSessionRevision.deleteMany({
+      where: {
+        session: {
+          companyId: { in: companyIds },
+        },
+      },
+    });
+    await prisma.stockCountSessionLine.deleteMany({
+      where: {
+        session: {
+          companyId: { in: companyIds },
+        },
+      },
+    });
+    await prisma.stockCountSession.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.transactionBatch.deleteMany({
       where: {
         transaction: {
@@ -238,6 +253,7 @@ export async function teardownTestContext() {
         },
       },
     });
+    await prisma.stockExceptionApproval.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.transaction.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.priceLog.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.materialLog.deleteMany({ where: { companyId: { in: companyIds } } });

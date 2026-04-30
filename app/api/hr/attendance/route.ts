@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { dateFromYmd, ymdFromInput } from '@/lib/hr/workDate';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
@@ -122,6 +123,12 @@ export async function DELETE(req: Request) {
 
   const result = await prisma.attendanceEntry.deleteMany({
     where: { companyId, workDate },
+  });
+  publishLiveUpdate({
+    companyId,
+    channel: 'hr',
+    entity: 'attendance',
+    action: 'deleted',
   });
   return successResponse({ ok: true, deletedRows: result.count });
 }

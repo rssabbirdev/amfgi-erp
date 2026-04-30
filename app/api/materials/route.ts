@@ -4,7 +4,8 @@ import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { serializeMaterialUoms } from '@/lib/utils/materialUom';
 import type { MaterialUomWithUnit } from '@/lib/utils/materialUom';
 import { decimalToNumber } from '@/lib/utils/decimal';
-import { ensureCategoryRef, ensureWarehouseRef } from '@/lib/materialMasterData';
+import { resolveCategoryRef, resolveWarehouseRef } from '@/lib/materialMasterData';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { z }                 from 'zod';
 
 const MaterialSchema = z.object({
@@ -12,7 +13,9 @@ const MaterialSchema = z.object({
   description:         z.string().max(500).optional(),
   unit:                z.string().min(1).max(20),
   category:            z.string().min(1).max(100).optional(),
+  categoryId:          z.string().min(1).max(100).optional(),
   warehouse:           z.string().min(1).max(100).optional(),
+  warehouseId:         z.string().min(1).max(100).optional(),
   stockType:           z.string().min(1).max(50),
   allowNegativeConsumption: z.boolean().optional(),
   externalItemName:    z.string().min(1).max(100).optional(),
@@ -41,13 +44,20 @@ export async function GET() {
         include: { unit: { select: { id: true, name: true } } },
         orderBy: [{ isBase: 'desc' }, { createdAt: 'asc' }],
       },
+      materialWarehouseStocks: {
+        select: {
+          warehouseId: true,
+          currentStock: true,
+        },
+      },
     },
   });
 
   return successResponse(
-    materials.map(({ materialUoms, ...m }) => ({
+    materials.map(({ materialUoms, materialWarehouseStocks, ...m }) => ({
       ...m,
       materialUoms: serializeMaterialUoms(materialUoms as MaterialUomWithUnit[]),
+      materialWarehouseStocks,
     }))
   );
 }
@@ -79,8 +89,14 @@ export async function POST(req: Request) {
   const companyId = session.user.activeCompanyId;
 
   const material = await prisma.$transaction(async (tx) => {
-    const categoryRef = await ensureCategoryRef(tx, companyId, parsed.data.category);
-    const warehouseRef = await ensureWarehouseRef(tx, companyId, parsed.data.warehouse);
+    const categoryRef = await resolveCategoryRef(tx, companyId, {
+      id: parsed.data.categoryId,
+      name: parsed.data.category,
+    });
+    const warehouseRef = await resolveWarehouseRef(tx, companyId, {
+      id: parsed.data.warehouseId,
+      name: parsed.data.warehouse,
+    });
 
     const mat = await tx.material.create({
       data: {
@@ -131,6 +147,13 @@ export async function POST(req: Request) {
         orderBy: [{ isBase: 'desc' }, { createdAt: 'asc' }],
       },
     },
+  });
+
+  publishLiveUpdate({
+    companyId,
+    channel: 'stock',
+    entity: 'material',
+    action: 'created',
   });
 
   return successResponse(

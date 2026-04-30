@@ -5,6 +5,25 @@ import { P } from '@/lib/permissions';
 import { errorResponse, successResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
+const FormulaConstantSchema = z.object({
+  key: z.string().min(1).max(80),
+  label: z.string().min(1).max(120),
+  value: z.union([z.number(), z.string().min(1)]),
+  unit: z.string().max(40).optional(),
+});
+
+const FormulaMaterialRuleSchema = z
+  .object({
+    materialId: z.string().min(1).optional(),
+    materialSelectorKey: z.string().min(1).max(80).optional(),
+    quantityExpression: z.string().min(1),
+    quantityUomId: z.string().optional(),
+    wastePercent: z.number().min(0).max(1000).optional(),
+  })
+  .refine((value) => value.materialId || value.materialSelectorKey, {
+    message: 'Material rule must include a fixed material or a job material selector',
+  });
+
 const FormulaLibrarySchema = z.object({
   name: z.string().min(1).max(120),
   slug: z.string().min(1).max(120).regex(/^[a-z0-9-]+$/),
@@ -15,20 +34,14 @@ const FormulaLibrarySchema = z.object({
     version: z.number().int().min(1).default(1),
     unitSystem: z.literal('METRIC').optional(),
     variables: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
+    constants: z.array(FormulaConstantSchema).optional(),
     areas: z.array(
       z.object({
         key: z.string().min(1).max(80),
         label: z.string().min(1).max(120),
         measurementsPath: z.string().optional(),
         variables: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
-        materials: z.array(
-          z.object({
-            materialId: z.string().min(1),
-            quantityExpression: z.string().min(1),
-            quantityUomId: z.string().optional(),
-            wastePercent: z.number().min(0).max(1000).optional(),
-          })
-        ),
+        materials: z.array(FormulaMaterialRuleSchema),
         labor: z.array(
           z.object({
             expertiseName: z.string().min(1).max(120),

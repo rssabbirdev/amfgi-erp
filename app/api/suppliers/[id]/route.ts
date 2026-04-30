@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { applyPartialPartyFieldsToUpdate, partyListPartyFieldsSchema } from '@/lib/partyListRecordPayload';
 import { serializeSupplierWithContacts, syncSupplierContacts } from '@/lib/partyContacts';
@@ -107,6 +108,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     });
     if (!supplier) return errorResponse('Supplier not found', 404);
 
+    publishLiveUpdate({
+      companyId,
+      channel: 'suppliers',
+      entity: 'supplier',
+      action: 'updated',
+    });
     return successResponse(serializeSupplierWithContacts(supplier));
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to update supplier';
@@ -157,6 +164,12 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
         where: { id },
         data: { isActive: false },
       });
+      publishLiveUpdate({
+        companyId,
+        channel: 'suppliers',
+        entity: 'supplier',
+        action: 'updated',
+      });
       return successResponse({
         deleted: true,
         permanent: false,
@@ -165,6 +178,12 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     }
 
     await prisma.supplier.delete({ where: { id } });
+    publishLiveUpdate({
+      companyId,
+      channel: 'suppliers',
+      entity: 'supplier',
+      action: 'deleted',
+    });
     return successResponse({ deleted: true, permanent: true });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to delete supplier';

@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
+import { useGetHrExpertisesQuery } from '@/store/api/endpoints/hr';
 
 interface Row {
   id: string;
@@ -15,8 +16,6 @@ interface Row {
 
 export default function HrExpertisesPage() {
   const { data: session } = useSession();
-  const [list, setList] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
@@ -25,27 +24,9 @@ export default function HrExpertisesPage() {
   const perms = (session?.user?.permissions ?? []) as string[];
   const canView = isSA || perms.includes('hr.employee.view') || perms.includes('hr.employee.edit');
   const canEdit = isSA || perms.includes('hr.employee.edit');
-
-  const load = async () => {
-    const res = await fetch('/api/hr/expertises', { cache: 'no-store' });
-    const json = await res.json();
-    if (res.ok && json?.success) setList(json.data);
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (!canView) {
-        if (!cancelled) setLoading(false);
-        return;
-      }
-      await load();
-      if (!cancelled) setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [canView]);
+  const { data: list = [], isLoading: loading, refetch } = useGetHrExpertisesQuery(undefined, {
+    skip: !canView,
+  });
 
   const onCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -67,7 +48,7 @@ export default function HrExpertisesPage() {
     else {
       toast.success('Expertise created');
       setShowCreate(false);
-      await load();
+      await refetch();
     }
     setSaving(false);
   };
@@ -92,7 +73,7 @@ export default function HrExpertisesPage() {
     else {
       toast.success('Expertise saved');
       setEditing(null);
-      await load();
+      await refetch();
     }
     setSaving(false);
   };
@@ -106,7 +87,7 @@ export default function HrExpertisesPage() {
     else {
       toast.success('Expertise deleted');
       if (editing?.id === id) setEditing(null);
-      await load();
+      await refetch();
     }
     setSaving(false);
   };

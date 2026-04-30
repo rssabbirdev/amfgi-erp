@@ -1,5 +1,6 @@
 import { auth }            from '@/auth';
 import { prisma }          from '@/lib/db/prisma';
+import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }               from 'zod';
 import bcrypt              from 'bcryptjs';
@@ -93,6 +94,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     });
 
     if (!user) return errorResponse('User not found', 404);
+    publishLiveUpdate({
+      companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
+      channel: 'admin',
+      entity: 'user',
+      action: 'updated',
+    });
     return successResponse(user);
   } catch (err) {
     if (err instanceof Error && err.message.includes('Foreign key constraint')) {
@@ -112,5 +119,11 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     data: { isActive: false },
   });
 
+  publishLiveUpdate({
+    companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
+    channel: 'admin',
+    entity: 'user',
+    action: 'deleted',
+  });
   return successResponse({ deleted: true });
 }

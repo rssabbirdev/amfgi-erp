@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { Button }                           from '@/components/ui/Button';
 import JobConsumptionTable                  from '@/components/reports/JobConsumptionTable';
@@ -66,6 +67,13 @@ export default function JobConsumptionPage() {
         <h1 className="text-2xl font-bold text-white">Job Consumption Report</h1>
         <p className="text-slate-400 text-sm mt-1">
           Net material usage per job — dispatched minus end-of-day returns
+        </p>
+        <p className="mt-2 text-sm text-slate-400">
+          Need budget and profitability context?{' '}
+          <Link href="/reports/job-profitability" className="text-emerald-300 hover:text-emerald-200 underline">
+            Open customer and job profitability
+          </Link>
+          .
         </p>
       </div>
 

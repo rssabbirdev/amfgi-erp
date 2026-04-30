@@ -15,21 +15,21 @@ const ReconcileLineSchema = z.object({
   warehouseId: z.string().min(1).optional(),
 });
 
+const ReconcileAllocationSchema = z.object({
+  jobId: z.string().min(1),
+  materialId: z.string().min(1),
+  quantity: z.number().min(0.001),
+});
+
 const ReconcileSchema = z.object({
   jobIds: z.array(z.string().min(1)).min(1),
   lines: z.array(ReconcileLineSchema).min(1),
+  allocations: z.array(ReconcileAllocationSchema).min(1),
   notes: z.string().max(20000).optional(),
   date: z.string().optional(),
 });
 
-function splitQuantityEvenly(total: number, count: number) {
-  if (count <= 0) return [];
-  const base = total / count;
-  const quantities = Array.from({ length: count }, () => base);
-  const allocated = quantities.reduce((sum, value) => sum + value, 0);
-  quantities[count - 1] += total - allocated;
-  return quantities;
-}
+const EPSILON = 0.0005;
 
 type BatchPool = {
   batchId: string;
@@ -214,7 +214,9 @@ export async function POST(req: Request) {
   const companyId = session.user.activeCompanyId;
   const txDate = parsed.data.date ? new Date(parsed.data.date) : new Date();
   const selectedLines = parsed.data.lines.filter((line) => line.quantity > 0);
+  const selectedAllocations = parsed.data.allocations.filter((allocation) => allocation.quantity > 0);
   if (selectedLines.length === 0) return errorResponse('Enter at least one quantity to distribute', 422);
+  if (selectedAllocations.length === 0) return errorResponse('Enter at least one allocation quantity', 422);
 
   try {
     const actorFields = buildTransactionActorFields(session.user);
@@ -244,6 +246,31 @@ export async function POST(req: Request) {
         throw new Error('Select at least one active job with a dispatch note');
       }
 
+      const validJobIds = new Set(jobs.map((job) => job.id));
+      const lineByMaterialId = new Map(selectedLines.map((line) => [line.materialId, line]));
+      const allocationsByMaterialId = new Map<
+        string,
+        Array<{
+          jobId: string;
+          quantity: number;
+        }>
+      >();
+
+      for (const allocation of selectedAllocations) {
+        if (!validJobIds.has(allocation.jobId)) {
+          throw new Error('Allocation contains a job that is not selected or not eligible for reconcile');
+        }
+        if (!lineByMaterialId.has(allocation.materialId)) {
+          throw new Error('Allocation contains a material that is not in the reconcile lines');
+        }
+        const rows = allocationsByMaterialId.get(allocation.materialId) ?? [];
+        rows.push({
+          jobId: allocation.jobId,
+          quantity: allocation.quantity,
+        });
+        allocationsByMaterialId.set(allocation.materialId, rows);
+      }
+
       const createdIds: string[] = [];
 
       for (const line of selectedLines) {
@@ -256,6 +283,14 @@ export async function POST(req: Request) {
         }
 
         const baseQuantity = await resolveQuantityToBase(tx, line.materialId, line.quantity, line.quantityUomId);
+        const materialAllocations = allocationsByMaterialId.get(line.materialId) ?? [];
+        const allocatedQuantity = materialAllocations.reduce((sum, allocation) => sum + allocation.quantity, 0);
+        if (Math.abs(allocatedQuantity - baseQuantity) > EPSILON) {
+          throw new Error(
+            `Allocated quantity for ${material.name} must equal the line total. Expected ${baseQuantity.toFixed(3)} ${material.unit}, got ${allocatedQuantity.toFixed(3)} ${material.unit}.`
+          );
+        }
+
         const effectiveWarehouse = await resolveEffectiveWarehouse(tx, {
           companyId,
           materialId: line.materialId,
@@ -326,24 +361,55 @@ export async function POST(req: Request) {
         }
 
         for (const batchUsed of fifoResult.batchesUsed) {
-          await tx.stockBatch.update({
-            where: { id: String(batchUsed.batchId) },
+          const batchUpdateResult = await tx.stockBatch.updateMany({
+            where: {
+              id: String(batchUsed.batchId),
+              quantityAvailable: {
+                gte: batchUsed.quantityFromBatch,
+              },
+            },
             data: {
               quantityAvailable: {
                 decrement: batchUsed.quantityFromBatch,
               },
             },
           });
+          if (batchUpdateResult.count === 0) {
+            throw new Error(
+              `Stock changed while reconciling ${material.name}. Please refresh and retry.`
+            );
+          }
         }
 
-        await tx.material.update({
-          where: { id: line.materialId },
-          data: {
-            currentStock: {
-              decrement: baseQuantity,
+        if (material.allowNegativeConsumption) {
+          await tx.material.update({
+            where: { id: line.materialId },
+            data: {
+              currentStock: {
+                decrement: baseQuantity,
+              },
             },
-          },
-        });
+          });
+        } else {
+          const stockUpdateResult = await tx.material.updateMany({
+            where: {
+              id: line.materialId,
+              currentStock: {
+                gte: baseQuantity,
+              },
+            },
+            data: {
+              currentStock: {
+                decrement: baseQuantity,
+              },
+            },
+          });
+          if (stockUpdateResult.count === 0) {
+            throw new Error(
+              `Insufficient stock for ${material.name}. Stock changed by another user; refresh and retry.`
+            );
+          }
+        }
         await applyMaterialWarehouseDelta(
           tx,
           companyId,
@@ -352,7 +418,6 @@ export async function POST(req: Request) {
           -baseQuantity
         );
 
-        const jobQuantities = splitQuantityEvenly(baseQuantity, jobs.length);
         const batchPools: BatchPool[] = fifoResult.batchesUsed.map((entry) => ({
           batchId: String(entry.batchId),
           batchNumber: entry.batchNumber,
@@ -360,9 +425,13 @@ export async function POST(req: Request) {
           unitCost: entry.unitCost,
         }));
 
-        for (let index = 0; index < jobs.length; index += 1) {
-          const job = jobs[index];
-          const jobQuantity = jobQuantities[index];
+        for (const allocation of materialAllocations) {
+          const job = jobs.find((entry) => entry.id === allocation.jobId);
+          if (!job) {
+            throw new Error('Allocation contains an invalid job');
+          }
+
+          const jobQuantity = allocation.quantity;
           if (jobQuantity <= 0) continue;
 
           const { allocations, remaining } = consumeFromPools(batchPools, jobQuantity);

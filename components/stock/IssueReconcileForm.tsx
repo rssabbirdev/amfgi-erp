@@ -16,6 +16,11 @@ import {
 
 type QtyMap = Record<string, string>;
 type WarehouseMap = Record<string, string>;
+type AllocationMap = Record<string, string>;
+
+function allocationKey(materialId: string, jobId: string) {
+  return `${materialId}::${jobId}`;
+}
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 }).format(value);
@@ -38,6 +43,7 @@ export function IssueReconcileForm() {
   const [deleteTransaction] = useDeleteTransactionMutation();
   const [qtyMap, setQtyMap] = useState<QtyMap>({});
   const [warehouseMap, setWarehouseMap] = useState<WarehouseMap>({});
+  const [allocationMap, setAllocationMap] = useState<AllocationMap>({});
   const [selectedJobs, setSelectedJobs] = useState<string[] | null>(null);
   const [notes, setNotes] = useState('');
   const { data: companies = [] } = useGetCompaniesQuery();
@@ -73,6 +79,11 @@ export function IssueReconcileForm() {
         setQtyMap({ [transaction.materialId]: String(transaction.quantity) });
         setWarehouseMap(transaction.warehouseId ? { [transaction.materialId]: transaction.warehouseId } : {});
         setSelectedJobs(transaction.jobId ? [transaction.jobId] : []);
+        setAllocationMap(
+          transaction.jobId
+            ? { [allocationKey(transaction.materialId, transaction.jobId)]: String(transaction.quantity) }
+            : {}
+        );
         setNotes(
           (transaction.notes ?? '')
             .replace(/^Non-stock reconcile\.\s*/i, '')
@@ -108,6 +119,31 @@ export function IssueReconcileForm() {
     [activeLines]
   );
 
+  const selectedJobRows = useMemo(() => {
+    const selectedJobIds = new Set(effectiveSelectedJobs);
+    return (data?.jobs ?? []).filter((job) => selectedJobIds.has(job.id));
+  }, [data, effectiveSelectedJobs]);
+
+  const allocationTotalsByMaterialId = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const material of data?.materials ?? []) {
+      let total = 0;
+      for (const jobId of effectiveSelectedJobs) {
+        total += Number.parseFloat(allocationMap[allocationKey(material.id, jobId)] || '0') || 0;
+      }
+      totals.set(material.id, total);
+    }
+    return totals;
+  }, [allocationMap, data, effectiveSelectedJobs]);
+
+  const allocationVarianceByMaterialId = useMemo(() => {
+    const variance = new Map<string, number>();
+    for (const line of activeLines) {
+      variance.set(line.materialId, line.quantity - (allocationTotalsByMaterialId.get(line.materialId) ?? 0));
+    }
+    return variance;
+  }, [activeLines, allocationTotalsByMaterialId]);
+
   const toggleJob = (jobId: string) => {
     setSelectedJobs((prev) => {
       const current = prev ?? data?.jobs.map((job) => job.id) ?? [];
@@ -128,6 +164,25 @@ export function IssueReconcileForm() {
       toast.error('Select a warehouse for each non-stock line');
       return;
     }
+    if (activeLines.some((line) => Math.abs(allocationVarianceByMaterialId.get(line.materialId) ?? 0) > 0.0005)) {
+      toast.error('Allocated quantity must match each material total before posting');
+      return;
+    }
+
+    const activeAllocations = activeLines.flatMap((line) =>
+      effectiveSelectedJobs
+        .map((jobId) => ({
+          jobId,
+          materialId: line.materialId,
+          quantity: Number.parseFloat(allocationMap[allocationKey(line.materialId, jobId)] || '0'),
+        }))
+        .filter((entry) => Number.isFinite(entry.quantity) && entry.quantity > 0)
+    );
+
+    if (activeAllocations.length === 0) {
+      toast.error('Enter at least one explicit job allocation');
+      return;
+    }
 
     try {
       if (editingTransactionId) {
@@ -141,6 +196,7 @@ export function IssueReconcileForm() {
           quantity: line.quantity,
           warehouseId: warehouseMap[line.materialId] || undefined,
         })),
+        allocations: activeAllocations,
         notes: notes.trim() || undefined,
         date,
       }).unwrap();
@@ -152,6 +208,7 @@ export function IssueReconcileForm() {
       );
       setQtyMap({});
       setWarehouseMap({});
+      setAllocationMap({});
       setNotes('');
     } catch (error: unknown) {
       const message =
@@ -186,7 +243,7 @@ export function IssueReconcileForm() {
                 {editingTransactionId ? 'Edit non-stock distribution' : 'Create non-stock distribution'}
               </h1>
               <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">
-                Enter the non-stock quantities to distribute, choose the variation jobs that have dispatch-note activity in the selected posting month, and post the allocation using FIFO cost layers first.
+                Enter the non-stock quantities to distribute, choose the variation jobs that have dispatch-note activity in the selected posting month, and assign the quantity explicitly before posting with FIFO cost layers first.
               </p>
             </div>
 
@@ -213,6 +270,10 @@ export function IssueReconcileForm() {
           <div className="bg-white px-5 py-4 dark:bg-slate-950/80">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">Distribution qty</p>
             <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{formatNumber(totalDistributionQty)}</p>
+          </div>
+          <div className="bg-white px-5 py-4 dark:bg-slate-950/80">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">Selected jobs</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{effectiveSelectedJobs.length}</p>
           </div>
         </div>
       </section>
@@ -241,6 +302,7 @@ export function IssueReconcileForm() {
                   <th className="px-4 py-3">On hand</th>
                   <th className="px-4 py-3">Rule</th>
                   <th className="px-4 py-3">Distribute qty</th>
+                  <th className="px-4 py-3">Allocated</th>
                   {showWarehouseColumn ? <th className="px-4 py-3">Warehouse</th> : null}
                 </tr>
               </thead>
@@ -277,6 +339,26 @@ export function IssueReconcileForm() {
                         <span className="text-xs text-slate-500 dark:text-slate-500">{material.unit}</span>
                       </div>
                     </td>
+                    <td className="px-4 py-3">
+                      {qtyMap[material.id] ? (
+                        <div className="space-y-1">
+                          <div className="text-slate-700 dark:text-slate-300">
+                            {formatNumber(allocationTotalsByMaterialId.get(material.id) ?? 0)} {material.unit}
+                          </div>
+                          <div
+                            className={`text-xs ${
+                              Math.abs(allocationVarianceByMaterialId.get(material.id) ?? 0) > 0.0005
+                                ? 'text-amber-700 dark:text-amber-300'
+                                : 'text-emerald-700 dark:text-emerald-300'
+                            }`}
+                          >
+                            Remaining {formatNumber(allocationVarianceByMaterialId.get(material.id) ?? 0)}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 dark:text-slate-500">Enter total first</span>
+                      )}
+                    </td>
                     {showWarehouseColumn ? (
                       <td className="px-4 py-3">
                         <select
@@ -299,10 +381,10 @@ export function IssueReconcileForm() {
                 ))}
                 {!isLoading && (data?.materials.length ?? 0) === 0 ? (
                   <tr>
-                    <td colSpan={showWarehouseColumn ? 5 : 4} className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
-                      No non-stock items found.
-                    </td>
-                  </tr>
+                  <td colSpan={showWarehouseColumn ? 6 : 5} className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
+                    No non-stock items found.
+                  </td>
+                </tr>
                 ) : null}
               </tbody>
             </table>
@@ -379,11 +461,102 @@ export function IssueReconcileForm() {
               </div>
 
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs leading-6 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
-                Selected jobs share each entered quantity evenly. FIFO batches are consumed first, and negative stock is only allowed for materials explicitly marked to allow it.
+                Each material total must be allocated explicitly across the selected jobs below. FIFO batches are consumed first, and negative stock is only allowed for materials explicitly marked to allow it.
                 The variation list refreshes from dispatch-note activity in the posting month you select above.
               </div>
             </div>
           </section>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+        <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-300">Explicit allocation</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-500">
+            Allocate each active material quantity into the jobs you selected. Totals must match before posting.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-[0.16em] text-slate-500 dark:bg-slate-900/90 dark:text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Job</th>
+                {activeLines.map((line) => {
+                  const material = data?.materials.find((entry) => entry.id === line.materialId);
+                  return (
+                    <th key={line.materialId} className="px-4 py-3">
+                      <div>{material?.name ?? line.materialId}</div>
+                      <div className="mt-1 normal-case tracking-normal text-[11px] text-slate-400">
+                        Total {formatNumber(line.quantity)} {material?.unit ?? ''}
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {selectedJobRows.map((job) => (
+                <tr key={job.id} className="border-t border-slate-200 dark:border-slate-800">
+                  <td className="px-4 py-3 align-top">
+                    <div className="font-medium text-slate-900 dark:text-white">{job.jobNumber}</div>
+                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">{job.customerName || 'No company name'}</div>
+                  </td>
+                  {activeLines.map((line) => {
+                    const material = data?.materials.find((entry) => entry.id === line.materialId);
+                    const key = allocationKey(line.materialId, job.id);
+                    return (
+                      <td key={key} className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.001"
+                            value={allocationMap[key] ?? ''}
+                            onChange={(e) => setAllocationMap((prev) => ({ ...prev, [key]: e.target.value }))}
+                            className="w-32 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900/80 dark:text-white"
+                            placeholder="0.000"
+                          />
+                          <span className="text-xs text-slate-500 dark:text-slate-500">{material?.unit ?? ''}</span>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {selectedJobRows.length > 0 && activeLines.length > 0 ? (
+                <tr className="border-t border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-900/60">
+                  <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">Allocated total</td>
+                  {activeLines.map((line) => {
+                    const material = data?.materials.find((entry) => entry.id === line.materialId);
+                    const allocated = allocationTotalsByMaterialId.get(line.materialId) ?? 0;
+                    const remaining = allocationVarianceByMaterialId.get(line.materialId) ?? 0;
+                    return (
+                      <td key={line.materialId} className="px-4 py-3">
+                        <div className="font-medium text-slate-900 dark:text-white">
+                          {formatNumber(allocated)} {material?.unit ?? ''}
+                        </div>
+                        <div
+                          className={`mt-1 text-xs ${
+                            Math.abs(remaining) > 0.0005
+                              ? 'text-amber-700 dark:text-amber-300'
+                              : 'text-emerald-700 dark:text-emerald-300'
+                          }`}
+                        >
+                          Remaining {formatNumber(remaining)}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ) : (
+                <tr>
+                  <td colSpan={Math.max(activeLines.length, 1) + 1} className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
+                    Enter at least one material total and keep one or more jobs selected to start allocating.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 

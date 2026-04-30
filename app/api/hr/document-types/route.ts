@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { ensureDefaultEmployeeDocumentTypes } from '@/lib/hr/defaultDocumentTypes';
 import { hasPerm, requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
@@ -54,6 +55,12 @@ export async function POST(req: Request) {
         isActive: d.isActive ?? true,
       },
     });
+    publishLiveUpdate({
+      companyId,
+      channel: 'hr',
+      entity: 'document-type',
+      action: 'created',
+    });
     return successResponse(row, 201);
   } catch (e) {
     if (e instanceof Error && e.message.includes('Unique constraint')) {
@@ -74,6 +81,12 @@ export async function PUT() {
   const list = await prisma.employeeDocumentType.findMany({
     where: { companyId },
     orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+  });
+  publishLiveUpdate({
+    companyId,
+    channel: 'hr',
+    entity: 'document-type',
+    action: 'changed',
   });
   return successResponse(list);
 }

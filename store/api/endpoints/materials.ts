@@ -10,18 +10,24 @@ export interface MaterialUomDto {
   factorToBase: number;
 }
 
+export interface MaterialWarehouseStockDto {
+  warehouseId: string;
+  currentStock: number;
+}
+
 export interface Material {
   id: string;
   companyId: string;
   name: string;
   description?: string;
   unit: string;
-  category: string;
-  warehouse: string;
+  category?: string;
+  categoryId?: string | null;
+  warehouse?: string;
   warehouseId?: string | null;
   stockType: string;
   allowNegativeConsumption: boolean;
-  externalItemName: string;
+  externalItemName?: string;
   currentStock: number;
   reorderLevel?: number;
   unitCost?: number;
@@ -29,6 +35,7 @@ export interface Material {
   createdAt?: string | Date;
   updatedAt?: string | Date;
   materialUoms?: MaterialUomDto[];
+  materialWarehouseStocks?: MaterialWarehouseStockDto[];
 }
 
 interface CrossCompanyMaterial {
@@ -43,11 +50,27 @@ interface CrossCompanyMaterial {
   materialUoms?: MaterialUomDto[];
 }
 
+function normalizeMaterial(material: Material): Material {
+  return {
+    ...material,
+    category: material.category ?? undefined,
+    warehouse: material.warehouse ?? undefined,
+    externalItemName: material.externalItemName ?? undefined,
+  };
+}
+
+function normalizeCrossCompanyMaterial(material: CrossCompanyMaterial): CrossCompanyMaterial {
+  return {
+    ...material,
+    warehouse: material.warehouse ?? undefined,
+  };
+}
+
 export const materialsApi = appApi.injectEndpoints({
   endpoints: (builder) => ({
     getMaterials: builder.query<Material[], void>({
       query: () => '/materials',
-      transformResponse: (r: { data: Material[] }) => r.data,
+      transformResponse: (r: { data: Material[] }) => r.data.map(normalizeMaterial),
       providesTags: (result) =>
         result
           ? [{ type: 'Material', id: 'LIST' }, ...result.map((m) => ({ type: 'Material' as const, id: m.id }))]
@@ -56,7 +79,7 @@ export const materialsApi = appApi.injectEndpoints({
 
     getMaterialById: builder.query<Material, string>({
       query: (id) => `/materials/${id}`,
-      transformResponse: (r: { data: Material }) => r.data,
+      transformResponse: (r: { data: Material }) => normalizeMaterial(r.data),
       providesTags: (result, error, id) => [{ type: 'Material', id }],
     }),
 
@@ -66,7 +89,7 @@ export const materialsApi = appApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      transformResponse: (r: { data: Material }) => r.data,
+      transformResponse: (r: { data: Material }) => normalizeMaterial(r.data),
       invalidatesTags: [{ type: 'Material', id: 'LIST' }],
     }),
 
@@ -76,7 +99,7 @@ export const materialsApi = appApi.injectEndpoints({
         method: 'PUT',
         body: data,
       }),
-      transformResponse: (r: { data: Material }) => r.data,
+      transformResponse: (r: { data: Material }) => normalizeMaterial(r.data),
       invalidatesTags: (result, error, { id }) => [
         { type: 'Material', id },
         { type: 'Material', id: 'LIST' },
@@ -97,7 +120,7 @@ export const materialsApi = appApi.injectEndpoints({
 
     getCrossCompanyMaterials: builder.query<CrossCompanyMaterial[], string>({
       query: (companyId) => `/materials/cross-company?companyId=${companyId}`,
-      transformResponse: (r: { data: CrossCompanyMaterial[] }) => r.data,
+      transformResponse: (r: { data: CrossCompanyMaterial[] }) => r.data.map(normalizeCrossCompanyMaterial),
     }),
 
     bulkCreateMaterials: builder.mutation<

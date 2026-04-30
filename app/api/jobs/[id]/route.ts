@@ -9,6 +9,7 @@ import {
   serializeRequiredExpertises,
   syncJobRequiredExpertises,
 } from '@/lib/jobs/jobRequiredExpertises';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { decimalEqualsNullable, decimalToNumber } from '@/lib/utils/decimal';
 import { z } from 'zod';
@@ -202,6 +203,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         },
       });
     });
+    publishLiveUpdate({
+      companyId,
+      channel: 'jobs',
+      entity: 'job',
+      action: 'updated',
+    });
     return successResponse(serializeRequiredExpertises(serializeJobWithContacts(job)));
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to update job';
@@ -220,6 +227,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   }
 
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
+  const companyId = session.user.activeCompanyId;
 
   const { id } = await params;
   const { hardDelete } = await req.json().catch(() => ({ hardDelete: false }));
@@ -245,12 +253,24 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       await prisma.job.delete({
         where: { id },
       });
+      publishLiveUpdate({
+        companyId,
+        channel: 'jobs',
+        entity: 'job',
+        action: 'deleted',
+      });
       return successResponse({ deleted: true, permanent: true });
     } else {
       // Soft delete (deactivate)
       const job = await prisma.job.update({
         where: { id },
         data: { status: 'CANCELLED' },
+      });
+      publishLiveUpdate({
+        companyId,
+        channel: 'jobs',
+        entity: 'job',
+        action: 'updated',
       });
       return successResponse({ deleted: true, permanent: false, message: 'Job marked as CANCELLED' });
     }

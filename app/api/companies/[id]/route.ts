@@ -1,8 +1,10 @@
 import { auth }            from '@/auth';
 import { prisma }          from '@/lib/db/prisma';
+import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
 import { assertWarehouseModeTransition, ensureCompanyFallbackWarehouse, normalizeWarehouseMode } from '@/lib/warehouses/companyWarehouseMode';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { normalizeCompanyPrintTemplateShape } from '@/lib/utils/companyPrintTemplates';
+import { normalizeStockControlSettings, mergeStockControlSettingsIntoCompanySettings } from '@/lib/stock-control/settings';
 import { z }               from 'zod';
 
 const UpdateSchema = z.object({
@@ -15,7 +17,7 @@ const UpdateSchema = z.object({
   printTemplates: z.any().optional(),
   externalCompanyId: z.string().max(120).optional().or(z.literal('')),
   jobSourceMode: z.enum(['HYBRID', 'EXTERNAL_ONLY']).optional(),
-  warehouseMode: z.enum(['DISABLED', 'OPTIONAL', 'REQUIRED']).optional(),
+  jobCostingSettings: z.any().optional(),
 });
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -79,13 +81,25 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (isSA && parsed.data.jobSourceMode !== undefined) {
     update.jobSourceMode = parsed.data.jobSourceMode;
   }
-  if (isSA && parsed.data.warehouseMode !== undefined) {
-    update.warehouseMode = normalizeWarehouseMode(parsed.data.warehouseMode);
+  if (isSA && parsed.data.jobCostingSettings !== undefined) {
+    update.jobCostingSettings = mergeStockControlSettingsIntoCompanySettings(
+      parsed.data.jobCostingSettings,
+      normalizeStockControlSettings(
+        parsed.data.jobCostingSettings &&
+          typeof parsed.data.jobCostingSettings === 'object' &&
+          !Array.isArray(parsed.data.jobCostingSettings)
+          ? (parsed.data.jobCostingSettings as { stockControl?: unknown }).stockControl
+          : undefined
+      )
+    );
+  }
+  if (isSA) {
+    update.warehouseMode = normalizeWarehouseMode(undefined);
   }
 
   const company = await prisma.$transaction(async (tx) => {
-    if (isSA && parsed.data.warehouseMode !== undefined) {
-      await assertWarehouseModeTransition(tx, id, normalizeWarehouseMode(parsed.data.warehouseMode));
+    if (isSA) {
+      await assertWarehouseModeTransition(tx, id, normalizeWarehouseMode(undefined));
     }
 
     const updated = await tx.company.update({
@@ -106,5 +120,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   });
 
   if (!company) return errorResponse('Company not found', 404);
+  publishLiveUpdate({
+    companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
+    channel: 'admin',
+    entity: 'company',
+    action: 'updated',
+  });
   return successResponse(normalizeCompanyPrintTemplateShape(company as Record<string, unknown>));
 }

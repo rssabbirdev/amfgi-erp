@@ -96,7 +96,9 @@ export default function SuppliersPage() {
   const perms = (session?.user?.permissions ?? []) as string[];
   const canManage = isSA || perms.includes('transaction.stock_in');
 
-  const { data: suppliers = [], isFetching, error } = useGetSuppliersQuery();
+  const { data: suppliers = [], isFetching, error } = useGetSuppliersQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
   const [deleteSupplier, { isLoading: isDeleting }] = useDeleteSupplierMutation();
   const [syncPartySuppliers, { isLoading: isSyncingParty }] = useSyncSuppliersFromPartyApiMutation();
 

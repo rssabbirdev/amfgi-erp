@@ -11,8 +11,17 @@ import toast from 'react-hot-toast';
 import type { Column } from '@/components/ui/DataTable';
 import type { ContextMenuOption } from '@/components/ui/ContextMenu';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
-import { useDeleteReceiptEntryMutation, useGetReceiptEntriesQuery } from '@/store/hooks';
-import type { ReceiptEntry } from '@/store/api/endpoints/receipts';
+import {
+  useAdjustReceiptEntryMutation,
+  useCancelReceiptEntryMutation,
+  useDeleteReceiptEntryMutation,
+  useGetReceiptEntriesQuery,
+  useLazyGetReceiptAdjustmentImpactQuery,
+} from '@/store/hooks';
+import type {
+  ReceiptAdjustmentImpactResponse,
+  ReceiptEntry,
+} from '@/store/api/endpoints/receipts';
 
 function formatMoney(value: number) {
   return `AED ${value.toLocaleString('en-AE', {
@@ -38,6 +47,17 @@ function extractErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function formatReceiptStatus(status: ReceiptEntry['status']) {
+  return status === 'cancelled' ? 'Cancelled' : 'Active';
+}
+
+function transactionBadgeVariant(type: string) {
+  if (type === 'STOCK_OUT') return 'orange';
+  if (type === 'RETURN' || type === 'TRANSFER_IN') return 'blue';
+  if (type === 'TRANSFER_OUT' || type === 'REVERSAL') return 'yellow';
+  return 'green';
 }
 
 function SectionShell({
@@ -81,12 +101,36 @@ export default function GoodsReceiptPage() {
     open: false,
     entry: null,
   });
+  const [cancelModal, setCancelModal] = useState<{
+    open: boolean;
+    entry: ReceiptEntry | null;
+    reason: string;
+  }>({
+    open: false,
+    entry: null,
+    reason: '',
+  });
+  const [adjustmentImpactModal, setAdjustmentImpactModal] = useState<{
+    open: boolean;
+    entry: ReceiptEntry | null;
+    data: ReceiptAdjustmentImpactResponse | null;
+    reason: string;
+  }>({
+    open: false,
+    entry: null,
+    data: null,
+    reason: '',
+  });
 
   const { data: entries = [], isFetching } = useGetReceiptEntriesQuery(
     { filterType, date: selectedDate },
-    { skip: !canView }
+    { skip: !canView, refetchOnMountOrArgChange: 30 }
   );
   const [deleteReceiptEntry, { isLoading: isDeleting }] = useDeleteReceiptEntryMutation();
+  const [cancelReceiptEntry, { isLoading: isCancelling }] = useCancelReceiptEntryMutation();
+  const [adjustReceiptEntry, { isLoading: isAdjustingReceipt }] = useAdjustReceiptEntryMutation();
+  const [loadReceiptAdjustmentImpact, { isFetching: isLoadingAdjustmentImpact }] =
+    useLazyGetReceiptAdjustmentImpactQuery();
 
   const receiptValue = useMemo(
     () => entries.reduce((sum, entry) => sum + entry.totalValue, 0),
@@ -128,6 +172,23 @@ export default function GoodsReceiptPage() {
           action: () => setViewEntry(entry),
         },
         {
+          label: 'Review adjustment impact',
+          icon: (
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 17v-6m3 6V7m3 10v-3M9 3h6a2 2 0 012 2v14l-5-3-5 3V5a2 2 0 012-2z"
+              />
+            </svg>
+          ),
+          action: () => void handleReviewAdjustmentImpact(entry),
+        },
+      ];
+
+      if (entry.status === 'active') {
+        options.push({
           label: 'Edit receipt',
           icon: (
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,11 +201,26 @@ export default function GoodsReceiptPage() {
             </svg>
           ),
           action: () => router.push(`/stock/goods-receipt/receive?edit=${entry.receiptNumber}`),
-        },
-      ];
+        });
+      }
 
-      if (canDelete) {
+      if (canDelete && entry.status === 'active') {
         options.push({ divider: true });
+        options.push({
+          label: 'Cancel receipt',
+          icon: (
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          ),
+          action: () => setCancelModal({ open: true, entry, reason: '' }),
+          danger: true,
+        });
         options.push({
           label: 'Delete receipt',
           icon: (
@@ -179,6 +255,81 @@ export default function GoodsReceiptPage() {
     }
   };
 
+  const handleCancelReceipt = async () => {
+    if (!cancelModal.entry) return;
+
+    try {
+      const reason = cancelModal.reason.trim() || undefined;
+      await cancelReceiptEntry({
+        receiptNumber: cancelModal.entry.receiptNumber,
+        reason,
+      }).unwrap();
+      toast.success('Receipt cancelled successfully');
+      setCancelModal({ open: false, entry: null, reason: '' });
+
+      if (viewEntry?.receiptNumber === cancelModal.entry.receiptNumber) {
+        setViewEntry({
+          ...viewEntry,
+          status: 'cancelled',
+          cancelledAt: new Date().toISOString(),
+          cancellationReason: reason ?? null,
+        });
+      }
+    } catch (error: unknown) {
+      toast.error(extractErrorMessage(error, 'Failed to cancel receipt'));
+    }
+  };
+
+  const handleReviewAdjustmentImpact = async (entry: ReceiptEntry) => {
+    setAdjustmentImpactModal({ open: true, entry, data: null, reason: '' });
+    try {
+      const data = await loadReceiptAdjustmentImpact(entry.receiptNumber).unwrap();
+      setAdjustmentImpactModal({ open: true, entry, data, reason: '' });
+    } catch (error: unknown) {
+      setAdjustmentImpactModal({ open: false, entry: null, data: null, reason: '' });
+      toast.error(extractErrorMessage(error, 'Failed to load receipt impact'));
+    }
+  };
+
+  const handleAdjustReceipt = async () => {
+    if (!adjustmentImpactModal.entry) return;
+
+    const reason = adjustmentImpactModal.reason.trim();
+    if (reason.length < 3) {
+      toast.error('Adjustment reason is required');
+      return;
+    }
+
+    try {
+      const result = await adjustReceiptEntry({
+        receiptNumber: adjustmentImpactModal.entry.receiptNumber,
+        reason,
+      }).unwrap();
+
+      const refreshedImpact = await loadReceiptAdjustmentImpact(
+        adjustmentImpactModal.entry.receiptNumber
+      ).unwrap();
+
+      setAdjustmentImpactModal((prev) => ({
+        ...prev,
+        data: refreshedImpact,
+        reason: '',
+      }));
+
+      if (viewEntry?.receiptNumber === adjustmentImpactModal.entry.receiptNumber) {
+        setViewEntry({
+          ...viewEntry,
+          adjustedAt: result.adjustedAt,
+          adjustmentReason: result.reason,
+        });
+      }
+
+      toast.success('Receipt adjustment posted successfully');
+    } catch (error: unknown) {
+      toast.error(extractErrorMessage(error, 'Failed to adjust receipt'));
+    }
+  };
+
   const columns: Column<ReceiptEntry>[] = [
     {
       key: 'receiptNumber',
@@ -186,8 +337,14 @@ export default function GoodsReceiptPage() {
       sortable: true,
       render: (entry) => (
         <div className="min-w-[180px]">
-          <div className="font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-            {entry.receiptNumber}
+          <div className="flex items-center gap-2">
+            <div className="font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+              {entry.receiptNumber}
+            </div>
+            <Badge
+              label={formatReceiptStatus(entry.status)}
+              variant={entry.status === 'cancelled' ? 'yellow' : 'green'}
+            />
           </div>
           <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">
             {formatDate(entry.receivedDate)}
@@ -372,6 +529,17 @@ export default function GoodsReceiptPage() {
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   {viewEntry.supplier || 'No supplier linked'} · {formatDate(viewEntry.receivedDate)}
                 </p>
+                {viewEntry.status === 'cancelled' ? (
+                  <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                    Cancelled{viewEntry.cancelledAt ? ` on ${formatDate(viewEntry.cancelledAt)}` : ''}.
+                    {viewEntry.cancellationReason ? ` Reason: ${viewEntry.cancellationReason}` : ''}
+                  </p>
+                ) : viewEntry.adjustedAt ? (
+                  <p className="mt-2 text-sm text-emerald-700 dark:text-emerald-300">
+                    Remaining stock adjusted{viewEntry.adjustedAt ? ` on ${formatDate(viewEntry.adjustedAt)}` : ''}.
+                    {viewEntry.adjustmentReason ? ` Reason: ${viewEntry.adjustmentReason}` : ''}
+                  </p>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-sm md:min-w-[18rem]">
@@ -441,8 +609,254 @@ export default function GoodsReceiptPage() {
               <Button variant="ghost" onClick={() => setViewEntry(null)}>
                 Close
               </Button>
-              <Button onClick={() => router.push(`/stock/goods-receipt/receive?edit=${viewEntry.receiptNumber}`)}>
-                Edit Receipt
+              {viewEntry.status === 'active' ? (
+                <Button onClick={() => router.push(`/stock/goods-receipt/receive?edit=${viewEntry.receiptNumber}`)}>
+                  Edit Receipt
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {adjustmentImpactModal.open && adjustmentImpactModal.entry ? (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            onClick={() => setAdjustmentImpactModal({ open: false, entry: null, data: null, reason: '' })}
+          />
+          <div className="fixed left-1/2 top-1/2 z-50 w-[min(96vw,64rem)] max-h-[88vh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 dark:border-slate-700 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                  Receipt impact
+                </p>
+                <h2 className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
+                  {adjustmentImpactModal.entry.receiptNumber}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Review downstream links before adjusting any consumed receipt.
+                </p>
+              </div>
+              {adjustmentImpactModal.data ? (
+                <Badge
+                  label={adjustmentImpactModal.data.needsAdjustmentReview ? 'Adjustment Review Required' : 'No Downstream Consumption'}
+                  variant={adjustmentImpactModal.data.needsAdjustmentReview ? 'yellow' : 'green'}
+                />
+              ) : null}
+            </div>
+
+            {isLoadingAdjustmentImpact && !adjustmentImpactModal.data ? (
+              <div className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                Loading receipt impact...
+              </div>
+            ) : adjustmentImpactModal.data ? (
+              <div className="space-y-5">
+                <div className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 dark:border-slate-800 dark:bg-slate-800 sm:grid-cols-2 xl:grid-cols-6">
+                  {[
+                    { label: 'Received', value: adjustmentImpactModal.data.summary.totalReceived.toFixed(3) },
+                    { label: 'Available', value: adjustmentImpactModal.data.summary.totalAvailable.toFixed(3) },
+                    { label: 'Consumed', value: adjustmentImpactModal.data.summary.totalConsumed.toFixed(3) },
+                    { label: 'Adjusted', value: adjustmentImpactModal.data.summary.totalAdjusted.toFixed(3) },
+                    { label: 'Linked jobs', value: String(adjustmentImpactModal.data.summary.linkedJobsCount) },
+                    { label: 'Linked customers', value: String(adjustmentImpactModal.data.summary.linkedCustomersCount) },
+                  ].map((item) => (
+                    <div key={item.label} className="bg-white px-4 py-3 dark:bg-slate-950/80">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">
+                        {item.label}
+                      </p>
+                      <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-300">
+                  {adjustmentImpactModal.data.canCancel
+                    ? 'This receipt is still untouched at the batch level and can be cancelled directly.'
+                    : 'This receipt already has downstream batch consumption. Review the linked jobs, customers, and stock moves before posting any correction.'}
+                </div>
+
+                {adjustmentImpactModal.data.adjustedAt ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-200">
+                    Remaining stock was adjusted on {formatDate(adjustmentImpactModal.data.adjustedAt)}.
+                    {adjustmentImpactModal.data.adjustmentReason
+                      ? ` Reason: ${adjustmentImpactModal.data.adjustmentReason}`
+                      : ''}
+                  </div>
+                ) : null}
+
+                {adjustmentImpactModal.data.canAdjustRemaining ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
+                    <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                      Post approved adjustment for remaining stock
+                    </p>
+                    <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">
+                      This reverses only the current on-hand balance from the receipt batches. Historical downstream consumption remains unchanged.
+                    </p>
+                    <div className="mt-3">
+                      <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Approval reason
+                      </label>
+                      <textarea
+                        value={adjustmentImpactModal.reason}
+                        onChange={(e) =>
+                          setAdjustmentImpactModal((prev) => ({ ...prev, reason: e.target.value }))
+                        }
+                        rows={3}
+                        placeholder="Required reason for the approved adjustment"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder-slate-500"
+                      />
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        variant="danger"
+                        onClick={handleAdjustReceipt}
+                        disabled={isAdjustingReceipt}
+                      >
+                        {isAdjustingReceipt ? 'Posting Adjustment...' : 'Post Approved Adjustment'}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="space-y-3">
+                  {adjustmentImpactModal.data.rows.map((row) => (
+                    <div
+                      key={row.batchId}
+                      className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/70"
+                    >
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="font-medium text-slate-900 dark:text-white">{row.materialName}</p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                            Batch {row.batchNumber} {row.warehouseName ? `· ${row.warehouseName}` : ''}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-4 gap-3 text-right text-xs md:min-w-[22rem]">
+                          <div>
+                            <p className="text-slate-500 dark:text-slate-500">Received</p>
+                            <p className="mt-1 font-mono text-slate-900 dark:text-white">{row.quantityReceived.toFixed(3)} {row.unit}</p>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 dark:text-slate-500">Available</p>
+                            <p className="mt-1 font-mono text-slate-900 dark:text-white">{row.quantityAvailable.toFixed(3)} {row.unit}</p>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 dark:text-slate-500">Consumed</p>
+                            <p className="mt-1 font-mono text-slate-900 dark:text-white">{row.quantityConsumed.toFixed(3)} {row.unit}</p>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 dark:text-slate-500">Adjusted</p>
+                            <p className="mt-1 font-mono text-slate-900 dark:text-white">{row.quantityAdjusted.toFixed(3)} {row.unit}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">
+                          Linked transactions
+                        </p>
+                        {row.linkedTransactions.length === 0 ? (
+                          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                            No downstream transactions are linked to this batch.
+                          </p>
+                        ) : (
+                          <div className="mt-3 overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.16em] text-slate-500 dark:border-slate-800 dark:text-slate-500">
+                                  <th className="px-2 py-2">Type</th>
+                                  <th className="px-2 py-2">Date</th>
+                                  <th className="px-2 py-2">Batch qty</th>
+                                  <th className="px-2 py-2">Job</th>
+                                  <th className="px-2 py-2">Customer</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {row.linkedTransactions.map((transaction) => (
+                                  <tr
+                                    key={transaction.transactionId}
+                                    className="border-b border-slate-100 text-slate-700 dark:border-slate-900 dark:text-slate-300"
+                                  >
+                                    <td className="px-2 py-2">
+                                      <Badge
+                                        label={transaction.type}
+                                        variant={transactionBadgeVariant(transaction.type)}
+                                      />
+                                    </td>
+                                    <td className="px-2 py-2">{formatDate(transaction.date)}</td>
+                                    <td className="px-2 py-2 font-mono">{transaction.quantityFromBatch.toFixed(3)}</td>
+                                    <td className="px-2 py-2">{transaction.jobNumber || '-'}</td>
+                                    <td className="px-2 py-2">{transaction.customerName || '-'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex justify-end border-t border-slate-200 pt-4 dark:border-slate-700">
+              <Button
+                variant="ghost"
+                onClick={() => setAdjustmentImpactModal({ open: false, entry: null, data: null, reason: '' })}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {cancelModal.open && cancelModal.entry ? (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            onClick={() => setCancelModal({ open: false, entry: null, reason: '' })}
+          />
+          <div className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300/75">
+              Cancel receipt
+            </p>
+            <h2 className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
+              {cancelModal.entry.receiptNumber}
+            </h2>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              Cancellation keeps the receipt in history, reverses its untouched stock, and writes a reversal trail.
+            </p>
+
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/20 dark:text-amber-200">
+              This is allowed only while the receipt quantity is still untouched. Once any quantity has been consumed, use an adjustment workflow instead.
+            </div>
+
+            <div className="mt-4">
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Cancellation reason
+              </label>
+              <textarea
+                value={cancelModal.reason}
+                onChange={(e) => setCancelModal((prev) => ({ ...prev, reason: e.target.value }))}
+                rows={3}
+                placeholder="Optional reason for the reversal"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder-slate-500"
+              />
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => setCancelModal({ open: false, entry: null, reason: '' })}
+                disabled={isCancelling}
+              >
+                Close
+              </Button>
+              <Button variant="danger" onClick={handleCancelReceipt} disabled={isCancelling}>
+                {isCancelling ? 'Cancelling...' : 'Cancel Receipt'}
               </Button>
             </div>
           </div>
@@ -464,11 +878,11 @@ export default function GoodsReceiptPage() {
             </h2>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
               Deleting this receipt reverses stock for {deleteModal.entry.itemsCount} item
-              {deleteModal.entry.itemsCount === 1 ? '' : 's'}.
+              {deleteModal.entry.itemsCount === 1 ? '' : 's'} only if the receipt is still untouched.
             </p>
 
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/70 dark:bg-red-950/20 dark:text-red-200">
-              This action cannot be undone from the history screen.
+              Once any quantity from this receipt has been consumed, delete is blocked and you must use an adjustment workflow instead.
             </div>
 
             <div className="mt-6 flex justify-end gap-3">

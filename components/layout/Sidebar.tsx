@@ -85,7 +85,7 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    href: '/reports/job-consumption', label: 'Reports', perm: 'report.view',
+    href: '/reports/job-profitability', label: 'Reports', perm: 'report.view',
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}

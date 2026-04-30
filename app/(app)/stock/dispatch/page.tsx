@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import { useSession } from 'next-auth/react';
 import { formatDateTime, formatDate } from '@/lib/utils/formatters';
 import type { Column } from '@/components/ui/DataTable';
-import { useGetDispatchEntriesQuery, useDeleteTransactionMutation } from '@/store/hooks';
+import { useGetDispatchEntriesQuery, useDeleteTransactionMutation, type DispatchEntry as DispatchEntryRecord } from '@/store/hooks';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
 import type { DocumentTemplate } from '@/lib/types/documentTemplate';
 
@@ -26,30 +26,7 @@ interface Material {
   transactionIds: string[];
 }
 
-interface Entry {
-  id: string;
-  _id?: string;
-  entryId: string;
-  jobId: string;
-  jobNumber: string;
-  jobDescription: string;
-  jobContactPerson?: string;
-  jobContactsJson?: unknown;
-  dispatchDate: string;
-  totalQuantity: number;
-  totalValuation: number;
-  materialsCount: number;
-  materials: Material[];
-  transactionIds: string[];
-  transactionCount: number;
-  notes?: string;
-  isDeliveryNote?: boolean;
-  signedCopyUrl?: string;
-  createdByUserId?: string;
-  createdByName?: string;
-  createdByEmail?: string;
-  createdBySignatureUrl?: string;
-}
+type Entry = Omit<DispatchEntryRecord, 'materials'> & { materials: Material[] };
 
 function parseJobContacts(value: unknown): Array<{ name: string; number?: string; email?: string; designation?: string; label?: string }> {
   if (!Array.isArray(value)) return [];
@@ -86,8 +63,6 @@ export default function DispatchPage() {
     new Date().toISOString().split('T')[0]
   );
   const [noteTypeFilter, setNoteTypeFilter] = useState<'all' | 'dispatch' | 'delivery'>('all');
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [loading, setLoading] = useState(false);
 
   // Load filter state from URL on mount
   useEffect(() => {
@@ -119,6 +94,11 @@ export default function DispatchPage() {
   const [selectedPrintTplId, setSelectedPrintTplId] = useState('');
 
   const [deleteTransaction] = useDeleteTransactionMutation();
+  const { data: dispatchEntries, isFetching: loading } = useGetDispatchEntriesQuery(
+    { filterType, date: selectedDate },
+    { skip: !canView, refetchOnMountOrArgChange: 30 }
+  );
+  const entries = (dispatchEntries?.entries ?? []) as Entry[];
 
   useEffect(() => {
     if (!printModalEntry || !session?.user?.activeCompanyId) return;
@@ -185,33 +165,6 @@ export default function DispatchPage() {
       .trim();
   };
 
-  const fetchEntries = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        filterType,
-        date: selectedDate,
-      });
-      const res = await fetch(`/api/materials/dispatch-history-entries?${params}`);
-      const json = await res.json();
-      if (res.ok && json.data) {
-        setEntries(json.data.entries);
-      } else {
-        toast.error(json.error ?? 'Failed to fetch entries');
-      }
-    } catch (err) {
-      toast.error('Error loading entries');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (canView) {
-      fetchEntries();
-    }
-  }, [filterType, selectedDate, canView]);
-
   const handleFilterTypeChange = (newFilterType: 'day' | 'month' | 'all') => {
     setFilterType(newFilterType);
     // Update URL
@@ -246,7 +199,6 @@ export default function DispatchPage() {
       }
       toast.success('Entry deleted successfully');
       setDeleteModal({ open: false, entry: null, loading: false });
-      fetchEntries();
     } catch (err: any) {
       toast.error(err?.data?.error ?? 'Failed to delete entry');
       setDeleteModal((prev) => ({ ...prev, loading: false }));

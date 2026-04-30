@@ -2,6 +2,11 @@ import { auth }              from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { decimalToNumberOrZero } from '@/lib/utils/decimal';
+import {
+  parseReceiptAdjustmentMetadata,
+  parseReceiptCancellationMetadata,
+  stripReceiptCancellationMarkers,
+} from '@/lib/utils/receiptCancellation';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -62,28 +67,61 @@ export async function GET(req: Request) {
 
     // Format entries
     const enrichedEntries = Array.from(grouped.entries()).map(([receiptNumber, lines]) => {
-      const materials = lines.map((line) => ({
-        materialId: line.materialId,
-        materialName: line.material?.name ?? 'Unknown',
-        unit: line.material?.unit ?? '—',
-        warehouseId: line.warehouse?.id ?? null,
-        warehouseName: line.warehouse?.name ?? null,
-        quantityReceived: line.quantityReceived,
-        quantityAvailable: line.quantityAvailable,
-        unitCost: line.unitCost,
-        totalCost: line.totalCost,
-        batchNumber: line.batchNumber,
-      }));
+      const materialGroups = new Map<string, {
+        materialId: string;
+        materialName: string;
+        unit: string;
+        warehouseId: string | null;
+        warehouseName: string | null;
+        quantityReceived: number;
+        quantityAvailable: number;
+        unitCost: number;
+        totalCost: number;
+        batchNumber: string;
+      }>();
+      for (const line of lines) {
+        const materialId = line.materialId;
+        const warehouseId = line.warehouse?.id ?? null;
+        const unitCost = decimalToNumberOrZero(line.unitCost);
+        const key = `${materialId}::${warehouseId ?? 'none'}::${unitCost}`;
+        const current = materialGroups.get(key);
+        if (current) {
+          current.quantityReceived += decimalToNumberOrZero(line.quantityReceived);
+          current.quantityAvailable += decimalToNumberOrZero(line.quantityAvailable);
+          current.totalCost += decimalToNumberOrZero(line.totalCost);
+        } else {
+          materialGroups.set(key, {
+            materialId,
+            materialName: line.material?.name ?? 'Unknown',
+            unit: line.material?.unit ?? '—',
+            warehouseId,
+            warehouseName: line.warehouse?.name ?? null,
+            quantityReceived: decimalToNumberOrZero(line.quantityReceived),
+            quantityAvailable: decimalToNumberOrZero(line.quantityAvailable),
+            unitCost,
+            totalCost: decimalToNumberOrZero(line.totalCost),
+            batchNumber: line.batchNumber,
+          });
+        }
+      }
+      const materials = Array.from(materialGroups.values());
 
       const totalValue = lines.reduce((sum, line) => sum + decimalToNumberOrZero(line.totalCost), 0);
       const firstLine = lines[0];
+      const cancellationMetadata = parseReceiptCancellationMetadata(firstLine?.notes);
+      const adjustmentMetadata = parseReceiptAdjustmentMetadata(firstLine?.notes);
 
       return {
         id: receiptNumber,
         receiptNumber,
         receivedDate: firstLine!.receivedDate,
         supplier: firstLine!.supplier || undefined,
-        notes: firstLine!.notes || undefined,
+        notes: stripReceiptCancellationMarkers(firstLine!.notes) || undefined,
+        status: cancellationMetadata.isCancelled ? 'cancelled' : 'active',
+        cancelledAt: cancellationMetadata.cancelledAt,
+        cancellationReason: cancellationMetadata.cancellationReason,
+        adjustedAt: adjustmentMetadata.adjustedAt,
+        adjustmentReason: adjustmentMetadata.adjustmentReason,
         itemsCount: lines.length,
         totalValue,
         materials,

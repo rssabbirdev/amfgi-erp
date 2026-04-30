@@ -4,7 +4,13 @@ import { serializeJobWithContacts } from '@/lib/jobs/jobContacts';
 import { buildTransactionActorFields } from '@/lib/utils/auditActor';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { decimalToNumberOrZero } from '@/lib/utils/decimal';
+import {
+  consumeTransactionBatchQuantities,
+  normalizeTransactionBatchLinks,
+  restoreTransactionBatchQuantities,
+} from '@/lib/utils/transactionBatchLinks';
 import { applyMaterialWarehouseDelta, resolveEffectiveWarehouse } from '@/lib/warehouses/stockWarehouses';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 
 function isReconcileTransaction(notes?: string | null) {
   const value = (notes ?? '').trim().toLowerCase();
@@ -161,7 +167,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
           where: { id: txn.materialId },
           data: {
             currentStock: {
-              increment: txn.quantity,
+              increment: txn.type === 'STOCK_OUT' ? txn.quantity : -txn.quantity,
             },
           },
         });
@@ -182,16 +188,18 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
         // Restore batch quantities for STOCK_OUT
         if (txn.type === 'STOCK_OUT' && txn.batchesUsed && txn.batchesUsed.length > 0) {
-          for (const batchUsed of txn.batchesUsed) {
-            await tx.stockBatch.update({
-              where: { id: batchUsed.batchId },
-              data: {
-                quantityAvailable: {
-                  increment: batchUsed.quantityFromBatch,
-                },
-              },
-            });
-          }
+          await restoreTransactionBatchQuantities(
+            tx,
+            normalizeTransactionBatchLinks(txn.batchesUsed)
+          );
+        }
+
+        if (txn.type === 'RETURN' && txn.batchesUsed && txn.batchesUsed.length > 0) {
+          await consumeTransactionBatchQuantities(
+            tx,
+            normalizeTransactionBatchLinks(txn.batchesUsed),
+            'Stock changed while deleting this return. Please refresh and retry.'
+          );
         }
 
         // Create reversal transaction for ledger
@@ -203,7 +211,6 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
             warehouseId: reversalWarehouse.warehouseId,
             quantity: txn.quantity,
             jobId: txn.jobId,
-            parentTransactionId: txn.id,
             notes: `Reversal of ${txn.type} - ${txn.notes || ''}`,
             date: new Date(),
             ...actorFields,
@@ -250,6 +257,14 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
             -decimalToNumberOrZero(returnTxn.quantity)
           );
 
+          if (returnTxn.batchesUsed && returnTxn.batchesUsed.length > 0) {
+            await consumeTransactionBatchQuantities(
+              tx,
+              normalizeTransactionBatchLinks(returnTxn.batchesUsed),
+              'Stock changed while deleting a linked return. Please refresh and retry.'
+            );
+          }
+
           // Create reversal for RETURN transaction
           await tx.transaction.create({
             data: {
@@ -259,7 +274,6 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
               warehouseId: returnWarehouse.warehouseId,
               quantity: returnTxn.quantity,
               jobId: returnTxn.jobId,
-              parentTransactionId: returnTxn.id,
               notes: `Reversal of RETURN - ${returnTxn.notes || ''}`,
               date: new Date(),
               ...actorFields,
@@ -274,6 +288,13 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       }
 
       return { deleted: true };
+    });
+
+    publishLiveUpdate({
+      companyId,
+      channel: 'stock',
+      entity: 'transaction',
+      action: 'deleted',
     });
 
     return successResponse(result);

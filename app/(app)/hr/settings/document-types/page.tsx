@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
+import { useGetHrDocumentTypesQuery } from '@/store/api/endpoints/hr';
 
 interface Row {
   id: string;
@@ -19,8 +20,6 @@ interface Row {
 
 export default function HrDocumentTypesPage() {
   const { data: session } = useSession();
-  const [list, setList] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
@@ -29,12 +28,9 @@ export default function HrDocumentTypesPage() {
   const perms = (session?.user?.permissions ?? []) as string[];
   const canView = isSA || perms.includes('hr.settings.document_types') || perms.includes('hr.document.view');
   const canEdit = isSA || perms.includes('hr.settings.document_types');
-
-  const load = async () => {
-    const res = await fetch('/api/hr/document-types', { cache: 'no-store' });
-    const json = await res.json();
-    if (res.ok && json?.success) setList(json.data);
-  };
+  const { data: list = [], isLoading: loading, refetch } = useGetHrDocumentTypesQuery(undefined, {
+    skip: !canView,
+  });
 
   const createType = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -60,7 +56,7 @@ export default function HrDocumentTypesPage() {
     else {
       toast.success('Document type created');
       setShowCreate(false);
-      await load();
+      await refetch();
     }
     setSaving(false);
   };
@@ -89,7 +85,7 @@ export default function HrDocumentTypesPage() {
     else {
       toast.success('Document type saved');
       setEditing(null);
-      await load();
+      await refetch();
     }
     setSaving(false);
   };
@@ -103,25 +99,10 @@ export default function HrDocumentTypesPage() {
     else {
       toast.success('Document type removed');
       if (editing?.id === id) setEditing(null);
-      await load();
+      await refetch();
     }
     setSaving(false);
   };
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (!canView) {
-        if (!cancelled) setLoading(false);
-        return;
-      }
-      await load();
-      if (!cancelled) setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [canView]);
 
   if (!canView) return <div className="text-slate-400">Forbidden</div>;
   if (loading) return <div className="text-slate-400">Loading…</div>;

@@ -4,7 +4,5 @@ export const adminApi = createApi({
   reducerPath: 'adminApi',
   baseQuery: fetchBaseQuery({ baseUrl: '/api' }),
   tagTypes: ['Company', 'User', 'Role', 'CompanyProfile'],
-  refetchOnFocus: true,
-  refetchOnReconnect: true,
   endpoints: () => ({}),
 });

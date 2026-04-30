@@ -1,14 +1,25 @@
 import { appApi } from '../appApi';
 
-interface DispatchEntry {
+export interface DispatchEntry {
   id: string;
+  _id?: string;
   entryId: string;
   jobId: string;
   jobNumber: string;
   jobDescription?: string;
-  dispatchDate: Date;
+  jobContactPerson?: string;
+  jobContactsJson?: unknown;
+  dispatchDate: string | Date;
   totalQuantity: number;
+  totalValuation: number;
   materialsCount: number;
+  notes?: string;
+  isDeliveryNote?: boolean;
+  signedCopyUrl?: string;
+  createdByUserId?: string;
+  createdByName?: string;
+  createdByEmail?: string;
+  createdBySignatureUrl?: string;
   materials: Array<{
     materialId: string;
     materialName: string;

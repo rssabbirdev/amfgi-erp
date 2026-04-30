@@ -39,6 +39,10 @@ import {
   writeCompanyDocumentTemplates,
 } from '@/lib/utils/companyPrintTemplates';
 import { createWorkScheduleTemplateDraft } from '@/lib/utils/documentDefaults';
+import {
+  DEFAULT_STOCK_CONTROL_SETTINGS,
+  readStockControlSettingsFromCompanySettings,
+} from '@/lib/stock-control/settings';
 import { SettingsMediaPanel } from '@/components/settings/SettingsMediaPanel';
 
 const SETTINGS_TABS = [
@@ -142,7 +146,8 @@ function SettingsPageContent() {
     email: '',
     externalCompanyId: '',
     jobSourceMode: 'HYBRID' as 'HYBRID' | 'EXTERNAL_ONLY',
-    warehouseMode: 'DISABLED' as 'DISABLED' | 'OPTIONAL' | 'REQUIRED',
+    negativeEvidenceQtyThreshold: DEFAULT_STOCK_CONTROL_SETTINGS.negativeEvidenceQtyThreshold.toString(),
+    negativeDecisionNoteQtyThreshold: DEFAULT_STOCK_CONTROL_SETTINGS.negativeDecisionNoteQtyThreshold.toString(),
   });
   const [driveStatus, setDriveStatus] = useState<{
     connected: boolean;
@@ -213,7 +218,9 @@ function SettingsPageContent() {
   const [tplSaving, setTplSaving] = useState(false);
 
   // Units state
-  const { data: units = [], isFetching: unitsFetching } = useGetUnitsQuery();
+  const { data: units = [], isFetching: unitsFetching } = useGetUnitsQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
   const [createUnit] = useCreateUnitMutation();
   const [updateUnit] = useUpdateUnitMutation();
   const [deleteUnit] = useDeleteUnitMutation();
@@ -226,7 +233,9 @@ function SettingsPageContent() {
   });
 
   // Categories state
-  const { data: categories = [], isFetching: categoriesFetching } = useGetCategoriesQuery();
+  const { data: categories = [], isFetching: categoriesFetching } = useGetCategoriesQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
   const [createCategory] = useCreateCategoryMutation();
   const [updateCategory] = useUpdateCategoryMutation();
   const [deleteCategory] = useDeleteCategoryMutation();
@@ -239,7 +248,9 @@ function SettingsPageContent() {
   });
 
   // Warehouses state
-  const { data: warehouses = [], isFetching: warehousesFetching } = useGetWarehousesQuery();
+  const { data: warehouses = [], isFetching: warehousesFetching } = useGetWarehousesQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
   const [createWarehouse] = useCreateWarehouseMutation();
   const [updateWarehouse] = useUpdateWarehouseMutation();
   const [deleteWarehouse] = useDeleteWarehouseMutation();
@@ -272,6 +283,7 @@ function SettingsPageContent() {
         if (res.ok) {
           const data = await res.json();
           const company = data.data;
+          const stockControlSettings = readStockControlSettingsFromCompanySettings(company.jobCostingSettings);
           setCompanyData(company);
           setCompanyForm({
             address: company.address || '',
@@ -279,7 +291,8 @@ function SettingsPageContent() {
             email: company.email || '',
             externalCompanyId: company.externalCompanyId || '',
             jobSourceMode: company.jobSourceMode || 'HYBRID',
-            warehouseMode: company.warehouseMode || 'DISABLED',
+            negativeEvidenceQtyThreshold: stockControlSettings.negativeEvidenceQtyThreshold.toString(),
+            negativeDecisionNoteQtyThreshold: stockControlSettings.negativeDecisionNoteQtyThreshold.toString(),
           });
           const parsedTemplates = readCompanyDocumentTemplates(company.printTemplates);
           if (parsedTemplates.length > 0) {
@@ -1105,10 +1118,7 @@ function SettingsPageContent() {
           </div>
           <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-4 text-sm text-slate-400">
             <p>
-              Current mode: <span className="text-slate-200">{companyForm.warehouseMode}</span>.{' '}
-              {companyForm.warehouseMode === 'DISABLED'
-                ? 'New stock movements are routed through the fallback warehouse until warehouse tracking is enabled.'
-                : 'These warehouses can now participate in stock routing and reporting.'}
+              Warehouse tracking is required. Every stock movement must select a warehouse.
             </p>
           </div>
           {warehousesFetching && warehouses.length === 0 ? (
@@ -1145,15 +1155,37 @@ function SettingsPageContent() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 try {
+                  const nextJobCostingSettings =
+                    companyData && typeof companyData === 'object' && 'jobCostingSettings' in companyData
+                      ? (companyData as { jobCostingSettings?: unknown }).jobCostingSettings
+                      : undefined;
                   const res = await fetch(`/api/companies/${session?.user?.activeCompanyId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(companyForm),
+                    body: JSON.stringify({
+                      ...companyForm,
+                      ...(isSA
+                        ? {
+                            jobCostingSettings: {
+                              ...(nextJobCostingSettings &&
+                              typeof nextJobCostingSettings === 'object' &&
+                              !Array.isArray(nextJobCostingSettings)
+                                ? (nextJobCostingSettings as Record<string, unknown>)
+                                : {}),
+                              stockControl: {
+                                negativeEvidenceQtyThreshold: Number(companyForm.negativeEvidenceQtyThreshold),
+                                negativeDecisionNoteQtyThreshold: Number(companyForm.negativeDecisionNoteQtyThreshold),
+                              },
+                            },
+                          }
+                        : {}),
+                    }),
                   });
                   if (res.ok) {
                     toast.success('Company information saved');
                     const data = await res.json();
                     const company = data.data;
+                    const stockControlSettings = readStockControlSettingsFromCompanySettings(company.jobCostingSettings);
                     setCompanyData(company);
                     setCompanyForm((prev) => ({
                       ...prev,
@@ -1162,7 +1194,8 @@ function SettingsPageContent() {
                       email: company.email || '',
                       externalCompanyId: company.externalCompanyId || '',
                       jobSourceMode: company.jobSourceMode || 'HYBRID',
-                      warehouseMode: company.warehouseMode || 'DISABLED',
+                      negativeEvidenceQtyThreshold: stockControlSettings.negativeEvidenceQtyThreshold.toString(),
+                      negativeDecisionNoteQtyThreshold: stockControlSettings.negativeDecisionNoteQtyThreshold.toString(),
                     }));
                   } else {
                     const err = await res.json();
@@ -1241,29 +1274,6 @@ function SettingsPageContent() {
                       Variations remain local in both modes.
                     </p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                      Warehouse Tracking
-                    </label>
-                    <select
-                      value={companyForm.warehouseMode}
-                      onChange={(e) =>
-                        setCompanyForm({
-                          ...companyForm,
-                          warehouseMode: e.target.value as 'DISABLED' | 'OPTIONAL' | 'REQUIRED',
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                    >
-                      <option value="DISABLED">Disabled</option>
-                      <option value="OPTIONAL">Optional</option>
-                      <option value="REQUIRED">Required</option>
-                    </select>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Disabled keeps stock on the company fallback warehouse. Optional lets teams start assigning
-                      warehouses gradually. Required enforces warehouse selection on future stock movements.
-                    </p>
-                  </div>
                   <div className="rounded-lg border border-slate-700 bg-slate-800/70 p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Fallback warehouse</p>
                     <p className="mt-2 text-sm font-medium text-white">
@@ -1273,9 +1283,50 @@ function SettingsPageContent() {
                         ? String((companyData.stockFallbackWarehouse as { name?: string }).name || 'System Default')
                         : 'System Default'}
                     </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      The system routes stock here whenever warehouse mode is disabled or a movement has no explicit
-                      warehouse yet.
+                    <p className="mt-1 text-xs text-slate-400">System-managed warehouse reference for stock integrity.</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-700 bg-slate-800/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Stock control thresholds</p>
+                    <div className="mt-3 grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                          Evidence threshold qty
+                        </label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0.001"
+                          value={companyForm.negativeEvidenceQtyThreshold}
+                          onChange={(e) =>
+                            setCompanyForm({
+                              ...companyForm,
+                              negativeEvidenceQtyThreshold: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                          Decision note threshold qty
+                        </label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0.001"
+                          value={companyForm.negativeDecisionNoteQtyThreshold}
+                          onChange={(e) =>
+                            setCompanyForm({
+                              ...companyForm,
+                              negativeDecisionNoteQtyThreshold: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-400">
+                      Large negative stock adjustments at or above the evidence threshold require strong evidence. At or above the decision note threshold, the approver must leave a decision note.
                     </p>
                   </div>
                 </>

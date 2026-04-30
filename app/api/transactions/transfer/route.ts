@@ -12,13 +12,14 @@ import { resolveQuantityToBase } from '@/lib/utils/materialUomDb';
 import { createBatchData } from '@/lib/utils/stockBatchManagement';
 import { ensureCategoryRef, ensureWarehouseRef } from '@/lib/materialMasterData';
 import { applyMaterialWarehouseDelta, resolveEffectiveWarehouse } from '@/lib/warehouses/stockWarehouses';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { z } from 'zod';
 
 const TransferSchema = z.object({
   sourceCompanyId: z.string().optional(),
   destinationCompanyId: z.string().min(1),
-  sourceWarehouseId: z.string().optional(),
-  destinationWarehouseId: z.string().optional(),
+  sourceWarehouseId: z.string().min(1),
+  destinationWarehouseId: z.string().min(1),
   destinationWarehouse: z.string().max(100).optional(),
   materialId: z.string().min(1),
   quantity: z.number().min(0.001),
@@ -159,7 +160,7 @@ export async function POST(req: Request) {
 
       const qtyBase = await resolveQuantityToBase(tx, materialId, quantity, quantityUomId);
       const sourceCurrentStock = decimalToNumberOrZero(srcMaterial.currentStock);
-      if (sourceCurrentStock < qtyBase) {
+      if (!srcMaterial.allowNegativeConsumption && sourceCurrentStock < qtyBase) {
         throw new Error(`Insufficient stock. Available: ${sourceCurrentStock} ${srcMaterial.unit}`);
       }
       const sourceWarehouse = await resolveEffectiveWarehouse(tx, {
@@ -199,24 +200,46 @@ export async function POST(req: Request) {
         ];
       }
 
-      const fifoResult = calculateFIFOConsumption(
-        sourceBatches.map((batch) => ({
-          id: batch.id,
-          batchNumber: batch.batchNumber,
-          quantityAvailable: decimalToNumberOrZero(batch.quantityAvailable),
-          unitCost: decimalToNumberOrZero(batch.unitCost),
-          receivedDate: batch.receivedDate,
-        })),
-        qtyBase
+      const availableFromBatches = sourceBatches.reduce(
+        (sum, batch) => sum + decimalToNumberOrZero(batch.quantityAvailable),
+        0
       );
+      const quantityFromBatches = srcMaterial.allowNegativeConsumption
+        ? Math.min(qtyBase, availableFromBatches)
+        : qtyBase;
+      const shortfallQuantity = Math.max(0, qtyBase - quantityFromBatches);
+      const fallbackUnitCost = decimalToNumberOrZero(srcMaterial.unitCost);
 
-      if (fifoResult.batchesUsed.length === 0) {
+      const fifoResult =
+        quantityFromBatches > 0
+          ? calculateFIFOConsumption(
+              sourceBatches.map((batch) => ({
+                id: batch.id,
+                batchNumber: batch.batchNumber,
+                quantityAvailable: decimalToNumberOrZero(batch.quantityAvailable),
+                unitCost: decimalToNumberOrZero(batch.unitCost),
+                receivedDate: batch.receivedDate,
+              })),
+              quantityFromBatches
+            )
+          : {
+              totalCost: 0,
+              averageCost: 0,
+              batchesUsed: [],
+            };
+
+      if (!srcMaterial.allowNegativeConsumption && fifoResult.batchesUsed.length === 0) {
         throw new Error(`Cannot fulfill ${qtyBase} ${srcMaterial.unit} of ${srcMaterial.name}`);
       }
-      const consumedQty = fifoResult.batchesUsed.reduce((sum, batch) => sum + decimalToNumberOrZero(batch.quantityFromBatch), 0);
-      if (consumedQty < qtyBase) {
+      const consumedQty = fifoResult.batchesUsed.reduce(
+        (sum, batch) => sum + decimalToNumberOrZero(batch.quantityFromBatch),
+        0
+      );
+      if (!srcMaterial.allowNegativeConsumption && consumedQty < qtyBase) {
         throw new Error(`Insufficient FIFO batches for ${srcMaterial.name}. Available in batches: ${consumedQty} ${srcMaterial.unit}`);
       }
+      const totalCost = fifoResult.totalCost + shortfallQuantity * fallbackUnitCost;
+      const averageCost = qtyBase > 0 ? totalCost / qtyBase : 0;
 
       const categoryRef = await ensureCategoryRef(tx, destinationCompanyId, srcMaterial.category);
       await ensureUnit(tx, destinationCompanyId, srcMaterial.unit);
@@ -242,7 +265,7 @@ export async function POST(req: Request) {
       });
 
       const previousPrice = decimalToNumberOrZero(destMaterial?.unitCost);
-      const nextPrice = decimalToNumberOrZero(fifoResult.averageCost) || decimalToNumberOrZero(srcMaterial.unitCost);
+      const nextPrice = decimalToNumberOrZero(averageCost) || decimalToNumberOrZero(srcMaterial.unitCost);
 
       if (!destMaterial) {
         destMaterial = await tx.material.create({
@@ -299,20 +322,30 @@ export async function POST(req: Request) {
           notes: notes || null,
           date: txDate,
           ...actorFields,
-          totalCost: fifoResult.totalCost,
-          averageCost: fifoResult.averageCost,
+          totalCost,
+          averageCost,
         },
       });
 
       for (const batchUsed of fifoResult.batchesUsed) {
-        await tx.stockBatch.update({
-          where: { id: String(batchUsed.batchId) },
+        const batchUpdateResult = await tx.stockBatch.updateMany({
+          where: {
+            id: String(batchUsed.batchId),
+            quantityAvailable: {
+              gte: batchUsed.quantityFromBatch,
+            },
+          },
           data: {
             quantityAvailable: {
               decrement: batchUsed.quantityFromBatch,
             },
           },
         });
+        if (batchUpdateResult.count === 0) {
+          throw new Error(
+            `Stock changed while transferring ${srcMaterial.name}. Please refresh and retry.`
+          );
+        }
 
         await tx.transactionBatch.create({
           data: {
@@ -326,14 +359,35 @@ export async function POST(req: Request) {
         });
       }
 
-      await tx.material.update({
-        where: { id: materialId },
-        data: {
-          currentStock: {
-            decrement: qtyBase,
+      if (srcMaterial.allowNegativeConsumption) {
+        await tx.material.update({
+          where: { id: materialId },
+          data: {
+            currentStock: {
+              decrement: qtyBase,
+            },
           },
-        },
-      });
+        });
+      } else {
+        const sourceStockUpdateResult = await tx.material.updateMany({
+          where: {
+            id: materialId,
+            currentStock: {
+              gte: qtyBase,
+            },
+          },
+          data: {
+            currentStock: {
+              decrement: qtyBase,
+            },
+          },
+        });
+        if (sourceStockUpdateResult.count === 0) {
+          throw new Error(
+            `Insufficient stock for ${srcMaterial.name}. Stock changed by another user; refresh and retry.`
+          );
+        }
+      }
       await applyMaterialWarehouseDelta(tx, srcCompanyId, materialId, sourceWarehouse.warehouseId, -qtyBase);
 
       await tx.material.update({
@@ -364,8 +418,8 @@ export async function POST(req: Request) {
           notes: notes || null,
           date: txDate,
           ...actorFields,
-          totalCost: fifoResult.totalCost,
-          averageCost: fifoResult.averageCost,
+          totalCost,
+          averageCost,
         },
       });
 
@@ -422,6 +476,19 @@ export async function POST(req: Request) {
         destinationCompany: destCompany.slug,
         destMaterialId: destMaterial.id,
       };
+    });
+
+    publishLiveUpdate({
+      companyId: srcCompanyId,
+      channel: 'stock',
+      entity: 'transfer',
+      action: 'created',
+    });
+    publishLiveUpdate({
+      companyId: destinationCompanyId,
+      channel: 'stock',
+      entity: 'transfer',
+      action: 'created',
     });
 
     return successResponse(result, 201);

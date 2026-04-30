@@ -66,9 +66,12 @@ export {
   useUpdateFormulaLibraryMutation,
   useDeleteFormulaLibraryMutation,
   useCalculateJobCostEngineMutation,
+  useGetDispatchBudgetWarningMutation,
   useCreateJobMutation,
   useUpdateJobMutation,
   useDeleteJobMutation,
+  type DispatchBudgetWarningResult,
+  type DispatchBudgetWarningRow,
 } from './api/endpoints/jobs';
 
 export {
@@ -85,6 +88,34 @@ export {
   useGetStockValuationQuery,
   useGetConsumptionQuery,
   useLazyGetJobConsumptionQuery,
+  useGetJobProfitabilityQuery,
+  useGetSupplierTraceabilityQuery,
+  useGetInventoryByWarehouseQuery,
+  useGetStockIntegrityQuery,
+  useGetStockExceptionsQuery,
+  useGetStockExceptionApprovalsQuery,
+  useGetStockAdjustmentsQuery,
+  useGetStockCountSessionsReportQuery,
+  useUpdateStockExceptionApprovalMutation,
+  type InventoryByWarehouseResponse,
+  type InventoryByWarehouseRow,
+  type InventoryByWarehouseWarehouseCol,
+  type JobProfitabilityResponse,
+  type JobProfitabilityRow,
+  type StockAdjustmentsResponse,
+  type StockAdjustmentRow,
+  type StockExceptionApprovalsResponse,
+  type StockExceptionApprovalRow,
+  type StockCountSessionsReportResponse,
+  type StockCountSessionReportRow,
+  type StockCountSessionMaterialReportRow,
+  type StockCountSessionWarehouseReportRow,
+  type StockExceptionsResponse,
+  type StockExceptionRow,
+  type SupplierTraceabilityResponse,
+  type SupplierTraceabilityRow,
+  type StockIntegrityResponse,
+  type StockIntegrityRow,
 } from './api/endpoints/reports';
 
 export {
@@ -97,6 +128,7 @@ export {
   useGetDispatchEntryQuery,
   useGetNonStockReconcileDataQuery,
   useReconcileNonStockMutation,
+  useRequestManualStockAdjustmentMutation,
 } from './api/endpoints/transactions';
 
 export {
@@ -109,12 +141,15 @@ export {
   type Supplier,
 } from './api/endpoints/suppliers';
 
-export { useGetDispatchEntriesQuery } from './api/endpoints/dispatch';
+export { useGetDispatchEntriesQuery, type DispatchEntry } from './api/endpoints/dispatch';
 
 export {
   useGetReceiptEntriesQuery,
   useGetReceiptEntryQuery,
+  useLazyGetReceiptAdjustmentImpactQuery,
   useDeleteReceiptEntryMutation,
+  useCancelReceiptEntryMutation,
+  useAdjustReceiptEntryMutation,
 } from './api/endpoints/receipts';
 
 export {
@@ -140,6 +175,17 @@ export {
   useDeleteWarehouseMutation,
   type Warehouse,
 } from './api/endpoints/warehouses';
+
+export {
+  useGetStockCountSessionsQuery,
+  useGetStockCountSessionByIdQuery,
+  useCreateStockCountSessionMutation,
+  useUpdateStockCountSessionMutation,
+  useSubmitStockCountSessionMutation,
+  type StockCountSessionDto,
+  type StockCountSessionLineDto,
+  type StockCountSessionRevisionDto,
+} from './api/endpoints/stockCountSessions';
 
 export {
   useGetMaterialLogsQuery,

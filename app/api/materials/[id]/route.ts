@@ -4,7 +4,8 @@ import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { serializeMaterialUoms } from '@/lib/utils/materialUom';
 import type { MaterialUomWithUnit } from '@/lib/utils/materialUom';
 import { decimalToNumber } from '@/lib/utils/decimal';
-import { ensureCategoryRef, ensureWarehouseRef } from '@/lib/materialMasterData';
+import { resolveCategoryRef, resolveWarehouseRef } from '@/lib/materialMasterData';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { z }                 from 'zod';
 
 const UpdateSchema = z.object({
@@ -12,7 +13,9 @@ const UpdateSchema = z.object({
   description:         z.string().max(500).optional(),
   unit:                z.string().min(1).max(20).optional(),
   category:            z.string().min(1).max(100).optional(),
+  categoryId:          z.string().min(1).max(100).optional(),
   warehouse:           z.string().min(1).max(100).optional(),
+  warehouseId:         z.string().min(1).max(100).optional(),
   stockType:           z.string().min(1).max(50).optional(),
   allowNegativeConsumption: z.boolean().optional(),
   externalItemName:    z.string().min(1).max(100).optional(),
@@ -89,12 +92,18 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   try {
     await prisma.$transaction(async (tx) => {
       const categoryRef =
-        parsed.data.category !== undefined
-          ? await ensureCategoryRef(tx, companyId, parsed.data.category)
+        parsed.data.category !== undefined || parsed.data.categoryId !== undefined
+          ? await resolveCategoryRef(tx, companyId, {
+              id: parsed.data.categoryId,
+              name: parsed.data.category,
+            })
           : null;
       const warehouseRef =
-        parsed.data.warehouse !== undefined
-          ? await ensureWarehouseRef(tx, companyId, parsed.data.warehouse)
+        parsed.data.warehouse !== undefined || parsed.data.warehouseId !== undefined
+          ? await resolveWarehouseRef(tx, companyId, {
+              id: parsed.data.warehouseId,
+              name: parsed.data.warehouse,
+            })
           : null;
 
       await tx.material.update({
@@ -162,6 +171,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   });
   if (!out) return errorResponse('Material not found', 404);
   const { materialUoms, ...rest } = out;
+  publishLiveUpdate({
+    companyId,
+    channel: 'stock',
+    entity: 'material',
+    action: 'updated',
+  });
   return successResponse({
     ...rest,
     materialUoms: serializeMaterialUoms(materialUoms as MaterialUomWithUnit[]),
@@ -204,12 +219,24 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (hardDelete) {
     // Permanently delete (only if no transactions OR user explicitly confirmed)
     await prisma.material.delete({ where: { id } });
+    publishLiveUpdate({
+      companyId: session.user.activeCompanyId,
+      channel: 'stock',
+      entity: 'material',
+      action: 'deleted',
+    });
     return successResponse({ deleted: true, permanent: true });
   } else {
     // Soft delete (deactivate)
     await prisma.material.update({
       where: { id },
       data: { isActive: false },
+    });
+    publishLiveUpdate({
+      companyId: session.user.activeCompanyId,
+      channel: 'stock',
+      entity: 'material',
+      action: 'updated',
     });
     return successResponse({ deleted: true, permanent: false, message: 'Material deactivated' });
   }

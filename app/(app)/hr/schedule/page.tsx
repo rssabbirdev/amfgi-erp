@@ -1,24 +1,11 @@
 ﻿'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
-
-interface ScheduleRow {
-  id: string;
-  workDate: string;
-  status: 'DRAFT' | 'PUBLISHED' | 'LOCKED';
-  createdAt: string;
-  publishedAt: string | null;
-  lockedAt: string | null;
-  attendanceRows: number;
-  _count: {
-    assignments: number;
-    absences: number;
-  };
-}
+import { useGetHrSchedulesQuery } from '@/store/api/endpoints/hr';
 
 async function readApiEnvelope<T>(res: Response) {
   const text = await res.text();
@@ -74,8 +61,6 @@ function StatCard({
 export default function HrScheduleListPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const [rows, setRows] = useState<ScheduleRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newDate, setNewDate] = useState(todayYmd);
   const [search, setSearch] = useState('');
@@ -85,22 +70,9 @@ export default function HrScheduleListPage() {
   const canView = isSA || perms.includes('hr.schedule.view');
   const canEdit = isSA || perms.includes('hr.schedule.edit');
 
-  useEffect(() => {
-    if (!canView) return;
-
-    let cancelled = false;
-    void (async () => {
-      setLoading(true);
-      const res = await fetch('/api/hr/schedule', { cache: 'no-store' });
-      const json = await readApiEnvelope<ScheduleRow[]>(res);
-      if (!cancelled && res.ok && json?.success) setRows(json.data ?? []);
-      if (!cancelled) setLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canView]);
+  const { data: rows = [], isLoading: loading } = useGetHrSchedulesQuery(undefined, {
+    skip: !canView,
+  });
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();

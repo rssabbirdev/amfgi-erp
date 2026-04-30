@@ -1,6 +1,6 @@
 'use client';
 
-import { type SetStateAction, useMemo, useState } from 'react';
+import { type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -53,8 +53,17 @@ type AreaRule = {
   key: string;
   label: string;
   fields: DynamicField[];
+  formulaValues: FormulaConstantField[];
   materials: MaterialRule[];
   labor: LaborRule[];
+};
+
+type FormulaConstantField = {
+  id: string;
+  key: string;
+  label: string;
+  value: string;
+  unit: string;
 };
 
 type BuilderState = {
@@ -63,6 +72,7 @@ type BuilderState = {
   fabricationType: string;
   description: string;
   globalFields: DynamicField[];
+  formulaConstants: FormulaConstantField[];
   areas: AreaRule[];
 };
 
@@ -84,13 +94,37 @@ type PlaygroundMaterialLine = {
 type FormulaToken = {
   token: string;
   label: string;
-  group: 'Job input' | 'Area measurement' | 'Area variable';
+  group: 'Job input' | 'Formula value' | 'Area measurement' | 'Area variable';
 };
 
 const FIELD_TYPES: FieldType[] = ['number', 'percent', 'length', 'area', 'volume', 'count', 'boolean', 'select', 'text', 'material'];
+const FORMULA_DRAFT_STORAGE_PREFIX = 'formula-builder-draft';
 
 function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function getFormulaDraftStorageKey(formulaId?: string) {
+  return `${FORMULA_DRAFT_STORAGE_PREFIX}:${formulaId ?? 'new'}`;
+}
+
+function formatAutoSaveLabel(state: 'idle' | 'draft' | 'saving' | 'saved' | 'error', lastSavedAt: string | null) {
+  const timeLabel = lastSavedAt
+    ? new Date(lastSavedAt).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  switch (state) {
+    case 'draft':
+      return timeLabel ? `Draft saved ${timeLabel}` : 'Draft saved locally';
+    case 'saving':
+      return 'Auto-saving...';
+    case 'saved':
+      return timeLabel ? `Saved ${timeLabel}` : 'Saved';
+    case 'error':
+      return 'Autosave failed';
+    default:
+      return 'Ready';
+  }
 }
 
 function slugify(value: string) {
@@ -118,6 +152,20 @@ function normalizeFormulaKey(value: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function moveArrayItem<T>(items: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return items;
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
+function reorderItemsById<T extends { id: string }>(items: T[], sourceId: string, targetId: string): T[] {
+  const from = items.findIndex((item) => item.id === sourceId);
+  const to = items.findIndex((item) => item.id === targetId);
+  return moveArrayItem(items, from, to);
 }
 
 function newField(scope?: FieldScope): DynamicField {
@@ -159,8 +207,19 @@ function newArea(): AreaRule {
     key: '',
     label: '',
     fields: [],
+    formulaValues: [],
     materials: [],
     labor: [],
+  };
+}
+
+function newFormulaConstant(): FormulaConstantField {
+  return {
+    id: uid('constant'),
+    key: '',
+    label: '',
+    value: '',
+    unit: '',
   };
 }
 
@@ -218,6 +277,18 @@ function parseFormula(row?: FormulaLibrary | null): BuilderState {
       key,
       label: typeof rawArea.label === 'string' ? rawArea.label : key,
       fields: [],
+      formulaValues: isRecord(rawArea.variables)
+        ? Object.entries(rawArea.variables).flatMap(([variableKey, variableValue]) => {
+            if (typeof variableValue !== 'number' && typeof variableValue !== 'string') return [];
+            return [{
+              id: uid('area-formula'),
+              key: variableKey,
+              label: variableKey,
+              value: String(variableValue),
+              unit: '',
+            }];
+          })
+        : [],
       materials,
       labor,
     });
@@ -248,6 +319,35 @@ function parseFormula(row?: FormulaLibrary | null): BuilderState {
       })
     : [];
 
+  const formulaConstants = Array.isArray(config.constants)
+    ? config.constants.flatMap((constant) => {
+        if (!isRecord(constant)) return [];
+        return [{
+          id: uid('constant'),
+          key: typeof constant.key === 'string' ? constant.key : '',
+          label: typeof constant.label === 'string' ? constant.label : (typeof constant.key === 'string' ? constant.key : ''),
+          value:
+            typeof constant.value === 'number'
+              ? String(constant.value)
+              : typeof constant.value === 'string'
+                ? constant.value
+                : '',
+          unit: typeof constant.unit === 'string' ? constant.unit : '',
+        }];
+      })
+    : isRecord(config.variables)
+      ? Object.entries(config.variables).flatMap(([key, value]) => {
+          if (typeof value !== 'number' && typeof value !== 'string') return [];
+          return [{
+            id: uid('constant'),
+            key,
+            label: key,
+            value: String(value),
+            unit: '',
+          }];
+        })
+      : [];
+
   const areas = Array.from(areaMap.values());
 
   return {
@@ -256,11 +356,28 @@ function parseFormula(row?: FormulaLibrary | null): BuilderState {
     fabricationType: row?.fabricationType ?? '',
     description: row?.description ?? '',
     globalFields,
+    formulaConstants,
     areas: areas.length > 0 ? areas : [newArea()],
   };
 }
 
+function parseFormulaConstantValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : trimmed;
+}
+
 function buildPayload(form: BuilderState) {
+  const constants = form.formulaConstants
+    .filter((field) => field.key.trim() && field.label.trim() && field.value.trim())
+    .map((field) => ({
+      key: field.key.trim(),
+      label: field.label.trim(),
+      value: parseFormulaConstantValue(field.value),
+      unit: field.unit.trim() || undefined,
+    }));
+
   const specificationSchema = {
     version: 1,
     globalFields: form.globalFields
@@ -293,11 +410,18 @@ function buildPayload(form: BuilderState) {
   const formulaConfig = {
     version: 2,
     unitSystem: 'METRIC' as const,
+    variables: Object.fromEntries(constants.map((field) => [field.key, field.value])),
+    constants,
     areas: form.areas
       .filter((area) => area.key.trim() && area.label.trim())
       .map((area) => ({
         key: area.key.trim(),
         label: area.label.trim(),
+        variables: Object.fromEntries(
+          area.formulaValues
+            .filter((field) => field.key.trim() && field.label.trim() && field.value.trim())
+            .map((field) => [field.key.trim(), parseFormulaConstantValue(field.value)])
+        ),
         materials: area.materials
           .filter((rule) => (rule.materialId || rule.materialSelectorKey) && rule.quantityExpression.trim())
           .map((rule) => ({
@@ -382,7 +506,14 @@ function buildPlaygroundNumericValues(form: BuilderState, values: PlaygroundValu
   const numericValues: Record<string, number> = {};
   for (const field of form.globalFields) {
     if (field.inputType === 'material') continue;
-    numericValues[`specs.global.${field.key}`] = parsePlaygroundNumber(values[`global.${field.key}`] ?? '');
+    const key = field.key.trim();
+    if (!key) continue;
+    numericValues[`specs.global.${key}`] = parsePlaygroundNumber(values[`global.${field.key}`] ?? '');
+  }
+  for (const field of form.formulaConstants) {
+    const key = field.key.trim();
+    if (!key) continue;
+    numericValues[`formula.${key}`] = evaluatePlaygroundExpression(field.value || '0', numericValues);
   }
   return numericValues;
 }
@@ -397,6 +528,11 @@ function buildPlaygroundPreview(form: BuilderState, values: PlaygroundValues, ma
     for (const field of area.fields) {
       const target = field.scope === 'variable' ? `area.variables.${field.key}` : `area.${field.key}`;
       numericValues[target] = parsePlaygroundNumber(values[`area.${area.id}.${field.key}`] ?? '');
+    }
+    for (const field of area.formulaValues) {
+      const key = field.key.trim();
+      if (!key) continue;
+      numericValues[`area.formula.${key}`] = evaluatePlaygroundExpression(field.value || '0', numericValues);
     }
 
     for (const rule of area.materials) {
@@ -439,13 +575,54 @@ function buildPlaygroundPreview(form: BuilderState, values: PlaygroundValues, ma
   };
 }
 
-function buildFormulaTokens(globalFields: DynamicField[], area: AreaRule): FormulaToken[] {
+function buildFormulaConstantTokens(globalFields: DynamicField[], formulaConstants: FormulaConstantField[], currentId?: string): FormulaToken[] {
   const globalTokens: FormulaToken[] = globalFields
     .filter((field) => field.key.trim() && field.inputType !== 'material')
     .map((field) => ({
       token: `specs.global.${field.key.trim()}`,
       label: field.label.trim() || field.key.trim(),
       group: 'Job input',
+    }));
+
+  const formulaTokens: FormulaToken[] = formulaConstants
+    .filter((field) => field.id !== currentId && field.key.trim())
+    .map((field) => ({
+      token: `formula.${field.key.trim()}`,
+      label: field.label.trim() || field.key.trim(),
+      group: 'Formula value',
+    }));
+
+  return [...globalTokens, ...formulaTokens];
+}
+
+function buildAreaFormulaValueTokens(
+  globalFields: DynamicField[],
+  formulaConstants: FormulaConstantField[],
+  area: AreaRule,
+  currentId?: string
+): FormulaToken[] {
+  const shared = buildFormulaTokens(globalFields, formulaConstants, {
+    ...area,
+    formulaValues: area.formulaValues.filter((field) => field.id !== currentId),
+  });
+  return shared;
+}
+
+function buildFormulaTokens(globalFields: DynamicField[], formulaConstants: FormulaConstantField[], area: AreaRule): FormulaToken[] {
+  const globalTokens: FormulaToken[] = globalFields
+    .filter((field) => field.key.trim() && field.inputType !== 'material')
+    .map((field) => ({
+      token: `specs.global.${field.key.trim()}`,
+      label: field.label.trim() || field.key.trim(),
+      group: 'Job input',
+    }));
+
+  const formulaTokens: FormulaToken[] = formulaConstants
+    .filter((field) => field.key.trim())
+    .map((field) => ({
+      token: `formula.${field.key.trim()}`,
+      label: field.label.trim() || field.key.trim(),
+      group: 'Formula value',
     }));
 
   const areaTokens: FormulaToken[] = area.fields
@@ -460,7 +637,15 @@ function buildFormulaTokens(globalFields: DynamicField[], area: AreaRule): Formu
       };
     });
 
-  return [...globalTokens, ...areaTokens];
+  const areaFormulaTokens: FormulaToken[] = area.formulaValues
+    .filter((field) => field.key.trim())
+    .map((field) => ({
+      token: `area.formula.${field.key.trim()}`,
+      label: field.label.trim() || field.key.trim(),
+      group: 'Area variable',
+    }));
+
+  return [...globalTokens, ...formulaTokens, ...areaTokens, ...areaFormulaTokens];
 }
 
 function getExpressionTokenQuery(value: string) {
@@ -476,15 +661,40 @@ function insertExpressionToken(value: string, token: string) {
   return `${value.slice(0, match.index)}${token}`;
 }
 
+function DragHandle({
+  label,
+  onDragStart,
+  onDragEnd,
+}: {
+  label: string;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className="inline-flex cursor-grab items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 transition hover:border-emerald-200 hover:bg-emerald-50 active:cursor-grabbing dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10"
+      title={`Drag to reorder ${label}`}
+    >
+      <span className="text-sm leading-none">::</span>
+      <span>Move</span>
+    </button>
+  );
+}
+
 export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
   const router = useRouter();
   const { data: session } = useSession();
   const perms = (session?.user?.permissions ?? []) as string[];
   const canManage = (session?.user?.isSuperAdmin ?? false) || perms.includes('settings.manage');
   const canView = (session?.user?.isSuperAdmin ?? false) || (perms.includes('job.view') && perms.includes('material.view'));
+  const [activeFormulaId, setActiveFormulaId] = useState(formulaId);
 
-  const { data: formula, isLoading: formulaLoading } = useGetFormulaLibraryByIdQuery(formulaId ?? '', {
-    skip: !formulaId || !canView,
+  const { data: formula, isLoading: formulaLoading } = useGetFormulaLibraryByIdQuery(activeFormulaId ?? '', {
+    skip: !activeFormulaId || !canView,
   });
   const { data: formulaLibrary = [] } = useGetFormulaLibrariesQuery(undefined, { skip: !canView });
   const { data: materials = [] } = useGetMaterialsQuery(undefined, { skip: !canView });
@@ -498,7 +708,15 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
   const [playgroundOpen, setPlaygroundOpen] = useState(false);
   const [playgroundValues, setPlaygroundValues] = useState<PlaygroundValues>({});
   const [collapsedAreaIds, setCollapsedAreaIds] = useState<Record<string, boolean>>({});
+  const [draggingAreaId, setDraggingAreaId] = useState<string | null>(null);
+  const [draggingFormulaConstantId, setDraggingFormulaConstantId] = useState<string | null>(null);
+  const [autoSaveState, setAutoSaveState] = useState<'idle' | 'draft' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const form = draft ?? initialForm;
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedSignatureRef = useRef<string>('');
+  const saveInFlightRef = useRef(false);
   const setForm = (updater: SetStateAction<BuilderState>) => {
     setDraft((current) => {
       const base = current ?? initialForm;
@@ -506,20 +724,63 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     });
   };
   const saving = creating || updating;
+  const storageKey = useMemo(() => getFormulaDraftStorageKey(activeFormulaId), [activeFormulaId]);
 
   const payload = useMemo(() => buildPayload(form), [form]);
   const playgroundPreview = useMemo(
     () => buildPlaygroundPreview(form, playgroundValues, materials),
     [form, materials, playgroundValues]
   );
+  const resolvedPlaygroundValues = useMemo(() => buildPlaygroundNumericValues(form, playgroundValues), [form, playgroundValues]);
+  const availableSidebarFormulaTokens = useMemo(() => {
+    const tokens: FormulaToken[] = [];
+    for (const field of form.globalFields) {
+      if (!field.key.trim() || field.inputType === 'material') continue;
+      tokens.push({
+        token: `specs.global.${field.key.trim()}`,
+        label: field.label.trim() || field.key.trim(),
+        group: 'Job input',
+      });
+    }
+    for (const field of form.formulaConstants) {
+      if (!field.key.trim()) continue;
+      tokens.push({
+        token: `formula.${field.key.trim()}`,
+        label: field.label.trim() || field.key.trim(),
+        group: 'Formula value',
+      });
+    }
+    for (const area of form.areas) {
+      for (const field of area.fields) {
+        if (!field.key.trim()) continue;
+        const token = field.scope === 'variable'
+          ? `area.variables.${field.key.trim()}`
+          : `area.${field.key.trim()}`;
+        tokens.push({
+          token,
+          label: `${area.label.trim() || area.key.trim() || 'Area'} - ${field.label.trim() || field.key.trim()}`,
+          group: field.scope === 'variable' ? 'Area variable' : 'Area measurement',
+        });
+      }
+      for (const field of area.formulaValues) {
+        if (!field.key.trim()) continue;
+        tokens.push({
+          token: `area.formula.${field.key.trim()}`,
+          label: `${area.label.trim() || area.key.trim() || 'Area'} - ${field.label.trim() || field.key.trim()}`,
+          group: 'Area variable',
+        });
+      }
+    }
+    return tokens;
+  }, [form]);
   const existingSlugSet = useMemo(
     () =>
       new Set(
         formulaLibrary
-          .filter((item) => item.id !== formulaId)
+          .filter((item) => item.id !== activeFormulaId)
           .map((item) => item.slug)
       ),
-    [formulaId, formulaLibrary]
+    [activeFormulaId, formulaLibrary]
   );
   const slugExists = form.slug.trim() ? existingSlugSet.has(slugify(form.slug)) : false;
   const suggestedSlug = useMemo(
@@ -527,6 +788,18 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     [existingSlugSet, form.name, form.slug]
   );
   const validationIssue = useMemo(() => validate(form) ?? (slugExists ? 'Formula slug already exists' : null), [form, slugExists]);
+  const saveBody = useMemo(
+    () => ({
+      name: form.name.trim(),
+      slug: slugify(form.slug),
+      fabricationType: form.fabricationType.trim(),
+      description: form.description.trim() || undefined,
+      specificationSchema: payload.specificationSchema,
+      formulaConfig: payload.formulaConfig,
+    }),
+    [form, payload]
+  );
+  const saveSignature = useMemo(() => JSON.stringify(saveBody), [saveBody]);
 
   const updateArea = (areaId: string, patch: Partial<AreaRule>) => {
     setForm((current) => ({
@@ -539,35 +812,108 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     setCollapsedAreaIds((current) => ({ ...current, [areaId]: !current[areaId] }));
   };
 
-  const save = async () => {
+  useEffect(() => {
+    setActiveFormulaId(formulaId);
+  }, [formulaId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (hydratedDraftKeyRef.current === storageKey) return;
+
+    const raw = window.localStorage.getItem(storageKey);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as { form?: BuilderState; slugEdited?: boolean; savedAt?: string };
+        if (parsed.form) setDraft(parsed.form);
+        if (typeof parsed.slugEdited === 'boolean') setSlugEdited(parsed.slugEdited);
+        if (typeof parsed.savedAt === 'string') setLastSavedAt(parsed.savedAt);
+      } catch {
+        window.localStorage.removeItem(storageKey);
+      }
+    } else if (draft == null) {
+      setDraft(null);
+      setSlugEdited(false);
+      setLastSavedAt(null);
+    }
+
+    hydratedDraftKeyRef.current = storageKey;
+  }, [draft, storageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (hydratedDraftKeyRef.current !== storageKey) return;
+
+    const savedAt = new Date().toISOString();
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        form,
+        slugEdited,
+        savedAt,
+      })
+    );
+    setLastSavedAt(savedAt);
+    setAutoSaveState((current) => (current === 'saving' ? current : 'draft'));
+  }, [form, slugEdited, storageKey]);
+
+  const saveFormula = async ({ mode }: { mode: 'manual' | 'auto' }) => {
     const issue = validate(form);
     if (issue) {
-      toast.error(issue);
+      if (mode === 'manual') toast.error(issue);
       return;
     }
     if (slugExists) {
-      toast.error(`Formula slug already exists. Try ${suggestedSlug}.`);
+      if (mode === 'manual') toast.error(`Formula slug already exists. Try ${suggestedSlug}.`);
       return;
     }
-
-    const body = {
-      name: form.name.trim(),
-      slug: slugify(form.slug),
-      fabricationType: form.fabricationType.trim(),
-      description: form.description.trim() || undefined,
-      specificationSchema: payload.specificationSchema,
-      formulaConfig: payload.formulaConfig,
-    };
+    if (saveInFlightRef.current) return;
 
     try {
-      if (formulaId) {
-        await updateFormula({ id: formulaId, data: body }).unwrap();
-        toast.success('Formula updated');
+      saveInFlightRef.current = true;
+      setAutoSaveState('saving');
+      if (activeFormulaId) {
+        const updated = await updateFormula({ id: activeFormulaId, data: saveBody }).unwrap();
+        const nextDraft = parseFormula(updated);
+        setDraft(nextDraft);
+        if (typeof window !== 'undefined') {
+          const savedAt = new Date().toISOString();
+          window.localStorage.setItem(
+            getFormulaDraftStorageKey(activeFormulaId),
+            JSON.stringify({
+              form: nextDraft,
+              slugEdited: true,
+              savedAt,
+            })
+          );
+        }
+        if (mode === 'manual') toast.success('Formula saved');
       } else {
-        await createFormula(body).unwrap();
-        toast.success('Formula created');
+        const created = await createFormula(saveBody).unwrap();
+        const nextDraft = parseFormula(created);
+        const nextStorageKey = getFormulaDraftStorageKey(created.id);
+        if (typeof window !== 'undefined') {
+          const savedAt = new Date().toISOString();
+          window.localStorage.setItem(
+            nextStorageKey,
+            JSON.stringify({
+              form: nextDraft,
+              slugEdited: true,
+              savedAt,
+            })
+          );
+          window.localStorage.removeItem(getFormulaDraftStorageKey(undefined));
+        }
+        hydratedDraftKeyRef.current = nextStorageKey;
+        setActiveFormulaId(created.id);
+        setDraft(nextDraft);
+        setSlugEdited(true);
+        router.replace(`/stock/job-budget/formulas/${created.id}/edit`);
+        if (mode === 'manual') toast.success('Formula created');
       }
-      router.push('/stock/job-budget/formulas');
+      const savedAt = new Date().toISOString();
+      setLastSavedAt(savedAt);
+      lastSavedSignatureRef.current = saveSignature;
+      setAutoSaveState('saved');
     } catch (error) {
       const message =
         typeof error === 'object' &&
@@ -576,9 +922,28 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
         typeof (error as { data?: { error?: unknown } }).data?.error === 'string'
           ? (error as { data: { error: string } }).data.error
           : 'Failed to save formula';
-      toast.error(message);
+      setAutoSaveState('error');
+      if (mode === 'manual') toast.error(message);
+    } finally {
+      saveInFlightRef.current = false;
     }
   };
+
+  useEffect(() => {
+    if (!activeFormulaId) return;
+    if (!draft) return;
+    if (validationIssue) return;
+    if (saveSignature === lastSavedSignatureRef.current) return;
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      void saveFormula({ mode: 'auto' });
+    }, 1200);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [activeFormulaId, draft, saveSignature, validationIssue]);
 
   if (!canView || !canManage) {
     return (
@@ -588,7 +953,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     );
   }
 
-  if (formulaLoading) {
+  if (formulaLoading && !formula && !draft) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Spinner size="lg" />
@@ -597,7 +962,10 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
   }
 
   return (
-    <div className="-mx-4 -my-4 min-h-[calc(100dvh-4rem)] overflow-x-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#f0fdfa_45%,#f8fafc_100%)] px-4 py-4 dark:bg-[linear-gradient(180deg,#020617_0%,#0f172a_52%,#020617_100%)] sm:-mx-5 sm:-my-5 sm:px-5 sm:py-5 lg:-mx-8 lg:-my-6 lg:px-8 lg:py-6">
+    <div
+      onContextMenuCapture={(event) => event.stopPropagation()}
+      className="-mx-4 -my-4 min-h-[calc(100dvh-4rem)] overflow-x-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#f0fdfa_45%,#f8fafc_100%)] px-4 py-4 text-select dark:bg-[linear-gradient(180deg,#020617_0%,#0f172a_52%,#020617_100%)] sm:-mx-5 sm:-my-5 sm:px-5 sm:py-5 lg:-mx-8 lg:-my-6 lg:px-8 lg:py-6 [&_*]:selection:bg-cyan-200/70 [&_*]:selection:text-slate-950 [&_input]:select-text [&_input]:context-menu [&_p]:select-text [&_pre]:select-text [&_span]:select-text [&_textarea]:select-text"
+    >
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex flex-col gap-4 border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.12),transparent_38%),linear-gradient(135deg,#ffffff,#f8fafc)] px-5 py-5 dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.18),transparent_38%),linear-gradient(135deg,#0f172a,#020617)] lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
@@ -615,12 +983,24 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
             <Link href="/stock/job-budget/formulas">
               <Button variant="secondary">Back to formulas</Button>
             </Link>
-            <Button onClick={save} loading={saving}>Save formula</Button>
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+              <span className={`inline-block h-2.5 w-2.5 rounded-full ${
+                autoSaveState === 'error'
+                  ? 'bg-rose-500'
+                  : autoSaveState === 'saving'
+                    ? 'bg-amber-500'
+                    : autoSaveState === 'saved'
+                      ? 'bg-emerald-500'
+                      : 'bg-slate-300 dark:bg-slate-600'
+              }`} />
+              <span>{formatAutoSaveLabel(autoSaveState, lastSavedAt)}</span>
+            </div>
+            <Button onClick={() => void saveFormula({ mode: 'manual' })} loading={saving}>Save formula</Button>
           </div>
         </div>
       </section>
 
-      <section className="mt-5 space-y-5">
+      <section className="mt-5 space-y-5 absolute">
         <div className="grid gap-3 md:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Inputs</p>
@@ -672,12 +1052,13 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
               <div className="grid gap-2 font-mono text-[11px] sm:grid-cols-3">
               <p className="rounded-xl bg-slate-100 px-3 py-2 dark:bg-slate-900">area.area_sqm</p>
               <p className="rounded-xl bg-slate-100 px-3 py-2 dark:bg-slate-900">specs.global.resin_kg_per_sqm</p>
-                <p className="rounded-xl bg-slate-100 px-3 py-2 dark:bg-slate-900">specs.global.resin-brand_a</p>
+                <p className="rounded-xl bg-slate-100 px-3 py-2 dark:bg-slate-900">formula.resin_use_rate</p>
               </div>
             </div>
           </div>
         </div>
 
+        <div className="grid min-w-0 items-start gap-5 overflow-visible xl:grid-cols-[minmax(0,1fr)_22rem]">
         <main className="min-w-0 space-y-5">
           <div className="rounded-[1.75rem] border border-slate-200 bg-white/95 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/80">
             <div className="flex flex-col gap-2 border-b border-slate-200 pb-4 dark:border-slate-800 sm:flex-row sm:items-end sm:justify-between">
@@ -806,7 +1187,23 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                 const areaTitle = `${areaIndex + 1}.${area.label.trim() || area.key.trim() || 'Area'} - ${area.key.trim() || 'new-area'}`;
 
                 return (
-                  <div key={area.id} className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-50 shadow-sm dark:border-slate-700 dark:bg-slate-900/45">
+                  <div
+                    key={area.id}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (!draggingAreaId || draggingAreaId === area.id) return;
+                      setForm((current) => ({
+                        ...current,
+                        areas: reorderItemsById(current.areas, draggingAreaId, area.id),
+                      }));
+                      setDraggingAreaId(null);
+                    }}
+                    className={`overflow-visible rounded-[1.5rem] border bg-slate-50 shadow-sm transition ${
+                      draggingAreaId === area.id
+                        ? 'border-emerald-300 ring-2 ring-emerald-500/20 dark:border-emerald-500/40'
+                        : 'border-slate-200 dark:border-slate-700'
+                    } dark:bg-slate-900/45`}
+                  >
                     <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-950/70 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 flex-1">
                         <button
@@ -855,13 +1252,20 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                         ) : null}
                       </div>
                       {!collapsed ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setForm((current) => ({ ...current, areas: current.areas.filter((item) => item.id !== area.id) }))}
-                        >
-                          Remove area
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <DragHandle
+                            label="area"
+                            onDragStart={() => setDraggingAreaId(area.id)}
+                            onDragEnd={() => setDraggingAreaId(null)}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setForm((current) => ({ ...current, areas: current.areas.filter((item) => item.id !== area.id) }))}
+                          >
+                            Remove area
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
 
@@ -890,10 +1294,35 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                           />
                         </div>
 
+                        <div className="rounded-2xl border border-cyan-200 bg-white p-4 dark:border-cyan-500/20 dark:bg-slate-950/70">
+                          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">Area scoped rates and values</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                Store formula-only rates for this area. These can only be used inside this area as <span className="font-mono">area.formula.key</span>.
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => updateArea(area.id, { formulaValues: [...area.formulaValues, newFormulaConstant()] })}
+                            >
+                              Add area value
+                            </Button>
+                          </div>
+                          <AreaFormulaValueRows
+                            area={area}
+                            globalFields={form.globalFields}
+                            formulaConstants={form.formulaConstants}
+                            onChange={(formulaValues) => updateArea(area.id, { formulaValues })}
+                          />
+                        </div>
+
                         <RuleRows
                           area={area}
                           materials={materials}
                           globalFields={form.globalFields}
+                          formulaConstants={form.formulaConstants}
                           globalMaterialFields={form.globalFields.filter((field) => field.inputType === 'material')}
                           onMaterialsChange={(materialsNext) => updateArea(area.id, { materials: materialsNext })}
                           onLaborChange={(laborNext) => updateArea(area.id, { labor: laborNext })}
@@ -906,6 +1335,168 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
             </div>
           </div>
         </main>
+
+        <aside className="min-w-0 self-start space-y-5 xl:sticky xl:top-2">
+          <div className="rounded-[1.75rem] border border-cyan-200 bg-white/95 p-5 shadow-sm dark:border-cyan-500/20 dark:bg-slate-950/80">
+            <div className="border-b border-cyan-100 pb-4 dark:border-slate-800">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Right sidebar</p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">Stored formula values</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Save fixed rates here once and reuse them inside expressions as <span className="font-mono">formula.key</span>. These values are not asked from the job-entry user.
+              </p>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3 dark:border-cyan-500/20 dark:bg-cyan-500/10">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">Stored values</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">{form.formulaConstants.length}</p>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => setForm((current) => ({ ...current, formulaConstants: [...current.formulaConstants, newFormulaConstant()] }))}>
+                Add value
+              </Button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {form.formulaConstants.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/70 px-4 py-5 text-sm text-slate-500 dark:border-cyan-500/20 dark:bg-cyan-500/5 dark:text-slate-400">
+                  Add resin use rate, fiber use rate, catalyst factor, overlap factor, or any other fixed formula-side value here.
+                </div>
+              ) : (
+                form.formulaConstants.map((field) => (
+                  <div
+                    key={field.id}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (!draggingFormulaConstantId || draggingFormulaConstantId === field.id) return;
+                      setForm((current) => ({
+                        ...current,
+                        formulaConstants: reorderItemsById(current.formulaConstants, draggingFormulaConstantId, field.id),
+                      }));
+                      setDraggingFormulaConstantId(null);
+                    }}
+                    className={`rounded-2xl border bg-white p-3 shadow-sm transition ${
+                      draggingFormulaConstantId === field.id
+                        ? 'border-cyan-300 ring-2 ring-cyan-500/20 dark:border-cyan-500/40'
+                        : 'border-slate-200 dark:border-slate-800'
+                    } dark:bg-slate-950/70`}
+                  >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <DragHandle
+                          label="stored value"
+                          onDragStart={() => setDraggingFormulaConstantId(field.id)}
+                          onDragEnd={() => setDraggingFormulaConstantId(null)}
+                        />
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Drag to reorder</span>
+                      </div>
+                      <div className="grid gap-2">
+                      <input
+                        value={field.label}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            formulaConstants: current.formulaConstants.map((item) => (item.id === field.id ? { ...item, label: event.target.value } : item)),
+                          }))
+                        }
+                        placeholder="Label, e.g. Resin use rate"
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-cyan-300 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                      />
+                      <input
+                        value={field.key}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            formulaConstants: current.formulaConstants.map((item) => (item.id === field.id ? { ...item, key: normalizeFormulaKey(event.target.value) } : item)),
+                          }))
+                        }
+                        placeholder="resin_use_rate"
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-900 outline-none transition focus:border-cyan-300 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                      />
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5.5rem]">
+                        <ExpressionInput
+                          value={field.value}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              formulaConstants: current.formulaConstants.map((item) => (item.id === field.id ? { ...item, value: event } : item)),
+                            }))
+                          }
+                          tokens={buildFormulaConstantTokens(form.globalFields, form.formulaConstants, field.id)}
+                          placeholder="0.85 or specs.global.base_rate * 1.08"
+                          className="focus:border-cyan-300 dark:focus:border-cyan-400"
+                        />
+                        <input
+                          value={field.unit}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              formulaConstants: current.formulaConstants.map((item) => (item.id === field.id ? { ...item, unit: event.target.value } : item)),
+                            }))
+                          }
+                          placeholder="kg/sqm"
+                          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-cyan-300 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-2 space-y-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate font-mono text-cyan-700 dark:text-cyan-300">{field.key ? `formula.${field.key}` : 'formula.key'}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setForm((current) => ({
+                              ...current,
+                              formulaConstants: current.formulaConstants.filter((item) => item.id !== field.id),
+                            }))
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Resolved use value</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-200">
+                          {field.key ? String(resolvedPlaygroundValues[`formula.${field.key}`] ?? 0) : '0'}
+                        </span>
+                      </div>
+                      <p className="text-[10px] leading-5 text-slate-500 dark:text-slate-400">
+                        This field accepts formulas using job inputs like <span className="font-mono">specs.global.*</span> and earlier stored values like <span className="font-mono">formula.*</span>.
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-[1.75rem] border border-slate-200 bg-white/95 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/80">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-600 dark:text-slate-400">Available formulas</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              All usable tokens from job inputs, global formula values, and area fields.
+            </p>
+            <div className="mt-4 space-y-2">
+              {availableSidebarFormulaTokens.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  Add inputs, stored values, or area fields to populate available formulas.
+                </div>
+              ) : (
+                availableSidebarFormulaTokens.map((item) => (
+                  <div key={`${item.group}-${item.token}`} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/70">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-[11px] font-semibold text-slate-900 dark:text-slate-100">{item.token}</p>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.label}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                        {item.group}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </aside>
+        </div>
 
       </section>
 
@@ -971,6 +1562,8 @@ function FieldRows({
   tokenPrefix: string;
   showScope?: boolean;
 }) {
+  const [draggingFieldId, setDraggingFieldId] = useState<string | null>(null);
+
   if (fields.length === 0) {
     return (
       <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/45">
@@ -986,7 +1579,28 @@ function FieldRows({
           ? `${tokenPrefix}.variables.${field.key || 'field_key'}`
           : `${tokenPrefix}.${field.key || 'field_key'}`;
         return (
-          <div key={field.id} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+          <div
+            key={field.id}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => {
+              if (!draggingFieldId || draggingFieldId === field.id) return;
+              onChange(reorderItemsById(fields, draggingFieldId, field.id));
+              setDraggingFieldId(null);
+            }}
+            className={`rounded-2xl border bg-white p-3 shadow-sm transition ${
+              draggingFieldId === field.id
+                ? 'border-emerald-300 ring-2 ring-emerald-500/20 dark:border-emerald-500/40'
+                : 'border-slate-200 dark:border-slate-800'
+            } dark:bg-slate-950/70`}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <DragHandle
+                label="field"
+                onDragStart={() => setDraggingFieldId(field.id)}
+                onDragEnd={() => setDraggingFieldId(null)}
+              />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Drag to reorder</span>
+            </div>
             <div className="grid min-w-0 gap-2 xl:grid-cols-[minmax(12rem,1.15fr)_minmax(10rem,1fr)_minmax(9rem,0.55fr)_minmax(6.5rem,0.35fr)_5.5rem]">
             <input
               value={field.label}
@@ -1029,6 +1643,93 @@ function FieldRows({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function AreaFormulaValueRows({
+  area,
+  globalFields,
+  formulaConstants,
+  onChange,
+}: {
+  area: AreaRule;
+  globalFields: DynamicField[];
+  formulaConstants: FormulaConstantField[];
+  onChange: (fields: FormulaConstantField[]) => void;
+}) {
+  const [draggingFieldId, setDraggingFieldId] = useState<string | null>(null);
+
+  if (area.formulaValues.length === 0) {
+    return (
+      <div className="mt-4 rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/60 px-4 py-6 text-sm text-slate-500 dark:border-cyan-500/20 dark:bg-cyan-500/5">
+        No area-only values yet. Add resin rate, overlap factor, coverage rate, or other stored expressions that belong only to this area.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-3">
+      {area.formulaValues.map((field) => (
+        <div
+          key={field.id}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={() => {
+            if (!draggingFieldId || draggingFieldId === field.id) return;
+            onChange(reorderItemsById(area.formulaValues, draggingFieldId, field.id));
+            setDraggingFieldId(null);
+          }}
+          className={`rounded-2xl border bg-white p-3 shadow-sm transition ${
+            draggingFieldId === field.id
+              ? 'border-cyan-300 ring-2 ring-cyan-500/20 dark:border-cyan-500/40'
+              : 'border-slate-200 dark:border-slate-800'
+          } dark:bg-slate-950/70`}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <DragHandle
+              label="area value"
+              onDragStart={() => setDraggingFieldId(field.id)}
+              onDragEnd={() => setDraggingFieldId(null)}
+            />
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Area only</span>
+          </div>
+          <div className="grid gap-2">
+            <input
+              value={field.label}
+              onChange={(event) => onChange(area.formulaValues.map((item) => (item.id === field.id ? { ...item, label: event.target.value } : item)))}
+              placeholder="Label, e.g. Wall resin rate"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-cyan-300 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            />
+            <input
+              value={field.key}
+              onChange={(event) => onChange(area.formulaValues.map((item) => (item.id === field.id ? { ...item, key: normalizeFormulaKey(event.target.value) } : item)))}
+              placeholder="wall_resin_rate"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-900 outline-none transition focus:border-cyan-300 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            />
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5.5rem]">
+              <ExpressionInput
+                value={field.value}
+                onChange={(value) => onChange(area.formulaValues.map((item) => (item.id === field.id ? { ...item, value } : item)))}
+                tokens={buildAreaFormulaValueTokens(globalFields, formulaConstants, area, field.id)}
+                placeholder="area.area_sqm * 0.85 or formula.resin_use_rate"
+                className="focus:border-cyan-300 dark:focus:border-cyan-400"
+              />
+              <input
+                value={field.unit}
+                onChange={(event) => onChange(area.formulaValues.map((item) => (item.id === field.id ? { ...item, unit: event.target.value } : item)))}
+                placeholder="kg/sqm"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-cyan-300 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              />
+            </div>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
+            <span className="truncate font-mono text-cyan-700 dark:text-cyan-300">{field.key ? `area.formula.${field.key}` : 'area.formula.key'}</span>
+            <Button size="sm" variant="ghost" onClick={() => onChange(area.formulaValues.filter((item) => item.id !== field.id))}>
+              Remove
+            </Button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1107,6 +1808,34 @@ function FormulaPlayground({
           ) : null}
         </div>
       </section>
+
+      {form.formulaConstants.length > 0 ? (
+        <section className="rounded-2xl border border-cyan-200 bg-cyan-50/70 p-4 dark:border-cyan-500/20 dark:bg-cyan-500/10">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-slate-950 dark:text-white">Stored formula values</h3>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                These fixed values come from the formula sidebar and are always available as <span className="font-mono">formula.key</span>.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {form.formulaConstants.map((field) => (
+              <div key={field.id} className="rounded-2xl border border-cyan-100 bg-white px-4 py-3 dark:border-cyan-500/20 dark:bg-slate-950/70">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950 dark:text-white">{field.label || field.key || 'Stored value'}</p>
+                    <p className="mt-1 font-mono text-[11px] text-cyan-700 dark:text-cyan-300">{field.key ? `formula.${field.key}` : 'formula.key'}</p>
+                  </div>
+                  <p className="text-right text-sm font-semibold text-slate-950 dark:text-white">
+                    {field.value || '0'} {field.unit || ''}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="space-y-3">
         {form.areas.map((area) => (
@@ -1219,7 +1948,7 @@ function ExpressionInput({
   const showSuggestions = focused && suggestions.length > 0;
 
   return (
-    <div>
+    <div className="relative">
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -1229,7 +1958,7 @@ function ExpressionInput({
         className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-900 outline-none transition focus:border-emerald-300 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-white ${className}`}
       />
       {showSuggestions ? (
-        <div className="mt-1.5 overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-sm dark:border-emerald-500/20 dark:bg-slate-950">
+        <div className="absolute left-0 right-0 top-[calc(100%+0.375rem)] z-40 overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-lg shadow-slate-950/10 dark:border-emerald-500/20 dark:bg-slate-950">
           <div className="border-b border-slate-100 bg-emerald-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:border-slate-800 dark:bg-emerald-500/10 dark:text-emerald-200">
             Suggested formula keys
           </div>
@@ -1254,7 +1983,7 @@ function ExpressionInput({
           </div>
         </div>
       ) : focused && tokens.length === 0 ? (
-        <p className="mt-1.5 rounded-xl border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+        <p className="absolute left-0 right-0 top-[calc(100%+0.375rem)] z-30 rounded-xl border border-dashed border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 shadow-lg shadow-slate-950/5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400">
           Add job inputs or area fields to get formula key suggestions.
         </p>
       ) : null}
@@ -1266,6 +1995,7 @@ function RuleRows({
   area,
   materials,
   globalFields,
+  formulaConstants,
   globalMaterialFields,
   onMaterialsChange,
   onLaborChange,
@@ -1273,11 +2003,14 @@ function RuleRows({
   area: AreaRule;
   materials: Array<{ id: string; name: string }>;
   globalFields: DynamicField[];
+  formulaConstants: FormulaConstantField[];
   globalMaterialFields: DynamicField[];
   onMaterialsChange: (rules: MaterialRule[]) => void;
   onLaborChange: (rules: LaborRule[]) => void;
 }) {
-  const formulaTokens = buildFormulaTokens(globalFields, area);
+  const formulaTokens = buildFormulaTokens(globalFields, formulaConstants, area);
+  const [draggingMaterialId, setDraggingMaterialId] = useState<string | null>(null);
+  const [draggingLaborId, setDraggingLaborId] = useState<string | null>(null);
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
@@ -1296,7 +2029,28 @@ function RuleRows({
             <p className="rounded-2xl border border-dashed border-teal-300 bg-white/70 px-4 py-5 text-sm text-slate-500 dark:border-teal-500/30 dark:bg-slate-950/50">No material rules yet. Add resin, gelcoat, fiber, catalyst, solvent, or other consumable rules here.</p>
           ) : (
             area.materials.map((rule) => (
-              <div key={rule.id} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+              <div
+                key={rule.id}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (!draggingMaterialId || draggingMaterialId === rule.id) return;
+                  onMaterialsChange(reorderItemsById(area.materials, draggingMaterialId, rule.id));
+                  setDraggingMaterialId(null);
+                }}
+                className={`space-y-3 rounded-2xl border bg-white p-3 shadow-sm transition ${
+                  draggingMaterialId === rule.id
+                    ? 'border-teal-300 ring-2 ring-teal-500/20 dark:border-teal-500/40'
+                    : 'border-slate-200 dark:border-slate-800'
+                } dark:bg-slate-950/70`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <DragHandle
+                    label="material rule"
+                    onDragStart={() => setDraggingMaterialId(rule.id)}
+                    onDragEnd={() => setDraggingMaterialId(null)}
+                  />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Drag to reorder</span>
+                </div>
                 <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(8rem,0.4fr)_minmax(12rem,1fr)]">
                   <select
                     value={rule.materialSource}
@@ -1402,7 +2156,28 @@ function RuleRows({
             <p className="rounded-2xl border border-dashed border-amber-300 bg-white/70 px-4 py-5 text-sm text-slate-500 dark:border-amber-500/30 dark:bg-slate-950/50">No labor rules yet. Add lamination, gelcoat, finishing, welding, or MEP expertise here.</p>
           ) : (
             area.labor.map((rule) => (
-              <div key={rule.id} className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+              <div
+                key={rule.id}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (!draggingLaborId || draggingLaborId === rule.id) return;
+                  onLaborChange(reorderItemsById(area.labor, draggingLaborId, rule.id));
+                  setDraggingLaborId(null);
+                }}
+                className={`space-y-2 rounded-2xl border bg-white p-3 shadow-sm transition ${
+                  draggingLaborId === rule.id
+                    ? 'border-amber-300 ring-2 ring-amber-500/20 dark:border-amber-500/40'
+                    : 'border-slate-200 dark:border-slate-800'
+                } dark:bg-slate-950/70`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <DragHandle
+                    label="labor rule"
+                    onDragStart={() => setDraggingLaborId(rule.id)}
+                    onDragEnd={() => setDraggingLaborId(null)}
+                  />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Drag to reorder</span>
+                </div>
                 <input
                   value={rule.expertiseName}
                   onChange={(event) => onLaborChange(area.labor.map((item) => (item.id === rule.id ? { ...item, expertiseName: event.target.value } : item)))}

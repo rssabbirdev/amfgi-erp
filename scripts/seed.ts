@@ -34,6 +34,7 @@ import { DEFAULT_EMPLOYEE_TYPE_SETTINGS } from '../lib/hr/employeeTypeSettings';
 import { buildWorkforceProfileExtension, type WorkforceEmployeeType } from '../lib/hr/workforceProfile';
 import { ALL_PERMISSIONS, ROLE_PRESETS } from '../lib/permissions';
 import { parsePartyListDateInput } from '../lib/partyListsApi';
+import { mergeStockControlSettingsIntoCompanySettings } from '../lib/stock-control/settings';
 import { buildTransactionActorFields } from '../lib/utils/auditActor';
 import { decimalToNumberOrZero } from '../lib/utils/decimal';
 import { companySeedPrintTemplates } from './seed-print-templates';
@@ -59,6 +60,212 @@ const STORE_KEEPER_PERMISSIONS = [
 ];
 
 const systemActorFields = buildTransactionActorFields(null, 'System Seed');
+
+async function setMaterialWarehouseStock(args: {
+  companyId: string;
+  materialId: string;
+  warehouseId: string;
+  currentStock: number;
+}) {
+  await prisma.materialWarehouseStock.upsert({
+    where: {
+      companyId_materialId_warehouseId: {
+        companyId: args.companyId,
+        materialId: args.materialId,
+        warehouseId: args.warehouseId,
+      },
+    },
+    update: {
+      currentStock: args.currentStock,
+    },
+    create: {
+      companyId: args.companyId,
+      materialId: args.materialId,
+      warehouseId: args.warehouseId,
+      currentStock: args.currentStock,
+    },
+  });
+}
+
+async function createSeedStockIn(args: {
+  companyId: string;
+  materialId: string;
+  warehouseId: string;
+  quantity: number;
+  unitCost: number;
+  date: Date;
+  notes: string;
+  receiptNumber: string;
+  batchNumber: string;
+  supplier?: string | null;
+  supplierId?: string | null;
+}) {
+  const batch = await prisma.stockBatch.create({
+    data: {
+      companyId: args.companyId,
+      materialId: args.materialId,
+      warehouseId: args.warehouseId,
+      batchNumber: args.batchNumber,
+      quantityReceived: args.quantity,
+      quantityAvailable: args.quantity,
+      unitCost: args.unitCost,
+      totalCost: args.quantity * args.unitCost,
+      supplier: args.supplier ?? null,
+      supplierId: args.supplierId ?? null,
+      receivedDate: args.date,
+      receiptNumber: args.receiptNumber,
+      notes: args.notes,
+    },
+  });
+
+  const transaction = await prisma.transaction.create({
+    data: {
+      companyId: args.companyId,
+      type: 'STOCK_IN',
+      materialId: args.materialId,
+      warehouseId: args.warehouseId,
+      quantity: args.quantity,
+      totalCost: args.quantity * args.unitCost,
+      averageCost: args.unitCost,
+      ...systemActorFields,
+      date: args.date,
+      notes: args.notes,
+    },
+  });
+
+  await prisma.transactionBatch.create({
+    data: {
+      transactionId: transaction.id,
+      batchId: batch.id,
+      batchNumber: batch.batchNumber,
+      quantityFromBatch: args.quantity,
+      unitCost: args.unitCost,
+      costAmount: args.quantity * args.unitCost,
+    },
+  });
+
+  return { batch, transaction };
+}
+
+async function createSeedStockOut(args: {
+  companyId: string;
+  materialId: string;
+  warehouseId: string;
+  quantity: number;
+  unitCostHint: number;
+  date: Date;
+  notes: string;
+  jobId?: string | null;
+  isDeliveryNote?: boolean;
+}) {
+  const batches = await prisma.stockBatch.findMany({
+    where: {
+      companyId: args.companyId,
+      materialId: args.materialId,
+      warehouseId: args.warehouseId,
+      quantityAvailable: { gt: 0 },
+    },
+    orderBy: [{ receivedDate: 'asc' }, { createdAt: 'asc' }],
+  });
+
+  let remaining = args.quantity;
+  let totalCost = 0;
+  const usage: Array<{
+    batchId: string;
+    batchNumber: string;
+    quantity: number;
+    unitCost: number;
+    costAmount: number;
+  }> = [];
+
+  for (const batch of batches) {
+    if (remaining <= 0) break;
+    const available = decimalToNumberOrZero(batch.quantityAvailable);
+    if (available <= 0) continue;
+    const quantityFromBatch = Math.min(remaining, available);
+    const unitCost = decimalToNumberOrZero(batch.unitCost) || args.unitCostHint;
+    const costAmount = quantityFromBatch * unitCost;
+    usage.push({
+      batchId: batch.id,
+      batchNumber: batch.batchNumber,
+      quantity: quantityFromBatch,
+      unitCost,
+      costAmount,
+    });
+    totalCost += costAmount;
+    remaining -= quantityFromBatch;
+  }
+
+  if (remaining > 0.0001) {
+    throw new Error(`Insufficient seeded batch stock for material ${args.materialId} in warehouse ${args.warehouseId}`);
+  }
+
+  const averageCost = args.quantity > 0 ? totalCost / args.quantity : args.unitCostHint;
+  const transaction = await prisma.transaction.create({
+    data: {
+      companyId: args.companyId,
+      type: 'STOCK_OUT',
+      materialId: args.materialId,
+      warehouseId: args.warehouseId,
+      quantity: args.quantity,
+      jobId: args.jobId ?? null,
+      totalCost,
+      averageCost,
+      ...systemActorFields,
+      date: args.date,
+      notes: args.notes,
+      isDeliveryNote: args.isDeliveryNote ?? false,
+    },
+  });
+
+  for (const item of usage) {
+    await prisma.transactionBatch.create({
+      data: {
+        transactionId: transaction.id,
+        batchId: item.batchId,
+        batchNumber: item.batchNumber,
+        quantityFromBatch: item.quantity,
+        unitCost: item.unitCost,
+        costAmount: item.costAmount,
+      },
+    });
+
+    await prisma.stockBatch.update({
+      where: { id: item.batchId },
+      data: {
+        quantityAvailable: {
+          decrement: item.quantity,
+        },
+      },
+    });
+  }
+
+  await prisma.material.update({
+    where: { companyId_id: { companyId: args.companyId, id: args.materialId } },
+    data: {
+      currentStock: {
+        decrement: args.quantity,
+      },
+    },
+  });
+
+  await prisma.materialWarehouseStock.update({
+    where: {
+      companyId_materialId_warehouseId: {
+        companyId: args.companyId,
+        materialId: args.materialId,
+        warehouseId: args.warehouseId,
+      },
+    },
+    data: {
+      currentStock: {
+        decrement: args.quantity,
+      },
+    },
+  });
+
+  return transaction;
+}
 
 interface MaterialDef {
   name: string;
@@ -307,15 +514,38 @@ async function seedCompanyData(
     createdUnits[unitName] = unit.id;
   }
 
+  // Create warehouses used by material seeds
+  const warehouseNames = Array.from(new Set(materials.map((m) => m.warehouse).filter((name) => name.trim())));
+  const warehouseByName = new Map<string, { id: string; name: string }>();
+  for (const warehouseName of warehouseNames) {
+    const warehouse = await prisma.warehouse.upsert({
+      where: { companyId_name: { companyId, name: warehouseName } },
+      update: { isActive: true, isSystem: false },
+      create: {
+        companyId,
+        name: warehouseName,
+        isActive: true,
+        isSystem: false,
+      },
+    });
+    warehouseByName.set(warehouseName, { id: warehouse.id, name: warehouse.name });
+  }
+
   // Create materials with stock batches and logs
   const createdMaterials: Record<string, string> = {};
   for (const m of materials) {
+    const seededWarehouse = warehouseByName.get(m.warehouse);
+    if (!seededWarehouse) {
+      throw new Error(`Warehouse "${m.warehouse}" is missing for ${companyName} seed.`);
+    }
     const material = await prisma.material.upsert({
       where: { companyId_name: { companyId, name: m.name } },
       update: {
         unit: m.unit,
         currentStock: m.currentStock,
         unitCost: m.unitCost,
+        warehouse: seededWarehouse.name,
+        warehouseId: seededWarehouse.id,
         isActive: true,
       },
       create: {
@@ -324,7 +554,8 @@ async function seedCompanyData(
         description: m.description,
         unit: m.unit,
         category: m.category,
-        warehouse: m.warehouse,
+        warehouse: seededWarehouse.name,
+        warehouseId: seededWarehouse.id,
         stockType: m.stockType,
         externalItemName: m.externalItemName,
         currentStock: m.currentStock,
@@ -367,36 +598,26 @@ async function seedCompanyData(
       });
     }
 
-    // Create stock batch
-    const batchNumber = `BATCH-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-    const batch = await prisma.stockBatch.create({
-      data: {
-        companyId,
-        materialId: material.id,
-        batchNumber,
-        quantityReceived: m.currentStock,
-        quantityAvailable: m.currentStock,
-        unitCost: m.unitCost,
-        totalCost: m.currentStock * m.unitCost,
-        receivedDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
-        receiptNumber: `GRN-${Date.now()}`,
-        notes: `Opening stock for ${m.name}`,
-      },
+    await setMaterialWarehouseStock({
+      companyId,
+      materialId: material.id,
+      warehouseId: seededWarehouse.id,
+      currentStock: m.currentStock,
     });
 
-    // Create STOCK_IN transaction for the opening stock
-    await prisma.transaction.create({
-      data: {
-        companyId,
-        type: 'STOCK_IN',
-        materialId: material.id,
-        quantity: m.currentStock,
-        totalCost: m.currentStock * m.unitCost,
-        averageCost: m.unitCost,
-        ...systemActorFields,
-        date: batch.receivedDate,
-        notes: `Opening stock: ${batchNumber}`,
-      },
+    const batchNumber = `OPEN-${companyName.replace(/[^A-Z0-9]/gi, '').slice(0, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+    const receivedDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    await createSeedStockIn({
+      companyId,
+      materialId: material.id,
+      warehouseId: seededWarehouse.id,
+      quantity: m.currentStock,
+      unitCost: m.unitCost,
+      date: receivedDate,
+      receiptNumber: `GRN-OPEN-${companyName.slice(0, 2).toUpperCase()}-${material.name.replace(/[^A-Z0-9]/gi, '').slice(0, 6).toUpperCase()}`,
+      batchNumber,
+      notes: `Opening stock for ${m.name}`,
+      supplier: 'Opening Balance',
     });
   }
 
@@ -598,21 +819,23 @@ async function seedCompanyData(
   if (firstJobId && Object.keys(createdMaterials).length > 0) {
     const materialIds = Object.values(createdMaterials);
     const firstMaterialId = materialIds[0];
-    // Create sample dispatch transaction
-    await prisma.transaction.create({
-      data: {
-        companyId,
-        type: 'STOCK_OUT',
-        materialId: firstMaterialId,
-        quantity: 50,
-        jobId: firstJobId,
-        totalCost: 50 * materials[0].unitCost,
-        averageCost: materials[0].unitCost,
-        ...systemActorFields,
-        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-        notes: 'Sample dispatch for job',
-        isDeliveryNote: false,
-      },
+    const firstMaterialWarehouseName = materials[0]?.warehouse;
+    const firstMaterialWarehouseId = firstMaterialWarehouseName
+      ? warehouseByName.get(firstMaterialWarehouseName)?.id
+      : null;
+    if (!firstMaterialWarehouseId) {
+      throw new Error(`Missing warehouse for seeded material ${materials[0]?.name ?? firstMaterialId}`);
+    }
+    await createSeedStockOut({
+      companyId,
+      materialId: firstMaterialId,
+      warehouseId: firstMaterialWarehouseId,
+      quantity: 50,
+      unitCostHint: materials[0].unitCost,
+      jobId: firstJobId,
+      date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      notes: 'Sample dispatch for job',
+      isDeliveryNote: false,
     });
 
     // Create sample delivery note transactions (multiple to showcase templates)
@@ -638,20 +861,16 @@ async function seedCompanyData(
         dnNotes += `• ${materials[1]?.name || 'Steel Plate'} | ${Math.floor(dnQuantity / 3)} sheets`;
       }
 
-      await prisma.transaction.create({
-        data: {
-          companyId,
-          type: 'STOCK_OUT',
-          materialId: firstMaterialId,
-          quantity: dnQuantity,
-          jobId: firstJobId,
-          totalCost: dnQuantity * materials[0].unitCost,
-          averageCost: materials[0].unitCost,
-          ...systemActorFields,
-          date: dnDate,
-          notes: dnNotes,
-          isDeliveryNote: true,
-        },
+      await createSeedStockOut({
+        companyId,
+        materialId: firstMaterialId,
+        warehouseId: firstMaterialWarehouseId,
+        quantity: dnQuantity,
+        unitCostHint: materials[0].unitCost,
+        jobId: firstJobId,
+        date: dnDate,
+        notes: dnNotes,
+        isDeliveryNote: true,
       });
     }
   }
@@ -687,9 +906,10 @@ async function seedJobCostingDemo(companyId: string) {
   await prisma.company.update({
     where: { id: companyId },
     data: {
-      jobCostingSettings: {
-        nonWorkingWeekdays: [0],
-      } as Prisma.InputJsonValue,
+      jobCostingSettings: mergeStockControlSettingsIntoCompanySettings(
+        { nonWorkingWeekdays: [0] },
+        { negativeEvidenceQtyThreshold: 10, negativeDecisionNoteQtyThreshold: 25 }
+      ) as Prisma.InputJsonValue,
     },
   });
 
@@ -1060,48 +1280,42 @@ async function seedJobCostingDemo(companyId: string) {
     await syncJobItemAssignments(finishItemId, assignedEmployeeIds);
   }
 
-  await prisma.transaction.createMany({
-    data: [
-      {
-        companyId,
-        type: 'STOCK_OUT',
-        materialId: mat.id,
-        quantity: 260,
-        jobId: variation.id,
-        totalCost: 260 * decimalToNumberOrZero(mat.unitCost),
-        averageCost: decimalToNumberOrZero(mat.unitCost),
-        ...systemActorFields,
-        date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-        notes: 'Demo actual issue for seeded job budget comparison',
-        isDeliveryNote: false,
-      },
-      {
-        companyId,
-        type: 'STOCK_OUT',
-        materialId: resin.id,
-        quantity: 610,
-        jobId: variation.id,
-        totalCost: 610 * decimalToNumberOrZero(resin.unitCost),
-        averageCost: decimalToNumberOrZero(resin.unitCost),
-        ...systemActorFields,
-        date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-        notes: 'Demo actual issue for seeded job budget comparison',
-        isDeliveryNote: false,
-      },
-      {
-        companyId,
-        type: 'STOCK_OUT',
-        materialId: gelcoat.id,
-        quantity: 145,
-        jobId: variation.id,
-        totalCost: 145 * decimalToNumberOrZero(gelcoat.unitCost),
-        averageCost: decimalToNumberOrZero(gelcoat.unitCost),
-        ...systemActorFields,
-        date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-        notes: 'Demo actual issue for seeded job budget comparison',
-        isDeliveryNote: false,
-      },
-    ],
+  if (!mat.warehouseId || !resin.warehouseId || !gelcoat.warehouseId) {
+    throw new Error('Seeded job costing demo materials must have warehouse assignments');
+  }
+
+  await createSeedStockOut({
+    companyId,
+    materialId: mat.id,
+    warehouseId: mat.warehouseId,
+    quantity: 260,
+    unitCostHint: decimalToNumberOrZero(mat.unitCost),
+    jobId: variation.id,
+    date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+    notes: 'Demo actual issue for seeded job budget comparison',
+    isDeliveryNote: false,
+  });
+  await createSeedStockOut({
+    companyId,
+    materialId: resin.id,
+    warehouseId: resin.warehouseId,
+    quantity: 610,
+    unitCostHint: decimalToNumberOrZero(resin.unitCost),
+    jobId: variation.id,
+    date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    notes: 'Demo actual issue for seeded job budget comparison',
+    isDeliveryNote: false,
+  });
+  await createSeedStockOut({
+    companyId,
+    materialId: gelcoat.id,
+    warehouseId: gelcoat.warehouseId,
+    quantity: 145,
+    unitCostHint: decimalToNumberOrZero(gelcoat.unitCost),
+    jobId: variation.id,
+    date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    notes: 'Demo actual issue for seeded job budget comparison',
+    isDeliveryNote: false,
   });
 
   console.log('  ✓ 2 formulas, 2 variation job items, and actual issue comparison rows');
@@ -1610,6 +1824,10 @@ async function seed() {
   await prisma.employee.deleteMany({});
   await prisma.employeeDocumentType.deleteMany({});
   await prisma.employeeMobileAccessToken.deleteMany({});
+  await prisma.stockCountSessionRevision.deleteMany({});
+  await prisma.stockCountSessionLine.deleteMany({});
+  await prisma.stockCountSession.deleteMany({});
+  await prisma.stockExceptionApproval.deleteMany({});
   await prisma.transactionBatch.deleteMany({});
   await prisma.transaction.deleteMany({});
   await prisma.jobLpoValueHistory.deleteMany({});
@@ -1620,6 +1838,7 @@ async function seed() {
   await prisma.materialUom.updateMany({ data: { parentUomId: null } });
   await prisma.materialUom.deleteMany({});
   await prisma.stockBatch.deleteMany({});
+  await prisma.materialWarehouseStock.deleteMany({});
   await prisma.jobItem.deleteMany({});
   await prisma.formulaLibrary.deleteMany({});
   await prisma.job.deleteMany({});
@@ -1646,11 +1865,16 @@ async function seed() {
       name: 'Almuraqib Fiber Glass Industry LLC',
       externalCompanyId: 'SEED-AMFGI',
       jobSourceMode: 'HYBRID',
+      warehouseMode: 'REQUIRED',
       description: 'Fiberglass fabrication and moulding',
       address: 'P.O. Box 123456, Dubai, UAE\nJebel Ali Industrial Area 1\nDubai, United Arab Emirates',
       phone: '+971 4 885 1234',
       email: 'info@almuraqib.ae',
       isActive: true,
+      jobCostingSettings: mergeStockControlSettingsIntoCompanySettings(
+        { nonWorkingWeekdays: [0] },
+        { negativeEvidenceQtyThreshold: 10, negativeDecisionNoteQtyThreshold: 25 }
+      ) as Prisma.InputJsonValue,
       hrEmployeeTypeSettings: DEFAULT_EMPLOYEE_TYPE_SETTINGS as unknown as Prisma.InputJsonValue,
       printTemplates: companySeedPrintTemplates as unknown as Prisma.InputJsonValue,
     },
@@ -1659,11 +1883,16 @@ async function seed() {
       slug: 'amfgi',
       externalCompanyId: 'SEED-AMFGI',
       jobSourceMode: 'HYBRID',
+      warehouseMode: 'REQUIRED',
       description: 'Fiberglass fabrication and moulding',
       address: 'P.O. Box 123456, Dubai, UAE\nJebel Ali Industrial Area 1\nDubai, United Arab Emirates',
       phone: '+971 4 885 1234',
       email: 'info@almuraqib.ae',
       isActive: true,
+      jobCostingSettings: mergeStockControlSettingsIntoCompanySettings(
+        { nonWorkingWeekdays: [0] },
+        { negativeEvidenceQtyThreshold: 10, negativeDecisionNoteQtyThreshold: 25 }
+      ) as Prisma.InputJsonValue,
       hrEmployeeTypeSettings: DEFAULT_EMPLOYEE_TYPE_SETTINGS as unknown as Prisma.InputJsonValue,
       printTemplates: companySeedPrintTemplates as unknown as Prisma.InputJsonValue,
     },
@@ -1675,11 +1904,16 @@ async function seed() {
       name: 'K&M Industries',
       externalCompanyId: 'SEED-KM',
       jobSourceMode: 'HYBRID',
+      warehouseMode: 'REQUIRED',
       description: 'Steel fabrication and structural work',
       address: 'P.O. Box 654321, Abu Dhabi, UAE\nIndustrial Zone 3\nAbu Dhabi, United Arab Emirates',
       phone: '+971 2 555 8888',
       email: 'info@kandm.ae',
       isActive: true,
+      jobCostingSettings: mergeStockControlSettingsIntoCompanySettings(
+        { nonWorkingWeekdays: [0] },
+        { negativeEvidenceQtyThreshold: 10, negativeDecisionNoteQtyThreshold: 25 }
+      ) as Prisma.InputJsonValue,
       hrEmployeeTypeSettings: DEFAULT_EMPLOYEE_TYPE_SETTINGS as unknown as Prisma.InputJsonValue,
       printTemplates: companySeedPrintTemplates as unknown as Prisma.InputJsonValue,
     },
@@ -1688,11 +1922,16 @@ async function seed() {
       slug: 'km',
       externalCompanyId: 'SEED-KM',
       jobSourceMode: 'HYBRID',
+      warehouseMode: 'REQUIRED',
       description: 'Steel fabrication and structural work',
       address: 'P.O. Box 654321, Abu Dhabi, UAE\nIndustrial Zone 3\nAbu Dhabi, United Arab Emirates',
       phone: '+971 2 555 8888',
       email: 'info@kandm.ae',
       isActive: true,
+      jobCostingSettings: mergeStockControlSettingsIntoCompanySettings(
+        { nonWorkingWeekdays: [0] },
+        { negativeEvidenceQtyThreshold: 10, negativeDecisionNoteQtyThreshold: 25 }
+      ) as Prisma.InputJsonValue,
       hrEmployeeTypeSettings: DEFAULT_EMPLOYEE_TYPE_SETTINGS as unknown as Prisma.InputJsonValue,
       printTemplates: companySeedPrintTemplates as unknown as Prisma.InputJsonValue,
     },

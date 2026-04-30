@@ -26,7 +26,7 @@ model Company {
   printTemplates           Json?
   hrEmployeeTypeSettings   Json?
   phone                    String?
-  warehouseMode            WarehouseMode               @default(DISABLED)
+  warehouseMode            WarehouseMode               @default(REQUIRED)
   stockFallbackWarehouseId String?
   categories               Category[]
   customers                Customer[]
@@ -67,6 +67,10 @@ model Company {
   employeeDocuments        EmployeeDocument[]
   workforceExpertises      WorkforceExpertise[]
   materialWarehouseStocks  MaterialWarehouseStock[]
+  tablePreferences         UserTablePreference[]
+  liveUpdateEvents         LiveUpdateEvent[]
+  stockExceptionApprovals  StockExceptionApproval[]
+  stockCountSessions       StockCountSession[]
 }
 
 model User {
@@ -97,6 +101,7 @@ model User {
   performedTransactions Transaction[]               @relation("TransactionPerformedBy")
   uploadedMedia         MediaAsset[]                @relation("MediaAssetUploader")
   mobileAccessTokens    EmployeeMobileAccessToken[]
+  tablePreferences      UserTablePreference[]
   /// When set, this login is the employee self-service account for HR portal
   linkedEmployeeId      String?                     @unique
   linkedEmployee        Employee?                   @relation("EmployeeUserLink", fields: [linkedEmployeeId], references: [id], onDelete: SetNull)
@@ -161,6 +166,125 @@ model UserCompanyAccess {
   @@unique([userId, companyId])
   @@index([companyId])
   @@index([roleId])
+}
+
+model UserTablePreference {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  key       String
+  state     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId, key])
+  @@index([companyId, key])
+}
+
+model LiveUpdateEvent {
+  id        BigInt   @id @default(autoincrement())
+  companyId String
+  channel   String
+  entity    String
+  action    String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, channel, id])
+  @@index([createdAt])
+}
+
+model StockCountSession {
+  id                              String                  @id @default(cuid())
+  companyId                       String
+  warehouseId                     String
+  title                           String
+  status                          StockCountSessionStatus @default(DRAFT)
+  evidenceReference               String?
+  evidenceNotes                   String?                 @db.Text
+  notes                           String?                 @db.Text
+  currentRevision                 Int                     @default(1)
+  linkedAdjustmentApprovalId      String?
+  linkedAdjustmentReferenceNumber String?
+  createdById                     String?
+  createdByName                   String?
+  reviewedById                    String?
+  reviewedByName                  String?
+  reviewedAt                      DateTime?
+  createdAt                       DateTime                @default(now())
+  updatedAt                       DateTime                @updatedAt
+
+  company   Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  warehouse Warehouse                 @relation(fields: [companyId, warehouseId], references: [companyId, id], onDelete: Restrict)
+  lines     StockCountSessionLine[]
+  revisions StockCountSessionRevision[]
+
+  @@index([companyId, status, createdAt])
+  @@index([companyId, warehouseId, status])
+}
+
+model StockCountSessionLine {
+  id           String   @id @default(cuid())
+  sessionId     String
+  materialId   String
+  materialName String
+  unit         String
+  warehouseId  String
+  systemQty    Decimal  @default(0) @db.Decimal(18, 3)
+  countedQty   Decimal? @db.Decimal(18, 3)
+  varianceQty  Decimal  @default(0) @db.Decimal(18, 3)
+  unitCost     Decimal  @default(0) @db.Decimal(18, 4)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  session StockCountSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, sortOrder])
+}
+
+model StockCountSessionRevision {
+  id             String   @id @default(cuid())
+  sessionId       String
+  revisionNumber Int
+  action         String
+  savedById      String?
+  savedByName    String?
+  snapshot       Json
+  createdAt      DateTime @default(now())
+
+  session StockCountSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, revisionNumber])
+  @@index([createdAt])
+}
+
+model StockExceptionApproval {
+  id              String                       @id @default(cuid())
+  companyId       String
+  exceptionType   StockExceptionType
+  status          StockExceptionApprovalStatus @default(PENDING)
+  referenceId     String
+  referenceNumber String?
+  reason          String                       @db.Text
+  payload         Json?
+  createdById     String?
+  createdByName   String?
+  createdAt       DateTime                     @default(now())
+  decidedById     String?
+  decidedByName   String?
+  decidedAt       DateTime?
+  decisionNote    String?                      @db.Text
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, exceptionType, referenceId])
+  @@index([companyId, status, createdAt])
+  @@index([companyId, exceptionType, createdAt])
 }
 
 model Material {
@@ -626,6 +750,7 @@ model Warehouse {
   stockBatches            StockBatch[]
   transactions            Transaction[]
   materialWarehouseStocks MaterialWarehouseStock[]
+  stockCountSessions      StockCountSession[]
 
   @@unique([companyId, id])
   @@unique([companyId, name])
@@ -1169,6 +1294,28 @@ enum TransactionType {
   TRANSFER_IN
   TRANSFER_OUT
   REVERSAL
+  ADJUSTMENT
+}
+
+enum StockExceptionType {
+  DISPATCH_OVERRIDE
+  RECEIPT_ADJUSTMENT
+  RECEIPT_CANCELLATION
+  MANUAL_STOCK_ADJUSTMENT
+}
+
+enum StockExceptionApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StockCountSessionStatus {
+  DRAFT
+  ADJUSTMENT_PENDING
+  ADJUSTMENT_APPROVED
+  ADJUSTMENT_REJECTED
+  CANCELLED
 }
 
 enum JobStatus {

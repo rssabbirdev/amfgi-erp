@@ -1,0 +1,80 @@
+# API HR, Materials, and Transactions
+
+> 205 nodes · cohesion 0.02
+
+## Key Concepts
+
+- **GET()** (155 connections) — `app\api\warehouses\route.ts`
+- **POST()** (130 connections) — `app\api\warehouses\route.ts`
+- **PUT()** (42 connections) — `app\api\warehouses\[id]\route.ts`
+- **DELETE()** (41 connections) — `app\api\warehouses\[id]\route.ts`
+- **PATCH()** (19 connections) — `app\api\user\profile\route.ts`
+- **prepareIntegrationRequest()** (10 connections) — `lib\integrations\integrationRoute.ts`
+- **errorResponse()** (10 connections) — `lib\utils\apiResponse.ts`
+- **successResponse()** (8 connections) — `lib\utils\apiResponse.ts`
+- **requireCompanySession()** (7 connections) — `lib\hr\requireCompanySession.ts`
+- **requirePerm()** (7 connections) — `lib\hr\requireCompanySession.ts`
+- **decimalToNumber()** (7 connections) — `lib\utils\decimal.ts`
+- **decimalToNumberOrZero()** (7 connections) — `lib\utils\decimal.ts`
+- **canAccess()** (6 connections) — `app\api\media\[id]\route.ts`
+- **decimal.ts** (6 connections) — `lib\utils\decimal.ts`
+- **route.ts** (5 connections) — `app\api\materials\[id]\uoms\route.ts`
+- **route.ts** (5 connections) — `app\api\transactions\non-stock-reconcile\route.ts`
+- **integrationRoute.ts** (5 connections) — `lib\integrations\integrationRoute.ts`
+- **serializeMaterialUoms()** (5 connections) — `lib\utils\materialUom.ts`
+- **parseDt()** (4 connections) — `app\api\hr\attendance\[id]\route.ts`
+- **diffMinutes()** (4 connections) — `app\api\hr\attendance\[id]\route.ts`
+- **route.ts** (4 connections) — `app\api\hr\geofence\zones\[id]\route.ts`
+- **route.ts** (4 connections) — `app\api\integrations\jobs\upsert\route.ts`
+- **route.ts** (4 connections) — `C:\almuraqib-custom-application\AMFGI\app\api\job-costing\formulas\[id]\route.ts`
+- **loadFormula()** (4 connections) — `C:\almuraqib-custom-application\AMFGI\app\api\job-costing\formulas\[id]\route.ts`
+- **route.ts** (4 connections) — `app\api\jobs\[id]\items\[itemId]\route.ts`
+- *... and 180 more nodes in this community*
+
+## Relationships
+
+- [[Lib Utils and Media]] (22 shared connections)
+- [[Lib, Scripts, and Profile]] (17 shared connections)
+- [[Lib Integrations, Party Lists API, and Party Contacts]] (14 shared connections)
+- [[HR, Components, and Print]] (12 shared connections)
+- [[Lib HR]] (12 shared connections)
+- [[Lib, HR, and Geofence]] (5 shared connections)
+- [[HR, Lib, and Almuraqib Custom Application]] (3 shared connections)
+- [[Lib, Jobs, and Job Contacts]] (3 shared connections)
+- [[Lib, Integrations, and Domain Allowlist]] (3 shared connections)
+- [[Lib Job Costing and Utils]] (3 shared connections)
+- [[Scripts and Relabel Graphify Communities]] (3 shared connections)
+- [[Components, Job Costing, and Formula Builder Editor]] (2 shared connections)
+
+## Source Files
+
+- `C:\almuraqib-custom-application\AMFGI\app\api\job-costing\formulas\[id]\route.ts`
+- `app\api\categories\[id]\route.ts`
+- `app\api\categories\route.ts`
+- `app\api\companies\[id]\route.ts`
+- `app\api\companies\route.ts`
+- `app\api\company-profiles\route.ts`
+- `app\api\customers\[id]\check-delete\route.ts`
+- `app\api\customers\[id]\route.ts`
+- `app\api\customers\route.ts`
+- `app\api\customers\sync\route.ts`
+- `app\api\delivery-notes\next-number\route.ts`
+- `app\api\hr\attendance\[id]\route.ts`
+- `app\api\hr\attendance\bulk-upsert\route.ts`
+- `app\api\hr\attendance\monthly-report\route.ts`
+- `app\api\hr\attendance\overview\route.ts`
+- `app\api\hr\attendance\route.ts`
+- `app\api\hr\document-types\[id]\route.ts`
+- `app\api\hr\document-types\route.ts`
+- `app\api\hr\documents\[id]\route.ts`
+- `app\api\hr\documents\[id]\upload-file\route.ts`
+
+## Audit Trail
+
+- EXTRACTED: 611 (70%)
+- INFERRED: 256 (30%)
+- AMBIGUOUS: 0 (0%)
+
+---
+
+*Part of the graphify knowledge wiki. See [[index]] to navigate.*

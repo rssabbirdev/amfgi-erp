@@ -21,6 +21,8 @@ interface SearchSelectProps<T extends { id: string; label: string; searchText?: 
   clearInputOnFocus?: boolean;
   inputProps?: InputHTMLAttributes<HTMLInputElement>;
   dropdownInPortal?: boolean;
+  allowClearButton?: boolean;
+  clearOnEmptyInput?: boolean;
 }
 
 export default function SearchSelect<T extends { id: string; label: string; searchText?: string }>(
@@ -43,6 +45,8 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     clearInputOnFocus = false,
     inputProps,
     dropdownInPortal = false,
+    allowClearButton = true,
+    clearOnEmptyInput = false,
   } = props;
 
   const [input, setInput] = useState('');
@@ -57,7 +61,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
-  const mergedInputClassName = [inputProps?.className, 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-white']
+  const mergedInputClassName = ['w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-white', inputProps?.className]
     .filter(Boolean)
     .join(' ');
 
@@ -110,6 +114,9 @@ export default function SearchSelect<T extends { id: string; label: string; sear
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setInput(newValue);
+    if (clearOnEmptyInput && newValue.trim().length === 0 && value) {
+      onChange('');
+    }
     onInputChange?.(newValue);
     setIsOpen(true);
     setHighlightedIdx(0);
@@ -259,7 +266,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
           aria-autocomplete="list"
         />
 
-        {input && (
+        {allowClearButton && input && (
           <button
             type="button"
             onClick={() => {

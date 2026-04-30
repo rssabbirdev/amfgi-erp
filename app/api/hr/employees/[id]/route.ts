@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { provisionEmployeeUser } from '@/lib/hr/provisionEmployeeUser';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
@@ -178,6 +179,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         });
       });
 
+      publishLiveUpdate({
+        companyId,
+        channel: 'hr',
+        entity: 'employee',
+        action: 'updated',
+      });
+
       return successResponse(emp);
     } catch (e) {
       if (e instanceof Error && e.message.startsWith('PROVISION:')) {
@@ -211,5 +219,11 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
   await prisma.user.updateMany({ where: { linkedEmployeeId: id }, data: { linkedEmployeeId: null } });
   await prisma.employee.delete({ where: { id } });
+  publishLiveUpdate({
+    companyId,
+    channel: 'hr',
+    entity: 'employee',
+    action: 'deleted',
+  });
   return successResponse({ ok: true });
 }

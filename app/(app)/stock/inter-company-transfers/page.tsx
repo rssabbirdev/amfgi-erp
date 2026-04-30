@@ -28,6 +28,7 @@ export default function InterCompanyTransfersPage() {
 
   const { data: transfers = [], isFetching } = useGetTransferLedgerQuery(undefined, {
     skip: !canView,
+    refetchOnMountOrArgChange: 30,
   });
 
   const inboundCount = useMemo(

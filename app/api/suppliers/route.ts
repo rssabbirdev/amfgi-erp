@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { serializeSupplierWithContacts, syncSupplierContacts } from '@/lib/partyContacts';
 import {
@@ -107,6 +108,12 @@ export async function POST(req: Request) {
           },
         },
       });
+    });
+    publishLiveUpdate({
+      companyId,
+      channel: 'suppliers',
+      entity: 'supplier',
+      action: 'created',
     });
     return successResponse(serializeSupplierWithContacts(supplier), 201);
   } catch (err: unknown) {

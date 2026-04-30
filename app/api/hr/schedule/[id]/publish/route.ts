@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -34,6 +35,13 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       createdAt: true,
       updatedAt: true,
     },
+  });
+
+  publishLiveUpdate({
+    companyId,
+    channel: 'hr',
+    entity: 'schedule',
+    action: 'updated',
   });
 
   return successResponse(updated);

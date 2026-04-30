@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState }  from 'react';
+import { useState }  from 'react';
 import { Button }               from '@/components/ui/Button';
 import DataTable                from '@/components/ui/DataTable';
 import { Badge }                from '@/components/ui/Badge';
@@ -9,6 +9,12 @@ import toast                    from 'react-hot-toast';
 import { PERMISSION_GROUPS, ROLE_PRESETS } from '@/lib/permissions';
 import type { Permission }      from '@/lib/permissions';
 import type { Column }          from '@/components/ui/DataTable';
+import {
+  useGetRolesQuery,
+  useCreateRoleMutation,
+  useUpdateRoleMutation,
+  useDeleteRoleMutation,
+} from '@/store/hooks';
 
 type Role = {
   id: string;
@@ -21,23 +27,18 @@ type Role = {
 };
 
 export default function AdminRolesPage() {
-  const [roles,       setRoles]       = useState<Role[]>([]);
-  const [loading,     setLoading]     = useState(true);
   const [modal,       setModal]       = useState(false);
   const [editing,     setEditing]     = useState<Role | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  const { data: roles = [], isFetching: loading } = useGetRolesQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const [createRole] = useCreateRoleMutation();
+  const [updateRole] = useUpdateRoleMutation();
+  const [deleteRole] = useDeleteRoleMutation();
 
   const [name,        setName]        = useState('');
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
-
-  const fetchRoles = () => {
-    setLoading(true);
-    fetch('/api/roles')
-      .then((r) => r.json())
-      .then((j) => { setRoles(j.data ?? []); setLoading(false); });
-  };
-
-  useEffect(() => { fetchRoles(); }, []);
 
   const openCreate = () => {
     setEditing(null);
@@ -72,32 +73,28 @@ export default function AdminRolesPage() {
 
     const url    = editing ? `/api/roles/${editing.id}` : '/api/roles';
     const method = editing ? 'PUT' : 'POST';
-
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-    });
-    setFormLoading(false);
-    if (res.ok) {
+    try {
+      if (editing) {
+        await updateRole({ id: editing.id, data: body }).unwrap();
+      } else {
+        await createRole(body).unwrap();
+      }
+      setFormLoading(false);
       toast.success(editing ? 'Role updated' : 'Role created');
       setModal(false);
-      fetchRoles();
-    } else {
-      const err = await res.json();
-      toast.error(err.error ?? 'Save failed');
+    } catch (error: any) {
+      setFormLoading(false);
+      toast.error(error?.data?.error ?? 'Save failed');
     }
   };
 
   const handleDelete = async (r: Role) => {
     if (!confirm(`Delete role "${r.name}"? This cannot be undone.`)) return;
-    const res = await fetch(`/api/roles/${r.id}`, { method: 'DELETE' });
-    if (res.ok) {
+    try {
+      await deleteRole(r.id).unwrap();
       toast.success('Role deleted');
-      fetchRoles();
-    } else {
-      const err = await res.json();
-      toast.error(err.error ?? 'Delete failed');
+    } catch (error: any) {
+      toast.error(error?.data?.error ?? 'Delete failed');
     }
   };
 

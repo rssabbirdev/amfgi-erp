@@ -1,4 +1,5 @@
 import type {
+  FormulaConstant,
   EmployeeExpertiseProfile,
   FormulaAreaRule,
   FormulaConfig,
@@ -68,11 +69,21 @@ function evaluateExpression(expression: string, values: FormulaVariableMap) {
   return Number.isFinite(result) ? result : 0;
 }
 
+function resolveFormulaValue(value: number | string, values: FormulaVariableMap) {
+  if (typeof value === 'number') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric)) return numeric;
+  return evaluateExpression(trimmed, values);
+}
+
 function buildVariableMap(
   areaRule: FormulaAreaRule,
   specs: JobItemSpecifications,
   areaKey: string,
-  formulaVariables?: Record<string, number | string>
+  formulaVariables?: Record<string, number | string>,
+  formulaConstants?: FormulaConstant[]
 ): FormulaVariableMap {
   const globalVariables = specs.global ?? {};
   const areaSpecs = specs.areas?.[areaKey];
@@ -85,10 +96,11 @@ function buildVariableMap(
     if (typeof value === 'number') values[`specs.global.${key}`] = value;
   }
   for (const [key, value] of Object.entries(formulaVariables ?? {})) {
-    if (typeof value === 'number') values[`formula.${key}`] = value;
-    if (typeof value === 'string') {
-      values[`formula.${key}`] = evaluateExpression(value, values);
-    }
+    values[`formula.${key}`] = resolveFormulaValue(value, values);
+  }
+  for (const constant of formulaConstants ?? []) {
+    if (!constant.key.trim()) continue;
+    values[`formula.${constant.key}`] = resolveFormulaValue(constant.value, values);
   }
   for (const [key, value] of Object.entries(measurements)) {
     values[`area.${key}`] = value;
@@ -97,10 +109,9 @@ function buildVariableMap(
     values[`area.variables.${key}`] = value;
   }
   for (const [key, value] of Object.entries(ruleVariables)) {
-    if (typeof value === 'number') values[`rule.${key}`] = value;
-    if (typeof value === 'string') {
-      values[`rule.${key}`] = evaluateExpression(value, values);
-    }
+    const resolved = resolveFormulaValue(value, values);
+    values[`rule.${key}`] = resolved;
+    values[`area.formula.${key}`] = resolved;
   }
   return values;
 }
@@ -190,7 +201,8 @@ export function buildJobItemEstimate({
       areaRule,
       jobItem.specifications,
       areaRule.key,
-      formulaLibrary.formulaConfig.variables
+      formulaLibrary.formulaConfig.variables,
+      formulaLibrary.formulaConfig.constants
     );
     for (const materialRule of areaRule.materials) {
       const materialId = resolveMaterialRuleId(materialRule, jobItem.specifications);

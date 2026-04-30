@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { applyPartialPartyFieldsToUpdate, partyListPartyFieldsSchema } from '@/lib/partyListRecordPayload';
 import { serializeCustomerWithContacts, syncCustomerContacts } from '@/lib/partyContacts';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { z } from 'zod';
 
 const UpdateSchema = z
@@ -94,6 +95,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         },
       });
     });
+    publishLiveUpdate({
+      companyId,
+      channel: 'customers',
+      entity: 'customer',
+      action: 'updated',
+    });
     return successResponse(serializeCustomerWithContacts(updated));
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to update customer';
@@ -119,8 +126,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params;
 
   try {
+    const companyId = session.user.activeCompanyId;
     const customer = await prisma.customer.findFirst({
-      where: { id, companyId: session.user.activeCompanyId },
+      where: { id, companyId },
     });
     if (!customer) return errorResponse('Customer not found', 404);
 
@@ -143,6 +151,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         where: { id },
         data: { isActive: false },
       });
+      publishLiveUpdate({
+        companyId,
+        channel: 'customers',
+        entity: 'customer',
+        action: 'updated',
+      });
       return successResponse({
         deleted: true,
         permanent: false,
@@ -151,6 +165,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     }
 
     await prisma.customer.delete({ where: { id } });
+    publishLiveUpdate({
+      companyId,
+      channel: 'customers',
+      entity: 'customer',
+      action: 'deleted',
+    });
     return successResponse({ deleted: true, permanent: true });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to delete customer';

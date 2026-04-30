@@ -1,5 +1,6 @@
 import { auth }            from '@/auth';
 import { prisma }          from '@/lib/db/prisma';
+import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }               from 'zod';
 import { ALL_PERMISSIONS } from '@/lib/permissions';
@@ -46,6 +47,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     data: update,
   });
 
+  publishLiveUpdate({
+    companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
+    channel: 'admin',
+    entity: 'role',
+    action: 'updated',
+  });
   return successResponse(role);
 }
 
@@ -65,5 +72,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   }
 
   await prisma.role.delete({ where: { id } });
+  publishLiveUpdate({
+    companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
+    channel: 'admin',
+    entity: 'role',
+    action: 'deleted',
+  });
   return successResponse({ deleted: true, permanent: true });
 }

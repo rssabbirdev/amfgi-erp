@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
@@ -38,14 +39,21 @@ export async function POST(req: Request) {
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
   try {
+    const companyId = session.user.activeCompanyId;
     const category = await prisma.category.create({
       data: {
         name: parsed.data.name.trim(),
-        companyId: session.user.activeCompanyId,
+        companyId,
         isActive: true,
       },
     });
 
+    publishLiveUpdate({
+      companyId,
+      channel: 'settings',
+      entity: 'category',
+      action: 'created',
+    });
     return successResponse(category, 201);
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : 'Creation failed';

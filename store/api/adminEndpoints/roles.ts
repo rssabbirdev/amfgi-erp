@@ -15,7 +15,10 @@ export const rolesApi = adminApi.injectEndpoints({
     getRoles: builder.query<Role[], void>({
       query: () => '/roles',
       transformResponse: (r: { data: Role[] }) => r.data,
-      providesTags: [{ type: 'Role', id: 'LIST' }, ...([] as any[])],
+      providesTags: (result) =>
+        result
+          ? [{ type: 'Role', id: 'LIST' }, ...result.map((role) => ({ type: 'Role' as const, id: role.id }))]
+          : [{ type: 'Role', id: 'LIST' }],
     }),
 
     createRole: builder.mutation<Role, Partial<Role>>({

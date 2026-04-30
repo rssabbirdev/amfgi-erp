@@ -76,6 +76,7 @@ async function resolvePermissions(
 
 const config: NextAuthConfig = {
   session: { strategy: 'jwt' },
+  trustHost: true,
   pages: { signIn: '/login', error: '/login' },
   providers: [
     Google({

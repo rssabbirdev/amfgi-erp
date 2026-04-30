@@ -4,12 +4,12 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
+import FlexibleTable, { type FlexibleTableColumn } from '@/components/ui/FlexibleTable';
 import SearchSelect from '@/components/ui/SearchSelect';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 import {
   useAddBatchTransactionMutation,
-  useGetCompaniesQuery,
   useDeleteReceiptEntryMutation,
   useGetMaterialsQuery,
   useGetReceiptEntryQuery,
@@ -82,6 +82,10 @@ function inputClassName() {
   return 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder-slate-500';
 }
 
+function tableInputClassName() {
+  return 'w-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder-slate-500';
+}
+
 function shellClassName() {
   return 'rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950/70';
 }
@@ -111,7 +115,6 @@ function ReceiptEditor({
   const { data: session } = useSession();
   const { data: materialsData = [] } = useGetMaterialsQuery();
   const { data: suppliersData = [] } = useGetSuppliersQuery();
-  const { data: companies = [] } = useGetCompaniesQuery();
   const { data: warehouses = [] } = useGetWarehousesQuery();
   const [addBatchTransaction] = useAddBatchTransactionMutation();
   const [deleteReceiptEntry] = useDeleteReceiptEntryMutation();
@@ -129,9 +132,7 @@ function ReceiptEditor({
   const perms = (session?.user?.permissions ?? []) as string[];
   const isSA = session?.user?.isSuperAdmin ?? false;
   const canPost = isSA || perms.includes('transaction.stock_in');
-  const activeCompany = companies.find((company) => company.id === session?.user?.activeCompanyId);
-  const warehouseMode = activeCompany?.warehouseMode ?? 'DISABLED';
-  const showWarehouseColumn = warehouseMode !== 'DISABLED';
+  const showWarehouseColumn = true;
 
   const suppliers = useMemo<SupplierOption[]>(
     () =>
@@ -140,6 +141,16 @@ function ReceiptEditor({
         label: supplier.name,
       })),
     [suppliersData]
+  );
+
+  const materialOptions = useMemo(
+    () =>
+      materialsData.map((entry) => ({
+        id: entry.id,
+        label: entry.name,
+        searchText: entry.unit,
+      })),
+    [materialsData]
   );
 
   const materialsById = useMemo(
@@ -189,8 +200,6 @@ function ReceiptEditor({
     );
   };
 
-  const addLine = () => setLines((prev) => normalizeLines([...prev, emptyLine(), emptyLine()]));
-
   const lineTotal = (line: LineItem) => {
     const quantity = parseFloat(line.quantity) || 0;
     const unitCost = parseFloat(line.unitCost) || 0;
@@ -222,6 +231,208 @@ function ReceiptEditor({
     [validLines]
   );
 
+  const tableColumns = useMemo<FlexibleTableColumn<LineItem>[]>(() => {
+    const cols: FlexibleTableColumn<LineItem>[] = [
+      {
+        id: 'row',
+        title: '#',
+        align: 'left',
+        defaultWidth: 70,
+        minWidth: 56,
+        maxWidth: 120,
+        renderCell: (_line, index) => (
+          <span className="text-xs font-mono text-slate-500 dark:text-slate-500">{index + 1}</span>
+        ),
+      },
+      {
+        id: 'material',
+        title: 'Material',
+        defaultWidth: 280,
+        minWidth: 220,
+        maxWidth: 520,
+        renderCell: (line) => {
+          const isDuplicate = duplicateMaterials.includes(line.materialId);
+          return (
+            <div>
+              <SearchSelect
+                value={line.materialId}
+                onChange={(id) => updateLine(line.id, 'materialId', id)}
+                placeholder="Search materials..."
+                dropdownInPortal
+                items={materialOptions}
+                inputProps={{ className: tableInputClassName() }}
+                renderItem={(item) => (
+                  <div>
+                    <div className="font-medium text-slate-900 dark:text-white">{item.label}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{item.searchText}</div>
+                  </div>
+                )}
+              />
+              {isDuplicate ? (
+                <p className="text-xs text-red-600 dark:text-red-300">Duplicate material. Merge rows before posting.</p>
+              ) : null}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'receivingUom',
+        title: 'Receiving UOM',
+        menuDescription: 'Unit used while receiving this material.',
+        defaultWidth: 220,
+        minWidth: 170,
+        maxWidth: 340,
+        renderCell: (line) => {
+          const material = getMaterial(line.materialId);
+          if (material?.materialUoms && material.materialUoms.length > 0) {
+            return (
+              <select
+                value={line.quantityUomId}
+                onChange={(e) => updateLine(line.id, 'quantityUomId', e.target.value)}
+                className={tableInputClassName()}
+              >
+                {material.materialUoms.map((uom) => (
+                  <option key={uom.id} value={uom.isBase ? '' : uom.id}>
+                    {uom.unitName}
+                    {uom.isBase ? ' (base)' : ` (=${uom.factorToBase} ${material.unit})`}
+                  </option>
+                ))}
+              </select>
+            );
+          }
+          return (
+            <div className="border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
+              {material?.unit ?? '-'}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'stock',
+        title: 'Stock',
+        menuDescription: 'Current stock before posting this receipt.',
+        align: 'right',
+        defaultWidth: 120,
+        minWidth: 90,
+        maxWidth: 220,
+        renderCell: (line) => {
+          const material = getMaterial(line.materialId);
+          return material ? (
+            <span className={material.currentStock <= 0 ? 'text-red-600 dark:text-red-300' : 'text-slate-700 dark:text-slate-300'}>
+              {material.currentStock}
+            </span>
+          ) : (
+            <span className="text-slate-400 dark:text-slate-500">-</span>
+          );
+        },
+      },
+      {
+        id: 'qty',
+        title: 'Qty',
+        menuDescription: 'Incoming quantity for this receipt line.',
+        align: 'right',
+        defaultWidth: 140,
+        minWidth: 120,
+        maxWidth: 260,
+        renderCell: (line) => (
+          <input
+            type="number"
+            min="0.001"
+            step="0.001"
+            placeholder="0.000"
+            value={line.quantity}
+            onChange={(e) => updateLine(line.id, 'quantity', e.target.value)}
+            className={`${tableInputClassName()} text-right font-mono`}
+          />
+        ),
+      },
+    ];
+
+    if (showWarehouseColumn) {
+      cols.push({
+        id: 'warehouse',
+        title: 'Warehouse',
+        menuDescription: 'Destination warehouse for the received stock.',
+        defaultWidth: 230,
+        minWidth: 180,
+        maxWidth: 360,
+        renderCell: (line) => {
+          const material = getMaterial(line.materialId);
+          return (
+            <div>
+              <select
+                value={line.warehouseId}
+                onChange={(e) => updateLine(line.id, 'warehouseId', e.target.value)}
+                className={tableInputClassName()}
+              >
+                <option value="">Select warehouse...</option>
+                {warehouses.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name}
+                    {material?.warehouseId === warehouse.id ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+              {material?.warehouseId && line.warehouseId === material.warehouseId ? (
+                <p className="text-xs text-emerald-700 dark:text-emerald-300">Using material default warehouse</p>
+              ) : null}
+            </div>
+          );
+        },
+      });
+    }
+
+    cols.push(
+      {
+        id: 'unitCost',
+        title: 'Unit cost',
+        menuDescription: 'Unit price entered for this receipt line.',
+        align: 'right',
+        defaultWidth: 140,
+        minWidth: 120,
+        maxWidth: 260,
+        renderCell: (line) => (
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            value={line.unitCost}
+            onChange={(e) => updateLine(line.id, 'unitCost', e.target.value)}
+            className={`${tableInputClassName()} text-right font-mono`}
+          />
+        ),
+      },
+      {
+        id: 'total',
+        title: 'Total',
+        menuDescription: 'Calculated line value from quantity and unit cost.',
+        align: 'right',
+        defaultWidth: 140,
+        minWidth: 110,
+        maxWidth: 260,
+        renderCell: (line) => {
+          const total = lineTotal(line);
+          const perBase = getUnitCostPerBase(line);
+          return (
+            <div className="space-y-1">
+              <span className="block font-mono font-medium text-slate-900 dark:text-white">
+                {total > 0 ? total.toFixed(2) : '-'}
+              </span>
+              {perBase ? (
+                <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                  Base cost {perBase.toFixed(2)}
+                </span>
+              ) : null}
+            </div>
+          );
+        },
+      }
+    );
+
+    return cols;
+  }, [duplicateMaterials, materialOptions, showWarehouseColumn, warehouses]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -235,11 +446,17 @@ function ReceiptEditor({
       return;
     }
 
+    const normalizedReceiptNumber = receiptNumber.trim();
+    if (!normalizedReceiptNumber) {
+      toast.error('Receipt number is required');
+      return;
+    }
+
     if (duplicateMaterials.length > 0) {
       toast.error('Duplicate materials found. Merge them into one row.');
       return;
     }
-    if (warehouseMode === 'REQUIRED' && validLines.some((line) => !line.warehouseId)) {
+    if (validLines.some((line) => !line.warehouseId)) {
       toast.error('Select a warehouse for each receipt line');
       return;
     }
@@ -253,7 +470,7 @@ function ReceiptEditor({
 
       await addBatchTransaction({
         type: 'STOCK_IN',
-        receiptNumber,
+        receiptNumber: normalizedReceiptNumber,
         supplier: getSupplierName(supplierId) || undefined,
         supplierId: supplierId || undefined,
         notes: notes || undefined,
@@ -432,177 +649,23 @@ function ReceiptEditor({
           </section>
 
           <section className={shellClassName()}>
-            <div className="border-b border-slate-200 px-5 py-3 dark:border-slate-800">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className={sectionHeadingClassName()}>Receiving lines</h2>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-500">
-                    Three empty rows are always kept ready while you work.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/80">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      #
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Material
-                    </th>
-                    <th className="px-2.5 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Receiving UOM
-                    </th>
-                    <th className="px-2.5 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Stock
-                    </th>
-                    <th className="px-2.5 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Qty
-                    </th>
-                    {showWarehouseColumn ? (
-                      <th className="px-2.5 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Warehouse
-                      </th>
-                    ) : null}
-                    <th className="px-2.5 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Unit cost
-                    </th>
-                    <th className="px-2.5 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Total
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.map((line, index) => {
-                    const material = getMaterial(line.materialId);
-                    const isDuplicate = duplicateMaterials.includes(line.materialId);
-                    const total = lineTotal(line);
-
-                    return (
-                      <tr
-                        key={line.id}
-                        className={[
-                          'border-b border-slate-200 transition-colors dark:border-slate-800',
-                          isDuplicate
-                            ? 'bg-red-50 dark:bg-red-950/10'
-                            : 'hover:bg-slate-50 dark:hover:bg-slate-900/40',
-                        ].join(' ')}
-                      >
-                        <td className="px-3 py-2 text-xs font-mono text-slate-500 dark:text-slate-500">
-                          {index + 1}
-                        </td>
-
-                        <td className="px-3 py-1.5 align-top">
-                          <SearchSelect
-                            value={line.materialId}
-                            onChange={(id) => updateLine(line.id, 'materialId', id)}
-                            placeholder="Search materials..."
-                            dropdownInPortal
-                            items={materialsData.map((entry) => ({
-                              id: entry.id,
-                              label: entry.name,
-                              searchText: entry.unit,
-                            }))}
-                            inputProps={{ className: inputClassName() }}
-                            renderItem={(item) => (
-                              <div>
-                                <div className="font-medium text-slate-900 dark:text-white">{item.label}</div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400">{item.searchText}</div>
-                              </div>
-                            )}
-                          />
-                          {isDuplicate ? (
-                            <p className="mt-1 text-xs text-red-600 dark:text-red-300">
-                              Duplicate material. Merge rows before posting.
-                            </p>
-                          ) : null}
-                        </td>
-
-                        <td className="px-2.5 py-1.5 align-top">
-                          {material?.materialUoms && material.materialUoms.length > 0 ? (
-                            <select
-                              value={line.quantityUomId}
-                              onChange={(e) => updateLine(line.id, 'quantityUomId', e.target.value)}
-                              className={inputClassName()}
-                            >
-                              {material.materialUoms.map((uom) => (
-                                <option key={uom.id} value={uom.isBase ? '' : uom.id}>
-                                  {uom.unitName}
-                                  {uom.isBase ? ' (base)' : ` (=${uom.factorToBase} ${material.unit})`}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
-                              {material?.unit ?? '-'}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="px-2.5 py-2 text-right font-mono align-top">
-                          {material ? (
-                            <span className={material.currentStock <= 0 ? 'text-red-600 dark:text-red-300' : 'text-slate-700 dark:text-slate-300'}>
-                              {material.currentStock}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-500">-</span>
-                          )}
-                        </td>
-
-                        <td className="px-2.5 py-1.5 align-top">
-                          <input
-                            type="number"
-                            min="0.001"
-                            step="0.001"
-                            placeholder="0.000"
-                            value={line.quantity}
-                            onChange={(e) => updateLine(line.id, 'quantity', e.target.value)}
-                            className={`${inputClassName()} text-right font-mono`}
-                          />
-                        </td>
-                        {showWarehouseColumn ? (
-                          <td className="px-2.5 py-1.5 align-top">
-                            <select
-                              value={line.warehouseId}
-                              onChange={(e) => updateLine(line.id, 'warehouseId', e.target.value)}
-                              className={inputClassName()}
-                            >
-                              <option value="">
-                                {warehouseMode === 'REQUIRED' ? 'Select warehouse...' : 'Use fallback/default'}
-                              </option>
-                              {warehouses.map((warehouse) => (
-                                <option key={warehouse.id} value={warehouse.id}>
-                                  {warehouse.name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                        ) : null}
-
-                        <td className="px-2.5 py-1.5 align-top">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={line.unitCost}
-                            onChange={(e) => updateLine(line.id, 'unitCost', e.target.value)}
-                            className={`${inputClassName()} text-right font-mono`}
-                          />
-                        </td>
-
-                        <td className="px-2.5 py-2 text-right font-mono font-medium text-slate-900 align-top dark:text-white">
-                          {total > 0 ? total.toFixed(2) : '-'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <FlexibleTable
+              storageKey="goods-receipt-receive-lines-table"
+              columns={tableColumns}
+              rows={lines}
+              rowKey={(line) => line.id}
+              minTableWidthClassName="min-w-[980px]"
+              title="Receiving lines"
+              description={`Three draft rows stay ready while you work. ${totalQtyLines} active line${totalQtyLines === 1 ? '' : 's'} · ${totalUnits.toFixed(2)} total quantity.`}
+              emptyState="No receipt lines yet."
+              rowClassName={(line) => {
+                const isDuplicate = duplicateMaterials.includes(line.materialId);
+                return [
+                  'border-b border-slate-200 transition-colors dark:border-slate-800',
+                  isDuplicate ? 'bg-red-50 dark:bg-red-950/10' : 'hover:bg-slate-50 dark:hover:bg-slate-900/40',
+                ].join(' ');
+              }}
+            />
           </section>
 
           <section className={shellClassName()}>
@@ -690,7 +753,7 @@ export default function ReceiveStockPage() {
       quantity: String(line.quantityReceived || ''),
       quantityUomId: '',
       unitCost: String(line.unitCost || ''),
-      warehouseId: '',
+      warehouseId: line.warehouseId || '',
     }));
   }, [receiptEntry]);
 
@@ -700,6 +763,22 @@ export default function ReceiveStockPage() {
 
   if (isEditMode && editReceiptNumber && !receiptEntry) {
     return <div className="text-sm text-slate-600 dark:text-slate-300">Receipt not found.</div>;
+  }
+
+  if (isEditMode && receiptEntry?.status === 'cancelled') {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em]">Receipt cancelled</p>
+          <p className="mt-2 text-sm">
+            This receipt was already cancelled and can no longer be edited. Open the receipt history if you need to review the reversal trail.
+          </p>
+        </div>
+        <Link href="/stock/goods-receipt">
+          <Button variant="ghost">Back to history</Button>
+        </Link>
+      </div>
+    );
   }
 
   return (

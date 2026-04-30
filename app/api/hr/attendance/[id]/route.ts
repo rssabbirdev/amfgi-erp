@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -113,6 +114,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       employee: { select: { id: true, fullName: true, employeeCode: true } },
       workAssignment: true,
     },
+  });
+  publishLiveUpdate({
+    companyId,
+    channel: 'hr',
+    entity: 'attendance',
+    action: 'updated',
   });
   return successResponse(row);
 }

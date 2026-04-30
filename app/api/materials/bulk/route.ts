@@ -1,16 +1,24 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
-import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import {
+  findWarehouseRef,
+  resolveCategoryRef,
+} from '@/lib/materialMasterData';
 import { decimalToNumber, decimalToNumberOrZero } from '@/lib/utils/decimal';
-import { ensureCategoryRef, ensureWarehouseRef } from '@/lib/materialMasterData';
+import { errorResponse, successResponse } from '@/lib/utils/apiResponse';
+import { applyMaterialWarehouseDelta } from '@/lib/warehouses/stockWarehouses';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { z } from 'zod';
 
 const MaterialRowSchema = z.object({
+  id: z.string().min(1).max(100).optional(),
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   unit: z.string().min(1).max(20),
   category: z.string().max(100).optional(),
+  categoryId: z.string().max(100).optional(),
   warehouse: z.string().max(100).optional(),
+  warehouseId: z.string().max(100).optional(),
   stockType: z.string().min(1).max(50),
   allowNegativeConsumption: z.boolean().optional(),
   externalItemName: z.string().max(100).optional(),
@@ -45,14 +53,56 @@ export async function POST(req: Request) {
     let created = 0;
     let updated = 0;
 
-    // ──────────── CREATE NEW ROWS (with StockBatch for opening stock) ────────────
     if (newRows.length > 0) {
-      await prisma.$transaction(async (tx) => {
-        for (const row of newRows) {
-          const categoryRef = await ensureCategoryRef(tx, companyId, row.category);
-          const warehouseRef = await ensureWarehouseRef(tx, companyId, row.warehouse);
+      const newRowNameCounts = new Map<string, number>();
+      for (const row of newRows) {
+        const normalizedName = row.name.trim().toLowerCase();
+        newRowNameCounts.set(normalizedName, (newRowNameCounts.get(normalizedName) ?? 0) + 1);
+      }
 
-          await tx.material.create({
+      const duplicateImportNames = [...newRowNameCounts.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([name]) => name);
+      if (duplicateImportNames.length > 0) {
+        return errorResponse(
+          `Duplicate material names in import file: ${duplicateImportNames.join(', ')}`,
+          409
+        );
+      }
+
+      const uniqueNewNames = [...new Set(newRows.map((row) => row.name.trim()))];
+      const existingConflicts = await prisma.material.findMany({
+        where: {
+          companyId,
+          OR: uniqueNewNames.map((name) => ({
+            name: {
+              equals: name,
+              mode: 'insensitive',
+            },
+          })),
+        },
+        select: { name: true },
+      });
+
+      if (existingConflicts.length > 0) {
+        return errorResponse(
+          `Material already exists: ${existingConflicts.map((material) => material.name).join(', ')}`,
+          409
+        );
+      }
+
+      for (const row of newRows) {
+        await prisma.$transaction(async (tx) => {
+          const categoryRef = await resolveCategoryRef(tx, companyId, {
+            id: row.categoryId,
+            name: row.category,
+          });
+          const warehouseRef = await findWarehouseRef(tx, companyId, {
+            id: row.warehouseId,
+            name: row.warehouse,
+          });
+
+          const material = await tx.material.create({
             data: {
               name: row.name.trim(),
               description: row.description?.trim() || null,
@@ -71,79 +121,97 @@ export async function POST(req: Request) {
               isActive: true,
             },
           });
-        }
-      });
 
-      // Create StockBatch records for rows with opening stock
-      // Fetch the created materials to get their IDs
-      const createdMaterialsList = await prisma.material.findMany({
-        where: {
-          companyId,
-          name: { in: newRows.map((r) => r.name.trim()) },
-        },
-        select: { id: true, name: true },
-      });
+          const unitRow = await tx.unit.findUnique({
+            where: {
+              companyId_name: {
+                companyId,
+                name: row.unit.trim(),
+              },
+            },
+          });
 
-      const nameToIdMap = new Map(createdMaterialsList.map((m) => [m.name.toLowerCase(), m.id]));
+          if (unitRow) {
+            await tx.materialUom.create({
+              data: {
+                companyId,
+                materialId: material.id,
+                unitId: unitRow.id,
+                isBase: true,
+                parentUomId: null,
+                factorToParent: 1,
+              },
+            });
+          }
 
-      const stockBatchesToCreate = newRows
-        .filter((row) => decimalToNumberOrZero(row.currentStock) > 0)
-        .map((row) => {
-          const materialId = nameToIdMap.get(row.name.trim().toLowerCase());
-          if (!materialId) return null;
-          const quantity = decimalToNumberOrZero(row.currentStock);
-          const unitCost = decimalToNumberOrZero(row.unitCost);
-          const totalCost = quantity * unitCost;
-          const now = new Date();
+          const openingStock = decimalToNumberOrZero(row.currentStock);
+          if (openingStock > 0 && warehouseRef.warehouseId) {
+            await applyMaterialWarehouseDelta(
+              tx,
+              companyId,
+              material.id,
+              warehouseRef.warehouseId,
+              openingStock
+            );
 
-          return {
-            materialId,
-            companyId,
-            batchNumber: `BLK-${now.getTime()}-${Math.random().toString(36).substr(2, 9)}`,
-            quantityReceived: quantity,
-            quantityAvailable: quantity,
-            unitCost,
-            totalCost,
-            supplier: 'Bulk Import',
-            receiptNumber: null,
-            receivedDate: now,
-            expiryDate: null,
-            notes: 'Created from bulk import',
-          };
-        })
-        .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-
-      if (stockBatchesToCreate.length > 0) {
-        await prisma.stockBatch.createMany({
-          data: stockBatchesToCreate,
+            const unitCost = decimalToNumberOrZero(row.unitCost);
+            await tx.stockBatch.create({
+              data: {
+                materialId: material.id,
+                companyId,
+                warehouseId: warehouseRef.warehouseId,
+                batchNumber: `BLK-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+                quantityReceived: openingStock,
+                quantityAvailable: openingStock,
+                unitCost,
+                totalCost: openingStock * unitCost,
+                supplier: 'Bulk Import',
+                receiptNumber: null,
+                receivedDate: new Date(),
+                expiryDate: null,
+                notes: 'Created from bulk import',
+              },
+            });
+          }
         });
       }
 
       created = newRows.length;
     }
 
-    // ──────────── UPDATE EXISTING ROWS (exclude currentStock) ────────────
     if (updateRows.length > 0) {
-      // Get IDs of all matching materials by name
       const existingMaterials = await prisma.material.findMany({
         where: {
           companyId,
-          name: { in: updateRows.map((r) => r.name.trim()) },
+          OR: updateRows.map((row) =>
+            row.id?.trim() ? { id: row.id.trim() } : { name: row.name.trim() }
+          ),
         },
         select: { id: true, name: true },
       });
 
-      const nameToIdMap = new Map(existingMaterials.map((m) => [m.name.toLowerCase(), m.id]));
+      const nameToIdMap = new Map(existingMaterials.map((material) => [material.name.toLowerCase(), material.id]));
+      const idLookup = new Set(existingMaterials.map((material) => material.id));
 
-      // Update each row (NOTE: currentStock is NOT updated for duplicates)
       for (const row of updateRows) {
-        const materialId = nameToIdMap.get(row.name.trim().toLowerCase());
-        if (materialId) {
-          const categoryRef = await ensureCategoryRef(prisma, companyId, row.category);
-          const warehouseRef = await ensureWarehouseRef(prisma, companyId, row.warehouse);
+        await prisma.$transaction(async (tx) => {
+          const resolvedMaterialId =
+            (row.id?.trim() && idLookup.has(row.id.trim()) ? row.id.trim() : null) ??
+            nameToIdMap.get(row.name.trim().toLowerCase());
 
-          await prisma.material.update({
-            where: { id: materialId },
+          if (!resolvedMaterialId) return;
+
+          const categoryRef = await resolveCategoryRef(tx, companyId, {
+            id: row.categoryId,
+            name: row.category,
+          });
+          const warehouseRef = await findWarehouseRef(tx, companyId, {
+            id: row.warehouseId,
+            name: row.warehouse,
+          });
+
+          await tx.material.update({
+            where: { id: resolvedMaterialId },
             data: {
               description: row.description?.trim() || null,
               unit: row.unit.trim(),
@@ -156,12 +224,64 @@ export async function POST(req: Request) {
               externalItemName: row.externalItemName?.trim() || null,
               unitCost: decimalToNumber(row.unitCost) ?? null,
               reorderLevel: decimalToNumber(row.reorderLevel) ?? null,
-              // NOTE: currentStock is intentionally excluded - opening stock is not updated for duplicates
             },
           });
+
+          const unitRow = await tx.unit.findUnique({
+            where: {
+              companyId_name: {
+                companyId,
+                name: row.unit.trim(),
+              },
+            },
+          });
+
+          if (unitRow) {
+            const base = await tx.materialUom.findFirst({
+              where: { materialId: resolvedMaterialId, isBase: true },
+            });
+
+            if (base) {
+              const taken = await tx.materialUom.findFirst({
+                where: {
+                  materialId: resolvedMaterialId,
+                  unitId: unitRow.id,
+                  NOT: { id: base.id },
+                },
+              });
+
+              if (!taken) {
+                await tx.materialUom.update({
+                  where: { id: base.id },
+                  data: { unitId: unitRow.id },
+                });
+              }
+            } else {
+              await tx.materialUom.create({
+                data: {
+                  companyId,
+                  materialId: resolvedMaterialId,
+                  unitId: unitRow.id,
+                  isBase: true,
+                  parentUomId: null,
+                  factorToParent: 1,
+                },
+              });
+            }
+          }
+
           updated++;
-        }
+        });
       }
+    }
+
+    if (created > 0 || updated > 0) {
+      publishLiveUpdate({
+        companyId,
+        channel: 'stock',
+        entity: 'material',
+        action: created > 0 && updated > 0 ? 'changed' : created > 0 ? 'created' : 'updated',
+      });
     }
 
     return successResponse({ created, updated });

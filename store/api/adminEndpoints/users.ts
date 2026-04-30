@@ -27,7 +27,10 @@ export const usersApi = adminApi.injectEndpoints({
     getUsers: builder.query<User[], void>({
       query: () => '/users',
       transformResponse: (r: { data: User[] }) => r.data,
-      providesTags: [{ type: 'User', id: 'LIST' }, ...([] as any[])],
+      providesTags: (result) =>
+        result
+          ? [{ type: 'User', id: 'LIST' }, ...result.map((user) => ({ type: 'User' as const, id: user.id }))]
+          : [{ type: 'User', id: 'LIST' }],
     }),
 
     createUser: builder.mutation<User, Partial<User> & { password: string }>({

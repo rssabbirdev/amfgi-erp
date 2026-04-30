@@ -6,17 +6,21 @@ import { useSearchParams }                from 'next/navigation';
 import { useSession }                     from 'next-auth/react';
 import { Button }                         from '@/components/ui/Button';
 import SearchSelect                       from '@/components/ui/SearchSelect';
+import LineGridColumnSettings, { type LineGridColumnConfig } from '@/components/stock/LineGridColumnSettings';
+import DispatchLineGrid                   from '@/components/stock/DispatchLineGrid';
 import toast                              from 'react-hot-toast';
 import {
-  useGetCompaniesQuery,
   useGetMaterialsQuery,
   useGetJobsQuery,
   useGetDispatchEntryQuery,
+  useGetDispatchBudgetWarningMutation,
   useGetJobMaterialsQuery,
   useGetCustomersQuery,
   useAddBatchTransactionMutation,
   useGetWarehousesQuery,
+  type DispatchBudgetWarningResult,
   type MaterialUomDto,
+  type Material,
 } from '@/store/hooks';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -37,7 +41,9 @@ interface Line {
   returnQty:   string;
   quantityUomId: string;
   warehouseId: string;
+  sourceTransactionId?: string;
   originalDispatchQty?: number; // Track original qty for editing validation
+  originalWarehouseId?: string;
 }
 
 interface PendingChange {
@@ -76,6 +82,95 @@ function normalizeLines(lines: Line[], jobId = '') {
   return [...nonEmptyLines, ...Array.from({ length: requiredEmptyRows }, () => emptyLine(jobId))];
 }
 
+function getSelectedUom(material: Material | undefined, quantityUomId: string) {
+  if (!material) return null;
+  if (!quantityUomId.trim()) {
+    return {
+      id: '',
+      unitName: material.unit,
+      factorToBase: 1,
+    };
+  }
+  const selected = material.materialUoms?.find((uom) => uom.id === quantityUomId);
+  return selected
+    ? {
+        id: selected.id,
+        unitName: selected.unitName,
+        factorToBase: selected.factorToBase,
+      }
+    : {
+        id: '',
+        unitName: material.unit,
+        factorToBase: 1,
+      };
+}
+
+function getWarehouseBaseStock(material: Material | undefined, warehouseId: string) {
+  if (!material || !warehouseId) return 0;
+  return material.materialWarehouseStocks?.find((stock) => stock.warehouseId === warehouseId)?.currentStock ?? 0;
+}
+
+function formatWarehouseStock(material: Material | undefined, warehouseId: string, quantityUomId: string) {
+  const selectedUom = getSelectedUom(material, quantityUomId);
+  const baseStock = getWarehouseBaseStock(material, warehouseId);
+  if (!selectedUom) {
+    return { quantity: 0, unitName: '' };
+  }
+  return {
+    quantity: baseStock / selectedUom.factorToBase,
+    unitName: selectedUom.unitName,
+  };
+}
+
+function formatGlobalStock(material: Material | undefined, quantityUomId: string) {
+  const selectedUom = getSelectedUom(material, quantityUomId);
+  const globalStock = material?.currentStock ?? 0;
+  if (!selectedUom) {
+    return { quantity: 0, unitName: '' };
+  }
+  return {
+    quantity: globalStock / selectedUom.factorToBase,
+    unitName: selectedUom.unitName,
+  };
+}
+
+function getMaterialUomOptions(material: Material | undefined) {
+  if (!material) return [];
+  const extraUoms = (material.materialUoms ?? []).filter((uom) => !uom.isBase);
+  return [
+    {
+      value: '',
+      label: `${material.unit} (base)`,
+    },
+    ...extraUoms.map((uom) => ({
+      value: uom.id,
+      label: `${uom.unitName} (=${uom.factorToBase} ${material.unit})`,
+    })),
+  ];
+}
+
+type DispatchGridColumnKey =
+  | 'line'
+  | 'material'
+  | 'uom'
+  | 'warehouseStock'
+  | 'globalStock'
+  | 'dispatchQty'
+  | 'returnQty'
+  | 'warehouse'
+  | 'action';
+
+const DEFAULT_GRID_COLUMNS: LineGridColumnConfig[] = [
+  { key: 'line', label: '#', visible: true, width: 48, minWidth: 40, maxWidth: 72 },
+  { key: 'material', label: 'Material', visible: true, width: 280, minWidth: 180, maxWidth: 420 },
+  { key: 'uom', label: 'UOM', visible: true, width: 140, minWidth: 110, maxWidth: 220 },
+  { key: 'warehouseStock', label: 'Warehouse Stock', visible: true, width: 150, minWidth: 120, maxWidth: 220 },
+  { key: 'globalStock', label: 'Global Stock', visible: true, width: 150, minWidth: 120, maxWidth: 220 },
+  { key: 'dispatchQty', label: 'Dispatch Qty', visible: true, width: 132, minWidth: 110, maxWidth: 220 },
+  { key: 'returnQty', label: 'Return Qty', visible: true, width: 132, minWidth: 110, maxWidth: 220 },
+  { key: 'warehouse', label: 'Warehouse', visible: true, width: 220, minWidth: 180, maxWidth: 320 }
+];
+
 function parseJobContacts(value: unknown): Array<{ name: string; number?: string; email?: string; designation?: string; label?: string }> {
   if (!Array.isArray(value)) return [];
   const contacts: Array<{ name: string; number?: string; email?: string; designation?: string; label?: string }> = [];
@@ -95,25 +190,35 @@ function parseJobContacts(value: unknown): Array<{ name: string; number?: string
   return contacts;
 }
 
+function parseOverrideReason(notesText: string) {
+  const match = notesText.match(/\[OVERRIDE_REASON:([^\]]+)\]/);
+  return match?.[1]?.trim() ?? '';
+}
+
+function stripOverrideReason(notesText: string) {
+  return notesText.replace(/\[OVERRIDE_REASON:[^\]]+\]\n?/g, '').trim();
+}
+
 export default function DispatchMaterialsPage() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
   const { data: materials = [] } = useGetMaterialsQuery();
   const { data: jobs = [] } = useGetJobsQuery();
   const { data: customers = [] } = useGetCustomersQuery();
-  const { data: companies = [] } = useGetCompaniesQuery();
   const { data: warehouses = [] } = useGetWarehousesQuery();
   const [addBatchTransaction] = useAddBatchTransactionMutation();
-  const activeCompany = companies.find((company) => company.id === session?.user?.activeCompanyId);
-  const warehouseMode = activeCompany?.warehouseMode ?? 'DISABLED';
-  const showWarehouseColumn = warehouseMode !== 'DISABLED';
+  const [getDispatchBudgetWarning, { isLoading: budgetWarningLoading }] = useGetDispatchBudgetWarningMutation();
+  const showWarehouseColumn = true;
+  const [gridColumns, setGridColumns] = useState<LineGridColumnConfig[]>(DEFAULT_GRID_COLUMNS);
 
   const [lines,        setLines]        = useState<Line[]>(() => normalizeLines([emptyLine()]));
   const [selectedJob,  setSelectedJob]  = useState('');
   const [date,         setDate]         = useState(() => new Date().toISOString().slice(0, 10));
   const [notes,        setNotes]        = useState('');
+  const [overrideReason, setOverrideReason] = useState('');
   const [submitting,   setSubmitting]   = useState(false);
   const [existingEntry, setExistingEntry] = useState<{ exists: boolean; lines: any[]; transactionIds: string[]; notes: string } | null>(null);
+  const [budgetWarning, setBudgetWarning] = useState<DispatchBudgetWarningResult | null>(null);
 
   // Get total dispatched/returned for each material on this job across all dates
   const { data: jobMaterials = [] } = useGetJobMaterialsQuery(selectedJob, { skip: !selectedJob });
@@ -121,6 +226,14 @@ export default function DispatchMaterialsPage() {
     open: false,
     pendingChange: null,
   });
+  const visibleGridColumns = useMemo(
+    () => gridColumns.filter((column) => column.visible && (showWarehouseColumn || column.key !== 'warehouse')),
+    [gridColumns, showWarehouseColumn]
+  );
+  const gridTemplateColumns = useMemo(
+    () => visibleGridColumns.map((column) => `${column.width}px`).join(' '),
+    [visibleGridColumns]
+  );
 
   // Load from query params if editing
   useEffect(() => {
@@ -145,6 +258,7 @@ export default function DispatchMaterialsPage() {
       setExistingEntry(null);
       setLines(normalizeLines([emptyLine()]));
       setNotes('');
+      setOverrideReason('');
       return;
     }
 
@@ -153,21 +267,25 @@ export default function DispatchMaterialsPage() {
 
       if (entryData.exists) {
         const newLines = entryData.lines.map((line: any) => ({
-          id: generateId(),
+          id: line.transactionId ?? generateId(),
           jobId: selectedJob,
           materialId: line.materialId,
           dispatchQty: line.quantity.toString(),
           returnQty: line.returnQty ? line.returnQty.toString() : '',
           quantityUomId: '',
-          warehouseId: '',
+          warehouseId: line.warehouseId ?? '',
+          sourceTransactionId: line.transactionId ?? undefined,
+          originalWarehouseId: line.warehouseId ?? '',
           originalDispatchQty: line.quantity,
         }));
 
         setLines(normalizeLines(newLines, selectedJob));
-        setNotes(entryData.notes || '');
+        setOverrideReason(parseOverrideReason(entryData.notes || ''));
+        setNotes(stripOverrideReason(entryData.notes || ''));
       } else {
         setLines(normalizeLines([emptyLine(selectedJob)], selectedJob));
         setNotes('');
+        setOverrideReason('');
       }
     }
   }, [selectedJob, date, entryData]);
@@ -202,6 +320,7 @@ export default function DispatchMaterialsPage() {
     // Clear materials and notes, reset to 5 rows
     setLines(normalizeLines([emptyLine()]));
     setNotes('');
+    setOverrideReason('');
     // Apply the change
     if (changeWarningModal.pendingChange.type === 'job') {
       setSelectedJob(changeWarningModal.pendingChange.newValue);
@@ -225,6 +344,19 @@ export default function DispatchMaterialsPage() {
     () => lines.filter((line) => line.materialId || line.dispatchQty || line.returnQty),
     [lines]
   );
+  const budgetWarningLines = useMemo(
+    () =>
+      lines
+        .filter((line) => line.materialId && line.dispatchQty)
+        .map((line) => ({
+          materialId: line.materialId,
+          quantity: Number.parseFloat(line.dispatchQty) || 0,
+          quantityUomId: line.quantityUomId || undefined,
+          returnQty: line.returnQty ? Number.parseFloat(line.returnQty) || 0 : undefined,
+        }))
+        .filter((line) => line.quantity > 0),
+    [lines]
+  );
 
   const totalDispatchQty = useMemo(
     () =>
@@ -244,12 +376,64 @@ export default function DispatchMaterialsPage() {
     [lines]
   );
 
+  const overrideSignals = useMemo(() => {
+    let negativeStockLineCount = 0;
+    for (const line of lines) {
+      if (!line.materialId || !line.dispatchQty || !line.warehouseId) continue;
+      const qty = Number.parseFloat(line.dispatchQty);
+      const mat = getMaterial(line.materialId);
+      if (!mat || !mat.allowNegativeConsumption || !Number.isFinite(qty) || qty <= 0) continue;
+      const baseQty = qtyInBase(mat.materialUoms, line.quantityUomId, qty);
+      const originalQty = line.originalDispatchQty ? parseFloat(String(line.originalDispatchQty)) : 0;
+      const originalWarehouseMatches = line.originalWarehouseId && line.originalWarehouseId === line.warehouseId;
+      const availableStock = getWarehouseBaseStock(mat, line.warehouseId) + (originalWarehouseMatches ? originalQty : 0);
+      if (availableStock + 0.0005 < baseQty) {
+        negativeStockLineCount += 1;
+      }
+    }
+
+    const budgetWarningCount = budgetWarning?.warningCount ?? 0;
+    return {
+      negativeStockLineCount,
+      budgetWarningCount,
+      requiresReason: negativeStockLineCount > 0 || budgetWarningCount > 0,
+    };
+  }, [budgetWarning, lines, materials]);
+
   // Check if any line has actual data (not empty)
   const hasData = () => lines.some((l) => l.materialId || l.dispatchQty || l.returnQty);
 
-  const removeLine = (id: string) => {
-    setLines((prev) => normalizeLines(prev.filter((l) => l.id !== id), selectedJob));
-  };
+  useEffect(() => {
+    if (!selectedJob || budgetWarningLines.length === 0) {
+      setBudgetWarning(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await getDispatchBudgetWarning({
+            jobId: selectedJob,
+            postingDate: date,
+            lines: budgetWarningLines,
+          }).unwrap();
+          if (!cancelled) {
+            setBudgetWarning(result.warningCount > 0 ? result : null);
+          }
+        } catch {
+          if (!cancelled) {
+            setBudgetWarning(null);
+          }
+        }
+      })();
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [budgetWarningLines, date, getDispatchBudgetWarning, selectedJob]);
 
   const updateLine = (id: string, field: keyof Line, value: string) => {
     setLines((prev) =>
@@ -277,6 +461,51 @@ export default function DispatchMaterialsPage() {
     );
   };
 
+  const addLine = () => {
+    setLines((prev) => normalizeLines([...prev, emptyLine(selectedJob)], selectedJob));
+  };
+
+  const removeLine = (id: string) => {
+    setLines((prev) => normalizeLines(prev.filter((line) => line.id !== id), selectedJob));
+  };
+
+  const setGridColumnVisibility = (key: string) => {
+    setGridColumns((current) => {
+      const visibleCount = current.filter((column) => column.visible).length;
+      return current.map((column) => {
+        if (column.key !== key) return column;
+        if (column.visible && visibleCount === 1) return column;
+        return { ...column, visible: !column.visible };
+      });
+    });
+  };
+
+  const moveGridColumn = (key: string, direction: 'left' | 'right') => {
+    setGridColumns((current) => {
+      const index = current.findIndex((column) => column.key === key);
+      if (index < 0) return current;
+      const targetIndex = direction === 'left' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= current.length) return current;
+      const next = [...current];
+      const [column] = next.splice(index, 1);
+      next.splice(targetIndex, 0, column);
+      return next;
+    });
+  };
+
+  const resizeGridColumn = (key: string, width: number) => {
+    setGridColumns((current) =>
+      current.map((column) =>
+        column.key === key
+          ? {
+              ...column,
+              width: Math.max(column.minWidth ?? 64, Math.min(column.maxWidth ?? 420, width)),
+            }
+          : column
+      )
+    );
+  };
+
   // Execute the actual batch dispatch
   const executeSubmit = async (linesToSubmit: Line[]) => {
     try {
@@ -284,6 +513,7 @@ export default function DispatchMaterialsPage() {
         type:  'STOCK_OUT',
         jobId: selectedJob || undefined,
         notes: notes?.trim() || undefined,
+        overrideReason: overrideReason.trim() || undefined,
         date,
         existingTransactionIds: existingEntry?.transactionIds,
         lines: linesToSubmit.map((l) => ({
@@ -299,6 +529,7 @@ export default function DispatchMaterialsPage() {
       setLines([]);
       setSelectedJob('');
       setNotes('');
+      setOverrideReason('');
       setExistingEntry(null);
     } catch (err: any) {
       toast.error(err?.data?.error ?? 'Dispatch failed');
@@ -316,8 +547,13 @@ export default function DispatchMaterialsPage() {
       toast.error('Add at least one material');
       return;
     }
-    if (warehouseMode === 'REQUIRED' && validLines.some((line) => !line.warehouseId)) {
+    if (validLines.some((line) => !line.warehouseId)) {
       toast.error('Select a warehouse for each dispatch line');
+      return;
+    }
+
+    if (overrideSignals.requiresReason && !overrideReason.trim()) {
+      toast.error('Enter an override reason before saving this dispatch');
       return;
     }
 
@@ -348,10 +584,10 @@ export default function DispatchMaterialsPage() {
         return;
       }
 
-      // Fourth check: Parse stock value correctly
-      const currentStock = typeof mat.currentStock === 'number' ? mat.currentStock : parseFloat(String(mat.currentStock));
-      if (isNaN(currentStock) || (!mat.allowNegativeConsumption && currentStock < 0)) {
-        toast.error(`Invalid stock value for ${mat.name}: ${mat.currentStock}`);
+      // Fourth check: Warehouse stock is valid
+      const selectedWarehouseStock = getWarehouseBaseStock(mat, line.warehouseId);
+      if (!mat.allowNegativeConsumption && selectedWarehouseStock < 0) {
+        toast.error(`Invalid warehouse stock value for ${mat.name}`);
         return;
       }
 
@@ -365,20 +601,21 @@ export default function DispatchMaterialsPage() {
       // Sixth check: Sufficient stock (compare in base UOM)
       const baseQty = qtyInBase(mat.materialUoms, line.quantityUomId, qty);
       const originalQty = line.originalDispatchQty ? parseFloat(String(line.originalDispatchQty)) : 0;
+      const originalWarehouseMatches = line.originalWarehouseId && line.originalWarehouseId === line.warehouseId;
       if (!mat.allowNegativeConsumption) {
         if (isNaN(originalQty)) {
-          const availableStock = currentStock;
+          const availableStock = selectedWarehouseStock;
           if (availableStock < baseQty) {
             toast.error(
-              `Insufficient stock for ${mat.name}. Requested: ${baseQty.toFixed(3)} ${mat.unit} (from entry), Available: ${availableStock.toFixed(3)} ${mat.unit}`
+              `Insufficient stock for ${mat.name} in selected warehouse. Requested: ${baseQty.toFixed(3)} ${mat.unit}, Available: ${availableStock.toFixed(3)} ${mat.unit}`
             );
             return;
           }
         } else {
-          const availableStock = currentStock + originalQty;
+          const availableStock = selectedWarehouseStock + (originalWarehouseMatches ? originalQty : 0);
           if (availableStock < baseQty) {
             toast.error(
-              `Insufficient stock for ${mat.name}. Requested: ${baseQty.toFixed(3)} ${mat.unit} (from entry), Available: ${availableStock.toFixed(3)} ${mat.unit}`
+              `Insufficient stock for ${mat.name} in selected warehouse. Requested: ${baseQty.toFixed(3)} ${mat.unit}, Available: ${availableStock.toFixed(3)} ${mat.unit}`
             );
             return;
           }
@@ -439,11 +676,49 @@ export default function DispatchMaterialsPage() {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 dark:border-slate-800 dark:bg-slate-800 sm:grid-cols-3">
+      {budgetWarning && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-600/10 p-4">
+          <p className="text-sm font-medium text-amber-300">
+            Budget warning: this dispatch may exceed the variation job material budget.
+          </p>
+          <div className="mt-3 space-y-2">
+            {budgetWarning.rows.slice(0, 4).map((row) => (
+              <div key={row.materialId} className="rounded-md bg-slate-950/30 px-3 py-2 text-xs text-slate-200">
+                <span className="font-semibold text-white">{row.materialName}</span>
+                {' · '}
+                projected {row.projectedIssuedBaseQuantity.toFixed(3)} {row.baseUnit}
+                {' vs budget '}
+                {row.estimatedBaseQuantity.toFixed(3)} {row.baseUnit}
+                {row.quantityOverrun > 0.0005 ? ` · over by ${row.quantityOverrun.toFixed(3)} ${row.baseUnit}` : ''}
+              </div>
+            ))}
+            {budgetWarning.warningCount > 4 && (
+              <p className="text-xs text-amber-200">+{budgetWarning.warningCount - 4} more material warning(s)</p>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-amber-200/90">
+            Enter an override reason below if this extra issue is intentional.
+          </p>
+        </div>
+      )}
+
+      {overrideSignals.negativeStockLineCount > 0 && (
+        <div className="rounded-lg border border-red-500/30 bg-red-600/10 p-4">
+          <p className="text-sm font-medium text-red-300">
+            Override required: {overrideSignals.negativeStockLineCount} line(s) exceed available warehouse FIFO stock on a negative-consumption material.
+          </p>
+          <p className="mt-2 text-xs text-red-200/90">
+            Saving will be blocked unless you capture the reason for this stock exception.
+          </p>
+        </div>
+      )}
+
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 dark:border-slate-800 dark:bg-slate-800 sm:grid-cols-4">
         {[
           { label: 'Rows in use', value: String(populatedLines.length), note: `${lines.length} open lines` },
           { label: 'Dispatch qty', value: totalDispatchQty.toFixed(3), note: 'Entered total' },
           { label: 'Return qty', value: totalReturnQty.toFixed(3), note: 'Entered total' },
+          { label: 'Budget warnings', value: budgetWarningLoading ? '...' : String(budgetWarning?.warningCount ?? 0), note: 'Variation budget check' },
         ].map((item) => (
           <div key={item.label} className="bg-white px-4 py-3 dark:bg-slate-950/80">
             <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">{item.label}</p>
@@ -465,7 +740,7 @@ export default function DispatchMaterialsPage() {
       >
         {/* Header */}
         <div className="border-b border-slate-200 p-4 dark:border-slate-800 sm:p-5">
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.25fr)_220px_minmax(220px,0.85fr)]">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_220px_minmax(220px,0.8fr)_minmax(220px,0.8fr)]">
             <div>
               <SearchSelect
                 label="Job"
@@ -510,171 +785,34 @@ export default function DispatchMaterialsPage() {
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               />
             </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">
+                Override Reason
+              </label>
+              <input
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                placeholder={overrideSignals.requiresReason ? 'Required for this dispatch' : 'Only needed for exceptions'}
+                className={`w-full rounded-xl border px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 dark:bg-slate-900 dark:text-white ${
+                  overrideSignals.requiresReason
+                    ? 'border-amber-400 bg-amber-50 focus:ring-amber-500 dark:border-amber-500/40 dark:bg-amber-500/10'
+                    : 'border-slate-200 bg-white focus:ring-emerald-500 dark:border-slate-700'
+                }`}
+              />
+            </div>
           </div>
         </div>
 
         {/* Table */}
-        <div className="overflow-hidden border-b border-slate-200 dark:border-slate-800">
-          <div className="overflow-x-auto overscroll-x-contain">
-          <table className="min-w-[940px] w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/80">
-                <th className="w-8 px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">#</th>
-                <th className="min-w-[280px] px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Material</th>
-                <th className="w-[150px] px-2 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">UOM</th>
-                <th className="w-[120px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">In Stock</th>
-                <th className="w-[138px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Dispatch Qty</th>
-                <th className="w-[138px] px-2 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Return Qty</th>
-                {showWarehouseColumn ? (
-                  <th className="w-[180px] px-2 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Warehouse</th>
-                ) : null}
-                <th className="w-[56px] px-2 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500">Clr</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-sm">
-                    No materials added yet. Click &quot;+ Add&quot; to start.
-                  </td>
-                </tr>
-              ) : (
-                lines.map((line, idx) => {
-                  const mat = getMaterial(line.materialId);
-
-                  return (
-                    <tr key={line.id} className="align-top border-b border-slate-200 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-900/40">
-                      <td className="px-3 py-2 font-mono text-xs text-slate-500 dark:text-slate-500">{idx + 1}</td>
-
-                      <td className="min-w-0 px-3 py-2">
-                        <div className="min-w-0">
-                          <div className="min-w-0">
-                            <SearchSelect
-                              value={line.materialId}
-                              onChange={(id) => updateLine(line.id, 'materialId', id)}
-                              onBlurInputValue={(inputValue) => {
-                                if (!inputValue.trim() && line.materialId) {
-                                  updateLine(line.id, 'materialId', '');
-                                }
-                              }}
-                              placeholder="Search materials..."
-                              disabled={!selectedJob}
-                              items={materials.filter((m) => m.isActive).map((m) => ({
-                                id: m.id,
-                                label: m.name,
-                                searchText: `${m.currentStock} ${m.unit}`,
-                              }))}
-                              dropdownInPortal
-                              inputProps={{ className: 'min-w-0 pr-8' }}
-                              renderItem={(item) => (
-                                <div className="flex w-full min-w-0 items-center justify-between gap-3">
-                                  <div className="truncate font-medium text-slate-900 dark:text-white">{item.label}</div>
-                                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">
-                                    {item.searchText}
-                                  </span>
-                                </div>
-                              )}
-                            />
-                          </div>
-                          {mat && line.materialId && (
-                            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                            </div>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-2 py-2 text-center text-slate-400 text-xs">
-                        {mat?.materialUoms && mat.materialUoms.length > 0 ? (
-                          <select
-                            value={line.quantityUomId}
-                            onChange={(e) => updateLine(line.id, 'quantityUomId', e.target.value)}
-                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
-                          >
-                            {mat.materialUoms.map((u: MaterialUomDto) => (
-                              <option key={u.id} value={u.isBase ? '' : u.id}>
-                                {u.unitName}
-                                {u.isBase ? ' (base)' : ` (=${u.factorToBase} ${mat.unit})`}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span>{mat?.unit ?? '—'}</span>
-                        )}
-                      </td>
-
-                      <td className="px-2 py-2 text-right font-mono text-sm text-emerald-700 dark:text-emerald-300">
-                        {mat?.currentStock ?? '—'}
-                      </td>
-
-                      <td className="px-2 py-2">
-                        <input
-                          type="number"
-                          min="0.001"
-                          step="any"
-                          disabled={!selectedJob || !mat || mat.currentStock === 0}
-                          value={line.dispatchQty}
-                          onChange={(e) => updateLine(line.id, 'dispatchQty', e.target.value)}
-                          title={!mat ? '' : mat.currentStock === 0 ? 'No stock available for this material' : ''}
-                          placeholder="0.00"
-                          className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-right text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
-                        />
-                      </td>
-
-                      <td className="px-2 py-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={line.returnQty}
-                          onChange={(e) => updateLine(line.id, 'returnQty', e.target.value)}
-                          placeholder="0.00"
-                          disabled={!selectedJob}
-                          className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-right text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
-                        />
-                      </td>
-                      {showWarehouseColumn ? (
-                        <td className="px-2 py-2">
-                          <select
-                            value={line.warehouseId}
-                            onChange={(e) => updateLine(line.id, 'warehouseId', e.target.value)}
-                            disabled={!selectedJob}
-                            className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
-                          >
-                            <option value="">
-                              {warehouseMode === 'REQUIRED' ? 'Select warehouse...' : 'Use fallback/default'}
-                            </option>
-                            {warehouses.map((warehouse) => (
-                              <option key={warehouse.id} value={warehouse.id}>
-                                {warehouse.name}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                      ) : null}
-
-                      <td className="px-2 py-2 text-center">
-                        <button
-                          type="button"
-                          onClick={() => removeLine(line.id)}
-                          className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:text-slate-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-                          aria-label={`Clear row ${idx + 1}`}
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="h-4 dark:bg-slate-950/70" />
+        <DispatchLineGrid
+          lines={lines}
+          materials={materials}
+          warehouses={warehouses}
+          selectedJob={selectedJob}
+          showWarehouseColumn={showWarehouseColumn}
+          emptyMessage="No materials added yet. Click + Add to start."
+          onUpdateLine={updateLine}
+        />
       </form>
 
       {/* Change Warning Modal */}

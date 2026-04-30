@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { dateFromYmd, ymdFromInput } from '@/lib/hr/workDate';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
@@ -152,5 +153,13 @@ export async function POST(req: Request) {
   }
 
   if (txOps.length) await prisma.$transaction(txOps);
+  if (txOps.length > 0) {
+    publishLiveUpdate({
+      companyId,
+      channel: 'hr',
+      entity: 'attendance',
+      action: 'changed',
+    });
+  }
   return successResponse({ ok: true, affectedRows: txOps.length });
 }

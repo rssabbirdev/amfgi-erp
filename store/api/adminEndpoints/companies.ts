@@ -6,7 +6,7 @@ export interface Company {
   slug: string;
   description?: string;
   isActive: boolean;
-  warehouseMode?: 'DISABLED' | 'OPTIONAL' | 'REQUIRED';
+  warehouseMode?: 'REQUIRED';
   stockFallbackWarehouseId?: string | null;
   stockFallbackWarehouse?: {
     id: string;
@@ -21,7 +21,10 @@ export const companiesApi = adminApi.injectEndpoints({
     getCompanies: builder.query<Company[], void>({
       query: () => '/companies',
       transformResponse: (r: { data: Company[] }) => r.data,
-      providesTags: [{ type: 'Company', id: 'LIST' }, ...([] as any[])],
+      providesTags: (result) =>
+        result
+          ? [{ type: 'Company', id: 'LIST' }, ...result.map((company) => ({ type: 'Company' as const, id: company.id }))]
+          : [{ type: 'Company', id: 'LIST' }],
     }),
 
     createCompany: builder.mutation<Company, Partial<Company>>({

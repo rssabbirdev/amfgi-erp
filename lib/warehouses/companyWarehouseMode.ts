@@ -11,10 +11,7 @@ export type CompanyWarehouseConfig = {
 };
 
 export function normalizeWarehouseMode(value: unknown): WarehouseMode {
-  if (value === WarehouseMode.OPTIONAL || value === WarehouseMode.REQUIRED) {
-    return value;
-  }
-  return WarehouseMode.DISABLED;
+  return WarehouseMode.REQUIRED;
 }
 
 export async function ensureCompanyFallbackWarehouse(

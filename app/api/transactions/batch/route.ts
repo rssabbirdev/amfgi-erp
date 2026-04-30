@@ -6,19 +6,106 @@ import { decimalEqualsNullable, decimalToNumber, decimalToNumberOrZero } from '@
 import { z } from 'zod';
 import { calculateFIFOConsumption } from '@/lib/utils/fifoConsumption';
 import { createBatchData } from '@/lib/utils/stockBatchManagement';
+import {
+  consumeTransactionBatchQuantities,
+  createTransactionBatchRecords,
+  normalizeTransactionBatchLinks,
+  restoreTransactionBatchQuantities,
+  type TransactionBatchLinkInput,
+} from '@/lib/utils/transactionBatchLinks';
 import { resolveQuantityToBase, resolveFactorToBase } from '@/lib/utils/materialUomDb';
 import { applyMaterialWarehouseDelta, resolveEffectiveWarehouse } from '@/lib/warehouses/stockWarehouses';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import {
   buildCustomerDriveFolderName,
   buildJobDriveFolderName,
   buildSignedDeliveryNoteDriveFileName,
   moveDriveFile,
 } from '@/lib/utils/googleDrive';
+import { upsertStockExceptionApproval } from '@/lib/utils/stockExceptionApproval';
 
 function parseDeliveryNoteLabel(notes?: string | null): string {
   const match = notes?.match(/--- DELIVERY NOTE #(\d+)/);
   const raw = match?.[1] ?? '';
   return `DN${(raw || '0').padStart(3, '0')}`;
+}
+
+function buildStockInReceiptNote(notes?: string, receiptNumber?: string) {
+  const trimmed = notes?.trim() || '';
+  if (!receiptNumber) return trimmed || null;
+  const marker = `[RECEIPT:${receiptNumber}]`;
+  return trimmed ? `${trimmed}\n${marker}` : marker;
+}
+
+function buildStockOutOverrideNote(notes?: string, overrideReason?: string) {
+  const trimmedNotes = notes?.trim() || '';
+  const trimmedReason = overrideReason?.trim() || '';
+  if (!trimmedReason) return trimmedNotes || null;
+  const marker = `[OVERRIDE_REASON:${trimmedReason}]`;
+  return trimmedNotes ? `${marker}\n${trimmedNotes}` : marker;
+}
+
+function buildReturnBatchLinks(
+  stockOutTxnId: string,
+  materialId: string,
+  warehouseId: string,
+  txDate: Date,
+  quantityToReturn: number,
+  sourceLinks: readonly TransactionBatchLinkInput[],
+  fallbackUnitCost: number,
+  notes?: string | null
+) {
+  let remaining = quantityToReturn;
+  const returnLinks: TransactionBatchLinkInput[] = [];
+  let syntheticBatch:
+    | {
+        materialId: string;
+        warehouseId: string;
+        batchNumber: string;
+        quantityReceived: number;
+        quantityAvailable: number;
+        unitCost: number;
+        totalCost: number;
+        receivedDate: Date;
+        supplier: string;
+        notes: string;
+      }
+    | null = null;
+
+  for (const sourceLink of sourceLinks) {
+    if (remaining <= 0) break;
+    const quantityFromBatch = Math.min(remaining, sourceLink.quantityFromBatch);
+    if (quantityFromBatch <= 0) continue;
+
+    returnLinks.push({
+      batchId: sourceLink.batchId,
+      batchNumber: sourceLink.batchNumber,
+      quantityFromBatch,
+      unitCost: sourceLink.unitCost,
+      costAmount: quantityFromBatch * sourceLink.unitCost,
+    });
+    remaining -= quantityFromBatch;
+  }
+
+  if (remaining > 0) {
+    const syntheticBatchNumber = `RETURN-${stockOutTxnId.slice(-8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+    syntheticBatch = {
+      materialId,
+      warehouseId,
+      batchNumber: syntheticBatchNumber,
+      quantityReceived: remaining,
+      quantityAvailable: remaining,
+      unitCost: fallbackUnitCost,
+      totalCost: remaining * fallbackUnitCost,
+      receivedDate: txDate,
+      supplier: 'Return Adjustment',
+      notes: notes?.trim()
+        ? `Auto-created return batch for previously batchless quantity. ${notes.trim()}`
+        : 'Auto-created return batch for previously batchless quantity.',
+    };
+  }
+
+  return { returnLinks, syntheticBatch };
 }
 
 const LineSchema = z.object({
@@ -37,6 +124,7 @@ const BatchSchema = z.object({
   jobId:         z.string().optional(),
   supplier:      z.string().max(100).optional(),
   supplierId:    z.string().min(1).optional(),
+  overrideReason: z.string().max(500).optional(),
   notes:         z.string().max(20000).optional(),
   date:          z.string().optional(),
   isDeliveryNote: z.boolean().optional(),
@@ -50,10 +138,21 @@ const BatchSchema = z.object({
     unitCost: z.number().finite(),
     quantityUomId: z.string().optional(),
   })).optional(),
-}).refine(
-  (data) => data.lines.length > 0 || data.isDeliveryNote === true,
-  { message: 'At least one line item required, or enable custom items only for delivery notes', path: ['lines'] }
-);
+})
+  .refine(
+    (data) => data.lines.length > 0 || data.isDeliveryNote === true,
+    { message: 'At least one line item required, or enable custom items only for delivery notes', path: ['lines'] }
+  )
+  .refine(
+    (data) => data.type !== 'STOCK_IN' || Boolean(data.receiptNumber),
+    { message: 'Receipt number is required for goods receipt', path: ['receiptNumber'] }
+  )
+  .refine(
+    (data) =>
+      (data.type !== 'STOCK_IN' && data.type !== 'STOCK_OUT') ||
+      data.lines.every((line) => Boolean(line.warehouseId?.trim())),
+    { message: 'Warehouse is required for every stock line', path: ['lines'] }
+  );
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -72,6 +171,7 @@ export async function POST(req: Request) {
     jobId,
     supplier,
     supplierId,
+    overrideReason,
     notes,
     date,
     isDeliveryNote,
@@ -96,6 +196,7 @@ export async function POST(req: Request) {
 
   const txDate = date ? new Date(date) : new Date();
   const companyId = session.user.activeCompanyId;
+  const actorName = session.user.name || session.user.email || session.user.id || null;
 
   if (supplierId) {
     const supOk = await prisma.supplier.findFirst({
@@ -109,6 +210,7 @@ export async function POST(req: Request) {
     const actorFields = buildTransactionActorFields(session.user);
     const result = await prisma.$transaction(async (tx) => {
       const created: string[] = [];
+      const materialCostById = new Map<string, number>();
       let preservedSignedCopy:
         | {
             signedCopyDriveId: string;
@@ -118,6 +220,16 @@ export async function POST(req: Request) {
 
       // Delete existing transactions and reverse stock if updating
       if (existingTransactionIds && existingTransactionIds.length > 0) {
+        await tx.stockExceptionApproval.deleteMany({
+          where: {
+            companyId,
+            exceptionType: 'DISPATCH_OVERRIDE',
+            referenceId: {
+              in: existingTransactionIds,
+            },
+          },
+        });
+
         for (const txnId of existingTransactionIds) {
           const existingTxn = await tx.transaction.findUnique({
             where: { id: txnId },
@@ -157,16 +269,10 @@ export async function POST(req: Request) {
 
               // Restore batch quantities if FIFO data exists
               if (existingTxn.batchesUsed && existingTxn.batchesUsed.length > 0) {
-                for (const batchUsed of existingTxn.batchesUsed) {
-                  await tx.stockBatch.update({
-                    where: { id: batchUsed.batchId },
-                    data: {
-                      quantityAvailable: {
-                        increment: batchUsed.quantityFromBatch,
-                      },
-                    },
-                  });
-                }
+                await restoreTransactionBatchQuantities(
+                  tx,
+                  normalizeTransactionBatchLinks(existingTxn.batchesUsed)
+                );
               }
             } else if (existingTxn.type === 'STOCK_IN') {
               // STOCK_IN increased stock, so reduce it
@@ -198,6 +304,9 @@ export async function POST(req: Request) {
                 where: {
                   parentTransactionId: existingTxn.id,
                 },
+                include: {
+                  batchesUsed: true,
+                },
               });
 
               for (const returnTxn of returnTxns) {
@@ -222,6 +331,14 @@ export async function POST(req: Request) {
                   returnWarehouse.warehouseId,
                   -decimalToNumberOrZero(returnTxn.quantity)
                 );
+
+                if (returnTxn.batchesUsed && returnTxn.batchesUsed.length > 0) {
+                  await consumeTransactionBatchQuantities(
+                    tx,
+                    normalizeTransactionBatchLinks(returnTxn.batchesUsed),
+                    'Stock changed while removing a linked return. Please refresh and submit again.'
+                  );
+                }
 
                 // Delete the RETURN transaction (cascade will remove batchesUsed)
                 await tx.transaction.delete({
@@ -263,11 +380,27 @@ export async function POST(req: Request) {
           returnQtyInput > 0
             ? await resolveQuantityToBase(tx, line.materialId, returnQtyInput, line.quantityUomId)
             : 0;
+        if (returnBase > baseQuantity) {
+          throw new Error(`Return quantity cannot exceed dispatch quantity for ${mat.name}`);
+        }
         const effectiveWarehouse = await resolveEffectiveWarehouse(tx, {
           companyId,
           materialId: line.materialId,
           warehouseId: line.warehouseId ?? warehouseId,
         });
+        const warehouseStockRow = await tx.materialWarehouseStock.findUnique({
+          where: {
+            companyId_materialId_warehouseId: {
+              companyId,
+              materialId: line.materialId,
+              warehouseId: effectiveWarehouse.warehouseId,
+            },
+          },
+          select: {
+            currentStock: true,
+          },
+        });
+        const currentWarehouseStock = decimalToNumberOrZero(warehouseStockRow?.currentStock);
 
         if (type === 'STOCK_OUT') {
           const fallbackUnitCost = decimalToNumberOrZero(mat.unitCost);
@@ -288,36 +421,43 @@ export async function POST(req: Request) {
             },
           });
 
-          // If no batches exist but currentStock > 0, create opening balance batch
-          const currentStock = decimalToNumberOrZero(mat.currentStock);
-          if (batches.length === 0 && currentStock > 0) {
+          // If no batches exist but warehouse stock > 0, create an opening batch for that warehouse.
+          if (batches.length === 0 && currentWarehouseStock > 0) {
             const unitCost = decimalToNumberOrZero(mat.unitCost);
-            const totalCost = currentStock * unitCost;
+            const totalCost = currentWarehouseStock * unitCost;
             const openingBatch = await tx.stockBatch.create({
               data: {
                 companyId,
                 materialId: line.materialId,
                 warehouseId: effectiveWarehouse.warehouseId,
                 batchNumber: `OPENING-${line.materialId}-${Date.now()}`,
-                quantityReceived: currentStock,
-                quantityAvailable: currentStock,
+                quantityReceived: currentWarehouseStock,
+                quantityAvailable: currentWarehouseStock,
                 unitCost: unitCost,
                 totalCost: totalCost,
                 receivedDate: new Date('2020-01-01'), // Historical date
                 supplier: 'Opening Balance',
-                notes: 'Auto-created opening balance for pre-FIFO material',
+                notes: 'Auto-created opening balance for pre-FIFO warehouse stock',
               },
             });
             batches = [openingBatch];
           }
 
-          if (!canGoNegative && (batches.length === 0 || currentStock < baseQuantity)) {
-            throw new Error(`Insufficient stock for ${mat.name}. Available: ${currentStock}`);
+          if (!canGoNegative && (batches.length === 0 || currentWarehouseStock < baseQuantity)) {
+            throw new Error(
+              `Insufficient stock for ${mat.name} in ${effectiveWarehouse.warehouseName}. Available: ${currentWarehouseStock}`
+            );
           }
 
           const availableFromBatches = batches.reduce((sum, batch) => sum + decimalToNumberOrZero(batch.quantityAvailable), 0);
           const quantityFromBatches = canGoNegative ? Math.min(baseQuantity, availableFromBatches) : baseQuantity;
           const shortfallQuantity = Math.max(0, baseQuantity - quantityFromBatches);
+
+          if (canGoNegative && shortfallQuantity > 0.0005 && !overrideReason?.trim()) {
+            throw new Error(
+              `Override reason is required for ${mat.name} because the dispatch exceeds available FIFO stock in ${effectiveWarehouse.warehouseName}.`
+            );
+          }
 
           const fifoResult =
             quantityFromBatches > 0
@@ -345,20 +485,10 @@ export async function POST(req: Request) {
           const averageCost = baseQuantity > 0 ? totalCost / baseQuantity : 0;
 
           // Update batch quantities and create TransactionBatch entries
-          const batchLinkData = [];
+          const batchLinkData: TransactionBatchLinkInput[] = [];
           for (const batchUsed of fifoResult.batchesUsed) {
             // batchUsed.batchId is already the Prisma string ID from FIFO calculation
             const prismaId = batchUsed.batchId.toString();
-
-            await tx.stockBatch.update({
-              where: { id: prismaId },
-              data: {
-                quantityAvailable: {
-                  decrement: batchUsed.quantityFromBatch,
-                },
-              },
-            });
-
             batchLinkData.push({
               batchNumber: batchUsed.batchNumber,
               quantityFromBatch: batchUsed.quantityFromBatch,
@@ -367,16 +497,42 @@ export async function POST(req: Request) {
               batchId: prismaId,
             });
           }
+          await consumeTransactionBatchQuantities(
+            tx,
+            batchLinkData,
+            `Stock changed while dispatching ${mat.name}. Please refresh and submit again.`
+          );
 
           // Update material stock
-          await tx.material.update({
-            where: { id: line.materialId },
-            data: {
-              currentStock: {
-                decrement: baseQuantity,
+          if (canGoNegative) {
+            await tx.material.update({
+              where: { id: line.materialId },
+              data: {
+                currentStock: {
+                  decrement: baseQuantity,
+                },
               },
-            },
-          });
+            });
+          } else {
+            const stockUpdateResult = await tx.material.updateMany({
+              where: {
+                id: line.materialId,
+                currentStock: {
+                  gte: baseQuantity,
+                },
+              },
+              data: {
+                currentStock: {
+                  decrement: baseQuantity,
+                },
+              },
+            });
+            if (stockUpdateResult.count === 0) {
+              throw new Error(
+                `Insufficient stock for ${mat.name}. Stock changed by another user; refresh and retry.`
+              );
+            }
+          }
           await applyMaterialWarehouseDelta(
             tx,
             companyId,
@@ -396,7 +552,7 @@ export async function POST(req: Request) {
               jobId: jobId || null,
               totalCost,
               averageCost,
-              notes: notes || null,
+              notes: buildStockOutOverrideNote(notes, overrideReason),
               isDeliveryNote: isDeliveryNote || false,
               signedCopyDriveId: preservedSignedCopy && created.length === 0 ? preservedSignedCopy.signedCopyDriveId : null,
               signedCopyUrl: preservedSignedCopy && created.length === 0 ? preservedSignedCopy.signedCopyUrl : null,
@@ -405,19 +561,28 @@ export async function POST(req: Request) {
             },
           });
 
-          // Create TransactionBatch junction entries
-          for (const batchLink of batchLinkData) {
-            await tx.transactionBatch.create({
-              data: {
-                transactionId: stockOutTxn.id,
-                batchId: batchLink.batchId,
-                batchNumber: batchLink.batchNumber,
-                quantityFromBatch: batchLink.quantityFromBatch,
-                unitCost: batchLink.unitCost,
-                costAmount: batchLink.costAmount,
-              },
+          if (overrideReason?.trim()) {
+            const isAutoApproved = Boolean(session.user.isSuperAdmin);
+            await upsertStockExceptionApproval(tx, {
+              companyId,
+              exceptionType: 'DISPATCH_OVERRIDE',
+              referenceId: stockOutTxn.id,
+              referenceNumber: stockOutTxn.id,
+              reason: overrideReason.trim(),
+              createdById: session.user.id ?? null,
+              createdByName: actorName,
+              status: isAutoApproved ? 'APPROVED' : 'PENDING',
+              decidedById: isAutoApproved ? (session.user.id ?? null) : null,
+              decidedByName: isAutoApproved ? actorName : null,
+              decidedAt: isAutoApproved ? txDate : null,
+              decisionNote: isAutoApproved
+                ? 'Auto-approved because override was posted by super admin.'
+                : null,
             });
           }
+
+          // Create TransactionBatch junction entries
+          await createTransactionBatchRecords(tx, stockOutTxn.id, batchLinkData);
 
           created.push(stockOutTxn.id);
 
@@ -454,6 +619,41 @@ export async function POST(req: Request) {
                 ...actorFields,
               },
             });
+
+            const { returnLinks, syntheticBatch } = buildReturnBatchLinks(
+              stockOutTxn.id,
+              line.materialId,
+              effectiveWarehouse.warehouseId,
+              txDate,
+              returnBase,
+              batchLinkData,
+              averageCost || fallbackUnitCost,
+              notes || null
+            );
+
+            if (returnLinks.length > 0) {
+              await restoreTransactionBatchQuantities(tx, returnLinks);
+              await createTransactionBatchRecords(tx, returnTxn.id, returnLinks);
+            }
+
+            if (syntheticBatch) {
+              const createdReturnBatch = await tx.stockBatch.create({
+                data: {
+                  companyId,
+                  ...syntheticBatch,
+                },
+              });
+              await tx.transactionBatch.create({
+                data: {
+                  transactionId: returnTxn.id,
+                  batchId: createdReturnBatch.id,
+                  batchNumber: createdReturnBatch.batchNumber,
+                  quantityFromBatch: syntheticBatch.quantityReceived,
+                  unitCost: syntheticBatch.unitCost,
+                  costAmount: syntheticBatch.totalCost,
+                },
+              });
+            }
 
             created.push(returnTxn.id);
           }
@@ -501,14 +701,9 @@ export async function POST(req: Request) {
             baseQuantity
           );
 
-          // Update unit cost if provided (stored per base UOM)
+          // Capture unit cost updates (stored per base UOM) and apply once with price logging later.
           if (line.unitCost !== undefined) {
-            await tx.material.update({
-              where: { id: line.materialId },
-              data: {
-                unitCost: unitCostPerBase,
-              },
-            });
+            materialCostById.set(line.materialId, unitCostPerBase);
           }
 
           // Create STOCK_IN transaction
@@ -519,7 +714,7 @@ export async function POST(req: Request) {
               materialId: line.materialId,
               warehouseId: effectiveWarehouse.warehouseId,
               quantity: baseQuantity,
-              notes: notes || null,
+              notes: buildStockInReceiptNote(notes, receiptNumber),
               date: txDate,
               ...actorFields,
             },
@@ -529,27 +724,40 @@ export async function POST(req: Request) {
         }
       }
 
-      // Update material unit costs if provided and create price logs
+      // Update material unit costs and create price logs.
+      // Priority: explicit materialUpdates payload. Fallback: unitCost provided on STOCK_IN lines.
+      const requestedMaterialCostUpdates = new Map<string, number>();
       if (materialUpdates && materialUpdates.length > 0) {
         for (const update of materialUpdates) {
+          let currentPrice = decimalToNumber(update.unitCost) ?? 0;
+          if (update.quantityUomId) {
+            const factor = await resolveFactorToBase(tx, update.materialId, update.quantityUomId);
+            currentPrice = update.unitCost / factor;
+          }
+          requestedMaterialCostUpdates.set(update.materialId, currentPrice);
+        }
+      }
+      for (const [materialId, currentPrice] of materialCostById) {
+        if (!requestedMaterialCostUpdates.has(materialId)) {
+          requestedMaterialCostUpdates.set(materialId, currentPrice);
+        }
+      }
+
+      if (requestedMaterialCostUpdates.size > 0) {
+        for (const [materialId, currentPrice] of requestedMaterialCostUpdates) {
           const material = await tx.material.findUnique({
-            where: { id: update.materialId },
+            where: { id: materialId },
           });
 
           if (material) {
             const previousPrice = decimalToNumberOrZero(material.unitCost);
-            let currentPrice = decimalToNumber(update.unitCost) ?? 0;
-            if (update.quantityUomId) {
-              const factor = await resolveFactorToBase(tx, update.materialId, update.quantityUomId);
-              currentPrice = update.unitCost / factor;
-            }
 
             // Only create log if price changed
             if (!decimalEqualsNullable(previousPrice, currentPrice)) {
               await tx.priceLog.create({
                 data: {
                   companyId,
-                  materialId: update.materialId,
+                  materialId,
                   previousPrice: previousPrice,
                   currentPrice: currentPrice,
                   source: 'bill',
@@ -562,7 +770,7 @@ export async function POST(req: Request) {
 
             // Update material cost
             await tx.material.update({
-              where: { id: update.materialId },
+              where: { id: materialId },
               data: {
                 unitCost: currentPrice,
               },
@@ -630,6 +838,13 @@ export async function POST(req: Request) {
         }
       }
     }
+
+    publishLiveUpdate({
+      companyId,
+      channel: 'stock',
+      entity: type === 'STOCK_IN' ? 'receipt' : 'dispatch',
+      action: existingTransactionIds && existingTransactionIds.length > 0 ? 'updated' : 'created',
+    });
 
     return successResponse(result, 201);
   } catch (err: unknown) {

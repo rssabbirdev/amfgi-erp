@@ -42,6 +42,7 @@ export async function GET(req: Request) {
         id: true,
         materialId: true,
         warehouseId: true,
+        createdAt: true,
         warehouse: {
           select: {
             id: true,
@@ -84,17 +85,25 @@ export async function GET(req: Request) {
         });
 
         return {
+          transactionId: txn.id,
           materialId: txn.materialId,
           materialName: txn.material?.name ?? 'Unknown',
           unit: txn.material?.unit ?? '',
-          warehouseId: txn.warehouse?.id ?? txn.warehouseId ?? null,
+          warehouseId: txn.warehouseId ?? txn.warehouse?.id ?? null,
           warehouseName: txn.warehouse?.name ?? null,
           quantity: txn.quantity,
           returnQty: returnTxn?.quantity ?? 0,
-          transactionId: txn.id,
+          createdAt: txn.createdAt,
         };
       })
     );
+
+    lines.sort((a, b) => {
+      const createdAtDiff = new Date(String(a.createdAt)).getTime() - new Date(String(b.createdAt)).getTime();
+      if (createdAtDiff !== 0) return createdAtDiff;
+      if (a.materialId !== b.materialId) return String(a.materialId).localeCompare(String(b.materialId));
+      return String(a.warehouseId ?? '').localeCompare(String(b.warehouseId ?? ''));
+    });
 
     // Extract notes from the first transaction
     const notes = transactions[0]?.notes ?? '';

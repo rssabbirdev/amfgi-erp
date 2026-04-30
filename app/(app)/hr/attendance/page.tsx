@@ -1,51 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
+import { useGetHrAttendanceOverviewQuery } from '@/store/api/endpoints/hr';
 
 function todayYmd() {
   return new Date().toISOString().slice(0, 10);
 }
-
-type OverviewPayload = {
-  selectedDay: {
-    workDate: string;
-    attendanceRows: number;
-    hasAttendance: boolean;
-    schedule: {
-      id: string;
-      workDate: string;
-      title: string | null;
-      clientDisplayName: string | null;
-      status: 'DRAFT' | 'PUBLISHED' | 'LOCKED';
-      publishedAt: string | null;
-      lockedAt: string | null;
-      needsAttendance: boolean;
-      _count: {
-        assignments: number;
-        absences: number;
-      };
-    } | null;
-  };
-  monthStats: {
-    month: string;
-    publishedScheduleDays: number;
-    fulfilledScheduleDays: number;
-    pendingScheduleDays: number;
-    attendanceRowCount: number;
-  };
-  pendingSchedules: Array<{
-    id: string;
-    workDate: string;
-    title: string | null;
-    assignmentCount: number;
-    attendanceRows: number;
-  }>;
-  previousAttendanceDays: Array<{ workDate: string; rows: number }>;
-};
 
 function formatDateLabel(value: string) {
   try {
@@ -136,8 +100,6 @@ export default function HrAttendancePage() {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const [workDate] = useState(searchParams.get('workDate') || todayYmd());
-  const [loading, setLoading] = useState(true);
-  const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [convertingScheduleId, setConvertingScheduleId] = useState<string | null>(null);
   const [deletingDate, setDeletingDate] = useState<string | null>(null);
 
@@ -145,34 +107,11 @@ export default function HrAttendancePage() {
   const perms = (session?.user?.permissions ?? []) as string[];
   const canView = isSA || perms.includes('hr.attendance.view');
   const canEdit = isSA || perms.includes('hr.attendance.edit');
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (!canView) {
-        if (!cancelled) setLoading(false);
-        return;
-      }
-      if (!cancelled) setLoading(true);
-      const ovRes = await fetch(`/api/hr/attendance/overview?workDate=${encodeURIComponent(workDate)}`, {
-        cache: 'no-store',
-      });
-      const ovJson = await ovRes.json();
-      if (!cancelled && ovRes.ok && ovJson?.success) setOverview(ovJson.data);
-      if (!cancelled) setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [canView, workDate]);
-
-  const refreshOverview = async () => {
-    const ovRes = await fetch(`/api/hr/attendance/overview?workDate=${encodeURIComponent(workDate)}`, {
-      cache: 'no-store',
-    });
-    const ovJson = await ovRes.json();
-    if (ovRes.ok && ovJson?.success) setOverview(ovJson.data);
-  };
+  const {
+    data: overview,
+    isLoading: loading,
+    refetch: refreshOverview,
+  } = useGetHrAttendanceOverviewQuery(workDate, { skip: !canView });
 
   const convertScheduleToAttendance = async (scheduleId: string) => {
     setConvertingScheduleId(scheduleId);

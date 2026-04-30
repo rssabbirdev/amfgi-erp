@@ -1,5 +1,6 @@
 import { regenerateAttendanceBoilerplate } from '@/lib/hr/generateAttendanceFromSchedule';
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -23,6 +24,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     await regenerateAttendanceBoilerplate(prisma, id);
     const count = await prisma.attendanceEntry.count({
       where: { companyId, workDate: sch.workDate },
+    });
+    publishLiveUpdate({
+      companyId,
+      channel: 'hr',
+      entity: 'attendance',
+      action: 'changed',
     });
     return successResponse({ ok: true, attendanceRows: count });
   } catch (e) {

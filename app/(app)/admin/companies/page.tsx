@@ -25,7 +25,9 @@ type Company = {
 };
 
 export default function AdminCompaniesPage() {
-  const { data: companies = [], isFetching } = useGetCompaniesQuery();
+  const { data: companies = [], isFetching } = useGetCompaniesQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
   const [createCompany, { isLoading: isCreating }] = useCreateCompanyMutation();
   const [updateCompany, { isLoading: isUpdating }] = useUpdateCompanyMutation();
 

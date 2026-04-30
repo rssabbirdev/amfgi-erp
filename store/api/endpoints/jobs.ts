@@ -125,6 +125,30 @@ export interface JobCostEngineResult {
   issueReconcileCompatible: boolean;
 }
 
+export interface DispatchBudgetWarningRow {
+  materialId: string;
+  materialName: string;
+  baseUnit: string;
+  estimatedBaseQuantity: number;
+  currentIssuedBaseQuantity: number;
+  pendingBaseQuantity: number;
+  projectedIssuedBaseQuantity: number;
+  quantityOverrun: number;
+  quotedUnitCost: number;
+  estimatedQuotedCost: number;
+  currentIssuedCost: number;
+  projectedIssuedCost: number;
+  costOverrun: number;
+  kind: 'quantity_overrun' | 'cost_overrun' | 'unbudgeted_material';
+}
+
+export interface DispatchBudgetWarningResult {
+  applicable: boolean;
+  reason: 'parent_job' | 'no_budget_items' | null;
+  warningCount: number;
+  rows: DispatchBudgetWarningRow[];
+}
+
 interface JobWithMaterials extends Job {
   materials?: Array<{
     materialId: string;
@@ -260,6 +284,27 @@ export const jobsApi = appApi.injectEndpoints({
       transformResponse: (r: { data: JobCostEngineResult }) => r.data,
     }),
 
+    getDispatchBudgetWarning: builder.mutation<
+      DispatchBudgetWarningResult,
+      {
+        jobId: string;
+        postingDate?: string;
+        lines: Array<{
+          materialId: string;
+          quantity: number;
+          quantityUomId?: string;
+          returnQty?: number;
+        }>;
+      }
+    >({
+      query: ({ jobId, ...body }) => ({
+        url: `/jobs/${jobId}/dispatch-budget-warning`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (r: { data: DispatchBudgetWarningResult }) => r.data,
+    }),
+
     createJob: builder.mutation<Job, Partial<Job>>({
       query: (body) => ({
         url: '/jobs',
@@ -311,6 +356,7 @@ export const {
   useUpdateFormulaLibraryMutation,
   useDeleteFormulaLibraryMutation,
   useCalculateJobCostEngineMutation,
+  useGetDispatchBudgetWarningMutation,
   useCreateJobMutation,
   useUpdateJobMutation,
   useDeleteJobMutation,

@@ -1,12 +1,19 @@
 'use client';
 
-import { useEffect, useState }  from 'react';
+import { useState }  from 'react';
 import { Button }               from '@/components/ui/Button';
 import DataTable                from '@/components/ui/DataTable';
 import { Badge }                from '@/components/ui/Badge';
 import Modal                    from '@/components/ui/Modal';
 import toast                    from 'react-hot-toast';
 import type { Column }          from '@/components/ui/DataTable';
+import {
+  useGetUsersQuery,
+  useGetCompaniesQuery,
+  useGetRolesQuery,
+  useCreateUserMutation,
+  useUpdateUserMutation,
+} from '@/store/hooks';
 
 type Company = {
   id: string;
@@ -51,13 +58,21 @@ type User = {
 };
 
 export default function AdminUsersPage() {
-  const [users,       setUsers]       = useState<User[]>([]);
-  const [companies,   setCompanies]   = useState<Company[]>([]);
-  const [roles,       setRoles]       = useState<Role[]>([]);
-  const [loading,     setLoading]     = useState(true);
   const [modal,       setModal]       = useState(false);
   const [editing,     setEditing]     = useState<User | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  const { data: users = [], isFetching: usersLoading } = useGetUsersQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const { data: companies = [], isFetching: companiesLoading } = useGetCompaniesQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const { data: roles = [], isFetching: rolesLoading } = useGetRolesQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const [createUser] = useCreateUserMutation();
+  const [updateUser] = useUpdateUserMutation();
+  const loading = usersLoading || companiesLoading || rolesLoading;
 
   // Form fields
   const [name,         setName]         = useState('');
@@ -66,19 +81,6 @@ export default function AdminUsersPage() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   // companyAccess: { companyId, roleId }[]
   const [accessRows, setAccessRows] = useState<{ companyId: string; roleId: string }[]>([]);
-
-  const fetchUsers = () => {
-    setLoading(true);
-    fetch('/api/users')
-      .then((r) => r.json())
-      .then((j) => { setUsers(j.data ?? []); setLoading(false); });
-  };
-
-  useEffect(() => {
-    fetchUsers();
-    fetch('/api/companies').then((r) => r.json()).then((j) => setCompanies(j.data ?? []));
-    fetch('/api/roles').then((r) => r.json()).then((j) => setRoles(j.data ?? []));
-  }, []);
 
   const openCreate = () => {
     setEditing(null);
@@ -121,34 +123,27 @@ export default function AdminUsersPage() {
     if (!editing) body.email = email;
     if (password) body.password = password;
 
-    const url    = editing ? `/api/users/${editing.id}` : '/api/users';
-    const method = editing ? 'PUT' : 'POST';
-
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-    });
-    setFormLoading(false);
-    if (res.ok) {
+    try {
+      if (editing) {
+        await updateUser({ id: editing.id, data: body }).unwrap();
+      } else {
+        await createUser(body as Partial<User> & { password: string }).unwrap();
+      }
+      setFormLoading(false);
       toast.success(editing ? 'User updated' : 'User created');
       setModal(false);
-      fetchUsers();
-    } else {
-      const err = await res.json();
-      toast.error(err.error ?? 'Save failed');
+    } catch (error: any) {
+      setFormLoading(false);
+      toast.error(error?.data?.error ?? 'Save failed');
     }
   };
 
   const handleToggleActive = async (u: User) => {
-    const res = await fetch(`/api/users/${u.id}`, {
-      method:  'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ isActive: !u.isActive }),
-    });
-    if (res.ok) {
+    try {
+      await updateUser({ id: u.id, data: { isActive: !u.isActive } }).unwrap();
       toast.success(u.isActive ? 'User deactivated' : 'User activated');
-      fetchUsers();
+    } catch (error: any) {
+      toast.error(error?.data?.error ?? 'Update failed');
     }
   };
 

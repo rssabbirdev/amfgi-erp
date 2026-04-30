@@ -68,7 +68,10 @@ export default function StockBatchesPage() {
     perms.includes('transaction.stock_in') ||
     perms.includes('transaction.stock_out');
 
-  const { data: batches = [], isFetching } = useGetStockBatchesQuery(undefined, { skip: !canView });
+  const { data: batches = [], isFetching } = useGetStockBatchesQuery(undefined, {
+    skip: !canView,
+    refetchOnMountOrArgChange: 30,
+  });
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
 
   const selectedBatch = useMemo(

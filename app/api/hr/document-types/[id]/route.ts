@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -41,6 +42,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   try {
     const row = await prisma.employeeDocumentType.update({ where: { id }, data });
+    publishLiveUpdate({
+      companyId,
+      channel: 'hr',
+      entity: 'document-type',
+      action: 'updated',
+    });
     return successResponse(row);
   } catch (e) {
     if (e instanceof Error && e.message.includes('Unique constraint')) {
@@ -69,5 +76,11 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   }
 
   await prisma.employeeDocumentType.delete({ where: { id } });
+  publishLiveUpdate({
+    companyId,
+    channel: 'hr',
+    entity: 'document-type',
+    action: 'deleted',
+  });
   return successResponse({ ok: true });
 }
