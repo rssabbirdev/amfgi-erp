@@ -24,9 +24,6 @@ declare module 'next-auth' {
       allowedCompanyIds: string[];
       /** Signature image URL for print templates */
       signatureUrl:      string | null;
-      /** Google Drive file ids kept for cleanup/backward compatibility */
-      imageDriveId:      string | null;
-      signatureDriveId:  string | null;
       /** HR employee self-service link (same company scope as active company) */
       linkedEmployeeId:  string | null;
     } & DefaultSession['user'];
@@ -39,8 +36,6 @@ declare module 'next-auth' {
     permissions:       Permission[];
     allowedCompanyIds: string[];
     signatureUrl?:     string | null;
-    imageDriveId?:     string | null;
-    signatureDriveId?: string | null;
     linkedEmployeeId?: string | null;
   }
 }
@@ -100,9 +95,7 @@ const config: NextAuthConfig = {
             email: true,
             password: true,
             image: true,
-            imageDriveId: true,
             signatureUrl: true,
-            signatureDriveId: true,
             isSuperAdmin: true,
             activeCompanyId: true,
             linkedEmployeeId: true,
@@ -145,8 +138,6 @@ const config: NextAuthConfig = {
           email:             user.email,
           image:             profileImg,
           signatureUrl:      sigImg,
-          imageDriveId:      user.imageDriveId ?? null,
-          signatureDriveId:  user.signatureDriveId ?? null,
           isSuperAdmin:      user.isSuperAdmin,
           activeCompanyId:   companyId,
           activeCompanySlug,
@@ -216,8 +207,6 @@ const config: NextAuthConfig = {
         token.allowedCompanyIds   = user.allowedCompanyIds;
         token.picture             = user.image ?? token.picture;
         token.signatureUrl        = user.signatureUrl ?? null;
-        token.imageDriveId        = user.imageDriveId ?? null;
-        token.signatureDriveId    = user.signatureDriveId ?? null;
         token.linkedEmployeeId    = user.linkedEmployeeId ?? null;
       }
       if (token.sub && !token.profileLoaded) {
@@ -226,16 +215,12 @@ const config: NextAuthConfig = {
           where: { id: token.sub as string },
           select: {
             image: true,
-            imageDriveId: true,
             signatureUrl: true,
-            signatureDriveId: true,
             linkedEmployeeId: true,
           },
         });
         if (u) {
           token.linkedEmployeeId   = u.linkedEmployeeId ?? null;
-          token.imageDriveId     = u.imageDriveId ?? null;
-          token.signatureDriveId = u.signatureDriveId ?? null;
           token.picture =
             (u.image?.trim() ? convertGoogleDriveUrl(u.image.trim()) : null) ??
             token.picture;
@@ -264,8 +249,6 @@ const config: NextAuthConfig = {
         if (session.image !== undefined) token.picture = session.image;
         if (session.signatureUrl !== undefined) token.signatureUrl = session.signatureUrl;
         if (session.name !== undefined) token.name = session.name;
-        if (session.imageDriveId !== undefined) token.imageDriveId = session.imageDriveId;
-        if (session.signatureDriveId !== undefined) token.signatureDriveId = session.signatureDriveId;
       }
       return token;
     },
@@ -281,8 +264,6 @@ const config: NextAuthConfig = {
       session.user.allowedCompanyIds = token.allowedCompanyIds ?? [];
       session.user.image             = token.picture ?? session.user.image;
       session.user.signatureUrl      = token.signatureUrl ?? null;
-      session.user.imageDriveId      = token.imageDriveId ?? null;
-      session.user.signatureDriveId  = token.signatureDriveId ?? null;
       session.user.linkedEmployeeId  = token.linkedEmployeeId ?? null;
       if (token.name) session.user.name = token.name;
       return session;

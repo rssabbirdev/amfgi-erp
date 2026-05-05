@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { driveFileIdToDisplayUrl } from '@/lib/utils/googleDriveUrl';
 
 export type VisaRow = {
   id: string;
@@ -40,7 +39,7 @@ export type EmployeeRecord = {
   terminationDate: string | null;
   status: string;
   bloodGroup: string | null;
-  photoDriveId: string | null;
+  photoUrl: string | null;
   portalEnabled: boolean;
   profileExtension?: unknown;
   visaPeriods: VisaRow[];
@@ -214,7 +213,7 @@ export function SelfServiceHero({
   eyebrow: string;
 }) {
   const name = displayName(employee);
-  const photoUrl = employee.photoDriveId ? driveFileIdToDisplayUrl(employee.photoDriveId) : null;
+  const photoUrl = employee.photoUrl?.trim() || null;
 
   return (
     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">

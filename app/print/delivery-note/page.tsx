@@ -25,8 +25,6 @@ interface Transaction {
     email?: string | null;
     image?: string | null;
     signatureUrl?: string | null;
-    imageDriveId?: string | null;
-    signatureDriveId?: string | null;
   } | null;
 }
 
@@ -152,8 +150,6 @@ export default function PrintDeliveryNotePage() {
     name: session?.user?.name,
     image: session?.user?.image,
     signatureUrl: session?.user?.signatureUrl,
-    imageDriveId: session?.user?.imageDriveId,
-    signatureDriveId: session?.user?.signatureDriveId,
   };
 
   const data = buildDataContext('delivery-note', transaction as any, company as any, creatorOrFallbackUser);

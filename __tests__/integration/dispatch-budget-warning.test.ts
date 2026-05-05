@@ -121,7 +121,7 @@ describe('Dispatch budget warning', () => {
     await prisma.jobItem.create({
       data: {
         companyId: ctx.amfgiCompany.id,
-        jobId: variationJob.id,
+        jobId: parentJob.id,
         formulaLibraryId: formula.id,
         name: 'Main budget item',
         specifications: {

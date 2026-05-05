@@ -46,6 +46,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     where: { id, companyId },
     include: {
       employee: { select: { profileExtension: true } },
+      workAssignment: { select: { shiftStart: true, shiftEnd: true } },
     },
   });
   if (!existing) return errorResponse('Not found', 404);
@@ -70,8 +71,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const nextBreakEnd =
     d.breakEndAt !== undefined ? parseDt(d.breakEndAt) : (existing as typeof existing & { breakEndAt?: Date | null }).breakEndAt;
   const nextStatus = d.status ?? existing.status;
-  const expectedStart = existing.expectedShiftStart;
-  const expectedEnd = existing.expectedShiftEnd;
+  const workDateYmd = existing.workDate.toISOString().slice(0, 10);
+  const wa = existing.workAssignment;
+  let dutyStart: Date | null = null;
+  let dutyEnd: Date | null = null;
+  if (wa?.shiftStart) dutyStart = parseDt(`${workDateYmd}T${wa.shiftStart}:00`);
+  if (wa?.shiftEnd) dutyEnd = parseDt(`${workDateYmd}T${wa.shiftEnd}:00`);
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: { hrEmployeeTypeSettings: true, printTemplates: true },
@@ -80,8 +85,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const basicHoursPerDay = basicHoursForProfileExtension(existing.employee.profileExtension, typeSettings);
   const basicMinutes = Math.round(basicHoursPerDay * 60);
 
-  const calculatedLate = expectedStart && nextCheckIn ? Math.max(0, diffMinutes(expectedStart, nextCheckIn)) : 0;
-  const calculatedEarly = expectedEnd && nextCheckOut ? Math.max(0, diffMinutes(nextCheckOut, expectedEnd)) : 0;
+  const calculatedLate = dutyStart && nextCheckIn ? Math.max(0, diffMinutes(dutyStart, nextCheckIn)) : 0;
+  const calculatedEarly = dutyEnd && nextCheckOut ? Math.max(0, diffMinutes(nextCheckOut, dutyEnd)) : 0;
   const workedMinutes = Math.max(0, diffMinutes(nextCheckIn, nextCheckOut) - diffMinutes(nextBreakStart, nextBreakEnd));
   const calculatedOvertime =
     nextStatus === 'ABSENT' || nextStatus === 'LEAVE' ? 0 : Math.max(0, workedMinutes - basicMinutes);

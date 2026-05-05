@@ -33,8 +33,13 @@ function weightedAverage(
 export function resolvePricingSnapshot(
   material: MaterialWithPricing,
   pricingMode: PricingMode,
-  customUnitCost?: number | null
+  customUnitCost?: number | null,
+  postingDate?: Date
 ): MaterialPricingSnapshot {
+  const relevantBatches = postingDate
+    ? material.stockBatches.filter((batch) => batch.receivedDate.getTime() <= postingDate.getTime())
+    : material.stockBatches;
+
   if (pricingMode === 'CUSTOM' && customUnitCost != null) {
     return {
       materialId: material.id,
@@ -61,7 +66,7 @@ export function resolvePricingSnapshot(
       materialName: material.name,
       baseUnit: material.unit,
       baseUnitCost: weightedAverage(
-        material.stockBatches.map((batch) => ({
+        relevantBatches.map((batch) => ({
           quantity: batch.quantityReceived,
           unitCost: batch.unitCost,
         })),
@@ -76,7 +81,7 @@ export function resolvePricingSnapshot(
     materialName: material.name,
     baseUnit: material.unit,
     baseUnitCost: weightedAverage(
-      [...material.stockBatches]
+      [...relevantBatches]
         .sort((a, b) => a.receivedDate.getTime() - b.receivedDate.getTime())
         .map((batch) => ({
           quantity: batch.quantityAvailable,

@@ -121,7 +121,7 @@ describe('Job profitability report', () => {
     await prisma.jobItem.create({
       data: {
         companyId: ctx.amfgiCompany.id,
-        jobId: variationJob.id,
+        jobId: parentJob.id,
         formulaLibraryId: formula.id,
         name: 'Profit item',
         specifications: {

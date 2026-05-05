@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma';
 import type { AppSessionUser } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { deleteFromDrive } from '@/lib/utils/googleDrive';
+import { extractGoogleDriveFileId } from '@/lib/utils/googleDriveUrl';
 
 function canAccess(user: AppSessionUser) {
   const isSA = user.isSuperAdmin ?? false;
@@ -30,7 +31,10 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   }
 
   try {
-    await deleteFromDrive(asset.driveId, companyId);
+    const driveId = extractGoogleDriveFileId(asset.fileUrl);
+    if (driveId) {
+      await deleteFromDrive(driveId, companyId);
+    }
   } catch (e) {
     console.error('Drive delete failed for media asset', asset.id, e);
   }

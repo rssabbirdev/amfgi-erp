@@ -353,13 +353,11 @@ function buildDraftFromExistingRow(
     checkInAt: shouldClearTiming
       ? ''
       : toLocalTimeInput((row.checkInAt as string | null) ?? null) ||
-        toLocalTimeInput((row.expectedShiftStart as string | null) ?? null) ||
         defaultTiming?.dutyStart ||
         '',
     checkOutAt: shouldClearTiming
       ? ''
       : toLocalTimeInput((row.checkOutAt as string | null) ?? null) ||
-        toLocalTimeInput((row.expectedShiftEnd as string | null) ?? null) ||
         defaultTiming?.dutyEnd ||
         '',
     breakInAt: shouldClearTiming

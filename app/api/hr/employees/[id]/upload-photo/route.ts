@@ -3,6 +3,7 @@ import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { buildEmployeeDriveFolderName, uploadToDrive } from '@/lib/utils/googleDrive';
+import { extractGoogleDriveFileId } from '@/lib/utils/googleDriveUrl';
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCompanySession();
@@ -33,7 +34,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const buffer = Buffer.from(await file.arrayBuffer());
     const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
     const safeCode = emp.employeeCode.replace(/[^a-zA-Z0-9-_]/g, '_');
-    const { id: driveId, viewerUrl } = await uploadToDrive(
+    const { viewerUrl } = await uploadToDrive(
       buffer,
       `employee-${safeCode}-photo-${Date.now()}.${ext}`,
       file.type,
@@ -53,16 +54,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     await prisma.employee.update({
       where: { id: employeeId },
-      data: { photoDriveId: driveId },
+      data: { photoUrl: viewerUrl },
     });
 
     // Mirror profile photo to linked self-service user (if linked).
     await prisma.user.updateMany({
       where: { linkedEmployeeId: employeeId },
-      data: { imageDriveId: driveId, image: viewerUrl },
+      data: { image: viewerUrl },
     });
 
-    return successResponse({ driveId, url: viewerUrl });
+    if (emp.photoUrl) {
+      const oldId = extractGoogleDriveFileId(emp.photoUrl);
+      if (oldId) {
+        const { deleteFromDrive } = await import('@/lib/utils/googleDrive');
+        try {
+          await deleteFromDrive(oldId, companyId);
+        } catch (error) {
+          console.error('Failed to remove replaced employee photo from Drive:', error);
+        }
+      }
+    }
+
+    return successResponse({ url: viewerUrl });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Upload failed';
     console.error('Employee photo upload:', err);

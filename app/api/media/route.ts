@@ -2,7 +2,6 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import type { AppSessionUser } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { driveFileIdToDisplayUrl } from '@/lib/utils/googleDriveUrl';
 
 function canAccess(user: AppSessionUser) {
   const isSA = user.isSuperAdmin ?? false;
@@ -41,8 +40,8 @@ export async function GET(req: Request) {
 
   const data = rows.map((a) => ({
     id: a.id,
-    driveId: a.driveId,
-    previewUrl: driveFileIdToDisplayUrl(a.driveId),
+    fileUrl: a.fileUrl,
+    previewUrl: a.fileUrl,
     mimeType: a.mimeType,
     fileName: a.fileName,
     category: a.category,

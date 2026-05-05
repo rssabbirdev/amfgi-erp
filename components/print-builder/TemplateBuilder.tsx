@@ -368,8 +368,6 @@ export function TemplateBuilder({
     name: string;
     image: string;
     signatureUrl: string;
-    imageDriveId: string;
-    signatureDriveId: string;
   } | null>(null);
 
   const [savedLayoutKey, setSavedLayoutKey] = useState(() => {
@@ -568,15 +566,11 @@ export function TemplateBuilder({
           name?: string;
           image?: string | null;
           signatureUrl?: string | null;
-          imageDriveId?: string | null;
-          signatureDriveId?: string | null;
         };
         setProfileForPreview({
           name: u.name ?? '',
           image: (u.image ?? '').trim(),
           signatureUrl: (u.signatureUrl ?? '').trim(),
-          imageDriveId: (u.imageDriveId ?? '').trim(),
-          signatureDriveId: (u.signatureDriveId ?? '').trim(),
         });
       } catch {
         if (!cancelled) setProfileForPreview(null);
@@ -589,8 +583,6 @@ export function TemplateBuilder({
     session?.user?.id,
     session?.user?.image,
     session?.user?.signatureUrl,
-    session?.user?.imageDriveId,
-    session?.user?.signatureDriveId,
   ]);
 
   useEffect(() => {
@@ -1156,10 +1148,6 @@ export function TemplateBuilder({
         name: profileForPreview?.name ?? session?.user?.name ?? '',
         image: profileForPreview?.image ?? session?.user?.image ?? '',
         signatureUrl: profileForPreview?.signatureUrl ?? session?.user?.signatureUrl ?? '',
-        imageDriveId:
-          profileForPreview?.imageDriveId ?? session?.user?.imageDriveId ?? '',
-        signatureDriveId:
-          profileForPreview?.signatureDriveId ?? session?.user?.signatureDriveId ?? '',
       },
     };
     const mockData = getMockData(template.itemType);
@@ -1201,8 +1189,6 @@ export function TemplateBuilder({
     session?.user?.name,
     session?.user?.image,
     session?.user?.signatureUrl,
-    session?.user?.imageDriveId,
-    session?.user?.signatureDriveId,
     profileForPreview,
   ]);
 

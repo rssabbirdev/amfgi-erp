@@ -1,6 +1,8 @@
 import { auth } from '@/auth';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
+import { resolveJobBudgetContext } from '@/lib/job-costing/budgetJobContext';
+import { syncTrackedJobItemProgress } from '@/lib/job-costing/jobItemProgressTracking';
 import {
   assertCompanyEmployeesExist,
   normalizeAssignedEmployeeIds,
@@ -18,13 +20,34 @@ const JobItemUpdateSchema = z.object({
   assignedEmployeeIds: z.array(z.string()).optional(),
   sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
+  progressStatus: z.enum(['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'ON_HOLD']).optional(),
+  progressPercent: z.number().min(0).max(100).optional(),
+  trackingItems: z.array(z.object({
+    id: z.string().min(1),
+    label: z.string().min(1).max(120),
+    unit: z.string().max(40).optional().nullable(),
+    targetValue: z.number().positive(),
+    sourceKey: z.string().max(180).optional().nullable(),
+  })).optional(),
+  trackingEnabled: z.boolean().optional(),
+  trackingLabel: z.string().max(120).optional().nullable(),
+  trackingUnit: z.string().max(40).optional().nullable(),
+  trackingTargetValue: z.number().min(0).optional().nullable(),
+  trackingSourceKey: z.string().max(180).optional().nullable(),
+  plannedStartDate: z.string().optional().nullable(),
+  plannedEndDate: z.string().optional().nullable(),
+  actualStartDate: z.string().optional().nullable(),
+  actualEndDate: z.string().optional().nullable(),
+  progressNote: z.string().max(2000).optional().nullable(),
 });
 
-async function loadJobItem(companyId: string, jobId: string, itemId: string) {
+async function loadJobItem(companyId: string, routeJobId: string, itemId: string) {
+  const ctx = await resolveJobBudgetContext(prisma, companyId, routeJobId);
+  if (!ctx) return null;
   return prisma.jobItem.findFirst({
     where: {
       id: itemId,
-      jobId,
+      jobId: ctx.budgetJobId,
       companyId,
     },
   });
@@ -43,10 +66,12 @@ export async function GET(
   const companyId = session.user.activeCompanyId;
 
   const { id, itemId } = await params;
+  const budgetCtx = await resolveJobBudgetContext(prisma, companyId, id);
+  if (!budgetCtx) return errorResponse('Job not found', 404);
   const row = await prisma.jobItem.findFirst({
     where: {
       id: itemId,
-      jobId: id,
+      jobId: budgetCtx.budgetJobId,
       companyId,
     },
     include: {
@@ -110,10 +135,46 @@ export async function PUT(
       where: { id: itemId },
       data: {
         ...jobItemData,
+        plannedStartDate:
+          jobItemData.plannedStartDate === undefined
+            ? undefined
+            : (jobItemData.plannedStartDate ? new Date(jobItemData.plannedStartDate) : null),
+        plannedEndDate:
+          jobItemData.plannedEndDate === undefined
+            ? undefined
+            : (jobItemData.plannedEndDate ? new Date(jobItemData.plannedEndDate) : null),
+        actualStartDate:
+          jobItemData.actualStartDate === undefined
+            ? undefined
+            : (jobItemData.actualStartDate ? new Date(jobItemData.actualStartDate) : null),
+        actualEndDate:
+          jobItemData.actualEndDate === undefined
+            ? undefined
+            : (jobItemData.actualEndDate ? new Date(jobItemData.actualEndDate) : null),
+        progressUpdatedAt:
+          jobItemData.progressStatus !== undefined ||
+          jobItemData.progressPercent !== undefined ||
+          jobItemData.trackingItems !== undefined ||
+          jobItemData.trackingEnabled !== undefined ||
+          jobItemData.trackingLabel !== undefined ||
+          jobItemData.trackingUnit !== undefined ||
+          jobItemData.trackingTargetValue !== undefined ||
+          jobItemData.trackingSourceKey !== undefined ||
+          jobItemData.plannedStartDate !== undefined ||
+          jobItemData.plannedEndDate !== undefined ||
+          jobItemData.actualStartDate !== undefined ||
+          jobItemData.actualEndDate !== undefined ||
+          jobItemData.progressNote !== undefined
+            ? new Date()
+            : undefined,
         specifications:
           jobItemData.specifications === undefined
             ? undefined
             : (jobItemData.specifications as Prisma.InputJsonValue),
+        trackingItems:
+          jobItemData.trackingItems === undefined
+            ? undefined
+            : (jobItemData.trackingItems as Prisma.InputJsonValue),
       } satisfies Prisma.JobItemUncheckedUpdateInput,
     });
 
@@ -134,6 +195,10 @@ export async function PUT(
           })),
         });
       }
+    }
+
+    if (jobItemData.trackingEnabled === true || existing.trackingEnabled) {
+      await syncTrackedJobItemProgress(tx, companyId, itemId);
     }
 
     return tx.jobItem.findFirstOrThrow({

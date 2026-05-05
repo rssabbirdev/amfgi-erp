@@ -243,7 +243,6 @@ export interface ImageSection {
   field?: string;
   /** Template upload / pasted URL (takes precedence over `url`/`field` when set) */
   imageUrl?: string;
-  imageDriveId?: string;
   objectFit: 'contain' | 'cover' | 'fill';
   /** CSS object-position, e.g. `center top`, `50% 30%` */
   objectPosition?: string;

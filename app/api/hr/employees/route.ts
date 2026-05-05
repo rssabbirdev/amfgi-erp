@@ -30,7 +30,7 @@ const CreateSchema = z.object({
   emergencyContactName: z.string().max(200).optional().nullable(),
   emergencyContactPhone: z.string().max(50).optional().nullable(),
   bloodGroup: z.string().max(10).optional().nullable(),
-  photoDriveId: z.string().max(200).optional().nullable(),
+  photoUrl: z.string().max(2000).optional().nullable(),
   portalEnabled: z.boolean().optional(),
   adminNotes: z.string().max(20000).optional().nullable(),
   profileExtension: z.unknown().optional().nullable(),
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
           emergencyContactName: d.emergencyContactName?.trim() || null,
           emergencyContactPhone: d.emergencyContactPhone?.trim() || null,
           bloodGroup: d.bloodGroup?.trim() || null,
-          photoDriveId: d.photoDriveId?.trim() || null,
+          photoUrl: d.photoUrl?.trim() || null,
           portalEnabled: auto ? true : (d.portalEnabled ?? false),
           adminNotes: d.adminNotes?.trim() || null,
           profileExtension:

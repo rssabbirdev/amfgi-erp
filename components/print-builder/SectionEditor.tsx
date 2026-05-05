@@ -428,8 +428,8 @@ function TemplateImageUpload({
       const formData = new FormData();
       formData.append('file', file);
       formData.append('companyId', companyId);
-      if (section.imageDriveId) {
-        formData.append('replaceDriveId', section.imageDriveId);
+      if (section.imageUrl) {
+        formData.append('replaceUrl', section.imageUrl);
       }
       const res = await fetch('/api/upload/template-image', { method: 'POST', body: formData });
       const json = await res.json().catch(() => ({}));
@@ -438,12 +438,11 @@ function TemplateImageUpload({
         return;
       }
       const url = json.data?.url as string | undefined;
-      const driveId = json.data?.driveId as string | undefined;
       if (!url) {
         toast.error('Invalid upload response');
         return;
       }
-      onChange({ ...section, imageUrl: url, imageDriveId: driveId });
+      onChange({ ...section, imageUrl: url });
       toast.success('Image uploaded');
     } catch {
       toast.error('Upload failed');
@@ -465,7 +464,6 @@ function TemplateImageUpload({
           onChange({
             ...section,
             imageUrl: s ? s : undefined,
-            ...(s ? {} : { imageDriveId: undefined }),
           });
         }}
         placeholder="https://â€¦ or Google Drive link"
@@ -488,11 +486,11 @@ function TemplateImageUpload({
         >
           {uploading ? 'Uploadingâ€¦' : 'Upload image'}
         </button>
-        {(section.imageUrl || section.imageDriveId) && (
+        {section.imageUrl && (
           <button
             type="button"
             disabled={locked}
-            onClick={() => onChange({ ...section, imageUrl: undefined, imageDriveId: undefined })}
+            onClick={() => onChange({ ...section, imageUrl: undefined })}
             className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-40"
           >
             Clear

@@ -31,8 +31,6 @@ function mergeFieldLists(...lists: FieldDef[][]): FieldDef[] {
 /** Bound to session user — see /profile (photo + signature uploads). */
 export const USER_PRINT_FIELDS: FieldDef[] = [
   { path: 'user.name', label: 'User name', category: 'User' },
-  { path: 'user.imageDriveId', label: 'User profile photo (Drive file ID)', category: 'User' },
-  { path: 'user.signatureDriveId', label: 'User signature (Drive file ID)', category: 'User' },
   { path: 'user.image', label: 'User profile photo URL (resolved)', category: 'User' },
   { path: 'user.signatureUrl', label: 'User signature image URL (resolved)', category: 'User' },
   { path: 'page.number', label: 'Page Number (dynamic)', category: 'Page' },

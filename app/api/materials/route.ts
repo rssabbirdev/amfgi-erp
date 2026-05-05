@@ -22,6 +22,8 @@ const MaterialSchema = z.object({
   unitCost:            z.number().finite().min(0).optional(),
   reorderLevel:        z.number().finite().min(0).optional(),
   currentStock:        z.number().finite().min(0).optional(),
+  assemblyOutputQuantity: z.number().finite().positive().optional(),
+  assemblyOverheadPercent: z.number().finite().min(0).optional(),
 });
 
 export async function GET() {
@@ -111,6 +113,8 @@ export async function POST(req: Request) {
         unitCost: decimalToNumber(parsed.data.unitCost) ?? null,
         reorderLevel: decimalToNumber(parsed.data.reorderLevel) ?? null,
         currentStock: decimalToNumber(parsed.data.currentStock) ?? 0,
+        assemblyOutputQuantity: decimalToNumber(parsed.data.assemblyOutputQuantity) ?? 1,
+        assemblyOverheadPercent: decimalToNumber(parsed.data.assemblyOverheadPercent) ?? 0,
         isActive: true,
       },
     });

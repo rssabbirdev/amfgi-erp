@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { uploadToDrive, deleteFromDrive } from '@/lib/utils/googleDrive';
+import { extractGoogleDriveFileId } from '@/lib/utils/googleDriveUrl';
 
 /**
  * Upload an image for a print template (e.g. letterhead block). Does not update Company;
@@ -22,6 +23,7 @@ export async function POST(req: Request) {
     const file = formData.get('file') as File | null;
     const companyId = formData.get('companyId') as string | null;
     const replaceDriveId = (formData.get('replaceDriveId') as string | null)?.trim() || null;
+    const replaceUrl = (formData.get('replaceUrl') as string | null)?.trim() || null;
 
     if (!file) return errorResponse('File is required', 400);
     if (!companyId) return errorResponse('Company ID is required', 400);
@@ -42,9 +44,10 @@ export async function POST(req: Request) {
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
     if (!folderId) return errorResponse('Google Drive folder not configured', 500);
 
-    if (replaceDriveId) {
+    const oldDriveId = replaceDriveId || extractGoogleDriveFileId(replaceUrl ?? '');
+    if (oldDriveId) {
       try {
-        await deleteFromDrive(replaceDriveId, companyId);
+        await deleteFromDrive(oldDriveId, companyId);
       } catch (err) {
         console.error('Failed to delete replaced template image from Drive:', err);
       }
@@ -53,7 +56,7 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const ext =
       file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-    const { id, viewerUrl } = await uploadToDrive(
+    const { viewerUrl } = await uploadToDrive(
       buffer,
       `print-template-${companyId}-${Date.now()}.${ext}`,
       file.type,
@@ -67,7 +70,7 @@ export async function POST(req: Request) {
       },
     );
 
-    return successResponse({ url: viewerUrl, driveId: id });
+    return successResponse({ url: viewerUrl });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Upload failed';
     console.error('Template image upload error:', err);

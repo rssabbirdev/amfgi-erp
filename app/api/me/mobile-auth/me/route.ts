@@ -6,22 +6,14 @@ export async function GET(req: Request) {
   const authCtx = await requireEmployeeApiAuth(req);
   if (!authCtx.ok) return errorResponse(authCtx.error, authCtx.status);
 
-  const [company, zoneCount] = await Promise.all([
-    prisma.company.findFirst({
-      where: { id: authCtx.companyId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-      },
-    }),
-    prisma.geofenceZone.count({
-      where: {
-        companyId: authCtx.companyId,
-        isActive: true,
-      },
-    }),
-  ]);
+  const company = await prisma.company.findFirst({
+    where: { id: authCtx.companyId },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+  });
 
   if (!company) return errorResponse('Company not found', 404);
 
@@ -29,8 +21,5 @@ export async function GET(req: Request) {
     authMode: authCtx.source,
     employee: authCtx.employee,
     company,
-    geofence: {
-      activeZoneCount: zoneCount,
-    },
   });
 }

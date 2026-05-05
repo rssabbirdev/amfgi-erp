@@ -26,9 +26,7 @@ export async function GET() {
       name: true,
       email: true,
       image: true,
-      imageDriveId: true,
       signatureUrl: true,
-      signatureDriveId: true,
     },
   });
 
@@ -39,8 +37,6 @@ export async function GET() {
     email: user.email,
     image: displayProfileImage(user),
     signatureUrl: displaySignature(user),
-    imageDriveId: user.imageDriveId,
-    signatureDriveId: user.signatureDriveId,
   });
 }
 
@@ -75,9 +71,7 @@ export async function PATCH(req: Request) {
       name: true,
       email: true,
       image: true,
-      imageDriveId: true,
       signatureUrl: true,
-      signatureDriveId: true,
     },
   });
 
@@ -87,7 +81,5 @@ export async function PATCH(req: Request) {
     email: user.email,
     image: displayProfileImage(user),
     signatureUrl: displaySignature(user),
-    imageDriveId: user.imageDriveId,
-    signatureDriveId: user.signatureDriveId,
   });
 }

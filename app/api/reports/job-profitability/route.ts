@@ -121,11 +121,17 @@ export async function GET() {
     });
 
     const variationJobIds = variationJobs.map((job) => job.id);
+    const parentJobIdsForBudget = Array.from(
+      new Set(
+        variationJobs.map((job) => job.parentJobId).filter((id): id is string => Boolean(id))
+      )
+    );
 
+    /** Budget lines live on the parent contract job; each variation row still uses that shared budget. */
     const jobItems = await prisma.jobItem.findMany({
       where: {
         companyId,
-        jobId: { in: variationJobIds.length > 0 ? variationJobIds : ['__none__'] },
+        jobId: { in: parentJobIdsForBudget.length > 0 ? parentJobIdsForBudget : ['__none__'] },
         isActive: true,
       },
       include: {
@@ -138,11 +144,11 @@ export async function GET() {
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
 
-    const jobItemsByJobId = new Map<string, typeof jobItems>();
+    const jobItemsByParentJobId = new Map<string, typeof jobItems>();
     for (const item of jobItems) {
-      const rows = jobItemsByJobId.get(item.jobId) ?? [];
+      const rows = jobItemsByParentJobId.get(item.jobId) ?? [];
       rows.push(item);
-      jobItemsByJobId.set(item.jobId, rows);
+      jobItemsByParentJobId.set(item.jobId, rows);
     }
 
     const budgetMaterialIds = Array.from(
@@ -282,7 +288,8 @@ export async function GET() {
     const settings = normalizeJobCostingSettings(company?.jobCostingSettings);
 
     const rows: JobProfitabilityRow[] = variationJobs.map((job) => {
-      const items = jobItemsByJobId.get(job.id) ?? [];
+      const parentId = job.parentJobId;
+      const items = parentId ? (jobItemsByParentJobId.get(parentId) ?? []) : [];
       const actualConsumption = actualConsumptionByJobId.get(job.id) ?? new Map<string, ActualConsumptionEntry>();
       const actualTotals = actualTotalsByJobId.get(job.id) ?? {
         issuedMaterialQuantity: 0,

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db/prisma';
 import { deleteFromDrive } from '@/lib/utils/googleDrive';
-import { driveFileIdToDisplayUrl } from '@/lib/utils/googleDriveUrl';
+import { extractGoogleDriveFileId } from '@/lib/utils/googleDriveUrl';
 
 export const MEDIA_KIND_USER_PROFILE = 'USER_PROFILE_IMAGE';
 export const MEDIA_KIND_USER_SIGNATURE = 'USER_SIGNATURE';
@@ -15,24 +15,23 @@ export async function finalizeUserMediaUpload(params: {
   userId: string;
   companyId: string;
   kind: UserMediaKind;
-  newDriveId: string;
+  newFileUrl: string;
   mimeType: string;
   fileName: string;
   bytes: number;
   uploadedById: string;
-}): Promise<{ displayUrl: string; driveId: string }> {
-  const { userId, companyId, kind, newDriveId, mimeType, fileName, bytes, uploadedById } = params;
-  const displayUrl = driveFileIdToDisplayUrl(newDriveId) ?? '';
+}): Promise<{ displayUrl: string }> {
+  const { userId, companyId, kind, newFileUrl, mimeType, fileName, bytes, uploadedById } = params;
+  const displayUrl = newFileUrl;
 
   const category = kind === MEDIA_KIND_USER_PROFILE ? 'profile_image' : 'signature';
 
   const oldDriveIdToRemove = await prisma.$transaction(async (tx) => {
     const prevUser = await tx.user.findUnique({
       where: { id: userId },
-      select: { imageDriveId: true, signatureDriveId: true },
+      select: { image: true, signatureUrl: true },
     });
-    const prevDrive =
-      kind === MEDIA_KIND_USER_PROFILE ? prevUser?.imageDriveId : prevUser?.signatureDriveId;
+    const prevUrl = kind === MEDIA_KIND_USER_PROFILE ? prevUser?.image : prevUser?.signatureUrl;
 
     const existingLink = await tx.mediaAssetLink.findUnique({
       where: { kind_entityId: { kind, entityId: userId } },
@@ -49,7 +48,7 @@ export async function finalizeUserMediaUpload(params: {
     await tx.mediaAsset.create({
       data: {
         companyId,
-        driveId: newDriveId,
+        fileUrl: newFileUrl,
         mimeType,
         fileName,
         category,
@@ -64,25 +63,26 @@ export async function finalizeUserMediaUpload(params: {
     if (kind === MEDIA_KIND_USER_PROFILE) {
       await tx.user.update({
         where: { id: userId },
-        data: { imageDriveId: newDriveId, image: displayUrl },
+        data: { image: displayUrl },
       });
     } else {
       await tx.user.update({
         where: { id: userId },
-        data: { signatureDriveId: newDriveId, signatureUrl: displayUrl },
+        data: { signatureUrl: displayUrl },
       });
     }
 
-    return prevDrive && prevDrive !== newDriveId ? prevDrive : null;
+    return prevUrl && prevUrl !== newFileUrl ? prevUrl : null;
   });
 
   if (oldDriveIdToRemove) {
     try {
-      await deleteFromDrive(oldDriveIdToRemove, companyId);
+      const driveId = extractGoogleDriveFileId(oldDriveIdToRemove);
+      if (driveId) await deleteFromDrive(driveId, companyId);
     } catch (err) {
       console.error('Failed to delete replaced user media from Drive:', err);
     }
   }
 
-  return { displayUrl, driveId: newDriveId };
+  return { displayUrl };
 }

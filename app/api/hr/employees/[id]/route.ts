@@ -5,7 +5,6 @@ import { provisionEmployeeUser } from '@/lib/hr/provisionEmployeeUser';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { driveFileIdToDisplayUrl } from '@/lib/utils/googleDriveUrl';
 import { z } from 'zod';
 
 const PatchSchema = z.object({
@@ -26,7 +25,7 @@ const PatchSchema = z.object({
   emergencyContactName: z.string().max(200).optional().nullable(),
   emergencyContactPhone: z.string().max(50).optional().nullable(),
   bloodGroup: z.string().max(10).optional().nullable(),
-  photoDriveId: z.string().max(200).optional().nullable(),
+  photoUrl: z.string().max(2000).optional().nullable(),
   portalEnabled: z.boolean().optional(),
   adminNotes: z.string().max(20000).optional().nullable(),
   profileExtension: z.unknown().optional().nullable(),
@@ -101,7 +100,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (d.emergencyContactName !== undefined) data.emergencyContactName = d.emergencyContactName?.trim() || null;
     if (d.emergencyContactPhone !== undefined) data.emergencyContactPhone = d.emergencyContactPhone?.trim() || null;
     if (d.bloodGroup !== undefined) data.bloodGroup = d.bloodGroup?.trim() || null;
-    if (d.photoDriveId !== undefined) data.photoDriveId = d.photoDriveId?.trim() || null;
+    if (d.photoUrl !== undefined) data.photoUrl = d.photoUrl?.trim() || null;
     if (d.portalEnabled !== undefined) data.portalEnabled = d.portalEnabled;
     if (d.adminNotes !== undefined) data.adminNotes = d.adminNotes?.trim() || null;
     if (d.profileExtension !== undefined)
@@ -128,7 +127,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
         const row = await tx.employee.findUnique({
           where: { id },
-          select: { email: true, fullName: true, photoDriveId: true },
+          select: { email: true, fullName: true, photoUrl: true },
         });
 
         if (shouldTryProvision && row?.email) {
@@ -148,15 +147,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
 
         // Keep linked self-service user profile in sync with HR master record.
-          if (row && (d.fullName !== undefined || d.photoDriveId !== undefined)) {
+          if (row && (d.fullName !== undefined || d.photoUrl !== undefined)) {
             await tx.user.updateMany({
               where: { linkedEmployeeId: id },
               data: {
                 ...(d.fullName !== undefined ? { name: row.fullName } : {}),
-                ...(d.photoDriveId !== undefined
+                ...(d.photoUrl !== undefined
                   ? {
-                      imageDriveId: row.photoDriveId,
-                      image: driveFileIdToDisplayUrl(row.photoDriveId) ?? null,
+                      image: row.photoUrl,
                     }
                   : {}),
               },

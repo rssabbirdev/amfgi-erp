@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import { useGetFormulaLibrariesQuery, useGetJobsQuery } from '@/store/hooks';
+
+const PAGE_SIZE = 10;
 
 function formatCount(value: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
@@ -18,13 +20,48 @@ export default function StockJobBudgetPage() {
   const canView = isSA || (perms.includes('job.view') && perms.includes('material.view'));
   const canManage = isSA || perms.includes('settings.manage');
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+
   const { data: formulas = [], isLoading: formulasLoading } = useGetFormulaLibrariesQuery(undefined, { skip: !canView });
   const { data: jobs = [], isLoading: jobsLoading } = useGetJobsQuery(undefined, { skip: !canView });
 
-  const variationJobs = useMemo(
-    () => jobs.filter((job) => Boolean(job.parentJobId) && job.status === 'ACTIVE'),
+  const parentContractJobs = useMemo(
+    () =>
+      jobs
+        .filter((job) => !job.parentJobId && job.status === 'ACTIVE')
+        .sort((a, b) => a.jobNumber.localeCompare(b.jobNumber)),
     [jobs]
   );
+
+  const filteredJobs = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return parentContractJobs;
+    return parentContractJobs.filter((job) => {
+      const hay = [job.jobNumber, job.customerName, job.projectName, job.description, job.site, job.address]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [parentContractJobs, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredJobs.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage((p) => Math.min(Math.max(1, p), totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
+
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const pageSlice = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredJobs.slice(start, start + PAGE_SIZE);
+  }, [filteredJobs, safePage]);
+
   const fabricationTypes = useMemo(
     () => new Set(formulas.map((formula) => formula.fabricationType)).size,
     [formulas]
@@ -49,7 +86,7 @@ export default function StockJobBudgetPage() {
               </p>
               <h1 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">Job budget and formulas</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-                Manage fabrication formula templates and open variation job budgets for material estimates, FIFO actuals, and workforce planning.
+                Manage formula templates and open parent contract jobs only: material budget lines live on the contract; dispatch and consumption on variations roll up in costing.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -82,45 +119,100 @@ export default function StockJobBudgetPage() {
             </p>
           </div>
           <div className="bg-white px-5 py-4 dark:bg-slate-950/80">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Active variations</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Active contract jobs</p>
             <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">
-              {jobsLoading ? '...' : formatCount(variationJobs.length)}
+              {jobsLoading ? '...' : formatCount(parentContractJobs.length)}
             </p>
+            <p className="mt-1 text-xs text-slate-500">Parent jobs only; variations are not listed here.</p>
           </div>
         </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.75fr)]">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
-          <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-300">Variation budgets</h2>
-              <p className="mt-1 text-sm text-slate-500">Open a variation job to calculate budget vs actual consumption.</p>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-300">
+                Contract job numbers
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Search by job number, customer, project, site, or address. Budget is always managed on these parent jobs.
+              </p>
             </div>
+            <label className="block w-full min-w-0 sm:max-w-xs">
+              <span className="sr-only">Search contract jobs</span>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search…"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-emerald-500/30 placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500"
+              />
+            </label>
           </div>
 
           {jobsLoading ? (
             <div className="flex h-40 items-center justify-center">
               <Spinner size="lg" />
             </div>
-          ) : variationJobs.length === 0 ? (
+          ) : parentContractJobs.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">
-              No active variation jobs found.
+              No active parent contract jobs found.
+            </div>
+          ) : filteredJobs.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">
+              No jobs match your search.
             </div>
           ) : (
-            <div className="divide-y divide-slate-200 dark:divide-slate-800">
-              {variationJobs.slice(0, 12).map((job) => (
-                <div key={job.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-white">{job.jobNumber}</p>
-                    <p className="mt-1 text-sm text-slate-500">{job.customerName || job.projectName || job.description || 'Variation job'}</p>
+            <>
+              <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                {pageSlice.map((job) => (
+                  <div key={job.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-mono text-base font-semibold tracking-tight text-slate-900 dark:text-white">
+                        {job.jobNumber}
+                      </p>
+                      <p className="mt-1 truncate text-sm text-slate-500">
+                        {job.customerName || job.projectName || job.description || 'Contract job'}
+                      </p>
+                    </div>
+                    <Link href={`/stock/job-budget/${job.id}`} className="shrink-0">
+                      <Button size="sm" variant="secondary">
+                        Open budget
+                      </Button>
+                    </Link>
                   </div>
-                  <Link href={`/stock/job-budget/${job.id}`}>
-                    <Button size="sm" variant="secondary">Open budget</Button>
-                  </Link>
+                ))}
+              </div>
+              {filteredJobs.length > PAGE_SIZE ? (
+                <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+                  <p>
+                    Page {safePage} of {totalPages} · {formatCount(filteredJobs.length)} job
+                    {filteredJobs.length === 1 ? '' : 's'}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={safePage <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={safePage >= totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
-              ))}
-            </div>
+              ) : null}
+            </>
           )}
         </div>
 
@@ -139,8 +231,8 @@ export default function StockJobBudgetPage() {
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-300">Flow</h2>
             <div className="mt-3 space-y-3 text-sm text-slate-600 dark:text-slate-400">
               <p>Formula defines dynamic inputs and rules.</p>
-              <p>Variation job stores job items using those formulas.</p>
-              <p>Budget compares theoretical material demand with actual FIFO stock issues.</p>
+              <p>Only the parent contract job stores budget lines (job items); variations cannot receive new budget lines from the API.</p>
+              <p>Opening a variation URL under stock job-budget redirects to the parent contract.</p>
             </div>
           </div>
         </div>

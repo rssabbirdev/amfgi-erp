@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const ext =
       file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-    const { id } = await uploadToDrive(
+    const { viewerUrl } = await uploadToDrive(
       buffer,
       `user-${userId}-avatar-${Date.now()}.${ext}`,
       file.type,
@@ -54,18 +54,18 @@ export async function POST(req: Request) {
       },
     );
 
-    const { displayUrl, driveId } = await finalizeUserMediaUpload({
+    const { displayUrl } = await finalizeUserMediaUpload({
       userId,
       companyId,
       kind: MEDIA_KIND_USER_PROFILE,
-      newDriveId: id,
+      newFileUrl: viewerUrl,
       mimeType: file.type,
       fileName: `user-${userId}-avatar.${ext}`,
       bytes: file.size,
       uploadedById: userId,
     });
 
-    return successResponse({ url: displayUrl, driveId });
+    return successResponse({ url: displayUrl });
   } catch (err: unknown) {
     const message = explainGoogleDriveError(err);
     console.error('User profile image upload error:', message);

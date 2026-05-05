@@ -108,13 +108,13 @@ export async function POST(req: Request) {
     const workedMinutes = Math.max(0, diffMinutes(checkInAt, checkOutAt) - breakMinutes);
 
     const asg = row.workAssignmentId ? asgById.get(row.workAssignmentId) : null;
-    let expectedShiftStart: Date | null = null;
-    let expectedShiftEnd: Date | null = null;
-    if (asg?.shiftStart) expectedShiftStart = parseDt(`${workDateYmd}T${asg.shiftStart}:00`);
-    if (asg?.shiftEnd) expectedShiftEnd = parseDt(`${workDateYmd}T${asg.shiftEnd}:00`);
+    let dutyStart: Date | null = null;
+    let dutyEnd: Date | null = null;
+    if (asg?.shiftStart) dutyStart = parseDt(`${workDateYmd}T${asg.shiftStart}:00`);
+    if (asg?.shiftEnd) dutyEnd = parseDt(`${workDateYmd}T${asg.shiftEnd}:00`);
 
-    const lateMinutes = expectedShiftStart && checkInAt ? Math.max(0, diffMinutes(expectedShiftStart, checkInAt)) : 0;
-    const earlyLeaveMinutes = expectedShiftEnd && checkOutAt ? Math.max(0, diffMinutes(checkOutAt, expectedShiftEnd)) : 0;
+    const lateMinutes = dutyStart && checkInAt ? Math.max(0, diffMinutes(dutyStart, checkInAt)) : 0;
+    const earlyLeaveMinutes = dutyEnd && checkOutAt ? Math.max(0, diffMinutes(checkOutAt, dutyEnd)) : 0;
     const overtimeMinutes = row.status === 'ABSENT' || row.status === 'LEAVE' ? 0 : Math.max(0, workedMinutes - basicMinutes);
 
     const data: Record<string, unknown> = {
@@ -122,8 +122,6 @@ export async function POST(req: Request) {
       employeeId: row.employeeId,
       workDate,
       workAssignmentId: row.workAssignmentId || null,
-      expectedShiftStart,
-      expectedShiftEnd,
       checkInAt,
       checkOutAt,
       breakStartAt: breakInAt,

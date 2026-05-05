@@ -38,14 +38,6 @@ const HUB_SECTIONS: Array<{
         perms: ['hr.attendance.view'],
       },
       {
-        href: '/hr/geofence',
-        title: 'Geofence Attendance',
-        description: 'Draw factory polygon borders, place gate entry points, and prepare mobile-ready geofence attendance zones.',
-        eyebrow: 'Geofence',
-        tone: 'amber',
-        perms: ['hr.geofence.view'],
-      },
-      {
         href: '/hr/reports/attendance',
         title: 'Monthly Attendance Reports',
         description: 'Review employee-wise monthly attendance and export Excel files for one employee or the full month.',
