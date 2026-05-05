@@ -1,6 +1,8 @@
 import { auth } from '@/auth';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
+import { resolveJobBudgetContext } from '@/lib/job-costing/budgetJobContext';
+import { syncTrackedJobItemProgress } from '@/lib/job-costing/jobItemProgressTracking';
 import {
   assertCompanyEmployeesExist,
   normalizeAssignedEmployeeIds,
@@ -17,6 +19,25 @@ const JobItemSchema = z.object({
   specifications: z.unknown(),
   assignedEmployeeIds: z.array(z.string()).optional(),
   sortOrder: z.number().int().min(0).optional(),
+  progressStatus: z.enum(['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'ON_HOLD']).optional(),
+  progressPercent: z.number().min(0).max(100).optional(),
+  trackingItems: z.array(z.object({
+    id: z.string().min(1),
+    label: z.string().min(1).max(120),
+    unit: z.string().max(40).optional().nullable(),
+    targetValue: z.number().positive(),
+    sourceKey: z.string().max(180).optional().nullable(),
+  })).optional(),
+  trackingEnabled: z.boolean().optional(),
+  trackingLabel: z.string().max(120).optional().nullable(),
+  trackingUnit: z.string().max(40).optional().nullable(),
+  trackingTargetValue: z.number().min(0).optional().nullable(),
+  trackingSourceKey: z.string().max(180).optional().nullable(),
+  plannedStartDate: z.string().optional().nullable(),
+  plannedEndDate: z.string().optional().nullable(),
+  actualStartDate: z.string().optional().nullable(),
+  actualEndDate: z.string().optional().nullable(),
+  progressNote: z.string().max(2000).optional().nullable(),
 });
 
 async function loadVariationJob(jobId: string, companyId: string) {
@@ -47,10 +68,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const job = await loadVariationJob(id, companyId);
   if (!job) return errorResponse('Job not found', 404);
 
+  const budgetCtx = await resolveJobBudgetContext(prisma, companyId, id);
+  if (!budgetCtx) return errorResponse('Job not found', 404);
+
   const rows = await prisma.jobItem.findMany({
     where: {
       companyId,
-      jobId: id,
+      jobId: budgetCtx.budgetJobId,
       isActive: true,
     },
     include: {
@@ -92,8 +116,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const job = await loadVariationJob(id, companyId);
   if (!job) return errorResponse('Job not found', 404);
-  if (!job.parentJobId) {
-    return errorResponse('Job items can only be attached to variation jobs', 422);
+  if (job.parentJobId) {
+    return errorResponse(
+      'Material budget lines are stored on the parent contract job. Open the parent job to add or edit budget items.',
+      422
+    );
   }
 
   const body = await req.json();
@@ -117,13 +144,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const created = await tx.jobItem.create({
       data: {
         companyId,
-        jobId: id,
+        jobId: job.id,
         createdBy: session.user.id,
         name: parsed.data.name,
         description: parsed.data.description ?? null,
         formulaLibraryId: parsed.data.formulaLibraryId,
         specifications: parsed.data.specifications as Prisma.InputJsonValue,
         sortOrder: parsed.data.sortOrder ?? 0,
+        progressStatus: parsed.data.progressStatus ?? 'NOT_STARTED',
+        progressPercent: parsed.data.progressPercent ?? 0,
+        trackingItems: parsed.data.trackingItems as Prisma.InputJsonValue | undefined,
+        trackingEnabled: parsed.data.trackingEnabled ?? false,
+        trackingLabel: parsed.data.trackingLabel?.trim() || null,
+        trackingUnit: parsed.data.trackingUnit?.trim() || null,
+        trackingTargetValue: parsed.data.trackingTargetValue ?? null,
+        trackingSourceKey: parsed.data.trackingSourceKey?.trim() || null,
+        plannedStartDate: parsed.data.plannedStartDate ? new Date(parsed.data.plannedStartDate) : null,
+        plannedEndDate: parsed.data.plannedEndDate ? new Date(parsed.data.plannedEndDate) : null,
+        actualStartDate: parsed.data.actualStartDate ? new Date(parsed.data.actualStartDate) : null,
+        actualEndDate: parsed.data.actualEndDate ? new Date(parsed.data.actualEndDate) : null,
+        progressNote: parsed.data.progressNote ?? null,
+        progressUpdatedAt: parsed.data.progressStatus !== undefined || parsed.data.progressPercent !== undefined || parsed.data.plannedStartDate !== undefined || parsed.data.plannedEndDate !== undefined || parsed.data.actualStartDate !== undefined || parsed.data.actualEndDate !== undefined || parsed.data.progressNote !== undefined ? new Date() : null,
       },
     });
 
@@ -136,6 +177,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           sortOrder: index,
         })),
       });
+    }
+
+    if (parsed.data.trackingEnabled) {
+      await syncTrackedJobItemProgress(tx, companyId, created.id);
     }
 
     return tx.jobItem.findFirstOrThrow({

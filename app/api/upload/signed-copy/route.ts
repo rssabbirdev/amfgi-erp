@@ -8,6 +8,7 @@ import {
   deleteFromDrive,
   uploadToDrive,
 } from '@/lib/utils/googleDrive';
+import { extractGoogleDriveFileId } from '@/lib/utils/googleDriveUrl';
 
 function parseDeliveryNoteLabel(notes?: string | null): string {
   const match = notes?.match(/--- DELIVERY NOTE #(\d+)/);
@@ -53,8 +54,8 @@ export async function POST(req: Request) {
         id: true,
         companyId: true,
         isDeliveryNote: true,
-        signedCopyDriveId: true,
         notes: true,
+        signedCopyUrl: true,
         jobId: true,
         job: {
           select: {
@@ -86,9 +87,10 @@ export async function POST(req: Request) {
     if (!folderId) return errorResponse('Google Drive folder not configured', 500);
 
     // Delete old file from Drive if it exists
-    if (transaction.signedCopyDriveId) {
+    const oldDriveId = extractGoogleDriveFileId(transaction.signedCopyUrl ?? '');
+    if (oldDriveId) {
       try {
-        await deleteFromDrive(transaction.signedCopyDriveId, transaction.companyId);
+        await deleteFromDrive(oldDriveId, transaction.companyId);
       } catch (err) {
         console.error('Failed to delete old signed copy from Drive:', err);
       }
@@ -105,7 +107,7 @@ export async function POST(req: Request) {
     const fileName = buildSignedDeliveryNoteDriveFileName(deliveryNoteLabel, jobNumber, transaction.id, ext);
 
     // Upload new file to Drive
-    const { id, viewerUrl } = await uploadToDrive(
+    const { viewerUrl } = await uploadToDrive(
       buffer,
       fileName,
       file.type,
@@ -131,7 +133,6 @@ export async function POST(req: Request) {
       where: { id: transactionId },
       data: {
         signedCopyUrl: viewerUrl,
-        signedCopyDriveId: id,
       },
     });
 

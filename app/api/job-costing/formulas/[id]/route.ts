@@ -3,62 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { P } from '@/lib/permissions';
 import { errorResponse, successResponse } from '@/lib/utils/apiResponse';
-import { z } from 'zod';
-
-const FormulaConstantSchema = z.object({
-  key: z.string().min(1).max(80),
-  label: z.string().min(1).max(120),
-  value: z.union([z.number(), z.string().min(1)]),
-  unit: z.string().max(40).optional(),
-});
-
-const FormulaMaterialRuleSchema = z
-  .object({
-    materialId: z.string().min(1).optional(),
-    materialSelectorKey: z.string().min(1).max(80).optional(),
-    quantityExpression: z.string().min(1),
-    quantityUomId: z.string().optional(),
-    wastePercent: z.number().min(0).max(1000).optional(),
-  })
-  .refine((value) => value.materialId || value.materialSelectorKey, {
-    message: 'Material rule must include a fixed material or a job material selector',
-  });
-
-const FormulaConfigSchema = z.object({
-  version: z.number().int().min(1).default(1),
-  unitSystem: z.literal('METRIC').optional(),
-  variables: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
-  constants: z.array(FormulaConstantSchema).optional(),
-  areas: z
-    .array(
-      z.object({
-        key: z.string().min(1).max(80),
-        label: z.string().min(1).max(120),
-        measurementsPath: z.string().optional(),
-        variables: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
-        materials: z.array(FormulaMaterialRuleSchema),
-        labor: z.array(
-          z.object({
-            expertiseName: z.string().min(1).max(120),
-            quantityExpression: z.string().optional(),
-            crewSizeExpression: z.string().optional(),
-            productivityPerWorkerPerDay: z.string().min(1),
-          })
-        ),
-      })
-    )
-    .min(1),
-});
-
-const FormulaLibraryUpdateSchema = z.object({
-  name: z.string().min(1).max(120).optional(),
-  slug: z.string().min(1).max(120).regex(/^[a-z0-9-]+$/).optional(),
-  fabricationType: z.string().min(1).max(120).optional(),
-  description: z.string().max(2000).nullable().optional(),
-  specificationSchema: z.unknown().nullable().optional(),
-  formulaConfig: FormulaConfigSchema.optional(),
-  isActive: z.boolean().optional(),
-});
+import { FormulaLibraryUpdateSchema, formulaChanged, formulaSnapshotData } from '../_lib';
 
 async function loadFormula(id: string, companyId: string) {
   return prisma.formulaLibrary.findFirst({
@@ -98,21 +43,46 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const parsed = FormulaLibraryUpdateSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  const row = await prisma.formulaLibrary.update({
-    where: { id },
-    data: {
-      ...parsed.data,
-      specificationSchema:
-        parsed.data.specificationSchema === undefined
-          ? undefined
-          : parsed.data.specificationSchema == null
-            ? Prisma.JsonNull
-            : (parsed.data.specificationSchema as Prisma.InputJsonValue),
-      formulaConfig:
-        parsed.data.formulaConfig === undefined
-          ? undefined
-          : (parsed.data.formulaConfig as Prisma.InputJsonValue),
-    },
+  const shouldCreateVersion = (parsed.data.saveMode ?? 'manual') === 'manual' && formulaChanged(existing, parsed.data);
+
+  const row = await prisma.$transaction(async (tx) => {
+    const updated = await tx.formulaLibrary.update({
+      where: { id },
+      data: {
+        name: parsed.data.name,
+        slug: parsed.data.slug,
+        fabricationType: parsed.data.fabricationType,
+        description: parsed.data.description,
+        isActive: parsed.data.isActive,
+        specificationSchema:
+          parsed.data.specificationSchema === undefined
+            ? undefined
+            : parsed.data.specificationSchema == null
+              ? Prisma.JsonNull
+              : (parsed.data.specificationSchema as Prisma.InputJsonValue),
+        formulaConfig:
+          parsed.data.formulaConfig === undefined
+            ? undefined
+            : (parsed.data.formulaConfig as Prisma.InputJsonValue),
+      },
+    });
+
+    if (shouldCreateVersion) {
+      const latest = await tx.formulaLibraryVersion.aggregate({
+        where: { companyId: session.user.activeCompanyId!, formulaLibraryId: id },
+        _max: { versionNumber: true },
+      });
+      await tx.formulaLibraryVersion.create({
+        data: formulaSnapshotData(
+          updated,
+          (latest._max.versionNumber ?? 0) + 1,
+          session.user.id,
+          parsed.data.changeNote ?? 'Manual save'
+        ),
+      });
+    }
+
+    return updated;
   });
 
   return successResponse(row);

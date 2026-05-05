@@ -75,8 +75,8 @@ export async function regenerateAttendanceBoilerplate(
     const onLeave = absent.has(employeeId);
     const workforce = parseWorkforceProfile(emp.profileExtension);
 
-    let expectedShiftStart: Date | null = null;
-    let expectedShiftEnd: Date | null = null;
+    let checkInAt: Date | null = null;
+    let checkOutAt: Date | null = null;
     let breakStartAt: Date | null = null;
     let breakEndAt: Date | null = null;
 
@@ -84,8 +84,8 @@ export async function regenerateAttendanceBoilerplate(
       const st = parseTimeCell(asg.shiftStart ?? undefined);
       const en = parseTimeCell(asg.shiftEnd ?? undefined);
       const breakWindow = parseBreakWindow(workDateYmd, asg.breakWindow);
-      if (st) expectedShiftStart = dubaiWallTimeToUtc(workDateYmd, st.hour, st.minute);
-      if (en) expectedShiftEnd = dubaiWallTimeToUtc(workDateYmd, en.hour, en.minute);
+      if (st) checkInAt = dubaiWallTimeToUtc(workDateYmd, st.hour, st.minute);
+      if (en) checkOutAt = dubaiWallTimeToUtc(workDateYmd, en.hour, en.minute);
       breakStartAt = breakWindow.breakStartAt;
       breakEndAt = breakWindow.breakEndAt;
     } else {
@@ -99,8 +99,8 @@ export async function regenerateAttendanceBoilerplate(
         const en = parseTimeCell(setting?.dutyEnd);
         const bs = parseTimeCell(setting?.breakStart);
         const be = parseTimeCell(setting?.breakEnd);
-        if (st) expectedShiftStart = dubaiWallTimeToUtc(workDateYmd, st.hour, st.minute);
-        if (en) expectedShiftEnd = dubaiWallTimeToUtc(workDateYmd, en.hour, en.minute);
+        if (st) checkInAt = dubaiWallTimeToUtc(workDateYmd, st.hour, st.minute);
+        if (en) checkOutAt = dubaiWallTimeToUtc(workDateYmd, en.hour, en.minute);
         if (bs) breakStartAt = dubaiWallTimeToUtc(workDateYmd, bs.hour, bs.minute);
         if (be) breakEndAt = dubaiWallTimeToUtc(workDateYmd, be.hour, be.minute);
       }
@@ -118,8 +118,8 @@ export async function regenerateAttendanceBoilerplate(
       employeeId,
       workDate: sch.workDate,
       workAssignmentId: assignmentId,
-      expectedShiftStart: onLeave ? null : expectedShiftStart,
-      expectedShiftEnd: onLeave ? null : expectedShiftEnd,
+      checkInAt: onLeave ? null : checkInAt,
+      checkOutAt: onLeave ? null : checkOutAt,
       breakStartAt: onLeave ? null : breakStartAt,
       breakEndAt: onLeave ? null : breakEndAt,
       status: onLeave ? 'LEAVE' : defaultStatus,

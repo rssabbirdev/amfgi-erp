@@ -7,7 +7,7 @@
  *   • Users: Super Admin, AMFGI Manager, Store Keeper
  *   • Per-company: Units, Categories, Warehouses
  *   • Per-company: Materials with stock batches, logs, transactions (STOCK_IN)
- *   • Per-company: Customers, Suppliers, Jobs (with variations, contactsJson + contactPerson, LPO/quotation demo)
+ *   • Per-company: Customers, Suppliers, Jobs (parent contracts + variations; budget JobItems on parent only; contactsJson + contactPerson, LPO/quotation demo)
  *   • Companies: externalCompanyId (SEED-AMFGI / SEED-KM) for integration playground smoke tests
  *   • Per-company: Sample dispatch entries and 3+ delivery notes (STOCK_OUT)
  *   • Delivery Notes: Structured with dynamic fields for template rendering
@@ -19,7 +19,7 @@
  *   - Print template builder ready (delivery note + work schedule templates pre-configured)
  *   - Delivery note and work schedule printing with company letterhead support
  *   - FIFO stock consumption tracking with batch costing
- *   - Job variations for complex projects
+ *   - Job variations for site/dispatch scope; material budget lines stay on the parent contract (matches /stock/job-budget and cost engine)
  *
  * Run with: npx tsx scripts/seed.ts
  */
@@ -265,6 +265,52 @@ async function createSeedStockOut(args: {
   });
 
   return transaction;
+}
+
+async function seedFormulaLibraryVersion(args: {
+  companyId: string;
+  formulaLibraryId: string;
+  versionNumber: number;
+  name: string;
+  slug: string;
+  fabricationType: string;
+  description?: string | null;
+  specificationSchema: Prisma.InputJsonValue;
+  formulaConfig: Prisma.InputJsonValue;
+  changeNote?: string | null;
+}) {
+  await prisma.formulaLibraryVersion.upsert({
+    where: {
+      companyId_formulaLibraryId_versionNumber: {
+        companyId: args.companyId,
+        formulaLibraryId: args.formulaLibraryId,
+        versionNumber: args.versionNumber,
+      },
+    },
+    update: {
+      name: args.name,
+      slug: args.slug,
+      fabricationType: args.fabricationType,
+      description: args.description ?? null,
+      specificationSchema: args.specificationSchema,
+      formulaConfig: args.formulaConfig,
+      changeNote: args.changeNote ?? null,
+      createdBy: 'System Seed',
+    },
+    create: {
+      companyId: args.companyId,
+      formulaLibraryId: args.formulaLibraryId,
+      versionNumber: args.versionNumber,
+      name: args.name,
+      slug: args.slug,
+      fabricationType: args.fabricationType,
+      description: args.description ?? null,
+      specificationSchema: args.specificationSchema,
+      formulaConfig: args.formulaConfig,
+      changeNote: args.changeNote ?? null,
+      createdBy: 'System Seed',
+    },
+  });
 }
 
 interface MaterialDef {
@@ -736,7 +782,7 @@ async function seedCompanyData(
     }
   }
 
-  // Create jobs with variations (if customer exists)
+  // Create parent contract jobs + variations (if customer exists). Budget lines are attached to parent jobs only (see seedJobCostingDemo).
   let firstJobId: string | null = null;
   if (firstCustomerId) {
     for (const j of jobs) {
@@ -939,238 +985,226 @@ async function seedJobCostingDemo(companyId: string) {
     return;
   }
 
+  const grpFormulaName = 'GRP Lining - Walls and Floor';
+  const grpFormulaSlug = 'grp-lining-wall-floor';
+  const grpFormulaDescription =
+    'Demo formula: walls and floor reuse shared rates, plus area-only access and overlap factors for GRP lining.';
+  const grpSpecificationSchema = {
+    version: 1,
+    globalFields: [
+      { key: 'mat_material_id', label: 'Fiberglass Mat Material', inputType: 'material', unit: 'kg', required: true },
+      { key: 'resin_material_id', label: 'Resin Brand / Material', inputType: 'material', unit: 'kg', required: true },
+      { key: 'catalyst_material_id', label: 'Catalyst Material', inputType: 'material', unit: 'ltr', required: true },
+      { key: 'gelcoat_material_id', label: 'Gelcoat Brand / Material', inputType: 'material', unit: 'kg', required: true },
+      { key: 'thickness_mm', label: 'Laminate Thickness', inputType: 'length', unit: 'mm', required: true },
+      { key: 'mat_kg_per_sqm', label: 'Mat Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
+      { key: 'resin_kg_per_sqm', label: 'Resin Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
+      { key: 'catalyst_ltr_per_sqm', label: 'Catalyst Consumption', inputType: 'number', unit: 'ltr/sqm', required: true },
+      { key: 'gelcoat_kg_per_sqm', label: 'Gelcoat Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
+    ],
+    areas: [
+      {
+        key: 'walls',
+        label: 'Walls',
+        fields: [{ key: 'area_sqm', label: 'Wall Area', inputType: 'area', unit: 'sqm', required: true }],
+      },
+      {
+        key: 'floor',
+        label: 'Floor',
+        fields: [{ key: 'area_sqm', label: 'Floor Area', inputType: 'area', unit: 'sqm', required: true }],
+      },
+    ],
+  } as Prisma.InputJsonValue;
+  const grpFormulaConfig = {
+    version: 2,
+    unitSystem: 'METRIC',
+    variables: {
+      thickness_factor: 'specs.global.thickness_mm / 4',
+      production_allowance: '1.03',
+      gelcoat_loss_factor: '1.05',
+    },
+    constants: [
+      { key: 'thickness_factor', label: 'Thickness Factor', value: 'specs.global.thickness_mm / 4' },
+      { key: 'production_allowance', label: 'Production Allowance', value: '1.03' },
+      { key: 'gelcoat_loss_factor', label: 'Gelcoat Loss Factor', value: '1.05' },
+    ],
+    areas: [
+      {
+        key: 'walls',
+        label: 'Walls',
+        variables: {
+          access_factor: '1.08',
+          overlap_factor: '1.04',
+        },
+        materials: [
+          { materialSelectorKey: 'mat_material_id', quantityExpression: 'area.area_sqm * specs.global.mat_kg_per_sqm * formula.thickness_factor * area.formula.overlap_factor * formula.production_allowance', wastePercent: 5 },
+          { materialSelectorKey: 'resin_material_id', quantityExpression: 'area.area_sqm * specs.global.resin_kg_per_sqm * formula.thickness_factor * area.formula.access_factor * formula.production_allowance', wastePercent: 7 },
+          { materialSelectorKey: 'catalyst_material_id', quantityExpression: 'area.area_sqm * specs.global.catalyst_ltr_per_sqm * area.formula.access_factor', wastePercent: 3 },
+          { materialSelectorKey: 'gelcoat_material_id', quantityExpression: 'area.area_sqm * specs.global.gelcoat_kg_per_sqm * formula.gelcoat_loss_factor', wastePercent: 5 },
+        ],
+        labor: [
+          {
+            expertiseName: 'Lamination',
+            quantityExpression: 'area.area_sqm * area.formula.access_factor',
+            crewSizeExpression: '3',
+            productivityPerWorkerPerDay: '18',
+          },
+          {
+            expertiseName: 'Gelcoat',
+            quantityExpression: 'area.area_sqm',
+            crewSizeExpression: '2',
+            productivityPerWorkerPerDay: '25',
+          },
+        ],
+      },
+      {
+        key: 'floor',
+        label: 'Floor',
+        variables: {
+          access_factor: '1',
+          overlap_factor: '1.02',
+        },
+        materials: [
+          { materialSelectorKey: 'mat_material_id', quantityExpression: 'area.area_sqm * specs.global.mat_kg_per_sqm * formula.thickness_factor * area.formula.overlap_factor * formula.production_allowance', wastePercent: 5 },
+          { materialSelectorKey: 'resin_material_id', quantityExpression: 'area.area_sqm * specs.global.resin_kg_per_sqm * formula.thickness_factor * area.formula.access_factor * formula.production_allowance', wastePercent: 7 },
+          { materialSelectorKey: 'catalyst_material_id', quantityExpression: 'area.area_sqm * specs.global.catalyst_ltr_per_sqm', wastePercent: 3 },
+          { materialSelectorKey: 'gelcoat_material_id', quantityExpression: 'area.area_sqm * specs.global.gelcoat_kg_per_sqm * formula.gelcoat_loss_factor', wastePercent: 5 },
+        ],
+        labor: [
+          {
+            expertiseName: 'Lamination',
+            quantityExpression: 'area.area_sqm',
+            crewSizeExpression: '3',
+            productivityPerWorkerPerDay: '20',
+          },
+          {
+            expertiseName: 'Gelcoat',
+            quantityExpression: 'area.area_sqm',
+            crewSizeExpression: '2',
+            productivityPerWorkerPerDay: '28',
+          },
+        ],
+      },
+    ],
+  } as Prisma.InputJsonValue;
+
   const grpFormula = await prisma.formulaLibrary.upsert({
-    where: { companyId_slug: { companyId, slug: 'grp-lining-wall-floor' } },
+    where: { companyId_slug: { companyId, slug: grpFormulaSlug } },
     update: {
-      name: 'GRP Lining - Walls and Floor',
+      name: grpFormulaName,
       fabricationType: 'GRP Lining',
-      description: 'Beginner demo: calculates mat, resin, catalyst, gelcoat, and lamination labor from wall and floor area.',
-      specificationSchema: {
-        version: 1,
-        globalFields: [
-          { key: 'mat_material_id', label: 'Fiberglass Mat Material', inputType: 'material', required: true },
-          { key: 'resin_material_id', label: 'Resin Brand / Material', inputType: 'material', required: true },
-          { key: 'catalyst_material_id', label: 'Catalyst Material', inputType: 'material', required: true },
-          { key: 'gelcoat_material_id', label: 'Gelcoat Brand / Material', inputType: 'material', required: true },
-          { key: 'thickness_mm', label: 'Laminate Thickness', inputType: 'length', unit: 'mm', required: true },
-          { key: 'mat_kg_per_sqm', label: 'Mat Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
-          { key: 'resin_kg_per_sqm', label: 'Resin Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
-          { key: 'catalyst_ltr_per_sqm', label: 'Catalyst Consumption', inputType: 'number', unit: 'ltr/sqm', required: true },
-          { key: 'gelcoat_kg_per_sqm', label: 'Gelcoat Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
-        ],
-        areas: [
-          {
-            key: 'walls',
-            label: 'Walls',
-            fields: [
-              { key: 'area_sqm', label: 'Wall Area', inputType: 'area', storage: 'measurement', unit: 'sqm', required: true },
-            ],
-          },
-          {
-            key: 'floor',
-            label: 'Floor',
-            fields: [
-              { key: 'area_sqm', label: 'Floor Area', inputType: 'area', storage: 'measurement', unit: 'sqm', required: true },
-            ],
-          },
-        ],
-      } as Prisma.InputJsonValue,
-      formulaConfig: {
-        version: 2,
-        unitSystem: 'METRIC',
-        areas: ['walls', 'floor'].map((key) => ({
-          key,
-          label: key === 'walls' ? 'Walls' : 'Floor',
-          materials: [
-            { materialSelectorKey: 'mat_material_id', quantityExpression: 'area.area_sqm * specs.global.mat_kg_per_sqm', wastePercent: 5 },
-            { materialSelectorKey: 'resin_material_id', quantityExpression: 'area.area_sqm * specs.global.resin_kg_per_sqm', wastePercent: 7 },
-            { materialSelectorKey: 'catalyst_material_id', quantityExpression: 'area.area_sqm * specs.global.catalyst_ltr_per_sqm', wastePercent: 3 },
-            { materialSelectorKey: 'gelcoat_material_id', quantityExpression: 'area.area_sqm * specs.global.gelcoat_kg_per_sqm', wastePercent: 5 },
-          ],
-          labor: [
-            {
-              expertiseName: 'Lamination',
-              quantityExpression: 'area.area_sqm',
-              crewSizeExpression: '3',
-              productivityPerWorkerPerDay: '18',
-            },
-            {
-              expertiseName: 'Gelcoat',
-              quantityExpression: 'area.area_sqm',
-              crewSizeExpression: '2',
-              productivityPerWorkerPerDay: '25',
-            },
-          ],
-        })),
-      } as Prisma.InputJsonValue,
+      description: grpFormulaDescription,
+      specificationSchema: grpSpecificationSchema,
+      formulaConfig: grpFormulaConfig,
       isActive: true,
     },
     create: {
       companyId,
-      name: 'GRP Lining - Walls and Floor',
-      slug: 'grp-lining-wall-floor',
+      name: grpFormulaName,
+      slug: grpFormulaSlug,
       fabricationType: 'GRP Lining',
-      description: 'Beginner demo: calculates mat, resin, catalyst, gelcoat, and lamination labor from wall and floor area.',
-      specificationSchema: {
-        version: 1,
-        globalFields: [
-          { key: 'mat_material_id', label: 'Fiberglass Mat Material', inputType: 'material', required: true },
-          { key: 'resin_material_id', label: 'Resin Brand / Material', inputType: 'material', required: true },
-          { key: 'catalyst_material_id', label: 'Catalyst Material', inputType: 'material', required: true },
-          { key: 'gelcoat_material_id', label: 'Gelcoat Brand / Material', inputType: 'material', required: true },
-          { key: 'thickness_mm', label: 'Laminate Thickness', inputType: 'length', unit: 'mm', required: true },
-          { key: 'mat_kg_per_sqm', label: 'Mat Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
-          { key: 'resin_kg_per_sqm', label: 'Resin Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
-          { key: 'catalyst_ltr_per_sqm', label: 'Catalyst Consumption', inputType: 'number', unit: 'ltr/sqm', required: true },
-          { key: 'gelcoat_kg_per_sqm', label: 'Gelcoat Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
-        ],
-        areas: [
-          {
-            key: 'walls',
-            label: 'Walls',
-            fields: [
-              { key: 'area_sqm', label: 'Wall Area', inputType: 'area', storage: 'measurement', unit: 'sqm', required: true },
-            ],
-          },
-          {
-            key: 'floor',
-            label: 'Floor',
-            fields: [
-              { key: 'area_sqm', label: 'Floor Area', inputType: 'area', storage: 'measurement', unit: 'sqm', required: true },
-            ],
-          },
-        ],
-      } as Prisma.InputJsonValue,
-      formulaConfig: {
-        version: 2,
-        unitSystem: 'METRIC',
-        areas: ['walls', 'floor'].map((key) => ({
-          key,
-          label: key === 'walls' ? 'Walls' : 'Floor',
-          materials: [
-            { materialSelectorKey: 'mat_material_id', quantityExpression: 'area.area_sqm * specs.global.mat_kg_per_sqm', wastePercent: 5 },
-            { materialSelectorKey: 'resin_material_id', quantityExpression: 'area.area_sqm * specs.global.resin_kg_per_sqm', wastePercent: 7 },
-            { materialSelectorKey: 'catalyst_material_id', quantityExpression: 'area.area_sqm * specs.global.catalyst_ltr_per_sqm', wastePercent: 3 },
-            { materialSelectorKey: 'gelcoat_material_id', quantityExpression: 'area.area_sqm * specs.global.gelcoat_kg_per_sqm', wastePercent: 5 },
-          ],
-          labor: [
-            {
-              expertiseName: 'Lamination',
-              quantityExpression: 'area.area_sqm',
-              crewSizeExpression: '3',
-              productivityPerWorkerPerDay: '18',
-            },
-            {
-              expertiseName: 'Gelcoat',
-              quantityExpression: 'area.area_sqm',
-              crewSizeExpression: '2',
-              productivityPerWorkerPerDay: '25',
-            },
-          ],
-        })),
-      } as Prisma.InputJsonValue,
+      description: grpFormulaDescription,
+      specificationSchema: grpSpecificationSchema,
+      formulaConfig: grpFormulaConfig,
       createdBy: 'System Seed',
       isActive: true,
     },
   });
+  await seedFormulaLibraryVersion({
+    companyId,
+    formulaLibraryId: grpFormula.id,
+    versionNumber: 1,
+    name: grpFormulaName,
+    slug: grpFormulaSlug,
+    fabricationType: 'GRP Lining',
+    description: grpFormulaDescription,
+    specificationSchema: grpSpecificationSchema,
+    formulaConfig: grpFormulaConfig,
+    changeNote: 'Seeded demo formula aligned to the current builder model.',
+  });
 
+  const finishingFormulaName = 'GRP Final Finishing';
+  const finishingFormulaSlug = 'grp-final-finishing';
+  const finishingFormulaDescription =
+    'Demo finishing formula: reusable global values plus an area-only buffing factor for final gelcoat and solvent usage.';
+  const finishingSpecificationSchema = {
+    version: 1,
+    globalFields: [
+      { key: 'gelcoat_material_id', label: 'Gelcoat Brand / Material', inputType: 'material', unit: 'kg', required: true },
+      { key: 'acetone_material_id', label: 'Acetone / Solvent Material', inputType: 'material', unit: 'kg', required: true },
+      { key: 'gelcoat_kg_per_sqm', label: 'Gelcoat Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
+      { key: 'acetone_kg_per_sqm', label: 'Acetone Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
+    ],
+    areas: [
+      {
+        key: 'finish',
+        label: 'Finish Area',
+        fields: [{ key: 'area_sqm', label: 'Finish Area', inputType: 'area', unit: 'sqm', required: true }],
+      },
+    ],
+  } as Prisma.InputJsonValue;
+  const finishingFormulaConfig = {
+    version: 2,
+    unitSystem: 'METRIC',
+    variables: {
+      finishing_allowance: '1.04',
+    },
+    constants: [{ key: 'finishing_allowance', label: 'Finishing Allowance', value: '1.04' }],
+    areas: [
+      {
+        key: 'finish',
+        label: 'Finish Area',
+        variables: {
+          buffing_factor: '1.02',
+        },
+        materials: [
+          { materialSelectorKey: 'gelcoat_material_id', quantityExpression: 'area.area_sqm * specs.global.gelcoat_kg_per_sqm * formula.finishing_allowance * area.formula.buffing_factor', wastePercent: 4 },
+          { materialSelectorKey: 'acetone_material_id', quantityExpression: 'area.area_sqm * specs.global.acetone_kg_per_sqm * formula.finishing_allowance', wastePercent: 2 },
+        ],
+        labor: [
+          {
+            expertiseName: 'Finishing',
+            quantityExpression: 'area.area_sqm',
+            crewSizeExpression: '2',
+            productivityPerWorkerPerDay: '30',
+          },
+        ],
+      },
+    ],
+  } as Prisma.InputJsonValue;
   const finishingFormula = await prisma.formulaLibrary.upsert({
-    where: { companyId_slug: { companyId, slug: 'grp-final-finishing' } },
+    where: { companyId_slug: { companyId, slug: finishingFormulaSlug } },
     update: {
-      name: 'GRP Final Finishing',
+      name: finishingFormulaName,
       fabricationType: 'GRP Finishing',
-      description: 'Beginner demo: topcoat and cleaning solvent budget for the final finishing stage.',
-      specificationSchema: {
-        version: 1,
-        globalFields: [
-          { key: 'gelcoat_material_id', label: 'Gelcoat Brand / Material', inputType: 'material', required: true },
-          { key: 'acetone_material_id', label: 'Acetone / Solvent Material', inputType: 'material', required: true },
-          { key: 'gelcoat_kg_per_sqm', label: 'Gelcoat Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
-          { key: 'acetone_kg_per_sqm', label: 'Acetone Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
-        ],
-        areas: [
-          {
-            key: 'finish',
-            label: 'Finish Area',
-            fields: [
-              { key: 'area_sqm', label: 'Finish Area', inputType: 'area', storage: 'measurement', unit: 'sqm', required: true },
-            ],
-          },
-        ],
-      } as Prisma.InputJsonValue,
-      formulaConfig: {
-        version: 2,
-        unitSystem: 'METRIC',
-        areas: [
-          {
-            key: 'finish',
-            label: 'Finish Area',
-            materials: [
-              { materialSelectorKey: 'gelcoat_material_id', quantityExpression: 'area.area_sqm * specs.global.gelcoat_kg_per_sqm', wastePercent: 4 },
-              { materialSelectorKey: 'acetone_material_id', quantityExpression: 'area.area_sqm * specs.global.acetone_kg_per_sqm', wastePercent: 2 },
-            ],
-            labor: [
-              {
-                expertiseName: 'Finishing',
-                quantityExpression: 'area.area_sqm',
-                crewSizeExpression: '2',
-                productivityPerWorkerPerDay: '30',
-              },
-            ],
-          },
-        ],
-      } as Prisma.InputJsonValue,
+      description: finishingFormulaDescription,
+      specificationSchema: finishingSpecificationSchema,
+      formulaConfig: finishingFormulaConfig,
       isActive: true,
     },
     create: {
       companyId,
-      name: 'GRP Final Finishing',
-      slug: 'grp-final-finishing',
+      name: finishingFormulaName,
+      slug: finishingFormulaSlug,
       fabricationType: 'GRP Finishing',
-      description: 'Beginner demo: topcoat and cleaning solvent budget for the final finishing stage.',
-      specificationSchema: {
-        version: 1,
-        globalFields: [
-          { key: 'gelcoat_material_id', label: 'Gelcoat Brand / Material', inputType: 'material', required: true },
-          { key: 'acetone_material_id', label: 'Acetone / Solvent Material', inputType: 'material', required: true },
-          { key: 'gelcoat_kg_per_sqm', label: 'Gelcoat Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
-          { key: 'acetone_kg_per_sqm', label: 'Acetone Consumption', inputType: 'number', unit: 'kg/sqm', required: true },
-        ],
-        areas: [
-          {
-            key: 'finish',
-            label: 'Finish Area',
-            fields: [
-              { key: 'area_sqm', label: 'Finish Area', inputType: 'area', storage: 'measurement', unit: 'sqm', required: true },
-            ],
-          },
-        ],
-      } as Prisma.InputJsonValue,
-      formulaConfig: {
-        version: 2,
-        unitSystem: 'METRIC',
-        areas: [
-          {
-            key: 'finish',
-            label: 'Finish Area',
-            materials: [
-              { materialSelectorKey: 'gelcoat_material_id', quantityExpression: 'area.area_sqm * specs.global.gelcoat_kg_per_sqm', wastePercent: 4 },
-              { materialSelectorKey: 'acetone_material_id', quantityExpression: 'area.area_sqm * specs.global.acetone_kg_per_sqm', wastePercent: 2 },
-            ],
-            labor: [
-              {
-                expertiseName: 'Finishing',
-                quantityExpression: 'area.area_sqm',
-                crewSizeExpression: '2',
-                productivityPerWorkerPerDay: '30',
-              },
-            ],
-          },
-        ],
-      } as Prisma.InputJsonValue,
+      description: finishingFormulaDescription,
+      specificationSchema: finishingSpecificationSchema,
+      formulaConfig: finishingFormulaConfig,
       createdBy: 'System Seed',
       isActive: true,
     },
+  });
+  await seedFormulaLibraryVersion({
+    companyId,
+    formulaLibraryId: finishingFormula.id,
+    versionNumber: 1,
+    name: finishingFormulaName,
+    slug: finishingFormulaSlug,
+    fabricationType: 'GRP Finishing',
+    description: finishingFormulaDescription,
+    specificationSchema: finishingSpecificationSchema,
+    formulaConfig: finishingFormulaConfig,
+    changeNote: 'Seeded demo formula aligned to the current builder model.',
   });
 
   const variation = await prisma.job.findFirst({
@@ -1179,11 +1213,13 @@ async function seedJobCostingDemo(companyId: string) {
       jobNumber: 'JOB-2024-001-v2',
       parentJobId: { not: null },
     },
+    select: { id: true, parentJobId: true },
   });
-  if (!variation) {
+  if (!variation?.parentJobId) {
     console.log('  ! Skipped seeded job items (demo variation not found)');
     return;
   }
+  const budgetJobId = variation.parentJobId;
 
   const assignedEmployees = await prisma.employee.findMany({
     where: { companyId, status: 'ACTIVE' },
@@ -1193,11 +1229,11 @@ async function seedJobCostingDemo(companyId: string) {
   const assignedEmployeeIds = assignedEmployees.map((employee) => employee.id);
 
   const existingGrpItem = await prisma.jobItem.findFirst({
-    where: { companyId, jobId: variation.id, name: 'Demo Item - Tank GRP Lining' },
+    where: { companyId, jobId: budgetJobId, name: 'Demo Item - Tank GRP Lining' },
   });
   const grpItemData = {
     companyId,
-    jobId: variation.id,
+    jobId: budgetJobId,
     formulaLibraryId: grpFormula.id,
     name: 'Demo Item - Tank GRP Lining',
     description: 'Seeded example: walls and floor use the same formula with separate measurements.',
@@ -1215,14 +1251,10 @@ async function seedJobCostingDemo(companyId: string) {
       },
       areas: {
         walls: {
-          measurements: {
-            area_sqm: 180,
-          },
+          measurements: { area_sqm: 180 },
         },
         floor: {
-          measurements: {
-            area_sqm: 75,
-          },
+          measurements: { area_sqm: 75 },
         },
       },
     } as Prisma.InputJsonValue,
@@ -1242,11 +1274,11 @@ async function seedJobCostingDemo(companyId: string) {
   }
 
   const existingFinishItem = await prisma.jobItem.findFirst({
-    where: { companyId, jobId: variation.id, name: 'Demo Item - Final Gelcoat Finish' },
+    where: { companyId, jobId: budgetJobId, name: 'Demo Item - Final Gelcoat Finish' },
   });
   const finishItemData = {
     companyId,
-    jobId: variation.id,
+    jobId: budgetJobId,
     formulaLibraryId: finishingFormula.id,
     name: 'Demo Item - Final Gelcoat Finish',
     description: 'Seeded example: a second job item inside the same variation.',
@@ -1259,9 +1291,7 @@ async function seedJobCostingDemo(companyId: string) {
       },
       areas: {
         finish: {
-          measurements: {
-            area_sqm: 255,
-          },
+          measurements: { area_sqm: 255 },
         },
       },
     } as Prisma.InputJsonValue,
@@ -1318,7 +1348,7 @@ async function seedJobCostingDemo(companyId: string) {
     isDeliveryNote: false,
   });
 
-  console.log('  ✓ 2 formulas, 2 variation job items, and actual issue comparison rows');
+  console.log('  ✓ 2 formulas, 2 contract budget job items (parent), and variation dispatch rows');
 }
 
 function atTime(dateOnly: Date, hhmm: string): Date {
@@ -1704,8 +1734,6 @@ async function seedHrWorkforceDemo(
         employeeId: emp.id,
         workDate,
         workAssignmentId: assignmentId,
-        expectedShiftStart: atTime(workDate, '08:00'),
-        expectedShiftEnd: atTime(workDate, '17:00'),
         checkInAt: checkIn,
         checkOutAt: checkOut,
         status: absent ? 'ABSENT' : halfDay ? 'HALF_DAY' : 'PRESENT',
@@ -1722,78 +1750,6 @@ async function seedHrWorkforceDemo(
     console.log(`  • Schedule day ${day + 1}/6 published for ${emailDomain}`);
   }
 
-  const isKmCompany = emailDomain === 'kandm.com';
-  const zoneName = isKmCompany ? 'Factory Yard Gate - K&M' : 'Factory Yard Gate - AMFGI';
-  const zonePolygon =
-    isKmCompany
-      ? [
-          { lat: 24.45322, lng: 54.37767 },
-          { lat: 24.45322, lng: 54.37841 },
-          { lat: 24.45263, lng: 54.37841 },
-          { lat: 24.45263, lng: 54.37767 },
-        ]
-      : [
-          { lat: 25.01062, lng: 55.14042 },
-          { lat: 25.01062, lng: 55.14118 },
-          { lat: 25.01003, lng: 55.14118 },
-          { lat: 25.01003, lng: 55.14042 },
-        ];
-  const gatePoint =
-    isKmCompany
-      ? { lat: 24.45296, lng: 54.37775 }
-      : { lat: 25.01029, lng: 55.14055 };
-
-  const geofenceZone = await prisma.geofenceZone.upsert({
-    where: { companyId_name: { companyId, name: zoneName } },
-    update: {
-      description: 'Seeded demo polygon geofence for factory gate attendance.',
-      isActive: true,
-      polygonPoints: zonePolygon as Prisma.InputJsonValue,
-      gateLat: gatePoint.lat,
-      gateLng: gatePoint.lng,
-      gateRadiusMeters: 30,
-      centerLat: zonePolygon.reduce((sum, point) => sum + point.lat, 0) / zonePolygon.length,
-      centerLng: zonePolygon.reduce((sum, point) => sum + point.lng, 0) / zonePolygon.length,
-      createdById,
-    },
-    create: {
-      companyId,
-      name: zoneName,
-      description: 'Seeded demo polygon geofence for factory gate attendance.',
-      isActive: true,
-      polygonPoints: zonePolygon as Prisma.InputJsonValue,
-      gateLat: gatePoint.lat,
-      gateLng: gatePoint.lng,
-      gateRadiusMeters: 30,
-      centerLat: zonePolygon.reduce((sum, point) => sum + point.lat, 0) / zonePolygon.length,
-      centerLng: zonePolygon.reduce((sum, point) => sum + point.lng, 0) / zonePolygon.length,
-      createdById,
-    },
-  });
-
-  await prisma.geofenceAttendanceEvent.createMany({
-    data: drivers.slice(0, 2).map((employee, index) => ({
-      companyId,
-      zoneId: geofenceZone.id,
-      employeeId: employee.id,
-      workDate: new Date(new Date().setHours(0, 0, 0, 0)),
-      eventType: index === 0 ? 'CHECK_IN' : 'CHECK_OUT',
-      validationStatus: 'VALID',
-      latitude: gatePoint.lat + index * 0.00001,
-      longitude: gatePoint.lng + index * 0.00001,
-      accuracyMeters: 8,
-      distanceToGateMeters: 4 + index,
-      insidePolygon: true,
-      withinGateRadius: true,
-      devicePlatform: index === 0 ? 'android' : 'ios',
-      deviceIdentifier: `seed-device-${index + 1}`,
-      notes: index === 0 ? 'Seeded geofence check-in' : 'Seeded geofence check-out',
-      occurredAt: new Date(Date.now() - index * 1000 * 60 * 45),
-    })),
-    skipDuplicates: false,
-  });
-  console.log(`  • Geofence demo seeded for ${emailDomain}`);
-
   console.log('  ✓ 30 employees seeded with workforce profiles');
   console.log('    - 6 drivers');
   console.log('    - 6 office staff');
@@ -1802,7 +1758,6 @@ async function seedHrWorkforceDemo(
   console.log('  ✓ 4 employee self-service logins linked to employees');
   console.log('  ✓ 6 schedules with schedule-level notes and driver trip logs');
   console.log('  ✓ Attendance entries generated for schedulable employees');
-  console.log('  ✓ 1 factory geofence zone and seeded gate events');
 }
 
 async function seed() {
@@ -1811,8 +1766,6 @@ async function seed() {
   // ── Delete old data (clean slate) ────────────────────────────────────────────
   console.log('Clearing old data…');
   await prisma.user.updateMany({ data: { linkedEmployeeId: null } });
-  await prisma.geofenceAttendanceEvent.deleteMany({});
-  await prisma.geofenceZone.deleteMany({});
   await prisma.attendanceEntry.deleteMany({});
   await prisma.workAssignmentMember.deleteMany({});
   await prisma.driverRunLog.deleteMany({});
@@ -1840,6 +1793,7 @@ async function seed() {
   await prisma.stockBatch.deleteMany({});
   await prisma.materialWarehouseStock.deleteMany({});
   await prisma.jobItem.deleteMany({});
+  await prisma.formulaLibraryVersion.deleteMany({});
   await prisma.formulaLibrary.deleteMany({});
   await prisma.job.deleteMany({});
   await prisma.supplier.deleteMany({});

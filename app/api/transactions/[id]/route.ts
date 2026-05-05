@@ -88,8 +88,6 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
             email: true,
             image: true,
             signatureUrl: true,
-            imageDriveId: true,
-            signatureDriveId: true,
           },
         },
       },

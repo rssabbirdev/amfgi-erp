@@ -31,11 +31,33 @@ export interface Material {
   currentStock: number;
   reorderLevel?: number;
   unitCost?: number;
+  assemblyOutputQuantity?: number;
+  assemblyOverheadPercent?: number;
   isActive: boolean;
   createdAt?: string | Date;
   updatedAt?: string | Date;
   materialUoms?: MaterialUomDto[];
   materialWarehouseStocks?: MaterialWarehouseStockDto[];
+}
+
+export interface MaterialAssemblyRow {
+  id?: string;
+  componentMaterialId: string;
+  quantity: number;
+  componentMaterial?: {
+    id: string;
+    name: string;
+    unit: string;
+    unitCost: number;
+    isActive: boolean;
+  };
+  lineCost?: number;
+}
+
+export interface MaterialAssembly {
+  outputQuantity: number;
+  overheadPercent: number;
+  components: MaterialAssemblyRow[];
 }
 
 interface CrossCompanyMaterial {
@@ -163,6 +185,33 @@ export const materialsApi = appApi.injectEndpoints({
         { type: 'Material', id: 'LIST' },
       ],
     }),
+
+    getMaterialAssembly: builder.query<MaterialAssembly, string>({
+      query: (materialId) => `/materials/${materialId}/assembly`,
+      transformResponse: (r: { data: MaterialAssembly }) => r.data,
+      providesTags: (result, error, materialId) => [{ type: 'Material', id: materialId }],
+    }),
+
+    upsertMaterialAssembly: builder.mutation<
+      { saved: boolean },
+      {
+        materialId: string;
+        outputQuantity: number;
+        overheadPercent: number;
+        components: { componentMaterialId: string; quantity: number }[];
+      }
+    >({
+      query: ({ materialId, ...body }) => ({
+        url: `/materials/${materialId}/assembly`,
+        method: 'PUT',
+        body,
+      }),
+      transformResponse: (r: { data: { saved: boolean } }) => r.data,
+      invalidatesTags: (result, error, { materialId }) => [
+        { type: 'Material', id: materialId },
+        { type: 'Material', id: 'LIST' },
+      ],
+    }),
   }),
 });
 
@@ -176,4 +225,6 @@ export const {
   useBulkCreateMaterialsMutation,
   useCreateMaterialUomMutation,
   useDeleteMaterialUomMutation,
+  useGetMaterialAssemblyQuery,
+  useUpsertMaterialAssemblyMutation,
 } = materialsApi;

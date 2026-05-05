@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
+import { resolveJobBudgetContext } from '@/lib/job-costing/budgetJobContext';
 import { buildJobItemEstimate } from '@/lib/job-costing/formulaEngine';
 import { resolvePricingSnapshot, getFactorToBase } from '@/lib/job-costing/pricing';
 import { normalizeJobCostingSettings } from '@/lib/job-costing/settings';
@@ -63,25 +64,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   try {
-    const job = await prisma.job.findFirst({
-      where: { id: jobId, companyId },
-      select: {
-        id: true,
-        jobNumber: true,
-        parentJobId: true,
-      },
+    const ctx = await resolveJobBudgetContext(prisma, companyId, jobId);
+    if (!ctx) return errorResponse('Job not found', 404);
+
+    const budgetJob = await prisma.job.findFirst({
+      where: { id: ctx.budgetJobId, companyId },
+      select: { id: true, jobNumber: true },
     });
-
-    if (!job) return errorResponse('Job not found', 404);
-
-    if (!job.parentJobId) {
-      return successResponse({
-        applicable: false,
-        reason: 'parent_job',
-        warningCount: 0,
-        rows: [],
-      });
-    }
+    if (!budgetJob) return errorResponse('Job not found', 404);
 
     const company = await prisma.company.findUnique({
       where: { id: companyId },
@@ -91,7 +81,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const jobItems = await prisma.jobItem.findMany({
       where: {
         companyId,
-        jobId,
+        jobId: ctx.budgetJobId,
         isActive: true,
       },
       include: {
@@ -115,7 +105,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       });
     }
 
-    const materialIds = Array.from(
+    const budgetMaterialIds = Array.from(
       new Set(
         jobItems.flatMap((item) => {
           const config = item.formulaLibrary.formulaConfig as FormulaConfig;
@@ -132,40 +122,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       )
     );
 
-    const [materials, transactions] = await Promise.all([
-      prisma.material.findMany({
-        where: {
-          companyId,
-          id: { in: materialIds.length > 0 ? materialIds : ['__none__'] },
-        },
-        include: {
-          materialUoms: true,
-          stockBatches: {
-            where: { companyId },
-            orderBy: { receivedDate: 'desc' },
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        companyId,
+        jobId: { in: ctx.consumptionJobIds },
+        type: { in: ['STOCK_OUT', 'RETURN'] },
+      },
+      select: {
+        materialId: true,
+        type: true,
+        quantity: true,
+        totalCost: true,
+        batchesUsed: {
+          select: {
+            costAmount: true,
           },
         },
-      }),
-      prisma.transaction.findMany({
-        where: {
-          companyId,
-          jobId,
-          materialId: { in: materialIds.length > 0 ? materialIds : ['__none__'] },
-          type: { in: ['STOCK_OUT', 'RETURN'] },
-        },
-        select: {
-          materialId: true,
-          type: true,
-          quantity: true,
-          totalCost: true,
-          batchesUsed: {
-            select: {
-              costAmount: true,
-            },
-          },
-        },
-      }),
-    ]);
+      },
+    });
 
     const actualConsumption = new Map<string, { materialId: string; actualIssuedBaseQuantity: number; actualIssuedCost: number }>();
     for (const txn of transactions) {
@@ -179,6 +153,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       current.actualIssuedCost += delta.cost;
       actualConsumption.set(txn.materialId, current);
     }
+
+    const materialIds = Array.from(new Set([...budgetMaterialIds, ...actualConsumption.keys()]));
+
+    const materials = await prisma.material.findMany({
+      where: {
+        companyId,
+        id: { in: materialIds.length > 0 ? materialIds : ['__none__'] },
+      },
+      include: {
+        materialUoms: true,
+        stockBatches: {
+          where: { companyId },
+          orderBy: { receivedDate: 'desc' },
+        },
+      },
+    });
 
     const materialCatalog = new Map(
       materials.map((material) => [
@@ -209,8 +199,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const settings = normalizeJobCostingSettings(company?.jobCostingSettings);
     const estimates = jobItems.map((item) =>
       buildJobItemEstimate({
-        jobId: job.id,
-        jobNumber: job.jobNumber,
+        jobId: budgetJob.id,
+        jobNumber: budgetJob.jobNumber,
         postingDate,
         nonWorkingWeekdays: settings.nonWorkingWeekdays,
         pricingMode: 'FIFO',

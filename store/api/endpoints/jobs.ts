@@ -32,6 +32,15 @@ export interface Job {
   createdBy: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
+  /** Single execution progress & schedule for the whole job (cost engine / UI). */
+  executionProgressStatus?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD';
+  executionProgressPercent?: number;
+  executionPlannedStartDate?: string | Date | null;
+  executionPlannedEndDate?: string | Date | null;
+  executionActualStartDate?: string | Date | null;
+  executionActualEndDate?: string | Date | null;
+  executionProgressNote?: string | null;
+  executionProgressUpdatedAt?: string | Date | null;
 }
 
 export interface FormulaLibrary {
@@ -49,6 +58,22 @@ export interface FormulaLibrary {
   updatedAt?: string | Date;
 }
 
+export interface FormulaLibraryVersion {
+  id: string;
+  companyId: string;
+  formulaLibraryId: string;
+  versionNumber: number;
+  name: string;
+  slug: string;
+  fabricationType: string;
+  description?: string | null;
+  specificationSchema?: unknown;
+  formulaConfig: unknown;
+  changeNote?: string | null;
+  createdBy: string;
+  createdAt?: string | Date;
+}
+
 export interface JobItem {
   id: string;
   companyId: string;
@@ -60,7 +85,57 @@ export interface JobItem {
   assignedEmployeeIds?: string[];
   sortOrder: number;
   isActive: boolean;
+  progressStatus?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD';
+  progressPercent?: number;
+  trackingItems?: Array<{
+    id: string;
+    label: string;
+    unit?: string | null;
+    targetValue: number;
+    sourceKey?: string | null;
+  }>;
+  trackingEnabled?: boolean;
+  trackingLabel?: string | null;
+  trackingUnit?: string | null;
+  trackingTargetValue?: number | null;
+  trackingSourceKey?: string | null;
+  plannedStartDate?: string | Date | null;
+  plannedEndDate?: string | Date | null;
+  actualStartDate?: string | Date | null;
+  actualEndDate?: string | Date | null;
+  progressNote?: string | null;
+  progressUpdatedAt?: string | Date | null;
   formulaLibrary?: FormulaLibrary;
+  createdBy: string;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
+
+export interface JobItemProgressEntry {
+  id: string;
+  companyId: string;
+  jobItemId: string;
+  trackerId?: string | null;
+  entryDate: string | Date;
+  quantity: number;
+  note?: string | null;
+  createdBy: string;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
+
+/** Flat list across all budget lines on a job (GET /jobs/:id/progress-entries). */
+export interface JobProgressEntryListRow {
+  id: string;
+  companyId: string;
+  jobItemId: string;
+  jobItemName: string;
+  trackerId?: string | null;
+  trackerLabel: string;
+  trackerUnit: string | null;
+  entryDate: string | Date;
+  quantity: number;
+  note?: string | null;
   createdBy: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
@@ -71,12 +146,16 @@ export interface JobCostEngineMaterialLine {
   materialName: string;
   baseUnit: string;
   estimatedBaseQuantity: number;
+  expectedIssuedBaseQuantity: number;
   quotedUnitCost: number;
   quotedCost: number;
+  expectedIssuedCost: number;
   actualIssuedBaseQuantity: number;
   actualIssuedCost: number;
   quantityVariance: number;
   costVariance: number;
+  issuePaceVariance: number;
+  issuePaceStatus: 'NOT_DUE' | 'ON_PLAN' | 'UNDER_ISSUED' | 'OVER_ISSUED';
   issueReconcileCompatible: boolean;
   pricingSource: 'FIFO' | 'MOVING_AVERAGE' | 'CURRENT' | 'CUSTOM';
 }
@@ -103,6 +182,59 @@ export interface JobCostEngineItem {
   totalActualMaterialCost: number;
   estimatedCompletionDays: number;
   estimatedCompletionDate: string | null;
+  progress: {
+    status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD';
+    scheduleStatus: 'NOT_DUE' | 'ON_TRACK' | 'AT_RISK' | 'DELAYED' | 'COMPLETED' | 'ON_HOLD';
+    percentComplete: number;
+    plannedStartDate: string | null;
+    plannedEndDate: string | null;
+    actualStartDate: string | null;
+    actualEndDate: string | null;
+    forecastCompletionDate: string | null;
+    varianceDays: number;
+    note: string | null;
+    remainingQuotedMaterialCost: number;
+    remainingEstimatedDays: number;
+    completedQuotedMaterialCost: number;
+    tracking: {
+      enabled: boolean;
+      items: Array<{
+        id: string;
+        label: string;
+        unit: string | null;
+        targetValue: number;
+        sourceKey: string | null;
+        completedValue: number;
+        remainingValue: number;
+        percentComplete: number;
+        averagePerDay: number;
+        projectedRemainingDays: number | null;
+        entryCount: number;
+        trackedDayCount: number;
+        firstEntryDate: string | null;
+        lastEntryDate: string | null;
+      }>;
+      totalTargetValue: number;
+      totalCompletedValue: number;
+      totalRemainingValue: number;
+      overallAveragePerDay: number;
+      overallProjectedRemainingDays: number | null;
+      entryCount: number;
+      trackedDayCount: number;
+      firstEntryDate: string | null;
+      lastEntryDate: string | null;
+      paceDenominator?: 'attendance_work_days' | 'progress_entry_days';
+      awaitingAttendanceForPace?: boolean;
+      attendance: {
+        workedDayCount: number;
+        totalWorkedMinutes: number;
+        totalWorkedHours: number;
+        uniqueWorkerCount: number;
+        averageWorkersPerDay: number;
+        lastAttendanceDate: string | null;
+      };
+    };
+  };
   warnings: string[];
 }
 
@@ -121,8 +253,48 @@ export interface JobCostEngineResult {
     totalActualMaterialCost: number;
     totalEstimatedCompletionDays: number;
     comparisonMode: 'FIFO' | 'MOVING_AVERAGE' | 'CURRENT' | 'CUSTOM';
+    jobWideAttendance?: {
+      workedDayCount: number;
+      totalWorkedMinutes: number;
+      totalWorkedHours: number;
+      uniqueWorkerCount: number;
+      averageWorkersPerDay: number;
+      lastAttendanceDate: string | null;
+    };
   };
   issueReconcileCompatible: boolean;
+  pricingSnapshots: Array<{
+    materialId: string;
+    materialName: string;
+    baseUnit: string;
+    baseUnitCost: number;
+    source: 'FIFO' | 'MOVING_AVERAGE' | 'CURRENT' | 'CUSTOM';
+  }>;
+}
+
+export interface JobCostingSnapshotMeta {
+  id: string;
+  versionNumber: number;
+  status: 'SAVED' | 'APPROVED' | 'SUPERSEDED';
+  pricingMode: 'FIFO' | 'MOVING_AVERAGE' | 'CURRENT' | 'CUSTOM';
+  postingDate: string;
+  totalQuotedMaterialCost: number;
+  totalActualMaterialCost: number;
+  totalEstimatedCompletionDays: number;
+  createdAt: string;
+  createdBy: string;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  note?: string | null;
+}
+
+export interface JobCostingSnapshotDetail {
+  snapshot: JobCostingSnapshotMeta & {
+    pricingSnapshots: JobCostEngineResult['pricingSnapshots'];
+    customUnitCosts?: Record<string, number> | null;
+    jobItemIds?: string[] | null;
+  };
+  result: JobCostEngineResult;
 }
 
 export interface DispatchBudgetWarningRow {
@@ -222,6 +394,68 @@ export const jobsApi = appApi.injectEndpoints({
       invalidatesTags: (result, error, { jobId }) => [{ type: 'Job', id: `${jobId}-ITEMS` }],
     }),
 
+    getJobItemProgressEntries: builder.query<JobItemProgressEntry[], { jobId: string; itemId: string }>({
+      query: ({ jobId, itemId }) => `/jobs/${jobId}/items/${itemId}/progress-entries`,
+      transformResponse: (r: { data: JobItemProgressEntry[] }) => r.data,
+      providesTags: (result, error, { itemId }) => [{ type: 'Job', id: `JOB-ITEM-PROGRESS-${itemId}` }],
+    }),
+
+    getJobProgressEntriesForJob: builder.query<JobProgressEntryListRow[], string>({
+      query: (jobId) => `/jobs/${jobId}/progress-entries`,
+      transformResponse: (r: { data: JobProgressEntryListRow[] }) => r.data,
+      providesTags: (result, error, jobId) => [{ type: 'Job', id: `${jobId}-PROGRESS-ENTRIES-ALL` }],
+    }),
+
+    addJobItemProgressEntry: builder.mutation<
+      JobItemProgressEntry,
+      { jobId: string; itemId: string; data: Partial<JobItemProgressEntry> }
+    >({
+      query: ({ jobId, itemId, data }) => ({
+        url: `/jobs/${jobId}/items/${itemId}/progress-entries`,
+        method: 'POST',
+        body: data,
+      }),
+      transformResponse: (r: { data: JobItemProgressEntry }) => r.data,
+      invalidatesTags: (result, error, { jobId, itemId }) => [
+        { type: 'Job', id: `${jobId}-ITEMS` },
+        { type: 'Job', id: `JOB-ITEM-PROGRESS-${itemId}` },
+        { type: 'Job', id: `${jobId}-PROGRESS-ENTRIES-ALL` },
+      ],
+    }),
+
+    updateJobItemProgressEntry: builder.mutation<
+      JobItemProgressEntry,
+      { jobId: string; itemId: string; entryId: string; data: Partial<JobItemProgressEntry> }
+    >({
+      query: ({ jobId, itemId, entryId, data }) => ({
+        url: `/jobs/${jobId}/items/${itemId}/progress-entries/${entryId}`,
+        method: 'PUT',
+        body: data,
+      }),
+      transformResponse: (r: { data: JobItemProgressEntry }) => r.data,
+      invalidatesTags: (result, error, { jobId, itemId }) => [
+        { type: 'Job', id: `${jobId}-ITEMS` },
+        { type: 'Job', id: `JOB-ITEM-PROGRESS-${itemId}` },
+        { type: 'Job', id: `${jobId}-PROGRESS-ENTRIES-ALL` },
+      ],
+    }),
+
+    deleteJobItemProgressEntry: builder.mutation<
+      { deleted: boolean },
+      { jobId: string; itemId: string; entryId: string }
+    >({
+      query: ({ jobId, itemId, entryId }) => ({
+        url: `/jobs/${jobId}/items/${itemId}/progress-entries/${entryId}`,
+        method: 'DELETE',
+      }),
+      transformResponse: (r: { data: { deleted: boolean } }) => r.data,
+      invalidatesTags: (result, error, { jobId, itemId }) => [
+        { type: 'Job', id: `${jobId}-ITEMS` },
+        { type: 'Job', id: `JOB-ITEM-PROGRESS-${itemId}` },
+        { type: 'Job', id: `${jobId}-PROGRESS-ENTRIES-ALL` },
+      ],
+    }),
+
     getFormulaLibraries: builder.query<FormulaLibrary[], void>({
       query: () => '/job-costing/formulas',
       transformResponse: (r: { data: FormulaLibrary[] }) => r.data,
@@ -234,17 +468,26 @@ export const jobsApi = appApi.injectEndpoints({
       providesTags: (result, error, id) => [{ type: 'Job', id: `FORMULA-${id}` }],
     }),
 
-    createFormulaLibrary: builder.mutation<FormulaLibrary, Partial<FormulaLibrary>>({
+    createFormulaLibrary: builder.mutation<
+      FormulaLibrary,
+      Partial<FormulaLibrary> & { saveMode?: 'manual' | 'auto'; changeNote?: string }
+    >({
       query: (body) => ({
         url: '/job-costing/formulas',
         method: 'POST',
         body,
       }),
       transformResponse: (r: { data: FormulaLibrary }) => r.data,
-      invalidatesTags: [{ type: 'Job', id: 'FORMULA_LIBRARY' }],
+      invalidatesTags: (result) =>
+        result
+          ? [{ type: 'Job', id: 'FORMULA_LIBRARY' }, { type: 'Job', id: `FORMULA-${result.id}-VERSIONS` }]
+          : [{ type: 'Job', id: 'FORMULA_LIBRARY' }],
     }),
 
-    updateFormulaLibrary: builder.mutation<FormulaLibrary, { id: string; data: Partial<FormulaLibrary> }>({
+    updateFormulaLibrary: builder.mutation<
+      FormulaLibrary,
+      { id: string; data: Partial<FormulaLibrary> & { saveMode?: 'manual' | 'auto'; changeNote?: string } }
+    >({
       query: ({ id, data }) => ({
         url: `/job-costing/formulas/${id}`,
         method: 'PUT',
@@ -254,6 +497,7 @@ export const jobsApi = appApi.injectEndpoints({
       invalidatesTags: (result, error, { id }) => [
         { type: 'Job', id: 'FORMULA_LIBRARY' },
         { type: 'Job', id: `FORMULA-${id}` },
+        { type: 'Job', id: `FORMULA-${id}-VERSIONS` },
       ],
     }),
 
@@ -264,6 +508,29 @@ export const jobsApi = appApi.injectEndpoints({
       }),
       transformResponse: (r: { data: { deleted: boolean } }) => r.data,
       invalidatesTags: [{ type: 'Job', id: 'FORMULA_LIBRARY' }],
+    }),
+
+    getFormulaLibraryVersions: builder.query<FormulaLibraryVersion[], string>({
+      query: (id) => `/job-costing/formulas/${id}/versions`,
+      transformResponse: (r: { data: FormulaLibraryVersion[] }) => r.data,
+      providesTags: (result, error, id) => [{ type: 'Job', id: `FORMULA-${id}-VERSIONS` }],
+    }),
+
+    restoreFormulaLibraryVersion: builder.mutation<
+      FormulaLibrary,
+      { id: string; versionId: string; changeNote?: string }
+    >({
+      query: ({ id, versionId, changeNote }) => ({
+        url: `/job-costing/formulas/${id}/restore-version`,
+        method: 'POST',
+        body: { versionId, changeNote },
+      }),
+      transformResponse: (r: { data: FormulaLibrary }) => r.data,
+      invalidatesTags: (result, error, { id }) => [
+        { type: 'Job', id: 'FORMULA_LIBRARY' },
+        { type: 'Job', id: `FORMULA-${id}` },
+        { type: 'Job', id: `FORMULA-${id}-VERSIONS` },
+      ],
     }),
 
     calculateJobCostEngine: builder.mutation<
@@ -280,8 +547,55 @@ export const jobsApi = appApi.injectEndpoints({
         url: `/jobs/${jobId}/cost-engine`,
         method: 'POST',
         body,
+        }),
+        transformResponse: (r: { data: JobCostEngineResult }) => r.data,
       }),
-      transformResponse: (r: { data: JobCostEngineResult }) => r.data,
+
+    getJobCostingSnapshots: builder.query<JobCostingSnapshotMeta[], string>({
+      query: (jobId) => `/jobs/${jobId}/cost-engine/snapshots`,
+      transformResponse: (r: { data: JobCostingSnapshotMeta[] }) => r.data,
+      providesTags: (result, error, jobId) => [{ type: 'Job', id: `COST-SNAPSHOTS-${jobId}` }],
+    }),
+
+    getJobCostingSnapshotById: builder.query<JobCostingSnapshotDetail, { jobId: string; snapshotId: string }>({
+      query: ({ jobId, snapshotId }) => `/jobs/${jobId}/cost-engine/snapshots/${snapshotId}`,
+      transformResponse: (r: { data: JobCostingSnapshotDetail }) => r.data,
+      providesTags: (result, error, { snapshotId }) => [{ type: 'Job', id: `COST-SNAPSHOT-${snapshotId}` }],
+    }),
+
+    createJobCostingSnapshot: builder.mutation<
+      JobCostingSnapshotDetail,
+      {
+        jobId: string;
+        pricingMode?: 'FIFO' | 'MOVING_AVERAGE' | 'CURRENT' | 'CUSTOM';
+        postingDate?: string;
+        jobItemIds?: string[];
+        customUnitCosts?: Record<string, number>;
+        note?: string;
+      }
+    >({
+      query: ({ jobId, ...body }) => ({
+        url: `/jobs/${jobId}/cost-engine/snapshots`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (r: { data: JobCostingSnapshotDetail }) => r.data,
+      invalidatesTags: (result, error, { jobId }) => [{ type: 'Job', id: `COST-SNAPSHOTS-${jobId}` }],
+    }),
+
+    approveJobCostingSnapshot: builder.mutation<
+      { snapshot: JobCostingSnapshotMeta },
+      { jobId: string; snapshotId: string }
+    >({
+      query: ({ jobId, snapshotId }) => ({
+        url: `/jobs/${jobId}/cost-engine/snapshots/${snapshotId}`,
+        method: 'PATCH',
+      }),
+      transformResponse: (r: { data: { snapshot: JobCostingSnapshotMeta } }) => r.data,
+      invalidatesTags: (result, error, { jobId, snapshotId }) => [
+        { type: 'Job', id: `COST-SNAPSHOTS-${jobId}` },
+        { type: 'Job', id: `COST-SNAPSHOT-${snapshotId}` },
+      ],
     }),
 
     getDispatchBudgetWarning: builder.mutation<
@@ -350,12 +664,23 @@ export const {
   useAddJobItemMutation,
   useUpdateJobItemMutation,
   useDeleteJobItemMutation,
+  useGetJobItemProgressEntriesQuery,
+  useGetJobProgressEntriesForJobQuery,
+  useAddJobItemProgressEntryMutation,
+  useUpdateJobItemProgressEntryMutation,
+  useDeleteJobItemProgressEntryMutation,
   useGetFormulaLibrariesQuery,
   useGetFormulaLibraryByIdQuery,
   useCreateFormulaLibraryMutation,
   useUpdateFormulaLibraryMutation,
   useDeleteFormulaLibraryMutation,
+  useGetFormulaLibraryVersionsQuery,
+  useRestoreFormulaLibraryVersionMutation,
   useCalculateJobCostEngineMutation,
+  useGetJobCostingSnapshotsQuery,
+  useGetJobCostingSnapshotByIdQuery,
+  useCreateJobCostingSnapshotMutation,
+  useApproveJobCostingSnapshotMutation,
   useGetDispatchBudgetWarningMutation,
   useCreateJobMutation,
   useUpdateJobMutation,

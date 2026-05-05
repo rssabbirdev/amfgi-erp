@@ -5,7 +5,6 @@ type LegacyLetterhead = {
   height: number;
   opacity: number;
   imageUrl?: string;
-  imageDriveId?: string;
 } & SectionBuilderMeta;
 
 function letterheadToImage(s: LegacyLetterhead): DocumentSection {
@@ -22,7 +21,6 @@ function letterheadToImage(s: LegacyLetterhead): DocumentSection {
     heightMm: s.height,
     opacity: s.opacity,
     imageUrl: s.imageUrl,
-    imageDriveId: s.imageDriveId,
     source: hasTemplateUrl ? 'url' : 'field',
     url: hasTemplateUrl ? s.imageUrl : undefined,
     field: hasTemplateUrl ? undefined : 'company.letterheadUrl',

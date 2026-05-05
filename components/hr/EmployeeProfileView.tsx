@@ -16,7 +16,6 @@ import {
 } from '@/lib/hr/workforceProfile';
 import { NATIONALITY_OPTIONS } from '@/lib/hr/employeeMeta';
 import toast from 'react-hot-toast';
-import { driveFileIdToDisplayUrl } from '@/lib/utils/googleDriveUrl';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
 
 type Tab = 'overview' | 'visa' | 'documents' | 'access';
@@ -56,7 +55,7 @@ interface DocRow {
   expiryDate: string | null;
   issuingAuthority: string | null;
   notes: string | null;
-  mediaDriveId: string | null;
+  mediaUrl: string | null;
   documentType: { id: string; name: string; slug: string };
   visaPeriod: { id: string; label: string } | null;
 }
@@ -80,7 +79,7 @@ interface EmployeeRecord {
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   bloodGroup: string | null;
-  photoDriveId: string | null;
+  photoUrl: string | null;
   portalEnabled: boolean;
   adminNotes?: string | null;
   profileExtension?: unknown;
@@ -114,10 +113,10 @@ async function readApiJson(res: Response): Promise<{ success?: boolean; error?: 
   }
 }
 
-function driveFileWebViewUrl(driveId: string | null | undefined): string | null {
-  const id = driveId?.trim();
-  if (!id) return null;
-  return `https://drive.google.com/file/d/${encodeURIComponent(id)}/view`;
+function driveFileWebViewUrl(url: string | null | undefined): string | null {
+  const value = url?.trim();
+  if (!value) return null;
+  return value;
 }
 
 function tenureLabel(hire: string | null | undefined) {
@@ -460,7 +459,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
         expiryDate: fd.get('expiryDate') || null,
         issuingAuthority: fd.get('issuingAuthority') || null,
         notes: fd.get('notes') || null,
-        mediaDriveId: fd.get('mediaDriveId') || null,
+        mediaUrl: fd.get('mediaUrl') || null,
       }),
     });
     const json = await res.json();
@@ -500,7 +499,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
         expiryDate: fd.get('expiryDate') || null,
         issuingAuthority: fd.get('issuingAuthority') || null,
         notes: fd.get('notes') || null,
-        mediaDriveId: fd.get('mediaDriveId') || null,
+        mediaUrl: fd.get('mediaUrl') || null,
       }),
     });
     const json = await res.json();
@@ -548,7 +547,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     if (!canEdit || photoUploading || isBusy) return;
     setPhotoUploading(true);
     try {
-      const ok = await patchEmployee({ photoDriveId: null }, { successMessage: 'Profile photo removed' });
+      const ok = await patchEmployee({ photoUrl: null }, { successMessage: 'Profile photo removed' });
       if (!ok) return;
     } finally {
       setPhotoUploading(false);
@@ -569,7 +568,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
         label: 'Remove photo',
         danger: true,
         action: () => {
-          if (!photoUploading && !isBusy && emp?.photoDriveId) void removeProfilePhoto();
+          if (!photoUploading && !isBusy && emp?.photoUrl) void removeProfilePhoto();
         },
       },
     ]);
@@ -750,7 +749,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   }
 
   const tenure = tenureLabel(emp.hireDate);
-  const photoUrl = driveFileIdToDisplayUrl(emp.photoDriveId);
+  const photoUrl = emp.photoUrl?.trim() || null;
   const tabs: { id: Tab; label: string; hint: string }[] = [
     { id: 'overview', label: 'Overview', hint: 'Identity, employment, emergency' },
     { id: 'visa', label: 'Visa & authorization', hint: 'Work authorization periods' },
@@ -1264,9 +1263,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                                           <p className="font-medium text-slate-200">{d.documentType.name}</p>
                                           <p className="text-slate-500">{d.documentNumber ?? 'No number'} / {d.expiryDate ? toInputDate(d.expiryDate) : 'No expiry'}</p>
                                         </div>
-                                        {d.mediaDriveId && (
+                                        {d.mediaUrl && (
                                           <a
-                                            href={driveFileWebViewUrl(d.mediaDriveId) ?? '#'}
+                                            href={driveFileWebViewUrl(d.mediaUrl) ?? '#'}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="text-emerald-400 hover:text-emerald-300"
@@ -1376,7 +1375,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                     </label>
                     <label className="block sm:col-span-2">
                       <span className={labelClass}>File (Drive id)</span>
-                      <input name="mediaDriveId" defaultValue={editingDoc.mediaDriveId ?? ''} className={fieldClass} placeholder="Optional - or replace by uploading" />
+                      <input name="mediaUrl" defaultValue={editingDoc.mediaUrl ?? ''} className={fieldClass} placeholder="Optional - or replace by uploading" />
                     </label>
                     <label className="block sm:col-span-2">
                       <span className={labelClass}>Replace file (PDF / JPEG / PNG / WebP)</span>
@@ -1453,7 +1452,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                     </label>
                     <label className="block sm:col-span-2">
                       <span className={labelClass}>File (Drive id)</span>
-                      <input name="mediaDriveId" className={fieldClass} placeholder="Optional - or upload below" />
+                      <input name="mediaUrl" className={fieldClass} placeholder="Optional - or upload below" />
                     </label>
                     <label className="block sm:col-span-2">
                       <span className={labelClass}>Upload scan (PDF / JPEG / PNG / WebP)</span>
@@ -1507,9 +1506,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                             </td>
                             <td className="px-4 py-3 text-xs">{d.visaPeriod?.label ?? '-'}</td>
                             <td className="px-4 py-3 text-xs">
-                              {d.mediaDriveId ? (
+                              {d.mediaUrl ? (
                                 <a
-                                  href={driveFileWebViewUrl(d.mediaDriveId) ?? '#'}
+                                  href={driveFileWebViewUrl(d.mediaUrl) ?? '#'}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="font-medium text-emerald-400 hover:text-emerald-300"

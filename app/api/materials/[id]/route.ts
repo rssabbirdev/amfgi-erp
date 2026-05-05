@@ -6,6 +6,7 @@ import type { MaterialUomWithUnit } from '@/lib/utils/materialUom';
 import { decimalToNumber } from '@/lib/utils/decimal';
 import { resolveCategoryRef, resolveWarehouseRef } from '@/lib/materialMasterData';
 import { publishLiveUpdate } from '@/lib/live-updates/server';
+import { recalculateAssemblyAncestorsTx } from '@/lib/utils/materialAssembly';
 import { z }                 from 'zod';
 
 const UpdateSchema = z.object({
@@ -21,6 +22,8 @@ const UpdateSchema = z.object({
   externalItemName:    z.string().min(1).max(100).optional(),
   unitCost:            z.number().finite().min(0).optional(),
   reorderLevel:        z.number().finite().min(0).optional(),
+  assemblyOutputQuantity: z.number().finite().positive().optional(),
+  assemblyOverheadPercent: z.number().finite().min(0).optional(),
 });
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -116,8 +119,21 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           warehouseId: warehouseRef ? warehouseRef.warehouseId : undefined,
           unitCost: parsed.data.unitCost !== undefined ? decimalToNumber(parsed.data.unitCost) ?? null : undefined,
           reorderLevel: parsed.data.reorderLevel !== undefined ? decimalToNumber(parsed.data.reorderLevel) ?? null : undefined,
+          assemblyOutputQuantity:
+            parsed.data.assemblyOutputQuantity !== undefined
+              ? decimalToNumber(parsed.data.assemblyOutputQuantity) ?? 1
+              : undefined,
+          assemblyOverheadPercent:
+            parsed.data.assemblyOverheadPercent !== undefined
+              ? decimalToNumber(parsed.data.assemblyOverheadPercent) ?? 0
+              : undefined,
         },
       });
+
+      if (parsed.data.unitCost !== undefined || parsed.data.assemblyOverheadPercent !== undefined) {
+        const changedBy = session.user.name || session.user.email || session.user.id;
+        await recalculateAssemblyAncestorsTx(tx, companyId, id, changedBy);
+      }
 
       if (parsed.data.unit !== undefined) {
         const name = parsed.data.unit.trim();

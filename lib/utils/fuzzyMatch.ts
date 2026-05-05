@@ -43,14 +43,27 @@ export function searchItems<T extends SearchableItem>(
   searchTerm: string,
   minScore: number = 0.3
 ): T[] {
-  if (!searchTerm.trim()) return items;
+  const normalizedSearch = searchTerm.toLowerCase().trim().replace(/\s+/g, ' ');
+  if (!normalizedSearch) return items;
+  const terms = normalizedSearch.split(' ').filter(Boolean);
 
   return items
     .map((item) => {
       const searchableText = item.searchText
-        ? `${item.label} ${item.searchText}`
-        : item.label;
-      const score = fuzzyMatch(searchTerm, searchableText);
+        ? `${item.label} ${item.searchText}`.toLowerCase().replace(/\s+/g, ' ')
+        : item.label.toLowerCase().replace(/\s+/g, ' ');
+
+      const score =
+        terms.length === 1
+          ? fuzzyMatch(normalizedSearch, searchableText)
+          : (() => {
+              const termScores = terms.map((term) => {
+                if (searchableText.includes(term)) return 1;
+                return fuzzyMatch(term, searchableText);
+              });
+              if (termScores.some((termScore) => termScore < minScore)) return 0;
+              return termScores.reduce((sum, termScore) => sum + termScore, 0) / termScores.length;
+            })();
       return { item, score };
     })
     .filter(({ score }) => score >= minScore)

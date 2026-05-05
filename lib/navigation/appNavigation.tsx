@@ -92,20 +92,6 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     ),
   },
   {
-    href: '/hr/geofence',
-    label: 'Geofence Attendance',
-    shortTitle: 'Geofence',
-    description: 'Manage factory polygon borders and gate zones for location-based attendance.',
-    category: 'People',
-    perm: 'hr.geofence.view',
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2l7 4v5c0 5.25-3.438 9.938-7 11-3.562-1.062-7-5.75-7-11V6l7-4z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9a2.5 2.5 0 110 5 2.5 2.5 0 010-5z" />
-      </svg>
-    ),
-  },
-  {
     href: '/me',
     label: 'My HR',
     shortTitle: 'My HR',

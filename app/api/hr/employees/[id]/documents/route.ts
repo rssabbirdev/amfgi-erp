@@ -13,7 +13,7 @@ const DocSchema = z.object({
   issuingAuthority: z.string().max(200).optional().nullable(),
   notes: z.string().max(5000).optional().nullable(),
   customFields: z.any().optional().nullable(),
-  mediaDriveId: z.string().max(200).optional().nullable(),
+  mediaUrl: z.string().max(2000).optional().nullable(),
 });
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -73,7 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       issuingAuthority: d.issuingAuthority?.trim() || null,
       notes: d.notes?.trim() || null,
       customFields: d.customFields === undefined ? undefined : d.customFields,
-      mediaDriveId: d.mediaDriveId?.trim() || null,
+      mediaUrl: d.mediaUrl?.trim() || null,
     },
   });
   return successResponse(doc, 201);

@@ -198,8 +198,6 @@ export type UserPrintSlice = {
     name: string;
     image: string;
     signatureUrl: string;
-    imageDriveId: string;
-    signatureDriveId: string;
   };
 };
 
@@ -903,11 +901,7 @@ function userSliceFromSession(user?: {
   name?: string | null;
   image?: string | null;
   signatureUrl?: string | null;
-  imageDriveId?: string | null;
-  signatureDriveId?: string | null;
 }): UserPrintSlice {
-  const imgId = user?.imageDriveId?.trim() ?? '';
-  const sigId = user?.signatureDriveId?.trim() ?? '';
   const image =
     (user?.image?.trim() ? convertGoogleDriveUrl(user.image.trim()) : null) ??
     '';
@@ -919,8 +913,6 @@ function userSliceFromSession(user?: {
       name: user?.name?.trim() ?? '',
       image,
       signatureUrl,
-      imageDriveId: imgId,
-      signatureDriveId: sigId,
     },
   };
 }
@@ -933,8 +925,6 @@ export function buildDataContext(
     name?: string | null;
     image?: string | null;
     signatureUrl?: string | null;
-    imageDriveId?: string | null;
-    signatureDriveId?: string | null;
   },
 ): AnyTemplateDataContext {
   let ctx: AnyTemplateDataContext;
@@ -962,8 +952,6 @@ const MOCK_USER_PRINT: UserPrintSlice = {
     name: 'Demo user',
     image: '',
     signatureUrl: '',
-    imageDriveId: '',
-    signatureDriveId: '',
   },
 };
 

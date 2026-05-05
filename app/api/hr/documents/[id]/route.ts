@@ -14,7 +14,7 @@ const PatchSchema = z.object({
   issuingAuthority: z.string().max(200).optional().nullable(),
   notes: z.string().max(5000).optional().nullable(),
   customFields: z.any().optional().nullable(),
-  mediaDriveId: z.string().max(200).optional().nullable(),
+  mediaUrl: z.string().max(2000).optional().nullable(),
 });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -57,7 +57,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (d.issuingAuthority !== undefined) data.issuingAuthority = d.issuingAuthority?.trim() || null;
   if (d.notes !== undefined) data.notes = d.notes?.trim() || null;
   if (d.customFields !== undefined) data.customFields = d.customFields;
-  if (d.mediaDriveId !== undefined) data.mediaDriveId = d.mediaDriveId?.trim() || null;
+  if (d.mediaUrl !== undefined) data.mediaUrl = d.mediaUrl?.trim() || null;
 
   const doc = await prisma.employeeDocument.update({ where: { id }, data });
   return successResponse(doc);

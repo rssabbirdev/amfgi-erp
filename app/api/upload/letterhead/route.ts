@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { uploadToDrive, deleteFromDrive } from '@/lib/utils/googleDrive';
+import { extractGoogleDriveFileId } from '@/lib/utils/googleDriveUrl';
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -46,13 +47,14 @@ export async function POST(req: Request) {
     // Get existing letterhead if any
     const company = await prisma.company.findUnique({
       where: { id: companyId },
-      select: { letterheadDriveId: true },
+      select: { letterheadUrl: true },
     });
 
     // Delete old file from Drive if it exists
-    if (company?.letterheadDriveId) {
+    const oldDriveId = extractGoogleDriveFileId(company?.letterheadUrl ?? '');
+    if (oldDriveId) {
       try {
-        await deleteFromDrive(company.letterheadDriveId, companyId);
+        await deleteFromDrive(oldDriveId, companyId);
       } catch (err) {
         // Log but don't fail if deletion fails
         console.error('Failed to delete old letterhead from Drive:', err);
@@ -60,7 +62,7 @@ export async function POST(req: Request) {
     }
 
     // Upload new file to Drive
-    const { id, viewerUrl } = await uploadToDrive(
+    const { viewerUrl } = await uploadToDrive(
       buffer,
       `letterhead-${companyId}.jpg`,
       file.type,
@@ -79,7 +81,6 @@ export async function POST(req: Request) {
       where: { id: companyId },
       data: {
         letterheadUrl: viewerUrl,
-        letterheadDriveId: id,
       },
       select: { id: true, letterheadUrl: true, name: true },
     });

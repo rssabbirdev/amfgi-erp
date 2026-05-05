@@ -23,7 +23,6 @@ function labelForSegment(segment: string, previous?: string) {
     new: 'New Employee',
     schedule: 'Schedule',
     attendance: 'Attendance',
-    geofence: 'Geofence Attendance',
     create: 'Create Attendance',
     boilerplate: 'Attendance Boilerplate',
     reports: 'Reports',
@@ -57,7 +56,6 @@ const CLICKABLE_HR_ROUTES = new Set([
   '/hr/employees',
   '/hr/schedule',
   '/hr/attendance',
-  '/hr/geofence',
   '/hr/reports/attendance',
 ]);
 

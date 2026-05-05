@@ -102,9 +102,8 @@ export default function ProfilePage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Upload failed');
       const url = json.data.url as string;
-      const driveId = json.data.driveId as string | undefined;
       setImageUrl(url);
-      await update(driveId !== undefined ? { image: url, imageDriveId: driveId } : { image: url });
+      await update({ image: url });
       toast.success('Profile photo updated');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed');
@@ -126,11 +125,8 @@ export default function ProfilePage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Upload failed');
       const url = json.data.url as string;
-      const driveId = json.data.driveId as string | undefined;
       setSignatureUrl(url);
-      await update(
-        driveId !== undefined ? { signatureUrl: url, signatureDriveId: driveId } : { signatureUrl: url }
-      );
+      await update({ signatureUrl: url });
       toast.success('Signature updated');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed');

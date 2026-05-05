@@ -42,6 +42,13 @@ const UpdateSchema = z.object({
     materialName: z.string(),
     quantity:     z.number().positive(),
   })).optional(),
+  executionProgressStatus: z.enum(['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'ON_HOLD']).optional(),
+  executionProgressPercent: z.number().min(0).max(100).optional(),
+  executionPlannedStartDate: z.string().optional().nullable(),
+  executionPlannedEndDate: z.string().optional().nullable(),
+  executionActualStartDate: z.string().optional().nullable(),
+  executionActualEndDate: z.string().optional().nullable(),
+  executionProgressNote: z.string().max(4000).optional().nullable(),
 });
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -131,6 +138,46 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (parsed.data.jobWorkValue !== undefined) updateData.jobWorkValue = decimalToNumber(parsed.data.jobWorkValue);
     if (parsed.data.finishedGoods !== undefined) {
       updateData.finishedGoods = (parsed.data.finishedGoods && parsed.data.finishedGoods.length > 0) ? parsed.data.finishedGoods : [];
+    }
+    if (parsed.data.executionProgressStatus !== undefined) {
+      updateData.executionProgressStatus = parsed.data.executionProgressStatus;
+    }
+    if (parsed.data.executionProgressPercent !== undefined) {
+      updateData.executionProgressPercent = decimalToNumber(parsed.data.executionProgressPercent);
+    }
+    if (parsed.data.executionPlannedStartDate !== undefined) {
+      updateData.executionPlannedStartDate = parsed.data.executionPlannedStartDate
+        ? new Date(`${parsed.data.executionPlannedStartDate}T00:00:00Z`)
+        : null;
+    }
+    if (parsed.data.executionPlannedEndDate !== undefined) {
+      updateData.executionPlannedEndDate = parsed.data.executionPlannedEndDate
+        ? new Date(`${parsed.data.executionPlannedEndDate}T00:00:00Z`)
+        : null;
+    }
+    if (parsed.data.executionActualStartDate !== undefined) {
+      updateData.executionActualStartDate = parsed.data.executionActualStartDate
+        ? new Date(`${parsed.data.executionActualStartDate}T00:00:00Z`)
+        : null;
+    }
+    if (parsed.data.executionActualEndDate !== undefined) {
+      updateData.executionActualEndDate = parsed.data.executionActualEndDate
+        ? new Date(`${parsed.data.executionActualEndDate}T00:00:00Z`)
+        : null;
+    }
+    if (parsed.data.executionProgressNote !== undefined) {
+      updateData.executionProgressNote = parsed.data.executionProgressNote?.trim() || null;
+    }
+    if (
+      parsed.data.executionProgressStatus !== undefined ||
+      parsed.data.executionProgressPercent !== undefined ||
+      parsed.data.executionPlannedStartDate !== undefined ||
+      parsed.data.executionPlannedEndDate !== undefined ||
+      parsed.data.executionActualStartDate !== undefined ||
+      parsed.data.executionActualEndDate !== undefined ||
+      parsed.data.executionProgressNote !== undefined
+    ) {
+      updateData.executionProgressUpdatedAt = new Date();
     }
 
     const job = await prisma.$transaction(async (tx) => {

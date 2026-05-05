@@ -1,8 +1,8 @@
 # getMonthlyAttendanceReports()
 
-> God node · 13 connections · `lib\hr\attendanceReports.ts`
+> God node · 13 connections · `C:\almuraqib-custom-application\AMFGI\lib\hr\attendanceReports.ts`
 
-**Community:** [[Lib HR]]
+**Community:** [[Almuraqib Custom Application Amfgi]]
 
 ## Connections by Relation
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import SearchSelect from '@/components/ui/SearchSelect';
 import toast from 'react-hot-toast';
 import {
   useCreateCategoryMutation,
@@ -14,12 +15,15 @@ import {
   useCreateUnitMutation,
   useCreateWarehouseMutation,
   useDeleteMaterialUomMutation,
+  useGetMaterialAssemblyQuery,
   useGetCategoriesQuery,
   useGetMaterialByIdQuery,
   useGetMaterialLogsQuery,
+  useGetMaterialsQuery,
   useGetPriceLogsQuery,
   useGetUnitsQuery,
   useGetWarehousesQuery,
+  useUpsertMaterialAssemblyMutation,
   useUpdateMaterialMutation,
   type Material,
 } from '@/store/hooks';
@@ -51,6 +55,22 @@ interface BasicOption {
   id: string;
   name: string;
 }
+
+interface DraftAssemblyComponent {
+  componentMaterialId: string;
+  quantity: string;
+}
+
+const STOCK_TYPE_OPTIONS = [
+  'Raw Material',
+  'Work In Progress',
+  'Finished Goods',
+  'Semi-finished',
+  'Consumable',
+  'Stock Assembly',
+  'Non-Stock',
+  'Other',
+].map((label) => ({ id: label, label }));
 
 function formatNumber(value?: number | null) {
   if (value === undefined || value === null) return '-';
@@ -147,6 +167,7 @@ function MaterialEditor({
   const [createWarehouse] = useCreateWarehouseMutation();
   const [createMaterialLog] = useCreateMaterialLogMutation();
   const [createPriceLog] = useCreatePriceLogMutation();
+  const [upsertMaterialAssembly] = useUpsertMaterialAssemblyMutation();
 
   const [unitModal, setUnitModal] = useState(false);
   const [categoryModal, setCategoryModal] = useState(false);
@@ -170,9 +191,13 @@ function MaterialEditor({
   const [deriveUnitId, setDeriveUnitId] = useState('');
   const [deriveParentId, setDeriveParentId] = useState('');
   const [deriveFactor, setDeriveFactor] = useState('');
+  const [assemblyOutputQuantity, setAssemblyOutputQuantity] = useState(material?.assemblyOutputQuantity?.toString() ?? '1');
+  const [assemblyOverheadPercent, setAssemblyOverheadPercent] = useState(material?.assemblyOverheadPercent?.toString() ?? '0');
+  const [assemblyComponents, setAssemblyComponents] = useState<DraftAssemblyComponent[]>([]);
 
   useEffect(() => {
     if (!material) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setName(material.name ?? '');
     setDescription(material.description ?? '');
     setUnit(material.unit ?? '');
@@ -183,11 +208,61 @@ function MaterialEditor({
     setExternalItemName(material.externalItemName ?? '');
     setReorderLevel(material.reorderLevel?.toString() ?? '');
     setUnitCost(material.unitCost?.toString() ?? '');
-  }, [material?.id, material?.updatedAt, material?.unitCost, material?.currentStock]);
+    setAssemblyOutputQuantity(material.assemblyOutputQuantity?.toString() ?? '1');
+    setAssemblyOverheadPercent(material.assemblyOverheadPercent?.toString() ?? '0');
+  }, [material, material?.id, material?.updatedAt, material?.unitCost, material?.currentStock]);
 
   const materialUoms = material?.materialUoms ?? [];
   const availableDerivedUnits = units.filter((entry) => !materialUoms.some((uom) => uom.unitId === entry.id));
   const latestPriceLog = priceLogs[0];
+  const isStockAssembly = stockType === 'Stock Assembly';
+
+  const { data: allMaterials = [] } = useGetMaterialsQuery(undefined, {
+    refetchOnMountOrArgChange: 30,
+  });
+  const { data: materialAssembly } = useGetMaterialAssemblyQuery(material?.id ?? '', {
+    skip: isCreateMode || !isStockAssembly,
+    refetchOnMountOrArgChange: 30,
+  });
+
+  useEffect(() => {
+    if (!materialAssembly || isCreateMode || !isStockAssembly) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAssemblyOutputQuantity(materialAssembly.outputQuantity?.toString() ?? '1');
+    setAssemblyOverheadPercent(materialAssembly.overheadPercent?.toString() ?? '0');
+    setAssemblyComponents(
+      materialAssembly.components.map((row) => ({
+        componentMaterialId: row.componentMaterialId,
+        quantity: String(row.quantity),
+      }))
+    );
+  }, [materialAssembly, isCreateMode, isStockAssembly]);
+
+  const assemblyMaterialOptions = useMemo(
+    () =>
+      allMaterials.filter((entry) => entry.id !== material?.id && entry.isActive).map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        unit: entry.unit,
+        unitCost: Number(entry.unitCost ?? 0),
+      })),
+    [allMaterials, material?.id]
+  );
+  const assemblyOutputQuantityValue = Math.max(parseFloat(assemblyOutputQuantity) || 1, 0.0001);
+  const assemblyOverheadPercentValue = Math.max(parseFloat(assemblyOverheadPercent) || 0, 0);
+  const assemblyTotalCost = useMemo(
+    () =>
+      assemblyComponents.reduce((sum, row) => {
+        const selected = assemblyMaterialOptions.find((entry) => entry.id === row.componentMaterialId);
+        if (!selected) return sum;
+        const qty = parseFloat(row.quantity) || 0;
+        return sum + qty * selected.unitCost;
+      }, 0),
+    [assemblyComponents, assemblyMaterialOptions]
+  );
+  const assemblyTotalCostWithOverhead = assemblyTotalCost * (1 + assemblyOverheadPercentValue / 100);
+  const calculatedAssemblyUnitCost = assemblyTotalCostWithOverhead / assemblyOutputQuantityValue;
+
 
   const pageTitle = isCreateMode ? 'New material' : material.name;
   const pageSubtitle = isCreateMode
@@ -224,8 +299,17 @@ function MaterialEditor({
       toast.error('Stock Type is required');
       return;
     }
-    if (!unitCost.trim()) {
+    if (!isStockAssembly && !unitCost.trim()) {
       toast.error('Unit Cost is required');
+      return;
+    }
+
+    if (isStockAssembly && (!assemblyOutputQuantity.trim() || Number(assemblyOutputQuantity) <= 0)) {
+      toast.error('Assembly output quantity must be greater than zero');
+      return;
+    }
+    if (isStockAssembly && Number(assemblyOverheadPercent) < 0) {
+      toast.error('Assembly overhead percent cannot be negative');
       return;
     }
 
@@ -240,7 +324,9 @@ function MaterialEditor({
       externalItemName: externalItemName.trim() || undefined,
       ...(isCreateMode && { currentStock: parseFloat(currentStock) || 0 }),
       reorderLevel: reorderLevel ? parseFloat(reorderLevel) : undefined,
-      unitCost: unitCost ? parseFloat(unitCost) : undefined,
+      unitCost: isStockAssembly ? calculatedAssemblyUnitCost : unitCost ? parseFloat(unitCost) : undefined,
+      assemblyOutputQuantity: parseFloat(assemblyOutputQuantity) || 1,
+      assemblyOverheadPercent: parseFloat(assemblyOverheadPercent) || 0,
     };
 
     try {
@@ -266,7 +352,7 @@ function MaterialEditor({
           changes,
         }).unwrap();
 
-        const parsedUnitCost = parseFloat(unitCost) || 0;
+        const parsedUnitCost = isStockAssembly ? calculatedAssemblyUnitCost : parseFloat(unitCost) || 0;
         if (parsedUnitCost > 0) {
           await createPriceLog({
             materialId: result.id,
@@ -276,15 +362,43 @@ function MaterialEditor({
           }).unwrap();
         }
 
+        if (stockType === 'Stock Assembly') {
+          await upsertMaterialAssembly({
+            materialId: result.id,
+            outputQuantity: parseFloat(assemblyOutputQuantity) || 1,
+            overheadPercent: parseFloat(assemblyOverheadPercent) || 0,
+            components: assemblyComponents
+              .filter((entry) => entry.componentMaterialId && (parseFloat(entry.quantity) || 0) > 0)
+              .map((entry) => ({
+                componentMaterialId: entry.componentMaterialId,
+                quantity: parseFloat(entry.quantity),
+              })),
+          }).unwrap();
+        }
+
         toast.success('Material created successfully');
         router.push(`/stock/materials/${result.id}`);
         return;
       }
 
       const previousUnitCost = material.unitCost || 0;
-      const newUnitCost = parseFloat(unitCost) || 0;
+      const newUnitCost = isStockAssembly ? calculatedAssemblyUnitCost : parseFloat(unitCost) || 0;
 
       await updateMaterial({ id: material.id, data: payload }).unwrap();
+
+      if (stockType === 'Stock Assembly') {
+        await upsertMaterialAssembly({
+          materialId: material.id,
+          outputQuantity: parseFloat(assemblyOutputQuantity) || 1,
+          overheadPercent: parseFloat(assemblyOverheadPercent) || 0,
+          components: assemblyComponents
+            .filter((entry) => entry.componentMaterialId && (parseFloat(entry.quantity) || 0) > 0)
+            .map((entry) => ({
+              componentMaterialId: entry.componentMaterialId,
+              quantity: parseFloat(entry.quantity),
+            })),
+        }).unwrap();
+      }
 
       const changes: Record<string, ChangeLogValue> = {};
       if (name !== material.name) changes.name = { from: material.name, to: name };
@@ -492,14 +606,15 @@ function MaterialEditor({
 
               <FieldShell label="Base unit" hint="Inventory and dispatch quantities resolve back to this unit.">
                 <div className="flex gap-2">
-                  <select value={unit} onChange={(e) => setUnit(e.target.value)} className={inputClassName()}>
-                    <option value="">Select unit</option>
-                    {units.map((entry) => (
-                      <option key={entry.id} value={entry.name}>
-                        {entry.name}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchSelect
+                    items={units.map((entry) => ({ id: entry.name, label: entry.name }))}
+                    value={unit}
+                    onChange={setUnit}
+                    placeholder="Select unit"
+                    openOnFocus
+                    dropdownInPortal
+                    inputProps={{ className: inputClassName() }}
+                  />
                   <Button type="button" size="sm" variant="secondary" onClick={() => setUnitModal(true)}>
                     New
                   </Button>
@@ -507,16 +622,20 @@ function MaterialEditor({
               </FieldShell>
 
               <FieldShell label="Stock type" hint="Used to separate raw, WIP, and finished items.">
-                <select value={stockType} onChange={(e) => setStockType(e.target.value)} className={inputClassName()}>
-                  <option value="">Select stock type</option>
-                  <option value="Raw Material">Raw Material</option>
-                  <option value="Work In Progress">Work In Progress</option>
-                  <option value="Finished Goods">Finished Goods</option>
-                  <option value="Semi-finished">Semi-finished</option>
-                  <option value="Consumable">Consumable</option>
-                  <option value="Non-Stock">Non-Stock</option>
-                  <option value="Other">Other</option>
-                </select>
+                <SearchSelect
+                  items={STOCK_TYPE_OPTIONS}
+                  value={stockType}
+                  onChange={(nextType) => {
+                    setStockType(nextType);
+                    if (nextType !== 'Stock Assembly') {
+                      setAssemblyComponents([]);
+                    }
+                  }}
+                  placeholder="Select stock type"
+                  openOnFocus
+                  dropdownInPortal
+                  inputProps={{ className: inputClassName() }}
+                />
               </FieldShell>
 
               <FieldShell
@@ -536,14 +655,15 @@ function MaterialEditor({
 
               <FieldShell label="Category">
                 <div className="flex gap-2">
-                  <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClassName()}>
-                    <option value="">Select category</option>
-                    {categories.map((entry) => (
-                      <option key={entry.id} value={entry.name}>
-                        {entry.name}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchSelect
+                    items={categories.map((entry) => ({ id: entry.name, label: entry.name }))}
+                    value={category}
+                    onChange={setCategory}
+                    placeholder="Select category"
+                    openOnFocus
+                    dropdownInPortal
+                    inputProps={{ className: inputClassName() }}
+                  />
                   <Button type="button" size="sm" variant="secondary" onClick={() => setCategoryModal(true)}>
                     New
                   </Button>
@@ -555,17 +675,20 @@ function MaterialEditor({
                 hint="Used as the default in receipts/dispatch lines. You can still override per line."
               >
                 <div className="flex gap-2">
-                  <select value={warehouse} onChange={(e) => setWarehouse(e.target.value)} className={inputClassName()}>
-                    <option value="">Select warehouse</option>
-                    {warehouses.map((entry) => (
-                      <option key={entry.id} value={entry.name}>
-                        {entry.name}
-                      </option>
-                    ))}
-                    {warehouse && !warehouses.some((entry) => entry.name === warehouse) ? (
-                      <option value={warehouse}>{warehouse} (current)</option>
-                    ) : null}
-                  </select>
+                  <SearchSelect
+                    items={[
+                      ...warehouses.map((entry) => ({ id: entry.name, label: entry.name })),
+                      ...(warehouse && !warehouses.some((entry) => entry.name === warehouse)
+                        ? [{ id: warehouse, label: `${warehouse} (current)` }]
+                        : []),
+                    ]}
+                    value={warehouse}
+                    onChange={setWarehouse}
+                    placeholder="Select warehouse"
+                    openOnFocus
+                    dropdownInPortal
+                    inputProps={{ className: inputClassName() }}
+                  />
                   <Button type="button" size="sm" variant="secondary" onClick={() => setWarehouseModal(true)}>
                     New
                   </Button>
@@ -605,11 +728,44 @@ function MaterialEditor({
                   type="number"
                   min="0"
                   step="0.01"
-                  value={unitCost}
+                  value={isStockAssembly ? calculatedAssemblyUnitCost.toFixed(4) : unitCost}
                   onChange={(e) => setUnitCost(e.target.value)}
                   className={inputClassName()}
+                  disabled={isStockAssembly}
                 />
               </FieldShell>
+
+              {isStockAssembly ? (
+                <FieldShell
+                  label="Assembly output quantity"
+                  hint="Total quantity produced by one assembly batch (in base unit)."
+                >
+                  <input
+                    type="number"
+                    min="0.0001"
+                    step="0.001"
+                    value={assemblyOutputQuantity}
+                    onChange={(e) => setAssemblyOutputQuantity(e.target.value)}
+                    className={inputClassName()}
+                  />
+                </FieldShell>
+              ) : null}
+
+              {isStockAssembly ? (
+                <FieldShell
+                  label="Assembly overhead (%)"
+                  hint="Add labour/tools cost as a percentage on total component cost."
+                >
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={assemblyOverheadPercent}
+                    onChange={(e) => setAssemblyOverheadPercent(e.target.value)}
+                    className={inputClassName()}
+                  />
+                </FieldShell>
+              ) : null}
 
               <FieldShell label="Reorder level">
                 <input
@@ -631,6 +787,86 @@ function MaterialEditor({
                 {submitButtonText}
               </Button>
             </div>
+
+            {isStockAssembly ? (
+              <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Assembly components</h3>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                  Build this stock item from existing materials. Cost updates automatically from component costs.
+                </p>
+                <div className="mt-4 space-y-3">
+                  {assemblyComponents.map((row, index) => {
+                    const selected = assemblyMaterialOptions.find((entry) => entry.id === row.componentMaterialId);
+                    const lineCost = (parseFloat(row.quantity) || 0) * (selected?.unitCost ?? 0);
+                    return (
+                      <div
+                        key={`${row.componentMaterialId}-${index}`}
+                        className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/70 lg:grid-cols-[1.2fr_0.7fr_0.8fr_auto]"
+                      >
+                        <SearchSelect
+                          items={assemblyMaterialOptions.map((entry) => ({
+                            id: entry.id,
+                            label: `${entry.name} (${entry.unit})`,
+                          }))}
+                          value={row.componentMaterialId}
+                          onChange={(nextId) =>
+                            setAssemblyComponents((prev) =>
+                              prev.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, componentMaterialId: nextId } : entry
+                              )
+                            )
+                          }
+                          placeholder="Select stock item"
+                          openOnFocus
+                          dropdownInPortal
+                          inputProps={{ className: inputClassName() }}
+                        />
+                        <input
+                          type="number"
+                          min="0.0001"
+                          step="0.001"
+                          value={row.quantity}
+                          onChange={(e) =>
+                            setAssemblyComponents((prev) =>
+                              prev.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, quantity: e.target.value } : entry
+                              )
+                            )
+                          }
+                          className={inputClassName()}
+                          placeholder="Qty"
+                        />
+                        <div className="flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                          AED {lineCost.toFixed(4)}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() =>
+                            setAssemblyComponents((prev) => prev.filter((_, entryIndex) => entryIndex !== index))
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setAssemblyComponents((prev) => [...prev, { componentMaterialId: '', quantity: '' }])}
+                  >
+                    Add component
+                  </Button>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Input: AED {assemblyTotalCost.toFixed(4)} | Overhead: {assemblyOverheadPercentValue.toFixed(2)}% | Total: AED {assemblyTotalCostWithOverhead.toFixed(4)} | Output: {assemblyOutputQuantityValue.toFixed(3)} {unit || material?.unit || ''}
+                  </p>
+                </div>
+              </div>
+            ) : null}
           </SectionShell>
 
           {!isCreateMode ? (
@@ -732,26 +968,30 @@ function MaterialEditor({
               {materialUoms.some((entry) => entry.isBase) ? (
                 <div className="mt-4 grid gap-4 border-t border-slate-200 pt-4 dark:border-slate-800 lg:grid-cols-[1.1fr_1fr_0.8fr_auto]">
                   <FieldShell label="Packaging unit">
-                    <select value={deriveUnitId} onChange={(e) => setDeriveUnitId(e.target.value)} className={inputClassName()}>
-                      <option value="">Select unit</option>
-                      {availableDerivedUnits.map((entry) => (
-                        <option key={entry.id} value={entry.id}>
-                          {entry.name}
-                        </option>
-                      ))}
-                    </select>
+                    <SearchSelect
+                      items={availableDerivedUnits.map((entry) => ({ id: entry.id, label: entry.name }))}
+                      value={deriveUnitId}
+                      onChange={setDeriveUnitId}
+                      placeholder="Select unit"
+                      openOnFocus
+                      dropdownInPortal
+                      inputProps={{ className: inputClassName() }}
+                    />
                   </FieldShell>
 
                   <FieldShell label="Parent UOM">
-                    <select value={deriveParentId} onChange={(e) => setDeriveParentId(e.target.value)} className={inputClassName()}>
-                      <option value="">Select parent</option>
-                      {materialUoms.map((entry) => (
-                        <option key={entry.id} value={entry.id}>
-                          {entry.unitName}
-                          {entry.isBase ? ' (base)' : ` (=${entry.factorToBase} ${material.unit})`}
-                        </option>
-                      ))}
-                    </select>
+                    <SearchSelect
+                      items={materialUoms.map((entry) => ({
+                        id: entry.id,
+                        label: `${entry.unitName}${entry.isBase ? ' (base)' : ` (=${entry.factorToBase} ${material.unit})`}`,
+                      }))}
+                      value={deriveParentId}
+                      onChange={setDeriveParentId}
+                      placeholder="Select parent"
+                      openOnFocus
+                      dropdownInPortal
+                      inputProps={{ className: inputClassName() }}
+                    />
                   </FieldShell>
 
                   <FieldShell label="Factor to parent">

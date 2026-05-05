@@ -1,8 +1,8 @@
 # applyDrafts()
 
-> God node · 17 connections · `app\(app)\hr\schedule\[workDate]\page.tsx`
+> God node · 17 connections · `C:\almuraqib-custom-application\AMFGI\app\(app)\hr\schedule\[workDate]\page.tsx`
 
-**Community:** [[HR, Components, and Print]]
+**Community:** [[Almuraqib Custom Application Amfgi]]
 
 ## Connections by Relation
 

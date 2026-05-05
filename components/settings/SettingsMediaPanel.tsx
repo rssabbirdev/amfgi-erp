@@ -15,7 +15,7 @@ const LINK_KIND_LABEL: Record<string, string> = {
 
 type MediaRow = {
   id: string;
-  driveId: string;
+  fileUrl: string;
   previewUrl: string | null;
   mimeType: string;
   fileName: string;
