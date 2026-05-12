@@ -1,15 +1,15 @@
 # Tests Readme
 
-> 6 nodes · cohesion 0.40
+> 6 nodes Â· cohesion 0.40
 
 ## Key Concepts
 
-- **Critical Path Integration Tests** (5 connections) — `__tests__/README.md`
-- **FIFO Stock Consumption** (2 connections) — `README.md`
-- **FIFO Financial Accuracy Rationale** (2 connections) — `__tests__/README.md`
-- **Integration Test Documentation Reference** (1 connections) — `README.md`
-- **Transfer Atomicity Rationale** (1 connections) — `__tests__/README.md`
-- **Multi-Tenancy Security Rationale** (1 connections) — `__tests__/README.md`
+- **Critical Path Integration Tests** (5 connections) â€” `__tests__/README.md`
+- **FIFO Stock Consumption** (2 connections) â€” `README.md`
+- **FIFO Financial Accuracy Rationale** (2 connections) â€” `__tests__/README.md`
+- **Integration Test Documentation Reference** (1 connections) â€” `README.md`
+- **Transfer Atomicity Rationale** (1 connections) â€” `__tests__/README.md`
+- **Multi-Tenancy Security Rationale** (1 connections) â€” `__tests__/README.md`
 
 ## Relationships
 

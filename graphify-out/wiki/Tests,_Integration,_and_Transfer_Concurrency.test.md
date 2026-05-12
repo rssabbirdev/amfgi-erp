@@ -1,0 +1,27 @@
+# Tests, Integration, and Transfer Concurrency.test
+
+> 3 nodes · cohesion 0.67
+
+## Key Concepts
+
+- **transferBody()** (2 connections) — `__tests__/integration/transfer-concurrency.test.ts`
+- **transfer-concurrency.test.ts** (1 connections) — `__tests__/integration/transfer-concurrency.test.ts`
+- **transfer-concurrency.test.ts** (1 connections) — `__tests__/integration/transfer-concurrency.test.ts`
+
+## Relationships
+
+- No strong cross-community connections detected
+
+## Source Files
+
+- `__tests__/integration/transfer-concurrency.test.ts`
+
+## Audit Trail
+
+- EXTRACTED: 4 (100%)
+- INFERRED: 0 (0%)
+- AMBIGUOUS: 0 (0%)
+
+---
+
+*Part of the graphify knowledge wiki. See [[index]] to navigate.*

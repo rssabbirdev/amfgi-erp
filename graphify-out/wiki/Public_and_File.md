@@ -1,12 +1,12 @@
 # Public and File
 
-> 3 nodes · cohesion 1.00
+> 3 nodes Â· cohesion 1.00
 
 ## Key Concepts
 
-- **File Document Icon** (2 connections) — `public/file.svg`
-- **Folded Corner Page Shape** (2 connections) — `public/file.svg`
-- **Document Text Lines Motif** (2 connections) — `public/file.svg`
+- **File Document Icon** (2 connections) â€” `public/file.svg`
+- **Folded Corner Page Shape** (2 connections) â€” `public/file.svg`
+- **Document Text Lines Motif** (2 connections) â€” `public/file.svg`
 
 ## Relationships
 

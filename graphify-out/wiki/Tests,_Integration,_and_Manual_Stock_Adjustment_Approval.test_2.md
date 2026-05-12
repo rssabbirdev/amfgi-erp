@@ -1,0 +1,25 @@
+# Tests, Integration, and Manual Stock Adjustment Approval.test
+
+> 1 nodes · cohesion 1.00
+
+## Key Concepts
+
+- **manual-stock-adjustment-approval.test.ts** (0 connections) — `__tests__/integration/manual-stock-adjustment-approval.test.ts`
+
+## Relationships
+
+- No strong cross-community connections detected
+
+## Source Files
+
+- `__tests__/integration/manual-stock-adjustment-approval.test.ts`
+
+## Audit Trail
+
+- EXTRACTED: 0 (0%)
+- INFERRED: 0 (0%)
+- AMBIGUOUS: 0 (0%)
+
+---
+
+*Part of the graphify knowledge wiki. See [[index]] to navigate.*

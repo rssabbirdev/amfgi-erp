@@ -1,11 +1,11 @@
 # Agents
 
-> 2 nodes · cohesion 1.00
+> 2 nodes Â· cohesion 1.00
 
 ## Key Concepts
 
-- **Graphify Knowledge Graph** (1 connections) — `AGENTS.md`
-- **GRAPH_REPORT.md** (1 connections) — `AGENTS.md`
+- **Graphify Knowledge Graph** (1 connections) â€” `AGENTS.md`
+- **GRAPH_REPORT.md** (1 connections) â€” `AGENTS.md`
 
 ## Relationships
 

@@ -1,8 +1,8 @@
 # update()
 
-> God node · 36 connections · `C:\almuraqib-custom-application\AMFGI\app\(app)\hr\settings\employee-types\page.tsx`
+> God node Â· 37 connections Â· `app/(app)/hr/settings/employee-types/page.tsx`
 
-**Community:** [[Almuraqib Custom Application Amfgi]]
+**Community:** [[Lib Utils, HR, and Material Master Data]]
 
 ## Connections by Relation
 
@@ -29,6 +29,7 @@
 - [[recalculateAssemblyUnitCostTx()]] `INFERRED`
 
 ### contains
+- [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 
 ---

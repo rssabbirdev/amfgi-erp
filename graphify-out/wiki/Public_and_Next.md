@@ -1,13 +1,13 @@
 # Public and Next
 
-> 4 nodes · cohesion 0.83
+> 4 nodes Â· cohesion 0.83
 
 ## Key Concepts
 
-- **Primary Wordmark Path Shape** (3 connections) — `public/next.svg`
-- **Secondary Wordmark Path Shape** (3 connections) — `public/next.svg`
-- **Next.js Logo Wordmark** (2 connections) — `public/next.svg`
-- **Monochrome Black Fill** (2 connections) — `public/next.svg`
+- **Primary Wordmark Path Shape** (3 connections) â€” `public/next.svg`
+- **Secondary Wordmark Path Shape** (3 connections) â€” `public/next.svg`
+- **Next.js Logo Wordmark** (2 connections) â€” `public/next.svg`
+- **Monochrome Black Fill** (2 connections) â€” `public/next.svg`
 
 ## Relationships
 
