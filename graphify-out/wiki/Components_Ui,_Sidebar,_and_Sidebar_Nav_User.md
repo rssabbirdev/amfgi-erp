@@ -1,6 +1,6 @@
 # Components Ui, Sidebar, and Sidebar Nav User
 
-> 19 nodes · cohesion 0.13
+> 18 nodes · cohesion 0.14
 
 ## Key Concepts
 
@@ -9,7 +9,6 @@
 - **AppNavigationSidebar()** (4 connections) — `components/layout/Sidebar.tsx`
 - **SidebarNavUser()** (4 connections) — `components/layout/SidebarNavUser.tsx`
 - **Sidebar()** (4 connections) — `components/ui/shadcn/sidebar.tsx`
-- **SidebarTrigger()** (4 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarRail()** (4 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarMenu()** (4 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarHeader()** (3 connections) — `components/ui/shadcn/sidebar.tsx`
@@ -26,11 +25,11 @@
 
 ## Relationships
 
-- [[Components Ui and App Shell]] (13 shared connections)
-- [[Reports, Settings, and HR]] (12 shared connections)
+- [[Components Ui and App Shell]] (12 shared connections)
+- [[Reports, Settings, and HR]] (11 shared connections)
 - [[Components Company Switcher, Ui, and Sidebar Nav User]] (10 shared connections)
 - [[Components, Lib, and Proxy]] (7 shared connections)
-- [[HR, Reports, and Components]] (1 shared connections)
+- [[HR, Components, and Reports]] (1 shared connections)
 
 ## Source Files
 
@@ -40,7 +39,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 87 (100%)
+- EXTRACTED: 83 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

@@ -19,11 +19,11 @@
 
 ## Relationships
 
-- [[API Companies, Settings, and Materials]] (5 shared connections)
+- [[API Settings, Companies, and Materials]] (5 shared connections)
 - [[API HR, Materials, and Upload]] (3 shared connections)
 - [[Lib Utils, HR, and Material Master Data]] (2 shared connections)
 - [[API Reports, Materials, and HR]] (2 shared connections)
-- [[Lib Integrations]] (1 shared connections)
+- [[Lib, Integrations, and Domain Allowlist]] (1 shared connections)
 
 ## Source Files
 

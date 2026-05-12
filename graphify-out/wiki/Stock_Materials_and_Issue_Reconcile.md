@@ -1,11 +1,12 @@
 # Stock Materials and Issue Reconcile
 
-> 9 nodes · cohesion 0.36
+> 10 nodes · cohesion 0.33
 
 ## Key Concepts
 
 - **page.tsx** (7 connections) — `app/(app)/stock/materials/[id]/page.tsx`
 - **page.tsx** (7 connections) — `app/(app)/stock/materials/[id]/page.tsx`
+- **inputClassName()** (4 connections) — `app/(app)/stock/materials/[id]/page.tsx`
 - **formatNumber()** (4 connections) — `app/(app)/stock/materials/[id]/page.tsx`
 - **normalizeStoredFiles()** (3 connections) — `app/(app)/stock/materials/[id]/page.tsx`
 - **MaterialEditor()** (3 connections) — `app/(app)/stock/materials/[id]/page.tsx`
@@ -16,9 +17,10 @@
 
 ## Relationships
 
-- [[Stock Goods Receipt, Stock Batches, and Inter Company Transfers]] (3 shared connections)
-- [[Stock Goods Receipt, Inter Company Transfers, and Materials]] (2 shared connections)
-- [[Components, HR, and Admin]] (2 shared connections)
+- [[Stock Goods Receipt and Inter Company Transfers]] (2 shared connections)
+- [[Customers, Stock, and Reports]] (2 shared connections)
+- [[Stock and Store]] (2 shared connections)
+- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (1 shared connections)
 
 ## Source Files
 
@@ -27,7 +29,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 33 (100%)
+- EXTRACTED: 37 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

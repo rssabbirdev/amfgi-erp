@@ -34,17 +34,17 @@
 ## Relationships
 
 - [[API Reports, Materials, and HR]] (40 shared connections)
-- [[API HR, Jobs, and Materials]] (12 shared connections)
+- [[API HR, Jobs, and Materials]] (14 shared connections)
 - [[API HR, User, and Jobs]] (9 shared connections)
 - [[Lib Utils]] (9 shared connections)
 - [[Lib Utils and Job Costing]] (8 shared connections)
 - [[Lib Integrations, Party Lists API, and Party List Sync]] (7 shared connections)
-- [[API Companies, Settings, and Materials]] (6 shared connections)
+- [[API Settings, Companies, and Materials]] (6 shared connections)
+- [[Lib Integrations and Party Contacts]] (6 shared connections)
 - [[API Transactions and Upload]] (5 shared connections)
-- [[Lib Utils, Media, and HR]] (5 shared connections)
 - [[Lib Utils, HR, and Material Master Data]] (5 shared connections)
 - [[Lib HR]] (4 shared connections)
-- [[Lib Integrations]] (4 shared connections)
+- [[Lib Utils, Media, and Db]] (4 shared connections)
 
 ## Source Files
 

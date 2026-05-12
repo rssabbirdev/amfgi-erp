@@ -37,7 +37,7 @@
 - [[Stock Dispatch]] (1 shared connections)
 - [[HR Schedule]] (1 shared connections)
 - [[Lib Utils, Job Costing, and Stock]] (1 shared connections)
-- [[Lib Utils, Media, and HR]] (1 shared connections)
+- [[Lib Utils, Media, and Db]] (1 shared connections)
 
 ## Source Files
 

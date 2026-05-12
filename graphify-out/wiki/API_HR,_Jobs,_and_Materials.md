@@ -1,6 +1,6 @@
 # API HR, Jobs, and Materials
 
-> 65 nodes · cohesion 0.05
+> 70 nodes · cohesion 0.05
 
 ## Key Concepts
 
@@ -10,6 +10,8 @@
 - **canManageDrive()** (7 connections) — `app/api/settings/google-drive/status/route.ts`
 - **loadFormula()** (5 connections) — `app/api/job-costing/formulas/[id]/route.ts`
 - **loadProgressEntry()** (5 connections) — `app/api/jobs/[id]/items/[itemId]/progress-entries/[entryId]/route.ts`
+- **normalizeRequiredExpertiseNames()** (5 connections) — `lib/jobs/jobRequiredExpertises.ts`
+- **serializeRequiredExpertises()** (5 connections) — `lib/jobs/jobRequiredExpertises.ts`
 - **route.ts** (4 connections) — `app/api/job-costing/formulas/[id]/route.ts`
 - **route.ts** (4 connections) — `app/api/jobs/[id]/items/[itemId]/route.ts`
 - **normalizePreferenceKey()** (4 connections) — `app/api/me/table-preferences/[key]/route.ts`
@@ -27,24 +29,22 @@
 - **route.ts** (3 connections) — `app/api/me/table-preferences/[key]/route.ts`
 - **route.ts** (3 connections) — `app/api/roles/[id]/route.ts`
 - **route.ts** (3 connections) — `app/api/stock-count-sessions/[id]/route.ts`
-- **route.ts** (3 connections) — `app/api/suppliers/[id]/route.ts`
-- **route.ts** (3 connections) — `app/api/users/[id]/route.ts`
-- *... and 40 more nodes in this community*
+- *... and 45 more nodes in this community*
 
 ## Relationships
 
-- [[API Reports, Materials, and HR]] (46 shared connections)
+- [[API Reports, Materials, and HR]] (47 shared connections)
 - [[API HR, User, and Jobs]] (14 shared connections)
-- [[API HR, Materials, and Upload]] (12 shared connections)
-- [[API Companies, Settings, and Materials]] (7 shared connections)
-- [[Lib Utils, Media, and HR]] (4 shared connections)
+- [[API HR, Materials, and Upload]] (14 shared connections)
+- [[API Settings, Companies, and Materials]] (7 shared connections)
 - [[Lib, Scripts, and Settings]] (4 shared connections)
 - [[Lib Utils and Job Costing]] (4 shared connections)
 - [[Lib Utils]] (4 shared connections)
+- [[API Media and Settings]] (3 shared connections)
 - [[Lib Utils, Job Costing, and Stock]] (3 shared connections)
 - [[Lib, Job Costing, and Job Item Assignments]] (3 shared connections)
-- [[Lib and Party Contacts]] (2 shared connections)
-- [[Lib, Jobs, and Job Required Expertises]] (2 shared connections)
+- [[Lib Live Updates and Warehouses]] (3 shared connections)
+- [[Lib Integrations and Party Contacts]] (2 shared connections)
 
 ## Source Files
 
@@ -71,8 +71,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 283 (86%)
-- INFERRED: 47 (14%)
+- EXTRACTED: 295 (85%)
+- INFERRED: 53 (15%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -1,60 +1,57 @@
 # Customers Jobs
 
-> 36 nodes · cohesion 0.10
+> 37 nodes · cohesion 0.08
 
 ## Key Concepts
 
-- **page.tsx** (58 connections) — `app/(app)/customers/page.tsx`
-- **page.tsx** (22 connections) — `app/(app)/customers/page.tsx`
-- **extractApiErrorMessage()** (14 connections) — `app/(app)/suppliers/page.tsx`
-- **CustomersPage()** (6 connections) — `app/(app)/customers/page.tsx`
-- **compactNumber()** (6 connections) — `app/(app)/suppliers/page.tsx`
-- **cx()** (5 connections) — `app/(app)/customers/jobs/page.tsx`
-- **CustomerReadOnlyDetails()** (4 connections) — `app/(app)/customers/page.tsx`
-- **cx()** (3 connections) — `app/(app)/customers/page.tsx`
-- **customerStatusClasses()** (3 connections) — `app/(app)/customers/page.tsx`
-- **prettyJobStatus()** (3 connections) — `app/(app)/customers/page.tsx`
-- **handleEditClick()** (3 connections) — `app/(app)/customers/page.tsx`
-- **handleSyncPartyCustomers()** (3 connections) — `app/(app)/customers/page.tsx`
-- **handleDeleteJob()** (3 connections) — `app/(app)/customers/page.tsx`
-- **formatDate()** (2 connections) — `app/(app)/customers/page.tsx`
-- **compactNumber()** (2 connections) — `app/(app)/customers/page.tsx`
-- **matchesText()** (2 connections) — `app/(app)/customers/page.tsx`
-- **customerStatusClasses()** (2 connections) — `app/(app)/customers/page.tsx`
-- **jobStatusClasses()** (2 connections) — `app/(app)/customers/page.tsx`
-- **updateContactRow()** (2 connections) — `app/(app)/customers/page.tsx`
-- **addContactRow()** (2 connections) — `app/(app)/customers/page.tsx`
-- **removeContactRow()** (2 connections) — `app/(app)/customers/page.tsx`
-- **openCustomerDetails()** (2 connections) — `app/(app)/customers/page.tsx`
-- **toggleMainJob()** (2 connections) — `app/(app)/customers/page.tsx`
-- **openCustomerContextMenu()** (2 connections) — `app/(app)/customers/page.tsx`
-- **openJobContextMenu()** (2 connections) — `app/(app)/customers/page.tsx`
-- *... and 11 more nodes in this community*
+- **page.tsx** (30 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **page.tsx** (10 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **jobContactFormUi.ts** (6 connections) — `lib/jobContactFormUi.ts`
+- **jobContactFormUi.ts** (5 connections) — `lib/jobContactFormUi.ts`
+- **CustomerJobFormPage()** (4 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **CustomerJobFormPage()** (3 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **MultiSelectDropdown.tsx** (3 connections) — `components/ui/MultiSelectDropdown.tsx`
+- **emptyJobContactRow()** (3 connections) — `lib/jobContactFormUi.ts`
+- **jobContactsToRows()** (3 connections) — `lib/jobContactFormUi.ts`
+- **jobs.ts** (3 connections) — `store/api/endpoints/jobs.ts`
+- **dateInputValue()** (3 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **getMode()** (3 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **buildFormFromJob()** (3 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **getNextNumericVariationSuffix()** (3 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **dateInputValue()** (2 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **getMode()** (2 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **buildFormFromJob()** (2 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **getNextNumericVariationSuffix()** (2 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **onMouseDown()** (2 connections) — `components/ui/MultiSelectDropdown.tsx`
+- **toggleValue()** (2 connections) — `components/ui/MultiSelectDropdown.tsx`
+- **rowHasContent()** (2 connections) — `lib/jobContactFormUi.ts`
+- **rowsToJobContactsPayload()** (2 connections) — `lib/jobContactFormUi.ts`
+- **primaryJobContactPersonFromRows()** (2 connections) — `lib/jobContactFormUi.ts`
+- **emptyForm()** (2 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- **parseNumberInput()** (2 connections) — `app/(app)/customers/jobs/form/page.tsx`
+- *... and 12 more nodes in this community*
 
 ## Relationships
 
-- [[Admin, Components, and Settings]] (9 shared connections)
-- [[Customers, Stock, and Providers]] (9 shared connections)
-- [[HR, Reports, and Components]] (7 shared connections)
-- [[Stock Goods Receipt, Stock Batches, and Inter Company Transfers]] (5 shared connections)
-- [[Suppliers]] (5 shared connections)
-- [[Components, HR, and Admin]] (3 shared connections)
 - [[Customers Jobs]] (3 shared connections)
-- [[Lib and Party Form Ui]] (3 shared connections)
-- [[Reports, Settings, and HR]] (1 shared connections)
-- [[Reports Stock Exceptions and Stock Adjustments]] (1 shared connections)
-- [[Stock Dispatch]] (1 shared connections)
+- [[HR Schedule and Settings]] (3 shared connections)
+- [[Stock, Providers, and Components]] (1 shared connections)
+- [[Lib, HR, and Workforce Profile]] (1 shared connections)
+- [[Admin Users, Roles, and Companies]] (1 shared connections)
+- [[Jobs, Id, and Cost Engine]] (1 shared connections)
+- [[API Reports, Materials, and HR]] (1 shared connections)
 
 ## Source Files
 
-- `app/(app)/customers/jobs/page.tsx`
-- `app/(app)/customers/page.tsx`
-- `app/(app)/suppliers/page.tsx`
+- `app/(app)/customers/jobs/form/page.tsx`
+- `components/ui/MultiSelectDropdown.tsx`
+- `lib/jobContactFormUi.ts`
+- `store/api/endpoints/jobs.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 168 (99%)
-- INFERRED: 1 (1%)
+- EXTRACTED: 115 (97%)
+- INFERRED: 4 (3%)
 - AMBIGUOUS: 0 (0%)
 
 ---

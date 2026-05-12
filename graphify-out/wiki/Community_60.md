@@ -1,4 +1,4 @@
-# Community 61
+# Community 60
 
 > 13 nodes · cohesion 0.18
 

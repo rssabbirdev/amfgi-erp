@@ -1,6 +1,6 @@
 # Stock Manual Adjustments and Inter Company Transfers
 
-> 17 nodes · cohesion 0.28
+> 19 nodes · cohesion 0.25
 
 ## Key Concepts
 
@@ -8,9 +8,11 @@
 - **page.tsx** (15 connections) — `app/(app)/stock/manual-adjustments/page.tsx`
 - **handleSubmit()** (14 connections) — `app/(app)/stock/manual-adjustments/page.tsx`
 - **updateLine()** (10 connections) — `app/(app)/stock/manual-adjustments/page.tsx`
+- **normalizeLines()** (8 connections) — `app/(app)/stock/inter-company-transfers/new/page.tsx`
 - **page.tsx** (8 connections) — `app/(app)/stock/inter-company-transfers/new/page.tsx`
 - **removeLine()** (8 connections) — `app/(app)/stock/manual-adjustments/page.tsx`
 - **page.tsx** (8 connections) — `app/(app)/stock/inter-company-transfers/new/page.tsx`
+- **isLineEmpty()** (6 connections) — `app/(app)/stock/inter-company-transfers/new/page.tsx`
 - **addLine()** (6 connections) — `app/(app)/stock/manual-adjustments/page.tsx`
 - **createLine()** (5 connections) — `app/(app)/stock/manual-adjustments/page.tsx`
 - **previewImportedRows()** (5 connections) — `app/(app)/stock/manual-adjustments/page.tsx`
@@ -24,10 +26,9 @@
 
 ## Relationships
 
-- [[Stock Dispatch]] (10 shared connections)
-- [[Stock Goods Receipt, Inter Company Transfers, and Materials]] (10 shared connections)
-- [[Stock, Dispatch, and Entry]] (8 shared connections)
-- [[Reports Stock Exceptions and Stock Adjustments]] (4 shared connections)
+- [[Stock Dispatch]] (23 shared connections)
+- [[Stock Goods Receipt and Inter Company Transfers]] (9 shared connections)
+- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (4 shared connections)
 - [[Stock Count Session and Manual Adjustments]] (2 shared connections)
 - [[Lib, Utils, and Manual Stock Adjustment Import]] (2 shared connections)
 - [[HR Schedule and Settings]] (1 shared connections)
@@ -39,8 +40,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 110 (97%)
-- INFERRED: 3 (3%)
+- EXTRACTED: 124 (98%)
+- INFERRED: 3 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

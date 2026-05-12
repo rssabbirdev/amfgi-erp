@@ -4,9 +4,9 @@
 
 ## Key Concepts
 
-- **Database Setup** (3 connections) — `README.md`
-- **Prisma Schema** (1 connections) — `README.md`
-- **Key Constraints** (1 connections) — `README.md`
+- **Features** (3 connections) — `README.md`
+- **Core Modules** (1 connections) — `README.md`
+- **Key Features** (1 connections) — `README.md`
 
 ## Relationships
 

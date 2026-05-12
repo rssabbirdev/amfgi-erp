@@ -33,14 +33,14 @@
 
 ## Relationships
 
-- [[Components, HR, and Admin]] (16 shared connections)
-- [[Admin, Components, and Settings]] (9 shared connections)
+- [[HR, Components, and Reports]] (20 shared connections)
+- [[Admin Users, Roles, and Companies]] (6 shared connections)
 - [[Lib Utils]] (5 shared connections)
-- [[HR, Reports, and Components]] (4 shared connections)
 - [[Lib, Scripts, and Settings]] (4 shared connections)
-- [[Customers, Stock, and Providers]] (3 shared connections)
+- [[Stock, Providers, and Components]] (3 shared connections)
 - [[Reports, Settings, and HR]] (2 shared connections)
 - [[Lib Utils and Types]] (2 shared connections)
+- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (2 shared connections)
 - [[Components Ui and Materials]] (1 shared connections)
 - [[HR Schedule]] (1 shared connections)
 - [[Suppliers]] (1 shared connections)

@@ -4,11 +4,11 @@
 
 ## Key Concepts
 
-- **Performance Tips** (5 connections) — `DEVELOPER_GUIDE.md`
-- **code:typescript (// ✅ Good: One query with include)** (1 connections) — `DEVELOPER_GUIDE.md`
-- **code:typescript (// ✅ Good: Only fetch needed fields)** (1 connections) — `DEVELOPER_GUIDE.md`
-- **code:typescript (// ✅ Good: Single query with multiple results)** (1 connections) — `DEVELOPER_GUIDE.md`
-- **code:typescript (const page = 1;)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **Common Issues & Solutions** (5 connections) — `DEVELOPER_GUIDE.md`
+- **Issue: "Environment variable not found: DATABASE_URL"** (1 connections) — `DEVELOPER_GUIDE.md`
+- **Issue: "Error: P2014: The change you are trying to make would violate a required relation"** (1 connections) — `DEVELOPER_GUIDE.md`
+- **Issue: "Relations require an FK field in the view"** (1 connections) — `DEVELOPER_GUIDE.md`
+- **Issue: Transactions are slower after migration** (1 connections) — `DEVELOPER_GUIDE.md`
 
 ## Relationships
 

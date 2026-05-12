@@ -33,12 +33,12 @@
 
 ## Relationships
 
-- [[API HR, Jobs, and Materials]] (46 shared connections)
+- [[API HR, Jobs, and Materials]] (47 shared connections)
 - [[API HR, Materials, and Upload]] (40 shared connections)
 - [[API HR, User, and Jobs]] (16 shared connections)
 - [[Lib Utils]] (9 shared connections)
 - [[Lib Utils and Job Costing]] (8 shared connections)
-- [[API Companies, Settings, and Materials]] (6 shared connections)
+- [[API Settings, Companies, and Materials]] (6 shared connections)
 - [[Lib Utils, Job Costing, and Stock]] (6 shared connections)
 - [[Lib HR]] (5 shared connections)
 - [[HR Schedule and Settings]] (5 shared connections)

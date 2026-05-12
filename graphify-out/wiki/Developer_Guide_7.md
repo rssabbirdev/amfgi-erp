@@ -4,11 +4,11 @@
 
 ## Key Concepts
 
-- **Schema Reference** (3 connections) — `DEVELOPER_GUIDE.md`
-- **Core Models** (2 connections) — `DEVELOPER_GUIDE.md`
-- **Key Enums** (2 connections) — `DEVELOPER_GUIDE.md`
-- **code:prisma (model Company {)** (1 connections) — `DEVELOPER_GUIDE.md`
-- **code:prisma (enum TransactionType {)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **Performance Tips** (5 connections) — `DEVELOPER_GUIDE.md`
+- **code:typescript (// ✅ Good: One query with include)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **code:typescript (// ✅ Good: Only fetch needed fields)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **code:typescript (// ✅ Good: Single query with multiple results)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **code:typescript (const page = 1;)** (1 connections) — `DEVELOPER_GUIDE.md`
 
 ## Relationships
 

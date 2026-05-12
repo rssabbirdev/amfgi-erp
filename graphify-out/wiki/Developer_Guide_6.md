@@ -4,11 +4,11 @@
 
 ## Key Concepts
 
-- **Common Issues & Solutions** (5 connections) — `DEVELOPER_GUIDE.md`
-- **Issue: "Environment variable not found: DATABASE_URL"** (1 connections) — `DEVELOPER_GUIDE.md`
-- **Issue: "Error: P2014: The change you are trying to make would violate a required relation"** (1 connections) — `DEVELOPER_GUIDE.md`
-- **Issue: "Relations require an FK field in the view"** (1 connections) — `DEVELOPER_GUIDE.md`
-- **Issue: Transactions are slower after migration** (1 connections) — `DEVELOPER_GUIDE.md`
+- **Quick Start** (3 connections) — `DEVELOPER_GUIDE.md`
+- **Install & Setup** (2 connections) — `DEVELOPER_GUIDE.md`
+- **Connect to Database** (2 connections) — `DEVELOPER_GUIDE.md`
+- **code:bash (npm install  # Installs Prisma 6 + @prisma/client + mariadb)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **code:bash (# Check .env has DATABASE_URL set)** (1 connections) — `DEVELOPER_GUIDE.md`
 
 ## Relationships
 

@@ -4,19 +4,19 @@
 
 ## Key Concepts
 
-- **AMFGI ERP System** (15 connections) — `README.md`
-- **Project Structure** (2 connections) — `README.md`
-- **README.md** (1 connections) — `README.md`
-- **Table of Contents** (1 connections) — `README.md`
-- **Tech Stack** (1 connections) — `README.md`
-- **code:block1 (c:\almuraqib-custom-application\AMFGI\)** (1 connections) — `README.md`
-- **Seeding Test Data** (1 connections) — `README.md`
-- **Documentation** (1 connections) — `README.md`
-- **License** (1 connections) — `README.md`
+- **Running Tests** (5 connections) — `README.md`
+- **Install Test Dependencies (One-Time)** (2 connections) — `README.md`
+- **Run All Tests** (2 connections) — `README.md`
+- **Run Specific Test Suite** (2 connections) — `README.md`
+- **Test Options** (2 connections) — `README.md`
+- **code:bash (npm install --save-dev jest ts-jest @types/jest)** (1 connections) — `README.md`
+- **code:bash (npm test)** (1 connections) — `README.md`
+- **code:bash (npm test -- fifo-batch.test.ts          # FIFO stock consump)** (1 connections) — `README.md`
+- **code:bash (npm test -- --watch                     # Watch mode)** (1 connections) — `README.md`
 
 ## Relationships
 
-- [[Readme]] (8 shared connections)
+- [[Readme]] (1 shared connections)
 
 ## Source Files
 
@@ -24,7 +24,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 24 (100%)
+- EXTRACTED: 17 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

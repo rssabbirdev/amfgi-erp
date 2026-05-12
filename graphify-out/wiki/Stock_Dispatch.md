@@ -1,60 +1,57 @@
 # Stock Dispatch
 
-> 31 nodes · cohesion 0.12
+> 35 nodes · cohesion 0.09
 
 ## Key Concepts
 
-- **page.tsx** (56 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **page.tsx** (30 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **generateId()** (11 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
-- **loadTransaction()** (8 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **DeliveryNoteCreatePage()** (5 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **parseOverrideReason()** (5 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
-- **stripOverrideReason()** (5 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
-- **formatWarehouseStock()** (3 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **parseDeliveryNoteNumber()** (3 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **parseDeliveryContactPerson()** (3 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **getJobContactOptions()** (3 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **addCustomItem()** (3 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **handleDuplicate()** (3 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **generateId()** (2 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **getSelectedUom()** (2 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **getWarehouseBaseStock()** (2 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **showBaseStockLine()** (2 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **fetchNextNumber()** (2 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **removeCustomItem()** (2 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **duplicateCustomItem()** (2 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **updateCustomItem()** (2 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **handleCreateContactPerson()** (2 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **qtyInBase()** (1 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **CustomItem** (1 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **Line** (1 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- *... and 6 more nodes in this community*
+- **page.tsx** (57 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **page.tsx** (27 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **getWarehouseBaseStock()** (7 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **validateAndSubmit()** (7 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **qtyInBase()** (6 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **getSelectedUom()** (6 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **formatWarehouseStock()** (6 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **DispatchMaterialsPage()** (5 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **getMaterialUomOptions()** (4 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **getSelectedUom()** (3 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **formatWarehouseStock()** (3 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **formatGlobalStock()** (3 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **executeSubmit()** (3 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **generateId()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **emptyLine()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **getWarehouseBaseStock()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **formatGlobalStock()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **parseJobContacts()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **LineGridColumnSettings.tsx** (2 connections) — `components/stock/LineGridColumnSettings.tsx`
+- **handleOutsideClick()** (2 connections) — `components/stock/LineGridColumnSettings.tsx`
+- **getJob()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **setGridColumnVisibility()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **moveGridColumn()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **resizeGridColumn()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **qtyInBase()** (1 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- *... and 10 more nodes in this community*
 
 ## Relationships
 
-- [[Stock, Dispatch, and Entry]] (20 shared connections)
-- [[Stock Manual Adjustments and Inter Company Transfers]] (10 shared connections)
-- [[Stock Dispatch]] (6 shared connections)
-- [[Stock Goods Receipt, Inter Company Transfers, and Materials]] (6 shared connections)
-- [[Components, HR, and Admin]] (4 shared connections)
+- [[Stock Dispatch]] (26 shared connections)
+- [[Stock Manual Adjustments and Inter Company Transfers]] (12 shared connections)
+- [[HR, Components, and Reports]] (6 shared connections)
+- [[Stock Goods Receipt and Inter Company Transfers]] (5 shared connections)
 - [[Reports, Settings, and HR]] (4 shared connections)
-- [[Admin, Components, and Settings]] (1 shared connections)
+- [[HR Schedule and Settings]] (2 shared connections)
 - [[Components, Ui, and Search Select]] (1 shared connections)
 - [[Components, Stock, and Dispatch Line Grid]] (1 shared connections)
-- [[Suppliers]] (1 shared connections)
-- [[HR, Reports, and Components]] (1 shared connections)
-- [[Reports Stock Exceptions and Stock Adjustments]] (1 shared connections)
+- [[Admin Users, Roles, and Companies]] (1 shared connections)
 
 ## Source Files
 
-- `app/(app)/stock/dispatch/delivery-note/page.tsx`
 - `app/(app)/stock/dispatch/entry/page.tsx`
+- `components/stock/LineGridColumnSettings.tsx`
 
 ## Audit Trail
 
-- EXTRACTED: 164 (99%)
-- INFERRED: 1 (1%)
+- EXTRACTED: 168 (99%)
+- INFERRED: 2 (1%)
 - AMBIGUOUS: 0 (0%)
 
 ---

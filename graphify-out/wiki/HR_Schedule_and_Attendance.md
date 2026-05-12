@@ -1,12 +1,11 @@
 # HR Schedule and Attendance
 
-> 22 nodes · cohesion 0.13
+> 21 nodes · cohesion 0.14
 
 ## Key Concepts
 
 - **page.tsx** (29 connections) — `app/(app)/hr/attendance/page.tsx`
 - **page.tsx** (27 connections) — `app/(app)/hr/schedule/page.tsx`
-- **hr.ts** (6 connections) — `store/api/endpoints/hr.ts`
 - **page.tsx** (6 connections) — `app/(app)/hr/attendance/page.tsx`
 - **HrAttendancePage()** (5 connections) — `app/(app)/hr/attendance/page.tsx`
 - **page.tsx** (5 connections) — `app/(app)/hr/schedule/page.tsx`
@@ -29,23 +28,22 @@
 
 ## Relationships
 
-- [[Components, HR, and Admin]] (16 shared connections)
-- [[HR, Reports, and Components]] (9 shared connections)
+- [[HR, Components, and Reports]] (19 shared connections)
 - [[Reports, Settings, and HR]] (7 shared connections)
-- [[Admin, Components, and Settings]] (6 shared connections)
+- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (6 shared connections)
+- [[Admin Users, Roles, and Companies]] (4 shared connections)
 - [[HR Attendance]] (4 shared connections)
 - [[HR Schedule and Settings]] (2 shared connections)
-- [[Customers, Stock, and Providers]] (1 shared connections)
+- [[Stock, Providers, and Components]] (1 shared connections)
 
 ## Source Files
 
 - `app/(app)/hr/attendance/page.tsx`
 - `app/(app)/hr/schedule/page.tsx`
-- `store/api/endpoints/hr.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 105 (98%)
+- EXTRACTED: 99 (98%)
 - INFERRED: 2 (2%)
 - AMBIGUOUS: 0 (0%)
 

@@ -33,16 +33,17 @@
 
 ## Relationships
 
-- [[Stock Goods Receipt, Stock Batches, and Inter Company Transfers]] (7 shared connections)
-- [[Customers, Stock, and Providers]] (6 shared connections)
-- [[Components, HR, and Admin]] (4 shared connections)
-- [[Admin, Components, and Settings]] (4 shared connections)
+- [[Customers, Stock, and Reports]] (5 shared connections)
+- [[HR, Components, and Reports]] (5 shared connections)
+- [[Stock, Providers, and Components]] (5 shared connections)
+- [[Admin Users, Roles, and Companies]] (4 shared connections)
 - [[HR Schedule and Settings]] (4 shared connections)
 - [[Stock]] (2 shared connections)
-- [[Reports Stock Exceptions and Stock Adjustments]] (1 shared connections)
+- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (2 shared connections)
 - [[Lib Utils, HR, and Material Master Data]] (1 shared connections)
 - [[Settings API]] (1 shared connections)
 - [[Stock Dispatch]] (1 shared connections)
+- [[Stock Stock Batches]] (1 shared connections)
 
 ## Source Files
 

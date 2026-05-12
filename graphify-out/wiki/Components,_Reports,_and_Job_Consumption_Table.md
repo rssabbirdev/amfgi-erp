@@ -12,8 +12,7 @@
 
 ## Relationships
 
-- [[Components, HR, and Admin]] (2 shared connections)
-- [[Admin, Components, and Settings]] (1 shared connections)
+- [[HR, Components, and Reports]] (3 shared connections)
 - [[API Reports, Materials, and HR]] (1 shared connections)
 
 ## Source Files

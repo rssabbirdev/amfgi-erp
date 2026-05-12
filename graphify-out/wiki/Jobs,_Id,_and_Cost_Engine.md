@@ -35,16 +35,16 @@
 
 - [[Jobs, Id, and Cost Engine]] (18 shared connections)
 - [[Stock, Customers, and Jobs]] (6 shared connections)
-- [[Components, HR, and Admin]] (4 shared connections)
+- [[HR, Components, and Reports]] (6 shared connections)
 - [[HR Schedule and Settings]] (3 shared connections)
-- [[Stock Goods Receipt, Stock Batches, and Inter Company Transfers]] (2 shared connections)
-- [[Admin, Components, and Settings]] (2 shared connections)
+- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (2 shared connections)
 - [[Reports, Settings, and HR]] (2 shared connections)
+- [[Admin Users, Roles, and Companies]] (2 shared connections)
 - [[Print and Delivery Note]] (2 shared connections)
-- [[HR, Reports, and Components]] (1 shared connections)
 - [[Components, Ui, and Search Select]] (1 shared connections)
 - [[Components, Ui, and Spinner]] (1 shared connections)
-- [[Reports Stock Exceptions and Stock Adjustments]] (1 shared connections)
+- [[Store, API, and Endpoints]] (1 shared connections)
+- [[Customers Jobs]] (1 shared connections)
 
 ## Source Files
 

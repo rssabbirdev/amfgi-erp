@@ -1,6 +1,6 @@
 # Components Company Switcher, Ui, and Sidebar Nav User
 
-> 20 nodes · cohesion 0.17
+> 19 nodes · cohesion 0.19
 
 ## Key Concepts
 
@@ -17,7 +17,6 @@
 - **DropdownMenuLabel** (3 connections) — `components/ui/shadcn/dropdown-menu.tsx`
 - **DropdownMenuSeparator** (3 connections) — `components/ui/shadcn/dropdown-menu.tsx`
 - **handleSwitchConfirmed()** (3 connections) — `components/layout/CompanySwitcher.tsx`
-- **sidebarMenuButtonVariants** (2 connections) — `components/ui/shadcn/sidebar.tsx`
 - **fn()** (2 connections) — `components/layout/CompanySwitcher.tsx`
 - **onKey()** (2 connections) — `components/layout/CompanySwitcher.tsx`
 - **handleSwitch()** (2 connections) — `components/layout/CompanySwitcher.tsx`
@@ -30,9 +29,9 @@
 - [[Components Ui, Sidebar, and Sidebar Nav User]] (10 shared connections)
 - [[Components Ui and App Shell]] (5 shared connections)
 - [[Reports, Settings, and HR]] (3 shared connections)
-- [[Reports Stock Exceptions and Stock Adjustments]] (2 shared connections)
+- [[Admin Users, Roles, and Companies]] (2 shared connections)
 - [[Components, Lib, and Proxy]] (2 shared connections)
-- [[HR, Reports, and Components]] (1 shared connections)
+- [[HR, Components, and Reports]] (1 shared connections)
 - [[Providers and Store]] (1 shared connections)
 - [[Lib Utils, HR, and Material Master Data]] (1 shared connections)
 
@@ -48,7 +47,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 89 (98%)
+- EXTRACTED: 87 (98%)
 - INFERRED: 2 (2%)
 - AMBIGUOUS: 0 (0%)
 

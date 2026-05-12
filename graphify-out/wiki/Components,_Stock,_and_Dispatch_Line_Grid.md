@@ -18,8 +18,7 @@
 
 ## Relationships
 
-- [[Stock Dispatch]] (1 shared connections)
-- [[Stock, Dispatch, and Entry]] (1 shared connections)
+- [[Stock Dispatch]] (2 shared connections)
 
 ## Source Files
 

@@ -1,6 +1,6 @@
 # Components Ui and App Shell
 
-> 25 nodes · cohesion 0.10
+> 26 nodes · cohesion 0.10
 
 ## Key Concepts
 
@@ -16,6 +16,7 @@
 - **SidebarInput()** (2 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarSeparator()** (2 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarGroupAction()** (2 connections) — `components/ui/shadcn/sidebar.tsx`
+- **sidebarMenuButtonVariants** (2 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarMenuAction()** (2 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarMenuBadge()** (2 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarMenuSkeleton()** (2 connections) — `components/ui/shadcn/sidebar.tsx`
@@ -28,18 +29,16 @@
 - **AppShell.tsx** (2 connections) — `components/layout/AppShell.tsx`
 - **AppShell()** (1 connections) — `components/layout/AppShell.tsx`
 - **SidebarContextProps** (1 connections) — `components/ui/shadcn/sidebar.tsx`
-- **SidebarContext** (1 connections) — `components/ui/shadcn/sidebar.tsx`
+- *... and 1 more nodes in this community*
 
 ## Relationships
 
 - [[Reports, Settings, and HR]] (16 shared connections)
-- [[Components Ui, Sidebar, and Sidebar Nav User]] (13 shared connections)
+- [[Components Ui, Sidebar, and Sidebar Nav User]] (12 shared connections)
+- [[HR, Components, and Reports]] (7 shared connections)
 - [[Components, Ui, and Shadcn]] (6 shared connections)
 - [[Components Company Switcher, Ui, and Sidebar Nav User]] (5 shared connections)
-- [[HR, Reports, and Components]] (3 shared connections)
-- [[Components, HR, and Admin]] (3 shared connections)
-- [[Components, Lib, and Proxy]] (2 shared connections)
-- [[Admin, Components, and Settings]] (1 shared connections)
+- [[Components, Lib, and Proxy]] (3 shared connections)
 - [[HR Schedule and Settings]] (1 shared connections)
 
 ## Source Files
@@ -52,7 +51,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 111 (99%)
+- EXTRACTED: 113 (99%)
 - INFERRED: 1 (1%)
 - AMBIGUOUS: 0 (0%)
 

@@ -1,17 +1,13 @@
-# Stock Goods Receipt, Inter Company Transfers, and Materials
+# Stock Goods Receipt and Inter Company Transfers
 
-> 16 nodes · cohesion 0.25
+> 12 nodes · cohesion 0.33
 
 ## Key Concepts
 
 - **page.tsx** (15 connections) — `app/(app)/stock/goods-receipt/receive/page.tsx`
 - **page.tsx** (15 connections) — `app/(app)/stock/goods-receipt/receive/page.tsx`
 - **getMaterial()** (12 connections) — `app/(app)/stock/inter-company-transfers/new/page.tsx`
-- **normalizeLines()** (8 connections) — `app/(app)/stock/inter-company-transfers/new/page.tsx`
 - **emptyLine()** (7 connections) — `app/(app)/stock/goods-receipt/receive/page.tsx`
-- **confirmChange()** (7 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
-- **isLineEmpty()** (6 connections) — `app/(app)/stock/inter-company-transfers/new/page.tsx`
-- **inputClassName()** (4 connections) — `app/(app)/stock/materials/[id]/page.tsx`
 - **uid()** (3 connections) — `app/(app)/stock/goods-receipt/receive/page.tsx`
 - **getUnitCostPerBase()** (3 connections) — `app/(app)/stock/goods-receipt/receive/page.tsx`
 - **buildDraftReceiptNumber()** (2 connections) — `app/(app)/stock/goods-receipt/receive/page.tsx`
@@ -23,23 +19,20 @@
 
 ## Relationships
 
-- [[Stock, Dispatch, and Entry]] (11 shared connections)
-- [[Stock Manual Adjustments and Inter Company Transfers]] (10 shared connections)
-- [[Stock Dispatch]] (6 shared connections)
-- [[Stock Goods Receipt, Stock Batches, and Inter Company Transfers]] (2 shared connections)
+- [[Stock Manual Adjustments and Inter Company Transfers]] (9 shared connections)
+- [[Stock Dispatch]] (9 shared connections)
+- [[Customers, Stock, and Reports]] (2 shared connections)
 - [[Stock Materials and Issue Reconcile]] (2 shared connections)
 - [[API Reports, Materials, and HR]] (1 shared connections)
 
 ## Source Files
 
-- `app/(app)/stock/dispatch/entry/page.tsx`
 - `app/(app)/stock/goods-receipt/receive/page.tsx`
 - `app/(app)/stock/inter-company-transfers/new/page.tsx`
-- `app/(app)/stock/materials/[id]/page.tsx`
 
 ## Audit Trail
 
-- EXTRACTED: 91 (99%)
+- EXTRACTED: 66 (99%)
 - INFERRED: 1 (1%)
 - AMBIGUOUS: 0 (0%)
 
