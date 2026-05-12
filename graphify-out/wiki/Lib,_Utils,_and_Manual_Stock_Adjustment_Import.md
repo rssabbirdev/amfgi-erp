@@ -15,7 +15,7 @@
 
 ## Relationships
 
-- [[Stock and Manual Adjustments]] (2 shared connections)
+- [[Stock Manual Adjustments and Inter Company Transfers]] (2 shared connections)
 
 ## Source Files
 

@@ -14,12 +14,13 @@
 
 ## Relationships
 
-- [[Components, HR, and Reports]] (3 shared connections)
+- [[HR Schedule, Attendance, and Employees]] (2 shared connections)
 - [[HR Schedule and Settings]] (2 shared connections)
 - [[Components HR]] (2 shared connections)
 - [[Lib HR]] (2 shared connections)
 - [[Customers Jobs]] (1 shared connections)
 - [[HR Schedule]] (1 shared connections)
+- [[Reports, Components, and HR]] (1 shared connections)
 - [[Lib, Scripts, and Settings]] (1 shared connections)
 
 ## Source Files

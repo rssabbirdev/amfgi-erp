@@ -39,7 +39,7 @@
 - [[HR Schedule and Settings]] (4 shared connections)
 - [[API HR, Jobs, and Materials]] (4 shared connections)
 - [[Settings API]] (3 shared connections)
-- [[API Companies, Customers, and Materials]] (3 shared connections)
+- [[API Companies, Materials, and Suppliers]] (3 shared connections)
 - [[Lib Utils, HR, and Material Master Data]] (3 shared connections)
 - [[Lib and API]] (2 shared connections)
 - [[Lib, Scripts, and Settings]] (1 shared connections)

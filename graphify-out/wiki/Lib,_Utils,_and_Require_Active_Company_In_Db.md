@@ -11,7 +11,7 @@
 ## Relationships
 
 - [[API HR, Materials, and Upload]] (1 shared connections)
-- [[API Companies, Customers, and Materials]] (1 shared connections)
+- [[API Companies, Materials, and Suppliers]] (1 shared connections)
 
 ## Source Files
 

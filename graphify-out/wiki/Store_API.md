@@ -19,7 +19,7 @@
 
 ## Relationships
 
-- [[Admin Users, Roles, and Companies]] (4 shared connections)
+- [[Admin, Components, and Settings]] (4 shared connections)
 
 ## Source Files
 

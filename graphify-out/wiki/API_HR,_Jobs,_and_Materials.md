@@ -1,6 +1,6 @@
 # API HR, Jobs, and Materials
 
-> 75 nodes · cohesion 0.04
+> 65 nodes · cohesion 0.05
 
 ## Key Concepts
 
@@ -10,16 +10,11 @@
 - **canManageDrive()** (7 connections) — `app/api/settings/google-drive/status/route.ts`
 - **loadFormula()** (5 connections) — `app/api/job-costing/formulas/[id]/route.ts`
 - **loadProgressEntry()** (5 connections) — `app/api/jobs/[id]/items/[itemId]/progress-entries/[entryId]/route.ts`
-- **normalizeAssignedEmployeeIds()** (5 connections) — `lib/job-costing/jobItemAssignments.ts`
-- **serializeAssignedEmployeeIds()** (5 connections) — `lib/job-costing/jobItemAssignments.ts`
-- **normalizeRequiredExpertiseNames()** (5 connections) — `lib/jobs/jobRequiredExpertises.ts`
-- **serializeRequiredExpertises()** (5 connections) — `lib/jobs/jobRequiredExpertises.ts`
 - **route.ts** (4 connections) — `app/api/job-costing/formulas/[id]/route.ts`
 - **route.ts** (4 connections) — `app/api/jobs/[id]/items/[itemId]/route.ts`
 - **normalizePreferenceKey()** (4 connections) — `app/api/me/table-preferences/[key]/route.ts`
 - **route.ts** (4 connections) — `app/api/settings/google-drive/status/route.ts`
 - **loadSession()** (4 connections) — `app/api/stock-count-sessions/[id]/route.ts`
-- **assertCompanyEmployeesExist()** (4 connections) — `lib/job-costing/jobItemAssignments.ts`
 - **route.ts** (4 connections) — `app/api/job-costing/formulas/[id]/route.ts`
 - **route.ts** (4 connections) — `app/api/jobs/[id]/items/[itemId]/route.ts`
 - **route.ts** (4 connections) — `app/api/settings/google-drive/status/route.ts`
@@ -29,22 +24,27 @@
 - **route.ts** (3 connections) — `app/api/jobs/[id]/items/[itemId]/progress-entries/route.ts`
 - **route.ts** (3 connections) — `app/api/jobs/[id]/items/[itemId]/progress-entries/[entryId]/route.ts`
 - **route.ts** (3 connections) — `app/api/materials/[id]/route.ts`
-- *... and 50 more nodes in this community*
+- **route.ts** (3 connections) — `app/api/me/table-preferences/[key]/route.ts`
+- **route.ts** (3 connections) — `app/api/roles/[id]/route.ts`
+- **route.ts** (3 connections) — `app/api/stock-count-sessions/[id]/route.ts`
+- **route.ts** (3 connections) — `app/api/suppliers/[id]/route.ts`
+- **route.ts** (3 connections) — `app/api/users/[id]/route.ts`
+- *... and 40 more nodes in this community*
 
 ## Relationships
 
-- [[API Reports, Materials, and HR]] (48 shared connections)
-- [[API HR, Materials, and Upload]] (17 shared connections)
+- [[API Reports, Materials, and HR]] (46 shared connections)
 - [[API HR, User, and Jobs]] (14 shared connections)
-- [[API Companies, Customers, and Materials]] (7 shared connections)
+- [[API HR, Materials, and Upload]] (12 shared connections)
+- [[API Companies, Materials, and Suppliers]] (7 shared connections)
 - [[Lib, Scripts, and Settings]] (4 shared connections)
 - [[Lib Utils and Job Costing]] (4 shared connections)
 - [[Lib Utils]] (4 shared connections)
 - [[Lib and API]] (3 shared connections)
 - [[Lib Utils, Job Costing, and Stock]] (3 shared connections)
+- [[Lib, Job Costing, and Job Item Assignments]] (3 shared connections)
 - [[Lib and Party Contacts]] (2 shared connections)
-- [[Lib, Utils, and Global Settings]] (2 shared connections)
-- [[Lib Utils, HR, and Material Master Data]] (2 shared connections)
+- [[Lib, Jobs, and Job Required Expertises]] (2 shared connections)
 
 ## Source Files
 
@@ -71,8 +71,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 307 (83%)
-- INFERRED: 61 (17%)
+- EXTRACTED: 283 (86%)
+- INFERRED: 47 (14%)
 - AMBIGUOUS: 0 (0%)
 
 ---

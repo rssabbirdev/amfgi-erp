@@ -33,16 +33,16 @@
 
 ## Relationships
 
-- [[Jobs Id]] (21 shared connections)
-- [[Components, HR, and Reports]] (5 shared connections)
-- [[Reports, Settings, and Components]] (4 shared connections)
+- [[Jobs, Id, and Cost Engine]] (20 shared connections)
+- [[Reports, Components, and HR]] (5 shared connections)
+- [[Reports, Settings, and HR]] (4 shared connections)
 - [[Stock, Customers, and Jobs]] (3 shared connections)
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (2 shared connections)
+- [[Admin, Components, and Settings]] (2 shared connections)
 - [[HR Schedule and Settings]] (2 shared connections)
-- [[HR Schedule and Attendance]] (1 shared connections)
+- [[Reports Stock Adjustments, Stock Count Sessions, and Stock Exceptions]] (1 shared connections)
+- [[HR Schedule, Attendance, and Employees]] (1 shared connections)
 - [[Components, Ui, and Search Select]] (1 shared connections)
 - [[Components, Ui, and Spinner]] (1 shared connections)
-- [[Admin Users, Roles, and Companies]] (1 shared connections)
 - [[Store, API, and Endpoints]] (1 shared connections)
 - [[Customers Jobs]] (1 shared connections)
 

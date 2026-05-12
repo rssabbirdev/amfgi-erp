@@ -1,6 +1,6 @@
 # API Reports, Materials, and HR
 
-> 95 nodes · cohesion 0.03
+> 92 nodes · cohesion 0.03
 
 ## Key Concepts
 
@@ -18,7 +18,6 @@
 - **redirectToSettings()** (3 connections) — `app/api/settings/google-drive/oauth/callback/route.ts`
 - **route.ts** (3 connections) — `app/api/transactions/[id]/route.ts`
 - **isReconcileTransaction()** (3 connections) — `app/api/transactions/[id]/route.ts`
-- **readCompanyOperationalSettings()** (3 connections) — `lib/utils/companyOperationalSettings.ts`
 - **buildPivot()** (3 connections) — `components/reports/JobConsumptionTable.tsx`
 - **route.ts** (3 connections) — `app/api/reports/stock-exceptions/route.ts`
 - **route.ts** (3 connections) — `app/api/transactions/[id]/route.ts`
@@ -29,16 +28,17 @@
 - **sleep()** (2 connections) — `app/api/live-updates/route.ts`
 - **route.ts** (2 connections) — `app/api/reports/stock-integrity/route.ts`
 - **hasMismatch()** (2 connections) — `app/api/reports/stock-integrity/route.ts`
-- *... and 70 more nodes in this community*
+- **route.ts** (2 connections) — `app/api/settings/google-drive/oauth/callback/route.ts`
+- *... and 67 more nodes in this community*
 
 ## Relationships
 
-- [[API HR, Jobs, and Materials]] (48 shared connections)
-- [[API HR, Materials, and Upload]] (43 shared connections)
+- [[API HR, Jobs, and Materials]] (46 shared connections)
+- [[API HR, Materials, and Upload]] (40 shared connections)
 - [[API HR, User, and Jobs]] (16 shared connections)
 - [[Lib Utils]] (9 shared connections)
 - [[Lib Utils and Job Costing]] (8 shared connections)
-- [[API Companies, Customers, and Materials]] (7 shared connections)
+- [[API Companies, Materials, and Suppliers]] (6 shared connections)
 - [[Lib Utils, Job Costing, and Stock]] (6 shared connections)
 - [[Lib HR]] (5 shared connections)
 - [[HR Schedule and Settings]] (5 shared connections)
@@ -71,8 +71,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 350 (80%)
-- INFERRED: 88 (20%)
+- EXTRACTED: 346 (80%)
+- INFERRED: 87 (20%)
 - AMBIGUOUS: 0 (0%)
 
 ---

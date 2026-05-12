@@ -16,7 +16,7 @@
 ## Relationships
 
 - [[Stock, Customers, and Jobs]] (2 shared connections)
-- [[Stock and Manual Adjustments]] (2 shared connections)
+- [[Stock Manual Adjustments and Inter Company Transfers]] (2 shared connections)
 - [[Lib, Scripts, and Settings]] (1 shared connections)
 - [[Lib, Utils, and Stock Count Session]] (1 shared connections)
 

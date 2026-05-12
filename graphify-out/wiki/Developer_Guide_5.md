@@ -4,11 +4,11 @@
 
 ## Key Concepts
 
-- **Common Issues & Solutions** (5 connections) — `DEVELOPER_GUIDE.md`
-- **Issue: "Environment variable not found: DATABASE_URL"** (1 connections) — `DEVELOPER_GUIDE.md`
-- **Issue: "Error: P2014: The change you are trying to make would violate a required relation"** (1 connections) — `DEVELOPER_GUIDE.md`
-- **Issue: "Relations require an FK field in the view"** (1 connections) — `DEVELOPER_GUIDE.md`
-- **Issue: Transactions are slower after migration** (1 connections) — `DEVELOPER_GUIDE.md`
+- **Schema Reference** (3 connections) — `DEVELOPER_GUIDE.md`
+- **Core Models** (2 connections) — `DEVELOPER_GUIDE.md`
+- **Key Enums** (2 connections) — `DEVELOPER_GUIDE.md`
+- **code:prisma (model Company {)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **code:prisma (enum TransactionType {)** (1 connections) — `DEVELOPER_GUIDE.md`
 
 ## Relationships
 

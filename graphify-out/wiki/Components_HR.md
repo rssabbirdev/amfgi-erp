@@ -36,7 +36,7 @@
 - [[HR Schedule and Settings]] (8 shared connections)
 - [[API Reports, Materials, and HR]] (4 shared connections)
 - [[Lib Utils, HR, and Material Master Data]] (3 shared connections)
-- [[Jobs Id]] (2 shared connections)
+- [[Print and Delivery Note]] (2 shared connections)
 - [[Components, Settings, and Settings Media Panel]] (2 shared connections)
 - [[Lib, HR, and Workforce Profile]] (2 shared connections)
 - [[Lib, Scripts, and Settings]] (1 shared connections)

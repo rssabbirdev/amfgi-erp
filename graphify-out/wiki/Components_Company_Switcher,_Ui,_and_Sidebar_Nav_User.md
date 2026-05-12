@@ -1,6 +1,6 @@
-# Components Ui, Company Switcher, and Sidebar Nav User
+# Components Company Switcher, Ui, and Sidebar Nav User
 
-> 21 nodes · cohesion 0.16
+> 20 nodes · cohesion 0.17
 
 ## Key Concepts
 
@@ -9,7 +9,6 @@
 - **dropdown-menu.tsx** (8 connections) — `components/ui/shadcn/dropdown-menu.tsx`
 - **SidebarMenuButton()** (7 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarMenuItem()** (5 connections) — `components/ui/shadcn/sidebar.tsx`
-- **SidebarMenu()** (4 connections) — `components/ui/shadcn/sidebar.tsx`
 - **useAppDispatch()** (4 connections) — `store/hooks.ts`
 - **CompanySwitcher.tsx** (4 connections) — `components/layout/CompanySwitcher.tsx`
 - **CompanySwitcher()** (3 connections) — `components/layout/CompanySwitcher.tsx`
@@ -29,11 +28,11 @@
 ## Relationships
 
 - [[Components Ui, Sidebar, and Sidebar Nav User]] (10 shared connections)
-- [[Components Ui]] (6 shared connections)
-- [[Reports, Settings, and Components]] (4 shared connections)
-- [[Admin Users, Roles, and Companies]] (2 shared connections)
+- [[Components Ui and App Shell]] (5 shared connections)
+- [[Reports, Settings, and HR]] (3 shared connections)
+- [[Admin, Components, and Settings]] (2 shared connections)
 - [[Components, Lib, and Proxy]] (2 shared connections)
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (1 shared connections)
+- [[Reports, Components, and HR]] (1 shared connections)
 - [[Providers and Store]] (1 shared connections)
 - [[Lib Utils, HR, and Material Master Data]] (1 shared connections)
 
@@ -49,7 +48,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 93 (98%)
+- EXTRACTED: 89 (98%)
 - INFERRED: 2 (2%)
 - AMBIGUOUS: 0 (0%)
 

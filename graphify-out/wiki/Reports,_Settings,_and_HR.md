@@ -1,6 +1,6 @@
-# Reports, Settings, and Components
+# Reports, Settings, and HR
 
-> 31 nodes · cohesion 0.08
+> 30 nodes · cohesion 0.09
 
 ## Key Concepts
 
@@ -29,16 +29,16 @@
 - **EventCategoryBadge()** (2 connections) — `app/(app)/reports/stock-exceptions/page.tsx`
 - **SummaryTile()** (2 connections) — `app/(app)/reports/supplier-traceability/page.tsx`
 - **LinkStatusBadge()** (2 connections) — `components/settings/MediaLibraryPanel.tsx`
-- *... and 6 more nodes in this community*
+- *... and 5 more nodes in this community*
 
 ## Relationships
 
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (19 shared connections)
-- [[Components Ui]] (19 shared connections)
-- [[Components, HR, and Reports]] (18 shared connections)
-- [[HR Schedule and Attendance]] (11 shared connections)
-- [[Components Ui, Sidebar, and Sidebar Nav User]] (9 shared connections)
-- [[Admin Users, Roles, and Companies]] (8 shared connections)
+- [[Reports, Components, and HR]] (27 shared connections)
+- [[Components Ui and App Shell]] (16 shared connections)
+- [[HR Schedule, Attendance, and Employees]] (13 shared connections)
+- [[Components Ui, Sidebar, and Sidebar Nav User]] (11 shared connections)
+- [[Admin, Components, and Settings]] (8 shared connections)
+- [[Reports Stock Adjustments, Stock Count Sessions, and Stock Exceptions]] (8 shared connections)
 - [[Stock Dispatch]] (7 shared connections)
 - [[Dashboard]] (6 shared connections)
 - [[HR, Stock, and Providers]] (4 shared connections)
@@ -62,13 +62,12 @@
 - `app/(app)/stock/dispatch/page.tsx`
 - `components/settings/MediaLibraryPanel.tsx`
 - `components/ui/shadcn/button.tsx`
-- `components/ui/shadcn/sidebar.tsx`
 - `components/ui/shadcn/skeleton.tsx`
 - `lib/utils.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 213 (100%)
+- EXTRACTED: 211 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

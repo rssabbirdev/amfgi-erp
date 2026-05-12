@@ -1,6 +1,6 @@
 # Customers Jobs
 
-> 36 nodes · cohesion 0.10
+> 35 nodes · cohesion 0.10
 
 ## Key Concepts
 
@@ -8,7 +8,6 @@
 - **page.tsx** (22 connections) — `app/(app)/customers/page.tsx`
 - **extractApiErrorMessage()** (14 connections) — `app/(app)/suppliers/page.tsx`
 - **CustomersPage()** (6 connections) — `app/(app)/customers/page.tsx`
-- **compactNumber()** (6 connections) — `app/(app)/suppliers/page.tsx`
 - **cx()** (5 connections) — `app/(app)/customers/jobs/page.tsx`
 - **CustomerReadOnlyDetails()** (4 connections) — `app/(app)/customers/page.tsx`
 - **cx()** (3 connections) — `app/(app)/customers/page.tsx`
@@ -29,19 +28,21 @@
 - **toggleMainJob()** (2 connections) — `app/(app)/customers/page.tsx`
 - **openCustomerContextMenu()** (2 connections) — `app/(app)/customers/page.tsx`
 - **openJobContextMenu()** (2 connections) — `app/(app)/customers/page.tsx`
-- *... and 11 more nodes in this community*
+- **canEdit()** (2 connections) — `app/(app)/customers/page.tsx`
+- *... and 10 more nodes in this community*
 
 ## Relationships
 
-- [[Customers, Stock, and Reports]] (11 shared connections)
-- [[Admin Users, Roles, and Companies]] (8 shared connections)
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (7 shared connections)
-- [[Components, HR, and Reports]] (5 shared connections)
+- [[Admin, Components, and Settings]] (9 shared connections)
+- [[Customers, Stock, and Reports]] (9 shared connections)
+- [[Reports, Components, and HR]] (5 shared connections)
 - [[Suppliers]] (5 shared connections)
+- [[HR Schedule, Attendance, and Employees]] (4 shared connections)
 - [[HR, Stock, and Providers]] (3 shared connections)
 - [[Customers Jobs]] (3 shared connections)
 - [[Lib and Party Form Ui]] (3 shared connections)
-- [[Reports, Settings, and Components]] (1 shared connections)
+- [[Reports Stock Adjustments, Stock Count Sessions, and Stock Exceptions]] (2 shared connections)
+- [[Reports, Settings, and HR]] (1 shared connections)
 - [[Stock Dispatch]] (1 shared connections)
 
 ## Source Files
@@ -52,7 +53,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 168 (99%)
+- EXTRACTED: 162 (99%)
 - INFERRED: 1 (1%)
 - AMBIGUOUS: 0 (0%)
 

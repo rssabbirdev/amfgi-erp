@@ -1,6 +1,6 @@
 # Stock Dispatch
 
-> 32 nodes · cohesion 0.11
+> 32 nodes · cohesion 0.12
 
 ## Key Concepts
 
@@ -8,7 +8,7 @@
 - **page.tsx** (30 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
 - **generateId()** (11 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
 - **loadTransaction()** (8 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
-- **confirmChange()** (7 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **parseCustomItems()** (6 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
 - **DeliveryNoteCreatePage()** (5 connections) — `app/(app)/stock/dispatch/delivery-note/page.tsx`
 - **parseOverrideReason()** (5 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
 - **stripOverrideReason()** (5 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
@@ -34,17 +34,17 @@
 ## Relationships
 
 - [[Stock, Dispatch, and Entry]] (22 shared connections)
-- [[Stock Goods Receipt, Inter Company Transfers, and Manual Adjustments]] (11 shared connections)
-- [[Stock Dispatch]] (6 shared connections)
-- [[Components, HR, and Reports]] (4 shared connections)
-- [[Reports, Settings, and Components]] (4 shared connections)
-- [[Stock and Manual Adjustments]] (4 shared connections)
-- [[HR Schedule and Attendance]] (1 shared connections)
+- [[Stock Manual Adjustments and Inter Company Transfers]] (10 shared connections)
+- [[Stock Goods Receipt, Inter Company Transfers, and Dispatch]] (6 shared connections)
+- [[Reports, Components, and HR]] (5 shared connections)
+- [[Reports, Settings, and HR]] (4 shared connections)
+- [[Stock Dispatch]] (2 shared connections)
+- [[HR Schedule, Attendance, and Employees]] (1 shared connections)
 - [[Components, Ui, and Search Select]] (1 shared connections)
 - [[Components, Stock, and Dispatch Line Grid]] (1 shared connections)
 - [[Suppliers]] (1 shared connections)
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (1 shared connections)
-- [[Admin Users, Roles, and Companies]] (1 shared connections)
+- [[Admin, Components, and Settings]] (1 shared connections)
+- [[HR Schedule and Settings]] (1 shared connections)
 
 ## Source Files
 
@@ -53,7 +53,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 171 (99%)
+- EXTRACTED: 170 (99%)
 - INFERRED: 1 (1%)
 - AMBIGUOUS: 0 (0%)
 

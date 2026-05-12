@@ -24,11 +24,12 @@
 
 ## Relationships
 
-- [[API Companies, Customers, and Materials]] (12 shared connections)
+- [[API Companies, Materials, and Suppliers]] (10 shared connections)
 - [[API HR, User, and Jobs]] (4 shared connections)
 - [[API HR, Jobs, and Materials]] (3 shared connections)
 - [[Lib Utils and Media]] (3 shared connections)
 - [[API and Lib]] (3 shared connections)
+- [[Auth]] (2 shared connections)
 - [[Lib Utils]] (2 shared connections)
 - [[API Reports, Materials, and HR]] (2 shared connections)
 - [[API HR, Materials, and Upload]] (2 shared connections)

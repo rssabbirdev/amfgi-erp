@@ -22,12 +22,12 @@
 
 ## Relationships
 
-- [[Reports, Settings, and Components]] (6 shared connections)
+- [[Reports, Settings, and HR]] (6 shared connections)
 - [[Suppliers]] (6 shared connections)
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (5 shared connections)
+- [[HR Schedule, Attendance, and Employees]] (4 shared connections)
 - [[Components, Lib, and Proxy]] (3 shared connections)
+- [[Reports, Components, and HR]] (2 shared connections)
 - [[HR Schedule and Settings]] (2 shared connections)
-- [[Components, HR, and Reports]] (1 shared connections)
 
 ## Source Files
 

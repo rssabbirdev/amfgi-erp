@@ -30,15 +30,15 @@
 
 ## Relationships
 
-- [[Components, HR, and Reports]] (9 shared connections)
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (6 shared connections)
+- [[Reports, Components, and HR]] (9 shared connections)
+- [[HR Schedule, Attendance, and Employees]] (5 shared connections)
+- [[Admin, Components, and Settings]] (5 shared connections)
 - [[Components Ui and Materials]] (5 shared connections)
-- [[Admin Users, Roles, and Companies]] (4 shared connections)
-- [[Reports, Settings, and Components]] (4 shared connections)
+- [[Reports, Settings, and HR]] (4 shared connections)
 - [[Customers Jobs]] (4 shared connections)
 - [[Settings API]] (3 shared connections)
 - [[Customers, Stock, and Reports]] (3 shared connections)
-- [[HR Schedule and Attendance]] (2 shared connections)
+- [[Reports Stock Adjustments, Stock Count Sessions, and Stock Exceptions]] (2 shared connections)
 - [[Suppliers]] (2 shared connections)
 - [[HR Schedule]] (1 shared connections)
 - [[Stock]] (1 shared connections)

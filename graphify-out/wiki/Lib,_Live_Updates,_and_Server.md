@@ -20,9 +20,10 @@
 
 ## Relationships
 
-- [[API Companies, Customers, and Materials]] (9 shared connections)
+- [[API Companies, Materials, and Suppliers]] (8 shared connections)
 - [[API Reports, Materials, and HR]] (2 shared connections)
 - [[API HR, Jobs, and Materials]] (2 shared connections)
+- [[Lib Party List Record Payload and Integrations]] (1 shared connections)
 - [[API HR, Materials, and Upload]] (1 shared connections)
 - [[API HR, User, and Jobs]] (1 shared connections)
 

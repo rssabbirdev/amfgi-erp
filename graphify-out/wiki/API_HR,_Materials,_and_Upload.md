@@ -1,11 +1,10 @@
 # API HR, Materials, and Upload
 
-> 107 nodes · cohesion 0.02
+> 102 nodes · cohesion 0.02
 
 ## Key Concepts
 
 - **POST()** (216 connections) — `app/api/warehouses/route.ts`
-- **hasManagePermission()** (6 connections) — `app/api/settings/integration-logs/[id]/retry/route.ts`
 - **route.ts** (4 connections) — `app/api/integrations/jobs/upsert/route.ts`
 - **readApiKey()** (4 connections) — `app/api/integrations/jobs/upsert/route.ts`
 - **readIdempotencyKey()** (4 connections) — `app/api/integrations/jobs/upsert/route.ts`
@@ -25,26 +24,27 @@
 - **route.ts** (2 connections) — `app/api/job-costing/formulas/route.ts`
 - **route.ts** (2 connections) — `app/api/jobs/route.ts`
 - **route.ts** (2 connections) — `app/api/roles/route.ts`
-- **route.ts** (2 connections) — `app/api/settings/integration-logs/route.ts`
-- **route.ts** (2 connections) — `app/api/settings/integration-logs/[id]/retry/route.ts`
 - **route.ts** (2 connections) — `app/api/stock-count-sessions/route.ts`
 - **route.ts** (2 connections) — `app/api/transactions/route.ts`
-- *... and 82 more nodes in this community*
+- **route.ts** (2 connections) — `app/api/units/route.ts`
+- **route.ts** (2 connections) — `app/api/upload/material-asset/route.ts`
+- **route.ts** (2 connections) — `app/api/users/route.ts`
+- *... and 77 more nodes in this community*
 
 ## Relationships
 
-- [[API Reports, Materials, and HR]] (43 shared connections)
-- [[API HR, Jobs, and Materials]] (17 shared connections)
+- [[API Reports, Materials, and HR]] (40 shared connections)
+- [[API HR, Jobs, and Materials]] (12 shared connections)
 - [[API HR, User, and Jobs]] (9 shared connections)
 - [[Lib Utils]] (9 shared connections)
 - [[Lib Utils and Job Costing]] (8 shared connections)
 - [[Lib Integrations, Party Lists API, and Party List Sync]] (7 shared connections)
-- [[API Companies, Customers, and Materials]] (6 shared connections)
-- [[Lib Integrations and Party List Record Payload]] (6 shared connections)
 - [[API Transactions and Upload]] (5 shared connections)
+- [[API Companies, Materials, and Suppliers]] (5 shared connections)
 - [[Lib Utils, HR, and Material Master Data]] (5 shared connections)
 - [[Lib HR]] (4 shared connections)
 - [[Lib Utils and Media]] (4 shared connections)
+- [[Lib, Integrations, and Party Upsert Service]] (4 shared connections)
 
 ## Source Files
 
@@ -71,8 +71,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 316 (81%)
-- INFERRED: 74 (19%)
+- EXTRACTED: 302 (80%)
+- INFERRED: 74 (20%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -1,6 +1,6 @@
 # Components Ui, Sidebar, and Sidebar Nav User
 
-> 16 nodes · cohesion 0.16
+> 18 nodes · cohesion 0.14
 
 ## Key Concepts
 
@@ -10,8 +10,10 @@
 - **SidebarNavUser()** (4 connections) — `components/layout/SidebarNavUser.tsx`
 - **Sidebar()** (4 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarRail()** (4 connections) — `components/ui/shadcn/sidebar.tsx`
+- **SidebarMenu()** (4 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarHeader()** (3 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarFooter()** (3 connections) — `components/ui/shadcn/sidebar.tsx`
+- **SidebarContent()** (3 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarGroup()** (3 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarGroupLabel()** (3 connections) — `components/ui/shadcn/sidebar.tsx`
 - **SidebarGroupContent()** (3 connections) — `components/ui/shadcn/sidebar.tsx`
@@ -23,12 +25,11 @@
 
 ## Relationships
 
-- [[Components Ui, Company Switcher, and Sidebar Nav User]] (10 shared connections)
-- [[Components Ui]] (10 shared connections)
-- [[Reports, Settings, and Components]] (9 shared connections)
+- [[Components Ui and App Shell]] (12 shared connections)
+- [[Reports, Settings, and HR]] (11 shared connections)
+- [[Components Company Switcher, Ui, and Sidebar Nav User]] (10 shared connections)
 - [[Components, Lib, and Proxy]] (7 shared connections)
-- [[Components App Shell and Ui]] (1 shared connections)
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (1 shared connections)
+- [[Reports, Components, and HR]] (1 shared connections)
 
 ## Source Files
 
@@ -38,7 +39,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 76 (100%)
+- EXTRACTED: 83 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

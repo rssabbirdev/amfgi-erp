@@ -16,8 +16,8 @@
 - **page.tsx** (3 connections) — `app/(app)/hr/settings/expertises/page.tsx`
 - **rememberScrollPosition()** (2 connections) — `app/(app)/dashboard/page.tsx`
 - **formatScheduleTimeForPrint()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **getInitialWorkProcessDetails()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **resolveWorkProcessDetails()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **parseJobExpertise()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **removeType()** (2 connections) — `app/(app)/hr/settings/document-types/page.tsx`
 - **onDelete()** (2 connections) — `app/(app)/hr/settings/expertises/page.tsx`
 - **page.tsx** (2 connections) — `app/(app)/settings/company/page.tsx`
@@ -33,14 +33,14 @@
 - [[Components HR]] (8 shared connections)
 - [[HR, Schedule, and Work Date]] (8 shared connections)
 - [[HR Attendance]] (6 shared connections)
-- [[Components, HR, and Reports]] (6 shared connections)
+- [[Reports, Components, and HR]] (6 shared connections)
 - [[HR Schedule]] (5 shared connections)
 - [[API Reports, Materials, and HR]] (5 shared connections)
 - [[Lib HR]] (5 shared connections)
+- [[Jobs, Id, and Cost Engine]] (4 shared connections)
 - [[Components Ui and Materials]] (4 shared connections)
 - [[Components Print Builder]] (4 shared connections)
 - [[Customers Jobs]] (3 shared connections)
-- [[Lib Integrations, Party Lists API, and Party List Sync]] (3 shared connections)
 
 ## Source Files
 

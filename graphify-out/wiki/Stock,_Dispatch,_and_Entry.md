@@ -1,11 +1,12 @@
 # Stock, Dispatch, and Entry
 
-> 34 nodes · cohesion 0.10
+> 35 nodes · cohesion 0.10
 
 ## Key Concepts
 
 - **page.tsx** (57 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
 - **page.tsx** (27 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
+- **handleDateChange()** (7 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
 - **getWarehouseBaseStock()** (7 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
 - **validateAndSubmit()** (7 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
 - **qtyInBase()** (6 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
@@ -28,23 +29,21 @@
 - **setGridColumnVisibility()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
 - **moveGridColumn()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
 - **resizeGridColumn()** (2 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
-- **qtyInBase()** (1 connections) — `app/(app)/stock/dispatch/entry/page.tsx`
-- *... and 9 more nodes in this community*
+- *... and 10 more nodes in this community*
 
 ## Relationships
 
-- [[Stock Dispatch]] (27 shared connections)
-- [[Stock Goods Receipt, Inter Company Transfers, and Manual Adjustments]] (13 shared connections)
-- [[Components, HR, and Reports]] (4 shared connections)
-- [[Reports, Settings, and Components]] (4 shared connections)
-- [[Stock and Manual Adjustments]] (4 shared connections)
+- [[Stock Dispatch]] (26 shared connections)
+- [[Stock Goods Receipt, Inter Company Transfers, and Dispatch]] (11 shared connections)
+- [[Stock Manual Adjustments and Inter Company Transfers]] (8 shared connections)
+- [[Reports, Components, and HR]] (5 shared connections)
+- [[Reports, Settings, and HR]] (4 shared connections)
 - [[HR Schedule and Settings]] (2 shared connections)
-- [[HR Schedule and Attendance]] (1 shared connections)
+- [[HR Schedule, Attendance, and Employees]] (1 shared connections)
 - [[Components, Ui, and Search Select]] (1 shared connections)
 - [[Components, Stock, and Line Grid Column Settings]] (1 shared connections)
 - [[Components, Stock, and Dispatch Line Grid]] (1 shared connections)
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (1 shared connections)
-- [[Admin Users, Roles, and Companies]] (1 shared connections)
+- [[Admin, Components, and Settings]] (1 shared connections)
 
 ## Source Files
 
@@ -52,7 +51,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 174 (99%)
+- EXTRACTED: 181 (99%)
 - INFERRED: 2 (1%)
 - AMBIGUOUS: 0 (0%)
 

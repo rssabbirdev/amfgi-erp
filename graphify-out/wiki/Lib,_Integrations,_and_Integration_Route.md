@@ -14,7 +14,7 @@
 
 ## Relationships
 
-- [[API Companies, Customers, and Materials]] (3 shared connections)
+- [[API Companies, Materials, and Suppliers]] (3 shared connections)
 - [[API Reports, Materials, and HR]] (2 shared connections)
 - [[API HR, Materials, and Upload]] (2 shared connections)
 - [[API and Lib]] (1 shared connections)

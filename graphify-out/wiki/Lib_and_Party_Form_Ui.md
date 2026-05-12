@@ -18,7 +18,7 @@
 ## Relationships
 
 - [[Customers Jobs]] (3 shared connections)
-- [[Admin Users, Roles, and Companies]] (2 shared connections)
+- [[Admin, Components, and Settings]] (2 shared connections)
 
 ## Source Files
 

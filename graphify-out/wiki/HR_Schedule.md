@@ -9,8 +9,8 @@
 - **normalizeDraft()** (4 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **createEmptySubTeam()** (3 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **normalizeMemberList()** (3 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **getInitialWorkProcessDetails()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **nextSubTeamLabel()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **parseJobExpertise()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **printTemplateSession.ts** (2 connections) — `lib/utils/printTemplateSession.ts`
 - **EmpOpt** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **JobOpt** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`

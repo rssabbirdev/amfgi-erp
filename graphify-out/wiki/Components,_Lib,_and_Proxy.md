@@ -34,13 +34,12 @@
 ## Relationships
 
 - [[Components Ui, Sidebar, and Sidebar Nav User]] (7 shared connections)
+- [[Components Ui and App Shell]] (3 shared connections)
 - [[Dashboard]] (3 shared connections)
 - [[Providers Theme Provider and App Providers]] (2 shared connections)
-- [[Components Ui]] (2 shared connections)
-- [[Admin Users, Roles, and Companies]] (2 shared connections)
-- [[Components Ui, Company Switcher, and Sidebar Nav User]] (2 shared connections)
-- [[Components App Shell and Ui]] (1 shared connections)
-- [[Reports, Settings, and Components]] (1 shared connections)
+- [[Admin, Components, and Settings]] (2 shared connections)
+- [[Components Company Switcher, Ui, and Sidebar Nav User]] (2 shared connections)
+- [[Reports, Settings, and HR]] (1 shared connections)
 
 ## Source Files
 

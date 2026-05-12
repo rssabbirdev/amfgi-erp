@@ -36,7 +36,7 @@
 - [[API Reports, Materials, and HR]] (6 shared connections)
 - [[API HR, Materials, and Upload]] (4 shared connections)
 - [[Components Job Costing]] (3 shared connections)
-- [[API Companies, Customers, and Materials]] (3 shared connections)
+- [[API Companies, Materials, and Suppliers]] (3 shared connections)
 - [[API HR, Jobs, and Materials]] (3 shared connections)
 - [[API HR, User, and Jobs]] (2 shared connections)
 - [[Lib, Scripts, and Settings]] (2 shared connections)

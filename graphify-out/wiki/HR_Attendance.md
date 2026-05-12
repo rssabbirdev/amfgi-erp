@@ -33,10 +33,9 @@
 
 ## Relationships
 
+- [[HR Schedule, Attendance, and Employees]] (7 shared connections)
 - [[HR Schedule and Settings]] (6 shared connections)
-- [[Components, HR, and Reports]] (5 shared connections)
-- [[HR Schedule and Attendance]] (4 shared connections)
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (3 shared connections)
+- [[Reports, Components, and HR]] (5 shared connections)
 - [[Components, Ui, and Search Select]] (1 shared connections)
 - [[API Reports, Materials, and HR]] (1 shared connections)
 

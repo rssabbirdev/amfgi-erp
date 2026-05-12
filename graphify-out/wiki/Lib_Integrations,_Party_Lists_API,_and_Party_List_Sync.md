@@ -35,8 +35,8 @@
 
 - [[API HR, Materials, and Upload]] (7 shared connections)
 - [[HR Schedule and Settings]] (3 shared connections)
-- [[Lib Integrations and Party List Record Payload]] (2 shared connections)
-- [[API Companies, Customers, and Materials]] (2 shared connections)
+- [[Lib Party List Record Payload and Integrations]] (2 shared connections)
+- [[API Companies, Materials, and Suppliers]] (2 shared connections)
 - [[Lib and Party Contacts]] (1 shared connections)
 - [[Lib Utils, Job Costing, and Stock]] (1 shared connections)
 - [[API Reports, Materials, and HR]] (1 shared connections)

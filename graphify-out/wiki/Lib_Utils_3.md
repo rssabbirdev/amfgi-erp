@@ -17,7 +17,7 @@
 
 - [[Settings API]] (2 shared connections)
 - [[HR Schedule and Settings]] (1 shared connections)
-- [[Reports, Settings, and Components]] (1 shared connections)
+- [[Reports, Settings, and HR]] (1 shared connections)
 
 ## Source Files
 

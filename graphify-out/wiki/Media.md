@@ -13,8 +13,8 @@
 
 ## Relationships
 
-- [[Components, HR, and Reports]] (3 shared connections)
-- [[Reports, Settings, and Components]] (1 shared connections)
+- [[Reports, Components, and HR]] (3 shared connections)
+- [[Reports, Settings, and HR]] (1 shared connections)
 
 ## Source Files
 

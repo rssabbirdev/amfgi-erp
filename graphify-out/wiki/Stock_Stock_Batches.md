@@ -17,13 +17,13 @@
 
 ## Relationships
 
-- [[Components, HR, and Reports]] (6 shared connections)
-- [[Reports, Settings, and Components]] (4 shared connections)
-- [[Reports Stock Exceptions, Job Profitability, and Stock Adjustments]] (3 shared connections)
+- [[Reports, Components, and HR]] (7 shared connections)
+- [[Reports, Settings, and HR]] (4 shared connections)
 - [[Customers, Stock, and Reports]] (2 shared connections)
+- [[Reports Stock Adjustments, Stock Count Sessions, and Stock Exceptions]] (2 shared connections)
 - [[Stock, Customers, and Jobs]] (2 shared connections)
 - [[Components Ui and Materials]] (1 shared connections)
-- [[Admin Users, Roles, and Companies]] (1 shared connections)
+- [[Admin, Components, and Settings]] (1 shared connections)
 - [[HR Schedule and Settings]] (1 shared connections)
 
 ## Source Files
