@@ -601,7 +601,7 @@ export default function AttendanceEntryGrid({
             key={columnKey}
             className={cn(
               cellClassName,
-              'bg-black/[0.03] px-2 py-1.5 font-mono text-xs font-medium text-foreground dark:bg-white/[0.04]'
+              'bg-black/3 px-2 py-1.5 font-mono text-xs font-medium text-foreground dark:bg-white/4'
             )}
           >
             {idx + 1}
@@ -721,7 +721,7 @@ export default function AttendanceEntryGrid({
             key={columnKey}
             className={cn(
               cellClassName,
-              'flex items-center bg-black/[0.02] px-2 py-1.5 text-right font-mono text-xs font-medium text-foreground dark:bg-white/[0.03]'
+              'flex items-center bg-black/2 px-2 py-1.5 text-right font-mono text-xs font-medium text-foreground dark:bg-white/3'
             )}
           >
             {formatHourValue(basicMinutes)}

@@ -194,7 +194,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
       role="listbox"
       className={[
         'z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900',
-        dropdownInPortal ? 'z-[200]' : '',
+        dropdownInPortal ? 'z-200' : '',
         dropdownClassName,
       ]
         .filter(Boolean)

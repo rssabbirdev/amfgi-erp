@@ -1,24 +1,23 @@
 # Components, Ui, and Flexible Table
 
-> 11 nodes · cohesion 0.35
+> 10 nodes · cohesion 0.22
 
 ## Key Concepts
 
-- **FlexibleTable.tsx** (9 connections) — `components/ui/FlexibleTable.tsx`
-- **FlexibleTable.tsx** (9 connections) — `components/ui/FlexibleTable.tsx`
-- **defaultColumnState()** (3 connections) — `components/ui/FlexibleTable.tsx`
-- **mergeStoredColumnState()** (3 connections) — `components/ui/FlexibleTable.tsx`
-- **getColumnSignature()** (2 connections) — `components/ui/FlexibleTable.tsx`
-- **getCellAlignmentClass()** (2 connections) — `components/ui/FlexibleTable.tsx`
-- **handlePointerDown()** (2 connections) — `components/ui/FlexibleTable.tsx`
-- **setColumnVisibility()** (2 connections) — `components/ui/FlexibleTable.tsx`
-- **setColumnWidth()** (2 connections) — `components/ui/FlexibleTable.tsx`
-- **moveColumn()** (2 connections) — `components/ui/FlexibleTable.tsx`
-- **openSettings()** (2 connections) — `components/ui/FlexibleTable.tsx`
+- **FlexibleTable.tsx** (10 connections) — `components/ui/FlexibleTable.tsx`
+- **FlexibleTableColumn** (2 connections) — `components/ui/FlexibleTable.tsx`
+- **defaultColumnState()** (2 connections) — `components/ui/FlexibleTable.tsx`
+- **mergeStoredColumnState()** (2 connections) — `components/ui/FlexibleTable.tsx`
+- **TableColumnState** (1 connections) — `components/ui/FlexibleTable.tsx`
+- **StoredTableState** (1 connections) — `components/ui/FlexibleTable.tsx`
+- **Props** (1 connections) — `components/ui/FlexibleTable.tsx`
+- **getColumnSignature()** (1 connections) — `components/ui/FlexibleTable.tsx`
+- **getCellAlignmentClass()** (1 connections) — `components/ui/FlexibleTable.tsx`
+- **FlexibleTable()** (1 connections) — `components/ui/FlexibleTable.tsx`
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [[Stock Goods Receipt]] (2 shared connections)
 
 ## Source Files
 
@@ -26,7 +25,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 38 (100%)
+- EXTRACTED: 22 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

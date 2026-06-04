@@ -1,14 +1,19 @@
 # Tests, Integration, and Multi Tenancy.test
 
-> 1 nodes · cohesion 1.00
+> 5 nodes · cohesion 0.40
 
 ## Key Concepts
 
-- **multi-tenancy.test.ts** (0 connections) — `__tests__/integration/multi-tenancy.test.ts`
+- **multi-tenancy.test.ts** (11 connections) — `__tests__/integration/multi-tenancy.test.ts`
+- **duplicatePromise** (1 connections) — `__tests__/integration/multi-tenancy.test.ts`
+- **amfgiMatForComp** (1 connections) — `__tests__/integration/multi-tenancy.test.ts`
+- **kmMatForComp** (1 connections) — `__tests__/integration/multi-tenancy.test.ts`
+- **amfgiSeeingKMPromise** (1 connections) — `__tests__/integration/multi-tenancy.test.ts`
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [[Tests Integration]] (5 shared connections)
+- [[API Reports, Materials, and Transactions]] (2 shared connections)
 
 ## Source Files
 
@@ -16,7 +21,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 0 (0%)
+- EXTRACTED: 15 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

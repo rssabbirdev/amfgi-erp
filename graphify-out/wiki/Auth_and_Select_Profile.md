@@ -1,12 +1,11 @@
 # Auth and Select Profile
 
-> 3 nodes · cohesion 0.67
+> 2 nodes · cohesion 1.00
 
 ## Key Concepts
 
-- **SelectProfileRedirect()** (2 connections) — `app/(auth)/select-profile/page.tsx`
 - **page.tsx** (1 connections) — `app/(auth)/select-profile/page.tsx`
-- **page.tsx** (1 connections) — `app/(auth)/select-profile/page.tsx`
+- **SelectProfileRedirect()** (1 connections) — `app/(auth)/select-profile/page.tsx`
 
 ## Relationships
 
@@ -18,7 +17,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 4 (100%)
+- EXTRACTED: 2 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

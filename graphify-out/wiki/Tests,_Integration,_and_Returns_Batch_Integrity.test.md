@@ -1,16 +1,22 @@
 # Tests, Integration, and Returns Batch Integrity.test
 
-> 3 nodes · cohesion 0.67
+> 6 nodes · cohesion 0.33
 
 ## Key Concepts
 
-- **seedDispatchScenario()** (2 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
-- **returns-batch-integrity.test.ts** (1 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
-- **returns-batch-integrity.test.ts** (1 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
+- **returns-batch-integrity.test.ts** (16 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
+- **seedDispatchScenario()** (1 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
+- **stockOutTxn** (1 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
+- **returnTxn** (1 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
+- **returnTransactions** (1 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
+- **survivingStockOuts** (1 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [[Tests Integration]] (5 shared connections)
+- [[API and Lib]] (2 shared connections)
+- [[Lib and API]] (2 shared connections)
+- [[API Reports, Materials, and Transactions]] (2 shared connections)
 
 ## Source Files
 
@@ -18,7 +24,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 4 (100%)
+- EXTRACTED: 21 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

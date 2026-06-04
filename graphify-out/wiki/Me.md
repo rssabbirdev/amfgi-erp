@@ -1,12 +1,11 @@
 # Me
 
-> 3 nodes · cohesion 0.67
+> 2 nodes · cohesion 1.00
 
 ## Key Concepts
 
-- **MeLayout()** (2 connections) — `app/(app)/me/layout.tsx`
-- **layout.tsx** (1 connections) — `app/(app)/me/layout.tsx`
-- **layout.tsx** (1 connections) — `app/(app)/me/layout.tsx`
+- **page.tsx** (1 connections) — `app/(app)/me/page.tsx`
+- **MeIndexPage()** (1 connections) — `app/(app)/me/page.tsx`
 
 ## Relationships
 
@@ -14,11 +13,11 @@
 
 ## Source Files
 
-- `app/(app)/me/layout.tsx`
+- `app/(app)/me/page.tsx`
 
 ## Audit Trail
 
-- EXTRACTED: 4 (100%)
+- EXTRACTED: 2 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

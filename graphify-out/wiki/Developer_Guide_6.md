@@ -4,11 +4,11 @@
 
 ## Key Concepts
 
-- **Quick Start** (3 connections) — `DEVELOPER_GUIDE.md`
-- **Install & Setup** (2 connections) — `DEVELOPER_GUIDE.md`
-- **Connect to Database** (2 connections) — `DEVELOPER_GUIDE.md`
-- **code:bash (npm install  # Installs Prisma 6 + @prisma/client + mariadb)** (1 connections) — `DEVELOPER_GUIDE.md`
-- **code:bash (# Check .env has DATABASE_URL set)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **Schema Reference** (3 connections) — `DEVELOPER_GUIDE.md`
+- **Core Models** (2 connections) — `DEVELOPER_GUIDE.md`
+- **Key Enums** (2 connections) — `DEVELOPER_GUIDE.md`
+- **code:prisma (model Company {)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **code:prisma (enum TransactionType {)** (1 connections) — `DEVELOPER_GUIDE.md`
 
 ## Relationships
 

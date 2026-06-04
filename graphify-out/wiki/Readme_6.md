@@ -4,11 +4,11 @@
 
 ## Key Concepts
 
-- **3. Database Setup** (3 connections) — `README.md`
-- **Local Development (MySQL Community Server)** (2 connections) — `README.md`
-- **cPanel Hosting** (2 connections) — `README.md`
-- **code:bash (# Install MySQL Community Server (https://dev.mysql.com/down)** (1 connections) — `README.md`
-- **code:bash (# 1. Login to cPanel → MySQL Databases)** (1 connections) — `README.md`
+- **Deployment** (3 connections) — `README.md`
+- **cPanel (Shared Hosting)** (2 connections) — `README.md`
+- **Environment Variables (cPanel)** (2 connections) — `README.md`
+- **code:bash (# 1. SSH into cPanel)** (1 connections) — `README.md`
+- **code:block15 (DATABASE_URL=mysql://cpaneluser_amfgi:password@localhost:330)** (1 connections) — `README.md`
 
 ## Relationships
 

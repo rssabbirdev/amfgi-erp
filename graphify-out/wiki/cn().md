@@ -1,57 +1,57 @@
 # cn()
 
-> God node · 106 connections · `lib/utils.ts`
+> God node · 169 connections · `lib/utils.ts`
 
-**Community:** [[Reports, Settings, and HR]]
+**Community:** [[Reports, Components, and Admin]]
 
 ## Connections by Relation
 
 ### calls
 - [[buttonVariants()]] `EXTRACTED`
 - [[Badge()]] `EXTRACTED`
-- [[JobCostEnginePage()]] `EXTRACTED`
-- [[StockBatchesPage()]] `EXTRACTED`
-- [[SidebarMenuButton()]] `EXTRACTED`
 - [[Skeleton()]] `EXTRACTED`
-- [[DashboardPage()]] `EXTRACTED`
+- [[JobCostEnginePage()]] `EXTRACTED`
+- [[FormulaBuilderEditor()]] `EXTRACTED`
+- [[ReceiptEditor()]] `EXTRACTED`
+- [[SidebarMenuButton()]] `EXTRACTED`
+- [[CustomerJobLedgerPage()]] `EXTRACTED`
+- [[GoodsReceiptPage()]] `EXTRACTED`
+- [[StockBatchesPage()]] `EXTRACTED`
 - [[HrAttendancePage()]] `EXTRACTED`
-- [[DeliveryNoteCreatePage()]] `EXTRACTED`
-- [[DispatchMaterialsPage()]] `EXTRACTED`
-- [[IssueReconcilePage()]] `EXTRACTED`
-- [[SidebarMenuItem()]] `EXTRACTED`
-- [[TemplateMetaBadge()]] `EXTRACTED`
 - [[DispatchPage()]] `EXTRACTED`
-- [[AppNavigationSidebar()]] `EXTRACTED`
-- [[SidebarProvider()]] `EXTRACTED`
-- [[Sidebar()]] `EXTRACTED`
-- [[SidebarTrigger()]] `EXTRACTED`
-- [[SidebarRail()]] `EXTRACTED`
+- [[StockJobBudgetPage()]] `EXTRACTED`
+- [[MaterialEditor()]] `EXTRACTED`
+- [[SidebarMenuItem()]] `EXTRACTED`
+- [[DashboardPage()]] `EXTRACTED`
+- [[AttendanceCreatePage()]] `EXTRACTED`
+- [[IssueReconcilePage()]] `EXTRACTED`
+- [[IssueReconcileForm()]] `EXTRACTED`
 - [[SidebarMenu()]] `EXTRACTED`
 
 ### contains
 - [[utils.ts]] `EXTRACTED`
 
 ### imports
+- [[FormulaBuilderEditor.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[sidebar.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
+- [[ScheduleDayClient.tsx]] `EXTRACTED`
 - [[button.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
+- [[sidebar.tsx]] `EXTRACTED`
 - [[card.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[Sidebar.tsx]] `EXTRACTED`
 - [[input.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
+- [[alert.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[AttendanceEntryGrid.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[GoodsReceiptLineGrid.tsx]] `EXTRACTED`
 
 ---
 

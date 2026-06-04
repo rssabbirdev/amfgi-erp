@@ -1,10 +1,12 @@
 # Lib, Validations, and Job.schema
 
-> 1 nodes · cohesion 1.00
+> 3 nodes · cohesion 0.67
 
 ## Key Concepts
 
-- **job.schema.ts** (0 connections) — `lib/validations/job.schema.ts`
+- **job.schema.ts** (2 connections) — `lib/validations/job.schema.ts`
+- **JobSchema** (1 connections) — `lib/validations/job.schema.ts`
+- **JobInput** (1 connections) — `lib/validations/job.schema.ts`
 
 ## Relationships
 
@@ -16,7 +18,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 0 (0%)
+- EXTRACTED: 4 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

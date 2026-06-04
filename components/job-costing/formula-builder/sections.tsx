@@ -656,7 +656,7 @@ export function ExpressionInput({
       <button
         type="button"
         onClick={() => onRequestEditor({ title, description, value, placeholder, tokens, onChange, resolvePreview, previewLabel })}
-        className={`flex min-h-[2.5rem] w-full items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-emerald-300 hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:hover:border-emerald-500/30 ${className}`}
+        className={`flex min-h-10 w-full items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-emerald-300 hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:hover:border-emerald-500/30 ${className}`}
       >
         <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono text-sm">
           {value ? (
@@ -665,7 +665,7 @@ export function ExpressionInput({
                 <span
                   key={`${part.text}-${index}`}
                   title={part.token.token}
-                  className={`mx-[1px] inline-flex max-w-full items-center rounded-md border px-1.5 py-0 text-[11px] font-semibold leading-5 align-middle ${getTokenChipClasses(part.token.group)}`}
+                  className={`mx-px inline-flex max-w-full items-center rounded-md border px-1.5 py-0 text-[11px] font-semibold leading-5 align-middle ${getTokenChipClasses(part.token.group)}`}
                 >
                   <span className="truncate">{part.token.token}</span>
                 </span>
@@ -908,7 +908,7 @@ export function RuleRows({
       {materialEditor ? (
         <div className="fixed inset-x-0 bottom-0 top-14 z-40">
           <button ref={materialBackdropRef} type="button" aria-label="Close material rule editor" onClick={attemptCloseMaterialEditor} className="drawer-backdrop-enter absolute inset-0 bg-slate-950/35 backdrop-blur-sm transition-opacity duration-200" />
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-[42rem]">
+          <div className="absolute inset-y-0 right-0 flex w-full max-w-2xl">
             <div ref={materialPanelRef} className="drawer-panel-enter ml-auto flex h-full w-full flex-col border-l border-slate-200 bg-white/98 shadow-2xl shadow-slate-950/25 backdrop-blur-sm transition-all duration-200 dark:border-slate-800 dark:bg-slate-950/98">
               <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
                 <div className="flex items-start justify-between gap-4">
@@ -997,7 +997,7 @@ export function RuleRows({
       {laborEditor ? (
         <div className="fixed inset-x-0 bottom-0 top-14 z-40">
           <button ref={laborBackdropRef} type="button" aria-label="Close labor rule editor" onClick={attemptCloseLaborEditor} className="drawer-backdrop-enter absolute inset-0 bg-slate-950/35 backdrop-blur-sm transition-opacity duration-200" />
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-[42rem]">
+          <div className="absolute inset-y-0 right-0 flex w-full max-w-2xl">
             <div ref={laborPanelRef} className="drawer-panel-enter ml-auto flex h-full w-full flex-col border-l border-slate-200 bg-white/98 shadow-2xl shadow-slate-950/25 backdrop-blur-sm transition-all duration-200 dark:border-slate-800 dark:bg-slate-950/98">
               <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
                 <div className="flex items-start justify-between gap-4">

@@ -1,8 +1,8 @@
 # Button
 
-> God node · 34 connections · `components/ui/shadcn/button.tsx`
+> God node · 65 connections · `components/ui/shadcn/button.tsx`
 
-**Community:** [[Components, Reports, and HR]]
+**Community:** [[Reports, Components, and Admin]]
 
 ## Connections by Relation
 
@@ -10,11 +10,11 @@
 - [[button.tsx]] `EXTRACTED`
 
 ### imports
+- [[FormulaBuilderEditor.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
+- [[ScheduleDayClient.tsx]] `EXTRACTED`
 - [[sidebar.tsx]] `EXTRACTED`
+- [[sections.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
@@ -23,11 +23,11 @@
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
+- [[EmployeeProfileView.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
+- [[LoginClient.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 

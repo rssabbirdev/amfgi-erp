@@ -234,7 +234,7 @@ export default function HrAttendancePage() {
               type="month"
               value={month}
               onChange={(e) => setMonth(e.target.value)}
-              className="h-10 w-full min-w-[10.5rem] sm:w-auto"
+              className="h-10 w-full min-w-42 sm:w-auto"
             />
           </div>
         </div>

@@ -1,22 +1,29 @@
 # Store, API, and Endpoints
 
-> 1 nodes · cohesion 1.00
+> 8 nodes · cohesion 0.25
 
 ## Key Concepts
 
-- **reports.ts** (0 connections) — `store/api/endpoints/reports.ts`
+- **stockCountSessions.ts** (9 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **StockCountSessionLineDto** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **StockCountSessionRevisionDto** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **StockCountSessionDto** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **StockCountSessionListResponse** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **StockCountSessionSubmitResponse** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **UpsertStockCountSessionPayload** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **stockCountSessionsApi** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [[Store API]] (2 shared connections)
 
 ## Source Files
 
-- `store/api/endpoints/reports.ts`
+- `store/api/endpoints/stockCountSessions.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 0 (0%)
+- EXTRACTED: 16 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

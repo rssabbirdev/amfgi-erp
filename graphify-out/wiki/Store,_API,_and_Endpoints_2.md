@@ -1,22 +1,55 @@
 # Store, API, and Endpoints
 
-> 1 nodes · cohesion 1.00
+> 33 nodes · cohesion 0.06
 
 ## Key Concepts
 
-- **categories.ts** (0 connections) — `store/api/endpoints/categories.ts`
+- **jobs.ts** (48 connections) — `store/api/endpoints/jobs.ts`
+- **FormulaLibrary** (3 connections) — `store/api/endpoints/jobs.ts`
+- **FormulaLibraryVersion** (2 connections) — `store/api/endpoints/jobs.ts`
+- **JobItem** (2 connections) — `store/api/endpoints/jobs.ts`
+- **JobItemProgressEntry** (2 connections) — `store/api/endpoints/jobs.ts`
+- **JobProgressEntryListRow** (2 connections) — `store/api/endpoints/jobs.ts`
+- **JobCostEngineItem** (2 connections) — `store/api/endpoints/jobs.ts`
+- **JobCostEngineResult** (2 connections) — `store/api/endpoints/jobs.ts`
+- **JobCostingSnapshotMeta** (2 connections) — `store/api/endpoints/jobs.ts`
+- **JobStatusFilter** (1 connections) — `store/api/endpoints/jobs.ts`
+- **JobScopeFilter** (1 connections) — `store/api/endpoints/jobs.ts`
+- **JobsListParams** (1 connections) — `store/api/endpoints/jobs.ts`
+- **JobsListResponse** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogTracker** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogExistingEntry** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogItem** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogJob** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogTeam** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogAssignment** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogEligibleJob** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogResponse** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogPendingRow** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogPendingResponse** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogListRow** (1 connections) — `store/api/endpoints/jobs.ts`
+- **DailyQuantityLogPendingListParams** (1 connections) — `store/api/endpoints/jobs.ts`
+- *... and 8 more nodes in this community*
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [[Jobs, Id, and Cost Engine]] (8 shared connections)
+- [[Components, Customers, and Lib]] (3 shared connections)
+- [[Stock Job Budget, Daily Quantity Log, and Integrity]] (3 shared connections)
+- [[Components Job Costing]] (3 shared connections)
+- [[Lib Import Export and HR]] (2 shared connections)
+- [[Lib Import Export and Party Lists API]] (2 shared connections)
+- [[Store API]] (2 shared connections)
+- [[Customers Jobs]] (1 shared connections)
+- [[Components, Jobs, and Consumption Costing Modal]] (1 shared connections)
 
 ## Source Files
 
-- `store/api/endpoints/categories.ts`
+- `store/api/endpoints/jobs.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 0 (0%)
+- EXTRACTED: 89 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

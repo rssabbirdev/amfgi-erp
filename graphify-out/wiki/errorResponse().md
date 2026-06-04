@@ -1,36 +1,57 @@
 # errorResponse()
 
-> God node · 28 connections · `lib/utils/apiResponse.ts`
+> God node · 336 connections · `lib/utils/apiResponse.ts`
 
-**Community:** [[API Media, Companies, and Materials]]
+**Community:** [[API Materials, Transactions, and Stock Exception Approvals]]
 
 ## Connections by Relation
 
 ### calls
-- [[GET()]] `INFERRED`
-- [[POST()]] `INFERRED`
-- [[PUT()]] `INFERRED`
-- [[DELETE()]] `INFERRED`
-- [[PATCH()]] `INFERRED`
-- [[prepareIntegrationRequest()]] `INFERRED`
+- [[requireCompanySession()]] `EXTRACTED`
 - [[PUT()]] `EXTRACTED`
 - [[DELETE()]] `EXTRACTED`
-- [[requireCompanySession()]] `INFERRED`
-- [[POST()]] `EXTRACTED`
-- [[POST()]] `EXTRACTED`
-- [[POST()]] `EXTRACTED`
-- [[POST()]] `EXTRACTED`
-- [[POST()]] `EXTRACTED`
+- [[GET()]] `EXTRACTED`
 - [[PATCH()]] `EXTRACTED`
 - [[POST()]] `EXTRACTED`
-- [[serializePrismaDecimals()]] `INFERRED`
+- [[POST()]] `EXTRACTED`
+- [[POST()]] `EXTRACTED`
 - [[GET()]] `EXTRACTED`
+- [[POST()]] `EXTRACTED`
+- [[POST()]] `EXTRACTED`
+- [[POST()]] `EXTRACTED`
+- [[POST()]] `EXTRACTED`
 - [[GET()]] `EXTRACTED`
+- [[PUT()]] `EXTRACTED`
+- [[prepareIntegrationRequest()]] `EXTRACTED`
+- [[GET()]] `EXTRACTED`
+- [[POST()]] `EXTRACTED`
+- [[POST()]] `EXTRACTED`
 - [[GET()]] `EXTRACTED`
 
 ### contains
 - [[apiResponse.ts]] `EXTRACTED`
-- [[apiResponse.ts]] `EXTRACTED`
+
+### imports
+- [[route.ts]] `EXTRACTED`
+- [[requireCompanySession.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
 
 ---
 

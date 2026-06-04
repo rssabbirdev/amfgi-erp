@@ -1,55 +1,54 @@
 # Components HR
 
-> 28 nodes · cohesion 0.17
+> 22 nodes · cohesion 0.12
 
 ## Key Concepts
 
-- **EmployeeProfileView.tsx** (25 connections) — `components/hr/EmployeeProfileView.tsx`
-- **EmployeeProfileView.tsx** (25 connections) — `components/hr/EmployeeProfileView.tsx`
-- **load()** (16 connections) — `app/print/delivery-note/page.tsx`
-- **patchEmployee()** (7 connections) — `components/hr/EmployeeProfileView.tsx`
-- **onSaveOverview()** (6 connections) — `components/hr/EmployeeProfileView.tsx`
-- **buildOverviewEmployeeSignature()** (5 connections) — `components/hr/EmployeeProfileView.tsx`
-- **submitVisa()** (5 connections) — `components/hr/EmployeeProfileView.tsx`
-- **addDocument()** (5 connections) — `components/hr/EmployeeProfileView.tsx`
-- **saveEditedDocument()** (5 connections) — `components/hr/EmployeeProfileView.tsx`
-- **toInputDate()** (4 connections) — `components/hr/EmployeeProfileView.tsx`
-- **provisionLogin()** (4 connections) — `components/hr/EmployeeProfileView.tsx`
-- **linkPortal()** (4 connections) — `components/hr/EmployeeProfileView.tsx`
-- **unlinkPortal()** (4 connections) — `components/hr/EmployeeProfileView.tsx`
-- **readApiJson()** (3 connections) — `components/hr/EmployeeProfileView.tsx`
-- **deleteVisa()** (3 connections) — `components/hr/EmployeeProfileView.tsx`
-- **uploadPhotoFromInput()** (3 connections) — `components/hr/EmployeeProfileView.tsx`
-- **removeProfilePhoto()** (3 connections) — `components/hr/EmployeeProfileView.tsx`
-- **deleteDocument()** (3 connections) — `components/hr/EmployeeProfileView.tsx`
+- **EmployeeProfileView.tsx** (34 connections) — `components/hr/EmployeeProfileView.tsx`
+- **EmployeeProfileView()** (7 connections) — `components/hr/EmployeeProfileView.tsx`
+- **page.tsx** (3 connections) — `app/(app)/hr/employees/[id]/page.tsx`
+- **toInputDate()** (3 connections) — `components/hr/EmployeeProfileView.tsx`
+- **buildOverviewEmployeeSignature()** (3 connections) — `components/hr/EmployeeProfileView.tsx`
+- **employeeMeta.ts** (3 connections) — `lib/hr/employeeMeta.ts`
+- **NATIONALITY_OPTIONS** (3 connections) — `lib/hr/employeeMeta.ts`
 - **initials()** (2 connections) — `components/hr/EmployeeProfileView.tsx`
-- **driveFileWebViewUrl()** (2 connections) — `components/hr/EmployeeProfileView.tsx`
 - **tenureLabel()** (2 connections) — `components/hr/EmployeeProfileView.tsx`
-- **daysUntil()** (2 connections) — `components/hr/EmployeeProfileView.tsx`
-- **validityLabel()** (2 connections) — `components/hr/EmployeeProfileView.tsx`
-- **buildOverviewDraftSignature()** (2 connections) — `components/hr/EmployeeProfileView.tsx`
-- **openPhotoContextMenu()** (2 connections) — `components/hr/EmployeeProfileView.tsx`
-- *... and 3 more nodes in this community*
+- **EmployeeProfilePage()** (1 connections) — `app/(app)/hr/employees/[id]/page.tsx`
+- **Tab** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **CatalogDocType** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **UserLink** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **VisaRow** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **DocRow** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **EmployeeRecord** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **readApiJson()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **driveFileWebViewUrl()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **daysUntil()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **validityLabel()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **buildOverviewDraftSignature()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **VisaStatusPill()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
 
 ## Relationships
 
-- [[HR Schedule and Settings]] (8 shared connections)
-- [[API Reports, Materials, and HR]] (4 shared connections)
-- [[Lib Utils, HR, and Material Master Data]] (3 shared connections)
-- [[Print and Delivery Note]] (2 shared connections)
-- [[Components, Settings, and Settings Media Panel]] (2 shared connections)
-- [[Lib, HR, and Workforce Profile]] (2 shared connections)
-- [[Lib, Scripts, and Settings]] (1 shared connections)
+- [[Lib HR]] (6 shared connections)
+- [[Reports, Components, and Admin]] (3 shared connections)
+- [[Stock, Customers, and Settings]] (3 shared connections)
+- [[Components, Stock, and Lib]] (2 shared connections)
+- [[Stock, Components, and Settings]] (1 shared connections)
+- [[Components, Customers, and Lib]] (1 shared connections)
+- [[Components, Ui, and Multi Select Dropdown]] (1 shared connections)
+- [[Customers Jobs]] (1 shared connections)
+- [[Components Me]] (1 shared connections)
 
 ## Source Files
 
-- `app/print/delivery-note/page.tsx`
+- `app/(app)/hr/employees/[id]/page.tsx`
 - `components/hr/EmployeeProfileView.tsx`
+- `lib/hr/employeeMeta.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 114 (76%)
-- INFERRED: 36 (24%)
+- EXTRACTED: 73 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

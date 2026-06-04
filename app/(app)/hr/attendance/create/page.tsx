@@ -232,11 +232,11 @@ function calculateWorkedMinutes(draft: AttendanceDraftRow): number {
   return Math.max(0, dutyMinutes - breakMinutes);
 }
 
-function formatHourValue(minutes: number): string {
-  const hours = minutes / 60;
-  const rounded = Math.round(hours * 100) / 100;
-  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(2)} h`;
-}
+// function formatHourValue(minutes: number): string {
+//   const hours = minutes / 60;
+//   const rounded = Math.round(hours * 100) / 100;
+//   return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(2)} h`;
+// }
 
 function employeeDisplayName(employee: EmployeeRow | undefined): string {
   return employee?.preferredName || employee?.fullName || '';
@@ -734,7 +734,7 @@ export default function AttendanceCreatePage() {
     return (
       <div className="flex w-full min-w-0 flex-col gap-5">
         <div className="h-20 animate-pulse rounded-lg border border-border bg-muted/30" />
-        <div className="h-[28rem] animate-pulse rounded-lg border border-border bg-muted/30" />
+        <div className="h-112 animate-pulse rounded-lg border border-border bg-muted/30" />
       </div>
     );
   }
@@ -843,7 +843,7 @@ export default function AttendanceCreatePage() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search… (Ctrl+F)"
                 aria-label="Search employees"
-                className={cn(DAY_SHEET_FIELD_CLASS, 'w-36 min-w-[8.5rem] sm:w-44')}
+                className={cn(DAY_SHEET_FIELD_CLASS, 'w-36 min-w-34 sm:w-44')}
               />
               <select
                 value={scopeFilter}
@@ -851,13 +851,13 @@ export default function AttendanceCreatePage() {
                   setScopeFilter(e.target.value as 'all' | 'assigned' | 'exceptions')
                 }
                 aria-label="Scope filter"
-                className={cn(DAY_SHEET_FIELD_CLASS, 'w-32 min-w-[7.5rem]')}
+                className={cn(DAY_SHEET_FIELD_CLASS, 'w-32 min-w-30')}
               >
                 <option value="all">All employees</option>
                 <option value="assigned">Assigned only</option>
                 <option value="exceptions">Exceptions only</option>
               </select>
-              <div className="min-w-[9rem] max-w-[14rem] flex-1">
+              <div className="min-w-36 max-w-56 flex-1">
                 <SearchSelect
                   items={insertableEmployees.map((employee) => ({
                     id: employee.id,

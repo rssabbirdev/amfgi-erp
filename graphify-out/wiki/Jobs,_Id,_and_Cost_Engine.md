@@ -1,50 +1,47 @@
 # Jobs, Id, and Cost Engine
 
-> 41 nodes · cohesion 0.07
+> 38 nodes · cohesion 0.06
 
 ## Key Concepts
 
-- **page.tsx** (79 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **JobCostEnginePage()** (9 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **formatQty()** (4 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **jobToScheduleForm()** (4 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **numericField()** (4 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **normalizeNumber()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **formatMoney()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **formatDays()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **progressStatusLabel()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **JobExecutionScheduleEditor()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **isRecord()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **valueToFormString()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **buildValuesFromSpecifications()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **mapJobStatusToProgressStatus()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **pricingModeLabel()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **scheduleStatusLabel()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **page.tsx** (90 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **jobToScheduleForm()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **emptyBudgetForm()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
 - **emptyProgressForm()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
 - **isoDateInput()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **parseBudgetSchema()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **parseInputValue()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **isEmptyBudgetValue()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **BudgetInput()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **createManualMaterialRow()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **createManualLaborRow()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
 - **PricingMode** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
 - **BudgetField** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **BudgetFormulaValue** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
 - **BudgetArea** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- *... and 16 more nodes in this community*
+- **BudgetSchema** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **BudgetMode** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **ManualMaterialRow** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **ManualLaborRow** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **BudgetItemForm** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **BudgetAreaInstance** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **ProgressForm** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **JobItemProgressStatus** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **ProgressEntryForm** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **TrackableSourceOption** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **BudgetPageTab** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **BUDGET_TAB_ITEMS** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **issuePaceLabel()** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **emptyProgressEntryForm()** (1 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- *... and 13 more nodes in this community*
 
 ## Relationships
 
-- [[Jobs, Id, and Cost Engine]] (20 shared connections)
-- [[Components, Reports, and HR]] (5 shared connections)
-- [[Reports, Settings, and HR]] (4 shared connections)
-- [[Stock, Customers, and Jobs]] (3 shared connections)
-- [[Admin, Components, and Settings]] (3 shared connections)
-- [[HR Schedule and Settings]] (2 shared connections)
-- [[Stock, Customers, and Store]] (1 shared connections)
-- [[Components, Ui, and Search Select]] (1 shared connections)
-- [[Components, Ui, and Spinner]] (1 shared connections)
-- [[Store, API, and Endpoints]] (1 shared connections)
-- [[Customers Jobs]] (1 shared connections)
-- [[Print and Delivery Note]] (1 shared connections)
+- [[Jobs, Id, and Cost Engine]] (23 shared connections)
+- [[Store, API, and Endpoints]] (10 shared connections)
+- [[Lib Job Costing]] (6 shared connections)
+- [[Reports, Components, and Admin]] (5 shared connections)
+- [[Stock Job Budget, Daily Quantity Log, and Integrity]] (3 shared connections)
+- [[Stock, Components, and Settings]] (2 shared connections)
+- [[Components, Customers, and Lib]] (2 shared connections)
+- [[Components, Stock, and Lib]] (1 shared connections)
+- [[Components HR and Ui]] (1 shared connections)
 
 ## Source Files
 
@@ -52,8 +49,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 159 (99%)
-- INFERRED: 2 (1%)
+- EXTRACTED: 135 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

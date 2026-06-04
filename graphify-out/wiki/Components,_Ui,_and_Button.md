@@ -1,10 +1,16 @@
 # Components, Ui, and Button
 
-> 1 nodes · cohesion 1.00
+> 7 nodes · cohesion 0.29
 
 ## Key Concepts
 
-- **Button.tsx** (0 connections) — `components/ui/Button.tsx`
+- **Button.tsx** (6 connections) — `components/ui/Button.tsx`
+- **Variant** (1 connections) — `components/ui/Button.tsx`
+- **Size** (1 connections) — `components/ui/Button.tsx`
+- **ButtonProps** (1 connections) — `components/ui/Button.tsx`
+- **variants** (1 connections) — `components/ui/Button.tsx`
+- **sizes** (1 connections) — `components/ui/Button.tsx`
+- **Button** (1 connections) — `components/ui/Button.tsx`
 
 ## Relationships
 
@@ -16,7 +22,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 0 (0%)
+- EXTRACTED: 12 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

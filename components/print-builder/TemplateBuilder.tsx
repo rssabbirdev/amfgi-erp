@@ -785,7 +785,14 @@ export function TemplateBuilder({
         secs
       )
     );
-  }, [template.id]);
+  }, [
+    template.id,
+    template.canvasMode,
+    template.canvasRects,
+    template.pageMargins,
+    template.pageStyle,
+    template.sections,
+  ]);
 
   const currentLayoutKey = useMemo(
     () => layoutSnapshotKey(margins, pageStyle, CANVAS_MODE, canvasRects, sections),
@@ -1129,19 +1136,13 @@ export function TemplateBuilder({
         {
           ...template,
           pageMargins: margins,
+          pageStyle,
           sections,
         },
         prev
       )
     );
-  }, [
-    sections.length,
-    margins.top,
-    margins.right,
-    margins.bottom,
-    margins.left,
-    template.id,
-  ]);
+  }, [margins, sections, pageStyle, template]);
 
   const previewData = useMemo(() => {
     const userSlice = {
@@ -1486,912 +1487,1289 @@ export function TemplateBuilder({
   }, [selectedIdx, removeSection]);
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white">
-      <header
-        className="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-slate-800 dark:bg-slate-950/95 dark:supports-[backdrop-filter]:bg-slate-950/80"
-        data-hist={histTick}
-      >
-        <div className="space-y-2 px-4 py-2.5 sm:px-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-300/80">
-                  Print Builder
-                </p>
-                <span className="hidden text-slate-300 dark:text-slate-700 sm:inline">/</span>
-                <h1 className="min-w-0 truncate text-sm font-semibold text-slate-900 dark:text-white">
-                  {template.name}
-                </h1>
-                {dirty && (
-                  <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                    Unsaved
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={toggle}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                {theme === 'dark' ? (
-                  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-                    />
-                  </svg>
-                ) : (
-                  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-                    />
-                  </svg>
-                )}
-                <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
-              </button>
-              {onClose && (
-                <button
-                  type="button"
-                  onClick={requestClose}
-                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Close
-                </button>
-              )}
-              <button
-                type="button"
-                title="Undo (Ctrl+Z)"
-                onClick={undo}
-                disabled={historyPast.current.length === 0}
-                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                Undo
-              </button>
-              <button
-                type="button"
-                title="Redo (Ctrl+Shift+Z)"
-                onClick={redo}
-                disabled={historyFuture.current.length === 0}
-                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                Redo
-              </button>
-              <button
-                type="button"
-                title="Save a restore point (also kept in this browser)"
-                onClick={saveCheckpoint}
-                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                Checkpoint
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving}
-                className="min-w-28 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
+		<div className='flex h-full min-h-0 flex-1 flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white'>
+			<header
+				className='shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur supports-backdrop-filter:bg-white/80 dark:border-slate-800 dark:bg-slate-950/95 dark:supports-backdrop-filter:bg-slate-950/80'
+				data-hist={histTick}
+			>
+				<div className='space-y-2 px-4 py-2.5 sm:px-5'>
+					<div className='flex flex-wrap items-center gap-2'>
+						<div className='min-w-0 flex-1'>
+							<div className='flex flex-wrap items-center gap-2'>
+								<p className='shrink-0 text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-300/80'>
+									Print Builder
+								</p>
+								<span className='hidden text-slate-300 dark:text-slate-700 sm:inline'>
+									/
+								</span>
+								<h1 className='min-w-0 truncate text-sm font-semibold text-slate-900 dark:text-white'>
+									{template.name}
+								</h1>
+								{dirty && (
+									<span className='inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'>
+										Unsaved
+									</span>
+								)}
+							</div>
+						</div>
+						<div className='flex flex-wrap items-center gap-1.5'>
+							<button
+								type='button'
+								onClick={toggle}
+								className='inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+								aria-label={
+									theme === 'dark'
+										? 'Switch to light mode'
+										: 'Switch to dark mode'
+								}
+								title={
+									theme === 'dark'
+										? 'Switch to light mode'
+										: 'Switch to dark mode'
+								}
+							>
+								{theme === 'dark' ? (
+									<svg
+										className='h-4 w-4 shrink-0'
+										fill='none'
+										stroke='currentColor'
+										viewBox='0 0 24 24'
+									>
+										<path
+											strokeLinecap='round'
+											strokeLinejoin='round'
+											strokeWidth={1.5}
+											d='M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z'
+										/>
+									</svg>
+								) : (
+									<svg
+										className='h-4 w-4 shrink-0'
+										fill='none'
+										stroke='currentColor'
+										viewBox='0 0 24 24'
+									>
+										<path
+											strokeLinecap='round'
+											strokeLinejoin='round'
+											strokeWidth={1.5}
+											d='M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z'
+										/>
+									</svg>
+								)}
+								<span>
+									{theme === 'dark' ? 'Light' : 'Dark'}
+								</span>
+							</button>
+							{onClose && (
+								<button
+									type='button'
+									onClick={requestClose}
+									className='rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+								>
+									Close
+								</button>
+							)}
+							<button
+								type='button'
+								title='Undo (Ctrl+Z)'
+								onClick={undo}
+								disabled={historyPast.current.length === 0}
+								className='rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+							>
+								Undo
+							</button>
+							<button
+								type='button'
+								title='Redo (Ctrl+Shift+Z)'
+								onClick={redo}
+								disabled={historyFuture.current.length === 0}
+								className='rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+							>
+								Redo
+							</button>
+							<button
+								type='button'
+								title='Save a restore point (also kept in this browser)'
+								onClick={saveCheckpoint}
+								className='rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+							>
+								Checkpoint
+							</button>
+							<button
+								type='button'
+								onClick={handleSave}
+								disabled={saving}
+								className='min-w-28 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700'
+							>
+								{saving ? 'Saving...' : 'Save'}
+							</button>
+						</div>
+					</div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <nav
-              className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overflow-y-hidden rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 [scrollbar-width:thin] dark:border-slate-800 dark:bg-slate-950/60"
-              aria-label="Layout tools"
-            >
-              {(template.itemType === 'delivery-note' || template.itemType === 'work-schedule') && (
-                <NavChip
-                  active={leftTool === 'preview-data'}
-                  onClick={() => setLeftTool('preview-data')}
-                  title={
-                    template.itemType === 'delivery-note'
-                      ? 'Pick a real delivery note for preview data'
-                      : 'Choose schedule preview data'
-                  }
-                >
-                  Preview data
-                </NavChip>
-              )}
-              <NavChip
-                active={leftTool === 'preview-workspace'}
-                onClick={() => setLeftTool('preview-workspace')}
-                title="Editor canvas color (not printed)"
-              >
-                Workspace
-              </NavChip>
-              <NavChip
-                active={leftTool === 'canvas'}
-                onClick={() => setLeftTool('canvas')}
-                title="Snap, resize limits, and canvas shortcuts"
-              >
-                Layout
-              </NavChip>
-              <NavChip
-                active={leftTool === 'page-chrome'}
-                onClick={() => setLeftTool('page-chrome')}
-                title="Margins, page background, watermark"
-              >
-                Page style
-              </NavChip>
-              <NavChip
-                active={leftTool === 'version-history'}
-                onClick={() => setLeftTool('version-history')}
-                title="Saved checkpoints and restore points for this template"
-              >
-                Versions
-              </NavChip>
-              <NavChip
-                active={leftTool === 'section-order'}
-                onClick={() => setLeftTool('section-order')}
-                title="Reorder blocks and choose which one to edit"
-              >
-                Blocks
-              </NavChip>
-            </nav>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <SmallStat label="Type" value={getItemTypeLabel(String(template.itemType))} />
-              <SmallStat label="Blocks" value={sections.length} />
-              <SmallStat label="Zoom" value={`${Math.round(previewScale * 100)}%`} />
-              <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={showRuler}
-                  onChange={(e) => setShowRuler(e.target.checked)}
-                  className="rounded border-slate-400 dark:border-slate-600"
-                />
-                Ruler
-              </label>
-              <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={showSectionOutlines}
-                  onChange={(e) => setShowSectionOutlines(e.target.checked)}
-                  className="rounded border-slate-400 dark:border-slate-600"
-                />
-                Outlines
-              </label>
-            </div>
-          </div>
-        </div>
-      </header>
+					<div className='flex flex-wrap items-center gap-2'>
+						<nav
+							className='flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overflow-y-hidden rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 [scrollbar-width:thin] dark:border-slate-800 dark:bg-slate-950/60'
+							aria-label='Layout tools'
+						>
+							{(template.itemType === 'delivery-note' ||
+								template.itemType === 'work-schedule') && (
+								<NavChip
+									active={leftTool === 'preview-data'}
+									onClick={() => setLeftTool('preview-data')}
+									title={
+										template.itemType === 'delivery-note'
+											? 'Pick a real delivery note for preview data'
+											: 'Choose schedule preview data'
+									}
+								>
+									Preview data
+								</NavChip>
+							)}
+							<NavChip
+								active={leftTool === 'preview-workspace'}
+								onClick={() => setLeftTool('preview-workspace')}
+								title='Editor canvas color (not printed)'
+							>
+								Workspace
+							</NavChip>
+							<NavChip
+								active={leftTool === 'canvas'}
+								onClick={() => setLeftTool('canvas')}
+								title='Snap, resize limits, and canvas shortcuts'
+							>
+								Layout
+							</NavChip>
+							<NavChip
+								active={leftTool === 'page-chrome'}
+								onClick={() => setLeftTool('page-chrome')}
+								title='Margins, page background, watermark'
+							>
+								Page style
+							</NavChip>
+							<NavChip
+								active={leftTool === 'version-history'}
+								onClick={() => setLeftTool('version-history')}
+								title='Saved checkpoints and restore points for this template'
+							>
+								Versions
+							</NavChip>
+							<NavChip
+								active={leftTool === 'section-order'}
+								onClick={() => setLeftTool('section-order')}
+								title='Reorder blocks and choose which one to edit'
+							>
+								Blocks
+							</NavChip>
+						</nav>
+						<div className='flex flex-wrap items-center gap-1.5'>
+							<SmallStat
+								label='Type'
+								value={getItemTypeLabel(
+									String(template.itemType),
+								)}
+							/>
+							<SmallStat label='Blocks' value={sections.length} />
+							<SmallStat
+								label='Zoom'
+								value={`${Math.round(previewScale * 100)}%`}
+							/>
+							<label className='inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'>
+								<input
+									type='checkbox'
+									checked={showRuler}
+									onChange={(e) =>
+										setShowRuler(e.target.checked)
+									}
+									className='rounded border-slate-400 dark:border-slate-600'
+								/>
+								Ruler
+							</label>
+							<label className='inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'>
+								<input
+									type='checkbox'
+									checked={showSectionOutlines}
+									onChange={(e) =>
+										setShowSectionOutlines(e.target.checked)
+									}
+									className='rounded border-slate-400 dark:border-slate-600'
+								/>
+								Outlines
+							</label>
+						</div>
+					</div>
+				</div>
+			</header>
 
-      <div className="flex min-h-0 flex-1 flex-row">
-        <div className="allow-text-select flex h-full min-h-0 w-[21rem] shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 xl:w-[22rem]">
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
-            {leftTool === 'preview-data' &&
-              (template.itemType === 'delivery-note' || template.itemType === 'work-schedule') && (
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
-                  Preview data
-                </p>
-                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                  Pick a real delivery note to preview fields in the document.
-                </p>
-                {!companyId && (
-                  <p className="text-[10px] text-amber-500/90">Active company required to load entries.</p>
-                )}
-                {template.itemType === 'delivery-note' && companyId && (
-                  <>
-                    <label className="block text-[10px] font-medium text-slate-600 dark:text-slate-400">Delivery entry</label>
-                    <select
-                      value={dnSelectedEntryId}
-                      onChange={(e) => setDnSelectedEntryId(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                      disabled={dnEntriesLoading}
-                    >
-                      <option value="">Sample / mock data</option>
-                      {dnEntries.map((ent) => {
-                        const d = ent.dispatchDate ? formatDate(ent.dispatchDate) : '-';
-                        return (
-                          <option key={ent.entryId} value={ent.entryId}>
-                            {ent.jobNumber} | {d}
-                            {ent.materialsCount > 1 ? ` (${ent.materialsCount} lines)` : ''}
-                          </option>
-                        );
-                      })}
-                    </select>
-                    {dnEntriesLoading && <p className="text-[10px] text-slate-500 dark:text-slate-500">Loading entries...</p>}
-                    {dnEntriesError && <p className="text-[10px] text-red-400">{dnEntriesError}</p>}
-                    {!dnEntriesLoading &&
-                      dnEntries.length === 0 &&
-                      companyId &&
-                      !dnEntriesError && (
-                        <p className="text-[10px] text-slate-600 dark:text-slate-500">No delivery notes found yet.</p>
-                      )}
-                    {liveTxnLoading && dnSelectedEntryId && (
-                      <p className="text-[10px] text-slate-500 dark:text-slate-500">Loading transactions...</p>
-                    )}
-                    {dnSelectedEntryId && !liveTxnLoading && !livePreviewBase && (
-                      <p className="text-[10px] text-slate-600 dark:text-slate-500">Could not load that delivery note.</p>
-                    )}
-                  </>
-                )}
-                {template.itemType === 'work-schedule' && (
-                  <div className="space-y-2">
-                    <p className="text-[10px] text-slate-600 dark:text-slate-400">
-                      Test this template with the current draft, sample data, or an older saved schedule.
-                    </p>
-                    <label className="block text-[10px] font-medium text-slate-600 dark:text-slate-400">
-                      Previous schedule
-                    </label>
-                    <select
-                      value={selectedSchedulePreviewId}
-                      onChange={(e) => setSelectedSchedulePreviewId(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                      disabled={schedulePreviewLoading}
-                    >
-                      <option value="">Current draft / sample data</option>
-                      {schedulePreviewOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {formatDate(option.workDate)} | {option.status}
-                          {option.title ? ` | ${option.title}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    {schedulePreviewLoading && (
-                      <p className="text-[10px] text-slate-500 dark:text-slate-500">Loading schedules...</p>
-                    )}
-                    {schedulePreviewError && <p className="text-[10px] text-red-400">{schedulePreviewError}</p>}
-                    {!schedulePreviewLoading &&
-                      !schedulePreviewError &&
-                      schedulePreviewOptions.length === 0 &&
-                      companyId && (
-                        <p className="text-[10px] text-slate-600 dark:text-slate-500">No schedules found yet.</p>
-                      )}
-                    {schedulePreviewDetailLoading && selectedSchedulePreviewId && (
-                      <p className="text-[10px] text-slate-500 dark:text-slate-500">Loading schedule preview...</p>
-                    )}
-                    {workSchedulePreviewBase ? (
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                        <p>
-                          {workSchedulePreviewBase.schedule.workDateLabel} | {workSchedulePreviewBase.schedule.groupCount} groups | {workSchedulePreviewBase.schedule.assignedWorkerCount} workers
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-slate-600 dark:text-slate-500">
-                        No live schedule preview found. The builder is showing sample data.
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedSchedulePreviewId('');
-                          reloadWorkSchedulePreview();
-                        }}
-                        className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                      >
-                        Use current schedule draft
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedSchedulePreviewId('');
-                          sessionStorage.removeItem(WORK_SCHEDULE_PREVIEW_SESSION_KEY);
-                          setWorkSchedulePreviewBase(null);
-                        }}
-                        className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                      >
-                        Use sample data
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+			<div className='flex min-h-0 flex-1 flex-row'>
+				<div className='allow-text-select flex h-full min-h-0 w-84 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 xl:w-88'>
+					<div className='min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3'>
+						{leftTool === 'preview-data' &&
+							(template.itemType === 'delivery-note' ||
+								template.itemType === 'work-schedule') && (
+								<div className='space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40'>
+									<p className='text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500'>
+										Preview data
+									</p>
+									<p className='text-[11px] leading-relaxed text-slate-600 dark:text-slate-400'>
+										Pick a real delivery note to preview
+										fields in the document.
+									</p>
+									{!companyId && (
+										<p className='text-[10px] text-amber-500/90'>
+											Active company required to load
+											entries.
+										</p>
+									)}
+									{template.itemType === 'delivery-note' &&
+										companyId && (
+											<>
+												<label className='block text-[10px] font-medium text-slate-600 dark:text-slate-400'>
+													Delivery entry
+												</label>
+												<select
+													value={dnSelectedEntryId}
+													onChange={(e) =>
+														setDnSelectedEntryId(
+															e.target.value,
+														)
+													}
+													className='w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+													disabled={dnEntriesLoading}
+												>
+													<option value=''>
+														Sample / mock data
+													</option>
+													{dnEntries.map((ent) => {
+														const d =
+															ent.dispatchDate
+																? formatDate(
+																		ent.dispatchDate,
+																	)
+																: '-';
+														return (
+															<option
+																key={
+																	ent.entryId
+																}
+																value={
+																	ent.entryId
+																}
+															>
+																{ent.jobNumber}{' '}
+																| {d}
+																{ent.materialsCount >
+																1
+																	? ` (${ent.materialsCount} lines)`
+																	: ''}
+															</option>
+														);
+													})}
+												</select>
+												{dnEntriesLoading && (
+													<p className='text-[10px] text-slate-500 dark:text-slate-500'>
+														Loading entries...
+													</p>
+												)}
+												{dnEntriesError && (
+													<p className='text-[10px] text-red-400'>
+														{dnEntriesError}
+													</p>
+												)}
+												{!dnEntriesLoading &&
+													dnEntries.length === 0 &&
+													companyId &&
+													!dnEntriesError && (
+														<p className='text-[10px] text-slate-600 dark:text-slate-500'>
+															No delivery notes
+															found yet.
+														</p>
+													)}
+												{liveTxnLoading &&
+													dnSelectedEntryId && (
+														<p className='text-[10px] text-slate-500 dark:text-slate-500'>
+															Loading
+															transactions...
+														</p>
+													)}
+												{dnSelectedEntryId &&
+													!liveTxnLoading &&
+													!livePreviewBase && (
+														<p className='text-[10px] text-slate-600 dark:text-slate-500'>
+															Could not load that
+															delivery note.
+														</p>
+													)}
+											</>
+										)}
+									{template.itemType === 'work-schedule' && (
+										<div className='space-y-2'>
+											<p className='text-[10px] text-slate-600 dark:text-slate-400'>
+												Test this template with the
+												current draft, sample data, or
+												an older saved schedule.
+											</p>
+											<label className='block text-[10px] font-medium text-slate-600 dark:text-slate-400'>
+												Previous schedule
+											</label>
+											<select
+												value={
+													selectedSchedulePreviewId
+												}
+												onChange={(e) =>
+													setSelectedSchedulePreviewId(
+														e.target.value,
+													)
+												}
+												className='w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+												disabled={
+													schedulePreviewLoading
+												}
+											>
+												<option value=''>
+													Current draft / sample data
+												</option>
+												{schedulePreviewOptions.map(
+													(option) => (
+														<option
+															key={option.id}
+															value={option.id}
+														>
+															{formatDate(
+																option.workDate,
+															)}{' '}
+															| {option.status}
+															{option.title
+																? ` | ${option.title}`
+																: ''}
+														</option>
+													),
+												)}
+											</select>
+											{schedulePreviewLoading && (
+												<p className='text-[10px] text-slate-500 dark:text-slate-500'>
+													Loading schedules...
+												</p>
+											)}
+											{schedulePreviewError && (
+												<p className='text-[10px] text-red-400'>
+													{schedulePreviewError}
+												</p>
+											)}
+											{!schedulePreviewLoading &&
+												!schedulePreviewError &&
+												schedulePreviewOptions.length ===
+													0 &&
+												companyId && (
+													<p className='text-[10px] text-slate-600 dark:text-slate-500'>
+														No schedules found yet.
+													</p>
+												)}
+											{schedulePreviewDetailLoading &&
+												selectedSchedulePreviewId && (
+													<p className='text-[10px] text-slate-500 dark:text-slate-500'>
+														Loading schedule
+														preview...
+													</p>
+												)}
+											{workSchedulePreviewBase ? (
+												<div className='rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'>
+													<p>
+														{
+															workSchedulePreviewBase
+																.schedule
+																.workDateLabel
+														}{' '}
+														|{' '}
+														{
+															workSchedulePreviewBase
+																.schedule
+																.groupCount
+														}{' '}
+														groups |{' '}
+														{
+															workSchedulePreviewBase
+																.schedule
+																.assignedWorkerCount
+														}{' '}
+														workers
+													</p>
+												</div>
+											) : (
+												<p className='text-[10px] text-slate-600 dark:text-slate-500'>
+													No live schedule preview
+													found. The builder is
+													showing sample data.
+												</p>
+											)}
+											<div className='flex flex-wrap gap-2'>
+												<button
+													type='button'
+													onClick={() => {
+														setSelectedSchedulePreviewId(
+															'',
+														);
+														reloadWorkSchedulePreview();
+													}}
+													className='rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+												>
+													Use current schedule draft
+												</button>
+												<button
+													type='button'
+													onClick={() => {
+														setSelectedSchedulePreviewId(
+															'',
+														);
+														sessionStorage.removeItem(
+															WORK_SCHEDULE_PREVIEW_SESSION_KEY,
+														);
+														setWorkSchedulePreviewBase(
+															null,
+														);
+													}}
+													className='rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+												>
+													Use sample data
+												</button>
+											</div>
+										</div>
+									)}
+								</div>
+							)}
 
-            {leftTool === 'preview-workspace' && (
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
-                  Preview workspace
-                </p>
-                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                  Color behind the page in this editor only - not printed.
-                </p>
-                <label className="block text-[10px] font-medium text-slate-600 dark:text-slate-400">Background</label>
-                <select
-                  value={previewWsMode}
-                  onChange={(e) =>
-                    setPreviewWsMode(e.target.value as 'default' | 'transparent' | 'custom')
-                  }
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                >
-                  <option value="default">Default gray</option>
-                  <option value="transparent">Transparent</option>
-                  <option value="custom">Custom color</option>
-                </select>
-                {previewWsMode === 'custom' && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={previewWsColor.match(/^#[0-9a-fA-F]{6}$/) ? previewWsColor : '#64748b'}
-                      onChange={(e) => setPreviewWsColor(e.target.value)}
-                      className="h-10 w-14 cursor-pointer rounded-xl border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900"
-                    />
-                    <input
-                      type="text"
-                      value={previewWsColor}
-                      onChange={(e) => setPreviewWsColor(e.target.value)}
-                      className="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-[11px] text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                      placeholder="#64748b"
-                    />
-                  </div>
-                )}
-                <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-500">
-                  Stored in this browser only.
-                </p>
-              </div>
-            )}
+						{leftTool === 'preview-workspace' && (
+							<div className='space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40'>
+								<p className='text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500'>
+									Preview workspace
+								</p>
+								<p className='text-[11px] leading-relaxed text-slate-600 dark:text-slate-400'>
+									Color behind the page in this editor only -
+									not printed.
+								</p>
+								<label className='block text-[10px] font-medium text-slate-600 dark:text-slate-400'>
+									Background
+								</label>
+								<select
+									value={previewWsMode}
+									onChange={(e) =>
+										setPreviewWsMode(
+											e.target.value as
+												| 'default'
+												| 'transparent'
+												| 'custom',
+										)
+									}
+									className='w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+								>
+									<option value='default'>
+										Default gray
+									</option>
+									<option value='transparent'>
+										Transparent
+									</option>
+									<option value='custom'>Custom color</option>
+								</select>
+								{previewWsMode === 'custom' && (
+									<div className='flex items-center gap-2'>
+										<input
+											type='color'
+											value={
+												previewWsColor.match(
+													/^#[0-9a-fA-F]{6}$/,
+												)
+													? previewWsColor
+													: '#64748b'
+											}
+											onChange={(e) =>
+												setPreviewWsColor(
+													e.target.value,
+												)
+											}
+											className='h-10 w-14 cursor-pointer rounded-xl border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900'
+										/>
+										<input
+											type='text'
+											value={previewWsColor}
+											onChange={(e) =>
+												setPreviewWsColor(
+													e.target.value,
+												)
+											}
+											className='flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-[11px] text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+											placeholder='#64748b'
+										/>
+									</div>
+								)}
+								<p className='text-[10px] leading-relaxed text-slate-500 dark:text-slate-500'>
+									Stored in this browser only.
+								</p>
+							</div>
+						)}
 
-            {leftTool === 'canvas' && (
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
-                  Block layout
-                </p>
-                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                  Each block has its own frame on the page. Drag to move, use the green handle to resize.
-                  Arrow keys nudge the selected block (Shift = 2&nbsp;mm).
-                </p>
-                <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800">
-                  <p className="text-[10px] leading-relaxed text-slate-600 dark:text-slate-400">
-                    Same options as the preview bar: snap to margins and neighbors; allow shrinking below
-                    measured content (clip inside the cell).
-                  </p>
-                  <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={snapEnabled}
-                      onChange={(e) => setSnapEnabled(e.target.checked)}
-                      className="rounded border-slate-400 dark:border-slate-600"
-                    />
-                    Snap while move / resize
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={allowShrinkBelowContent}
-                      onChange={(e) => setAllowShrinkBelowContent(e.target.checked)}
-                      className="rounded border-slate-400 dark:border-slate-600"
-                    />
-                    Allow resize smaller than content
-                  </label>
-                </div>
-              </div>
-            )}
+						{leftTool === 'canvas' && (
+							<div className='space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40'>
+								<p className='text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500'>
+									Block layout
+								</p>
+								<p className='text-[11px] leading-relaxed text-slate-600 dark:text-slate-400'>
+									Each block has its own frame on the page.
+									Drag to move, use the green handle to
+									resize. Arrow keys nudge the selected block
+									(Shift = 2&nbsp;mm).
+								</p>
+								<div className='space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800'>
+									<p className='text-[10px] leading-relaxed text-slate-600 dark:text-slate-400'>
+										Same options as the preview bar: snap to
+										margins and neighbors; allow shrinking
+										below measured content (clip inside the
+										cell).
+									</p>
+									<label className='flex cursor-pointer items-center gap-2 text-xs text-slate-700 dark:text-slate-300'>
+										<input
+											type='checkbox'
+											checked={snapEnabled}
+											onChange={(e) =>
+												setSnapEnabled(e.target.checked)
+											}
+											className='rounded border-slate-400 dark:border-slate-600'
+										/>
+										Snap while move / resize
+									</label>
+									<label className='flex cursor-pointer items-center gap-2 text-xs text-slate-700 dark:text-slate-300'>
+										<input
+											type='checkbox'
+											checked={allowShrinkBelowContent}
+											onChange={(e) =>
+												setAllowShrinkBelowContent(
+													e.target.checked,
+												)
+											}
+											className='rounded border-slate-400 dark:border-slate-600'
+										/>
+										Allow resize smaller than content
+									</label>
+								</div>
+							</div>
+						)}
 
-            {leftTool === 'page-chrome' && (
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
-                  Page & watermark
-                </p>
-                <PageChromeEditor
-                  itemType={String(template.itemType)}
-                  pageStyle={pageStyle}
-                  onChange={setPageStyle}
-                  pageMargins={margins}
-                  onMarginsChange={setMargins}
-                  companyId={companyId}
-                />
-              </div>
-            )}
+						{leftTool === 'page-chrome' && (
+							<div className='space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40'>
+								<p className='text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500'>
+									Page & watermark
+								</p>
+								<PageChromeEditor
+									itemType={String(template.itemType)}
+									pageStyle={pageStyle}
+									onChange={setPageStyle}
+									pageMargins={margins}
+									onMarginsChange={setMargins}
+									companyId={companyId}
+								/>
+							</div>
+						)}
 
-            {leftTool === 'version-history' && (
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
-                  Layout versions ({layoutVersions.length})
-                </p>
-                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                  Each successful <span className="text-slate-800 dark:text-slate-300">Save</span> and manual{' '}
-                  <span className="text-slate-800 dark:text-slate-300">Checkpoint</span> stores a copy in this browser. Restore
-                  replaces the current layout (Undo/Redo resets).
-                </p>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={saveCheckpoint}
-                    className="flex-1 rounded-xl border border-slate-300 bg-white py-2 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    New checkpoint
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearLayoutVersions}
-                    disabled={layoutVersions.length === 0}
-                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[10px] font-medium text-slate-500 hover:text-red-500 disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-red-300"
-                  >
-                    Clear all
-                  </button>
-                </div>
-                {layoutVersions.length === 0 ? (
-                  <p className="text-[10px] text-slate-600 dark:text-slate-500">No versions yet - save or add a checkpoint.</p>
-                ) : (
-                  <ul className="max-h-[min(420px,50vh)] space-y-1 overflow-y-auto pr-0.5">
-                    {layoutVersions.map((v) => (
-                      <li
-                        key={v.id}
-                        className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[10px] shadow-sm dark:border-slate-800 dark:bg-slate-900/80"
-                      >
-                        <div className="flex items-start justify-between gap-1">
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium text-slate-900 dark:text-slate-200" title={v.label}>
-                              {v.label}
-                            </p>
-                            <p className="text-[9px] text-slate-500 dark:text-slate-500">
-                              {v.kind === 'saved' ? 'Saved' : 'Checkpoint'} |{' '}
-                              {new Date(v.at).toLocaleString(undefined, {
-                                dateStyle: 'short',
-                                timeStyle: 'short',
-                              })}
-                            </p>
-                          </div>
-                          <div className="flex shrink-0 flex-col gap-0.5">
-                            <button
-                              type="button"
-                              onClick={() => restoreLayoutVersion(v)}
-                              className="rounded-lg bg-sky-600 px-2 py-1 text-[9px] font-medium text-white hover:bg-sky-500"
-                            >
-                              Restore
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeLayoutVersion(v.id)}
-                              className="rounded px-1.5 py-0.5 text-[9px] text-slate-500 hover:text-red-500 dark:hover:text-red-400"
-                              title="Remove from list"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+						{leftTool === 'version-history' && (
+							<div className='space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40'>
+								<p className='text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500'>
+									Layout versions ({layoutVersions.length})
+								</p>
+								<p className='text-[11px] leading-relaxed text-slate-600 dark:text-slate-400'>
+									Each successful{' '}
+									<span className='text-slate-800 dark:text-slate-300'>
+										Save
+									</span>{' '}
+									and manual{' '}
+									<span className='text-slate-800 dark:text-slate-300'>
+										Checkpoint
+									</span>{' '}
+									stores a copy in this browser. Restore
+									replaces the current layout (Undo/Redo
+									resets).
+								</p>
+								<div className='flex gap-1'>
+									<button
+										type='button'
+										onClick={saveCheckpoint}
+										className='flex-1 rounded-xl border border-slate-300 bg-white py-2 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+									>
+										New checkpoint
+									</button>
+									<button
+										type='button'
+										onClick={clearLayoutVersions}
+										disabled={layoutVersions.length === 0}
+										className='rounded-xl border border-slate-300 bg-white px-3 py-2 text-[10px] font-medium text-slate-500 hover:text-red-500 disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-red-300'
+									>
+										Clear all
+									</button>
+								</div>
+								{layoutVersions.length === 0 ? (
+									<p className='text-[10px] text-slate-600 dark:text-slate-500'>
+										No versions yet - save or add a
+										checkpoint.
+									</p>
+								) : (
+									<ul className='max-h-[min(420px,50vh)] space-y-1 overflow-y-auto pr-0.5'>
+										{layoutVersions.map((v) => (
+											<li
+												key={v.id}
+												className='rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[10px] shadow-sm dark:border-slate-800 dark:bg-slate-900/80'
+											>
+												<div className='flex items-start justify-between gap-1'>
+													<div className='min-w-0 flex-1'>
+														<p
+															className='truncate font-medium text-slate-900 dark:text-slate-200'
+															title={v.label}
+														>
+															{v.label}
+														</p>
+														<p className='text-[9px] text-slate-500 dark:text-slate-500'>
+															{v.kind === 'saved'
+																? 'Saved'
+																: 'Checkpoint'}{' '}
+															|{' '}
+															{new Date(
+																v.at,
+															).toLocaleString(
+																undefined,
+																{
+																	dateStyle:
+																		'short',
+																	timeStyle:
+																		'short',
+																},
+															)}
+														</p>
+													</div>
+													<div className='flex shrink-0 flex-col gap-0.5'>
+														<button
+															type='button'
+															onClick={() =>
+																restoreLayoutVersion(
+																	v,
+																)
+															}
+															className='rounded-lg bg-sky-600 px-2 py-1 text-[9px] font-medium text-white hover:bg-sky-500'
+														>
+															Restore
+														</button>
+														<button
+															type='button'
+															onClick={() =>
+																removeLayoutVersion(
+																	v.id,
+																)
+															}
+															className='rounded px-1.5 py-0.5 text-[9px] text-slate-500 hover:text-red-500 dark:hover:text-red-400'
+															title='Remove from list'
+														>
+															Remove
+														</button>
+													</div>
+												</div>
+											</li>
+										))}
+									</ul>
+								)}
+							</div>
+						)}
 
-            {leftTool === 'section-order' && (
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
-                  Block order ({sections.length})
-                </p>
-                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                  Drag to reorder. Click a row for properties.{' '}
-                  <span className="text-slate-800 dark:text-slate-300">Ctrl/Cmd+click</span> to multi-select, then Group.
-                  Locked blocks hide the dashed page outline; grouped blocks move together on the page.
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  <button
-                    type="button"
-                    onClick={groupSelectedSections}
-                    disabled={sectionOrderSelection.length < 2}
-                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                    title="Assign one group id to all selected blocks (canvas: move together)"
-                  >
-                    Group
-                  </button>
-                  <button
-                    type="button"
-                    onClick={ungroupSelection}
-                    disabled={
-                      !sectionOrderSelection.some((i) => Boolean(sections[i]?.groupId))
-                    }
-                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    Ungroup
-                  </button>
-                  <button
-                    type="button"
-                    onClick={toggleLockSelected}
-                    disabled={selectedIdx === null}
-                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                    title="Lock or unlock the primary selected block (last single-click)"
-                  >
-                    {selectedIdx !== null && isSectionLocked(sections[selectedIdx]) ? 'Unlock' : 'Lock'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={lockGroupOfPrimary}
-                    disabled={selectedIdx === null || !sections[selectedIdx]?.groupId}
-                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                    title="Lock every block in the primary block's group"
-                  >
-                    Lock group
-                  </button>
-                  <button
-                    type="button"
-                    onClick={unlockGroupOfPrimary}
-                    disabled={selectedIdx === null || !sections[selectedIdx]?.groupId}
-                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    Unlock group
-                  </button>
-                </div>
-                {sectionOrderSelection.length > 1 && (
-                  <p className="text-[10px] font-medium text-violet-600 dark:text-violet-400/90">{sectionOrderSelection.length} selected</p>
-                )}
-                <div className="space-y-1 pb-2">
-                  {sections.map((sec, idx) => (
-                    <div
-                      key={idx}
-                      draggable
-                      onDragStart={() => setDragSectionIdx(idx)}
-                      onDragEnd={() => {
-                        setDragSectionIdx(null);
-                        setOrderHoverIdx(null);
-                      }}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        onDropSection(idx);
-                      }}
-                      onMouseEnter={() => setOrderHoverIdx(idx)}
-                      onMouseLeave={() => setOrderHoverIdx(null)}
-                      onClick={(e) => {
-                        if (e.ctrlKey || e.metaKey) {
-                          e.stopPropagation();
-                          setSectionOrderSelection((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(idx)) next.delete(idx);
-                            else next.add(idx);
-                            let arr = [...next].sort((a, b) => a - b);
-                            if (arr.length === 0) arr = [idx];
-                            setSelectedIdx(arr.includes(idx) ? idx : arr[arr.length - 1]!);
-                            return arr;
-                          });
-                        } else {
-                          setSelectedIdx(idx);
-                          setSectionOrderSelection([idx]);
-                        }
-                        setRightPanel('properties');
-                      }}
-                      className={`flex cursor-grab items-center gap-1.5 rounded border px-2 py-1.5 text-xs transition active:cursor-grabbing ${
-                        selectedIdx === idx
-                          ? 'border-emerald-600 bg-emerald-900/40 text-emerald-300'
-                          : sectionOrderSelection.includes(idx)
-                            ? 'border-violet-500/70 bg-violet-950/35 text-violet-100'
-                            : orderHoverIdx === idx
-                              ? 'border-sky-500/60 bg-sky-950/40 text-sky-100'
-                              : 'border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      <span
-                        className={`h-2 w-2 shrink-0 rounded-full ${
-                          sec.groupId ? 'bg-violet-400' : 'bg-slate-300 dark:bg-slate-700'
-                        }`}
-                        title={sec.groupId ? 'In canvas group' : 'Ungrouped'}
-                        aria-hidden
-                      />
-                      <span className="w-5 shrink-0 text-center text-slate-500 dark:text-slate-500">{idx + 1}</span>
-                      <span
-                        className="flex min-w-0 flex-1 items-baseline gap-1 truncate text-left"
-                        title={getSectionOrderLabel(sec)}
-                      >
-                        {(() => {
-                          const d = getSectionOrderDisplay(sec);
-                          if (d.kind === 'split') {
-                            return (
-                              <>
-                                <span className="shrink-0 font-medium text-slate-500 dark:text-slate-400">{d.base}</span>
-                                <span className="shrink-0 text-slate-400 dark:text-slate-500">-</span>
-                                <span className="min-w-0 truncate">{d.suffix}</span>
-                              </>
-                            );
-                          }
-                          return <span className="truncate">{d.text}</span>;
-                        })()}
-                      </span>
-                      {isSectionLocked(sec) && (
-                        <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300" title="Locked">
-                          Locked
-                        </span>
-                      )}
-                      <div className="flex shrink-0 gap-1">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            updateSection(idx, { ...sec, locked: !sec.locked });
-                          }}
-                          className="rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-200 hover:text-amber-700 dark:hover:bg-slate-800 dark:hover:text-amber-300"
-                          title={isSectionLocked(sec) ? 'Unlock' : 'Lock'}
-                        >
-                          {isSectionLocked(sec) ? 'Unlock' : 'Lock'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            moveSection(idx, -1);
-                          }}
-                          disabled={idx === 0}
-                          className="rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-20 dark:hover:bg-slate-800 dark:hover:text-white"
-                        >
-                          Up
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            moveSection(idx, 1);
-                          }}
-                          disabled={idx === sections.length - 1}
-                          className="rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-20 dark:hover:bg-slate-800 dark:hover:text-white"
-                        >
-                          Down
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeSection(idx);
-                          }}
-                          className="rounded px-1.5 py-0.5 text-[10px] font-medium text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-500 dark:hover:bg-red-500/10 dark:hover:text-red-300"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+						{leftTool === 'section-order' && (
+							<div className='space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40'>
+								<p className='text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500'>
+									Block order ({sections.length})
+								</p>
+								<p className='text-[11px] leading-relaxed text-slate-600 dark:text-slate-400'>
+									Drag to reorder. Click a row for properties.{' '}
+									<span className='text-slate-800 dark:text-slate-300'>
+										Ctrl/Cmd+click
+									</span>{' '}
+									to multi-select, then Group. Locked blocks
+									hide the dashed page outline; grouped blocks
+									move together on the page.
+								</p>
+								<div className='flex flex-wrap gap-1'>
+									<button
+										type='button'
+										onClick={groupSelectedSections}
+										disabled={
+											sectionOrderSelection.length < 2
+										}
+										className='rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+										title='Assign one group id to all selected blocks (canvas: move together)'
+									>
+										Group
+									</button>
+									<button
+										type='button'
+										onClick={ungroupSelection}
+										disabled={
+											!sectionOrderSelection.some((i) =>
+												Boolean(sections[i]?.groupId),
+											)
+										}
+										className='rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+									>
+										Ungroup
+									</button>
+									<button
+										type='button'
+										onClick={toggleLockSelected}
+										disabled={selectedIdx === null}
+										className='rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+										title='Lock or unlock the primary selected block (last single-click)'
+									>
+										{selectedIdx !== null &&
+										isSectionLocked(sections[selectedIdx])
+											? 'Unlock'
+											: 'Lock'}
+									</button>
+									<button
+										type='button'
+										onClick={lockGroupOfPrimary}
+										disabled={
+											selectedIdx === null ||
+											!sections[selectedIdx]?.groupId
+										}
+										className='rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+										title="Lock every block in the primary block's group"
+									>
+										Lock group
+									</button>
+									<button
+										type='button'
+										onClick={unlockGroupOfPrimary}
+										disabled={
+											selectedIdx === null ||
+											!sections[selectedIdx]?.groupId
+										}
+										className='rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+									>
+										Unlock group
+									</button>
+								</div>
+								{sectionOrderSelection.length > 1 && (
+									<p className='text-[10px] font-medium text-violet-600 dark:text-violet-400/90'>
+										{sectionOrderSelection.length} selected
+									</p>
+								)}
+								<div className='space-y-1 pb-2'>
+									{sections.map((sec, idx) => (
+										<div
+											key={idx}
+											draggable
+											onDragStart={() =>
+												setDragSectionIdx(idx)
+											}
+											onDragEnd={() => {
+												setDragSectionIdx(null);
+												setOrderHoverIdx(null);
+											}}
+											onDragOver={(e) =>
+												e.preventDefault()
+											}
+											onDrop={(e) => {
+												e.preventDefault();
+												onDropSection(idx);
+											}}
+											onMouseEnter={() =>
+												setOrderHoverIdx(idx)
+											}
+											onMouseLeave={() =>
+												setOrderHoverIdx(null)
+											}
+											onClick={(e) => {
+												if (e.ctrlKey || e.metaKey) {
+													e.stopPropagation();
+													setSectionOrderSelection(
+														(prev) => {
+															const next =
+																new Set(prev);
+															if (next.has(idx))
+																next.delete(
+																	idx,
+																);
+															else next.add(idx);
+															let arr = [
+																...next,
+															].sort(
+																(a, b) => a - b,
+															);
+															if (
+																arr.length === 0
+															)
+																arr = [idx];
+															setSelectedIdx(
+																arr.includes(
+																	idx,
+																)
+																	? idx
+																	: arr[
+																			arr.length -
+																				1
+																		]!,
+															);
+															return arr;
+														},
+													);
+												} else {
+													setSelectedIdx(idx);
+													setSectionOrderSelection([
+														idx,
+													]);
+												}
+												setRightPanel('properties');
+											}}
+											className={`flex cursor-grab items-center gap-1.5 rounded border px-2 py-1.5 text-xs transition active:cursor-grabbing ${
+												selectedIdx === idx
+													? 'border-emerald-600 bg-emerald-900/40 text-emerald-300'
+													: sectionOrderSelection.includes(
+																idx,
+														  )
+														? 'border-violet-500/70 bg-violet-950/35 text-violet-100'
+														: orderHoverIdx === idx
+															? 'border-sky-500/60 bg-sky-950/40 text-sky-100'
+															: 'border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800'
+											}`}
+										>
+											<span
+												className={`h-2 w-2 shrink-0 rounded-full ${
+													sec.groupId
+														? 'bg-violet-400'
+														: 'bg-slate-300 dark:bg-slate-700'
+												}`}
+												title={
+													sec.groupId
+														? 'In canvas group'
+														: 'Ungrouped'
+												}
+												aria-hidden
+											/>
+											<span className='w-5 shrink-0 text-center text-slate-500 dark:text-slate-500'>
+												{idx + 1}
+											</span>
+											<span
+												className='flex min-w-0 flex-1 items-baseline gap-1 truncate text-left'
+												title={getSectionOrderLabel(
+													sec,
+												)}
+											>
+												{(() => {
+													const d =
+														getSectionOrderDisplay(
+															sec,
+														);
+													if (d.kind === 'split') {
+														return (
+															<>
+																<span className='shrink-0 font-medium text-slate-500 dark:text-slate-400'>
+																	{d.base}
+																</span>
+																<span className='shrink-0 text-slate-400 dark:text-slate-500'>
+																	-
+																</span>
+																<span className='min-w-0 truncate'>
+																	{d.suffix}
+																</span>
+															</>
+														);
+													}
+													return (
+														<span className='truncate'>
+															{d.text}
+														</span>
+													);
+												})()}
+											</span>
+											{isSectionLocked(sec) && (
+												<span
+													className='shrink-0 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300'
+													title='Locked'
+												>
+													Locked
+												</span>
+											)}
+											<div className='flex shrink-0 gap-1'>
+												<button
+													type='button'
+													onClick={(e) => {
+														e.stopPropagation();
+														updateSection(idx, {
+															...sec,
+															locked: !sec.locked,
+														});
+													}}
+													className='rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-200 hover:text-amber-700 dark:hover:bg-slate-800 dark:hover:text-amber-300'
+													title={
+														isSectionLocked(sec)
+															? 'Unlock'
+															: 'Lock'
+													}
+												>
+													{isSectionLocked(sec)
+														? 'Unlock'
+														: 'Lock'}
+												</button>
+												<button
+													type='button'
+													onClick={(e) => {
+														e.stopPropagation();
+														moveSection(idx, -1);
+													}}
+													disabled={idx === 0}
+													className='rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-20 dark:hover:bg-slate-800 dark:hover:text-white'
+												>
+													Up
+												</button>
+												<button
+													type='button'
+													onClick={(e) => {
+														e.stopPropagation();
+														moveSection(idx, 1);
+													}}
+													disabled={
+														idx ===
+														sections.length - 1
+													}
+													className='rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-20 dark:hover:bg-slate-800 dark:hover:text-white'
+												>
+													Down
+												</button>
+												<button
+													type='button'
+													onClick={(e) => {
+														e.stopPropagation();
+														removeSection(idx);
+													}}
+													className='rounded px-1.5 py-0.5 text-[10px] font-medium text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-500 dark:hover:bg-red-500/10 dark:hover:text-red-300'
+												>
+													Remove
+												</button>
+											</div>
+										</div>
+									))}
+								</div>
+							</div>
+						)}
+					</div>
 
-          <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/95">
-            <p className="mb-2 px-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500">
-              Add block
-            </p>
-            {(template.itemType === 'delivery-note' || template.itemType === 'packing-slip') && (
-              <button
-                type="button"
-                onClick={addContactBlock}
-                className="mb-3 w-full rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-[11px] font-semibold text-sky-700 hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200 dark:hover:bg-sky-500/20"
-                title="Quick insert: job contact section"
-              >
-                + Contact block
-              </button>
-            )}
-            <div className="grid max-h-40 grid-cols-3 gap-2 overflow-y-auto overflow-x-hidden">
-              {SECTION_PALETTE.map((item) => (
-                <button
-                  key={item.type}
-                  type="button"
-                  onClick={() => addSection(item.type)}
-                  className="flex flex-col items-center gap-1 rounded-xl border border-slate-200 bg-white p-2 text-center text-slate-600 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
-                  title={item.description}
-                >
-                  <span className="text-sm leading-none">{item.icon}</span>
-                  <span className="text-[9px] leading-tight">{item.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+					<div className='shrink-0 border-t border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/95'>
+						<p className='mb-2 px-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500'>
+							Add block
+						</p>
+						{(template.itemType === 'delivery-note' ||
+							template.itemType === 'packing-slip') && (
+							<button
+								type='button'
+								onClick={addContactBlock}
+								className='mb-3 w-full rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-[11px] font-semibold text-sky-700 hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200 dark:hover:bg-sky-500/20'
+								title='Quick insert: job contact section'
+							>
+								+ Contact block
+							</button>
+						)}
+						<div className='grid max-h-40 grid-cols-3 gap-2 overflow-y-auto overflow-x-hidden'>
+							{SECTION_PALETTE.map((item) => (
+								<button
+									key={item.type}
+									type='button'
+									onClick={() => addSection(item.type)}
+									className='flex flex-col items-center gap-1 rounded-xl border border-slate-200 bg-white p-2 text-center text-slate-600 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-700 dark:hover:text-white'
+									title={item.description}
+								>
+									<span className='text-sm leading-none'>
+										{item.icon}
+									</span>
+									<span className='text-[9px] leading-tight'>
+										{item.label}
+									</span>
+								</button>
+							))}
+						</div>
+					</div>
+				</div>
 
-        <div
-          className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
-            previewWsMode === 'transparent'
-              ? 'bg-transparent'
-              : 'bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.18),_transparent_55%),linear-gradient(to_bottom,_#e2e8f0,_#cbd5e1)] dark:bg-slate-800'
-          }`}
-        >
-          <div className="shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
-                  Preview canvas
-                </p>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  Position blocks visually, then fine-tune fields and layout settings from the side panels.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                  {getItemTypeLabel(String(template.itemType))}
-                </span>
-                <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                  {selectedSection ? getSectionOrderLabel(selectedSection) : 'No block selected'}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
-            <CanvasPreview
-              template={previewTemplate}
-              data={previewData}
-              selectedIdx={selectedIdx}
-              onSelectSection={(idx) => {
-                setSelectedIdx(idx);
-                setSectionOrderSelection([idx]);
-                setRightPanel('properties');
-              }}
-              onUpdateSection={updateSection}
-              onCanvasRectsChange={setCanvasRects}
-              onInteractionEnd={onCanvasInteractionEnd}
-              scale={previewScale}
-              workspaceBackground={previewWorkspaceBackground}
-              showRuler={showRuler}
-              showSectionOutlines={showSectionOutlines}
-              orderHoverIdx={orderHoverIdx}
-              snapEnabled={snapEnabled}
-              allowShrinkBelowContent={allowShrinkBelowContent}
-            />
-          </div>
-          <div
-            className="flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"
-            title="Preview zoom (editor only - not print scale)"
-          >
-            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-500">
-                  Layout
-                </span>
-                <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={snapEnabled}
-                    onChange={(e) => setSnapEnabled(e.target.checked)}
-                    className="rounded border-slate-400 dark:border-slate-600"
-                  />
-                  Snap
-                </label>
-                <label
-                  className="flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400"
-                  title="Off: width/height stop at measured content in the preview"
-                >
-                  <input
-                    type="checkbox"
-                    checked={allowShrinkBelowContent}
-                    onChange={(e) => setAllowShrinkBelowContent(e.target.checked)}
-                    className="rounded border-slate-400 dark:border-slate-600"
-                  />
-                  Shrink below content
-                </label>
-                {selectedIdx !== null && (
-                  <>
-                    <span className="hidden h-3 w-px bg-slate-300 dark:bg-slate-700 sm:inline" aria-hidden />
-                    <button
-                      type="button"
-                      onClick={bringCanvasForward}
-                      disabled={
-                        selectedIdx !== null && isSectionLocked(sections[selectedIdx])
-                      }
-                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                      title="Bring forward (stacking)"
-                    >
-                      Forward
-                    </button>
-                    <button
-                      type="button"
-                      onClick={sendCanvasBackward}
-                      disabled={
-                        selectedIdx !== null && isSectionLocked(sections[selectedIdx])
-                      }
-                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                      title="Send backward (stacking)"
-                    >
-                      Back
-                    </button>
-                    <button
-                      type="button"
-                      onClick={duplicateSelectedSection}
-                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      type="button"
-                      onClick={deleteSelectedSection}
-                      className="rounded-lg border border-red-200 bg-white px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:bg-slate-800 dark:text-red-400 dark:hover:bg-slate-700"
-                    >
-                      Delete
-                    </button>
-                  </>
-                )}
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-500">
-                Zoom
-              </span>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                onClick={() => setPreviewScale((s) => Math.max(1, Math.round((s - 0.2) * 100) / 100))}
-              >
-                -
-              </button>
-              <input
-                type="range"
-                min={1}
-                max={4}
-                step={0.05}
-                value={previewScale}
-                onChange={(e) => setPreviewScale(Number(e.target.value))}
-                className="h-1.5 w-36 cursor-pointer accent-emerald-600"
-              />
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                onClick={() => setPreviewScale((s) => Math.min(4, Math.round((s + 0.2) * 100) / 100))}
-              >
-                +
-              </button>
-              <span className="w-12 text-right font-mono text-[10px] text-slate-500 dark:text-slate-400">
-                {Math.round(previewScale * 100)}%
-              </span>
-            </div>
-          </div>
-        </div>
+				<div
+					className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
+						previewWsMode === 'transparent'
+							? 'bg-transparent'
+							: 'bg-[radial-gradient(circle_at_top,rgba(148,163,184,0.18),transparent_55%),linear-gradient(to_bottom,#e2e8f0,#cbd5e1)] dark:bg-slate-800'
+					}`}
+				>
+					<div className='shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80'>
+						<div className='flex flex-wrap items-center justify-between gap-3'>
+							<div className='min-w-0'>
+								<p className='text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500'>
+									Preview canvas
+								</p>
+								<p className='mt-1 text-sm text-slate-600 dark:text-slate-400'>
+									Position blocks visually, then fine-tune
+									fields and layout settings from the side
+									panels.
+								</p>
+							</div>
+							<div className='flex flex-wrap items-center gap-2'>
+								<span className='rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'>
+									{getItemTypeLabel(
+										String(template.itemType),
+									)}
+								</span>
+								<span className='rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'>
+									{selectedSection
+										? getSectionOrderLabel(selectedSection)
+										: 'No block selected'}
+								</span>
+							</div>
+						</div>
+					</div>
+					<div className='min-h-0 flex-1 overflow-auto px-4 py-4'>
+						<CanvasPreview
+							template={previewTemplate}
+							data={previewData}
+							selectedIdx={selectedIdx}
+							onSelectSection={(idx) => {
+								setSelectedIdx(idx);
+								setSectionOrderSelection([idx]);
+								setRightPanel('properties');
+							}}
+							onUpdateSection={updateSection}
+							onCanvasRectsChange={setCanvasRects}
+							onInteractionEnd={onCanvasInteractionEnd}
+							scale={previewScale}
+							workspaceBackground={previewWorkspaceBackground}
+							showRuler={showRuler}
+							showSectionOutlines={showSectionOutlines}
+							orderHoverIdx={orderHoverIdx}
+							snapEnabled={snapEnabled}
+							allowShrinkBelowContent={allowShrinkBelowContent}
+						/>
+					</div>
+					<div
+						className='flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95'
+						title='Preview zoom (editor only - not print scale)'
+					>
+						<div className='flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5'>
+							<span className='text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-500'>
+								Layout
+							</span>
+							<label className='flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400'>
+								<input
+									type='checkbox'
+									checked={snapEnabled}
+									onChange={(e) =>
+										setSnapEnabled(e.target.checked)
+									}
+									className='rounded border-slate-400 dark:border-slate-600'
+								/>
+								Snap
+							</label>
+							<label
+								className='flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400'
+								title='Off: width/height stop at measured content in the preview'
+							>
+								<input
+									type='checkbox'
+									checked={allowShrinkBelowContent}
+									onChange={(e) =>
+										setAllowShrinkBelowContent(
+											e.target.checked,
+										)
+									}
+									className='rounded border-slate-400 dark:border-slate-600'
+								/>
+								Shrink below content
+							</label>
+							{selectedIdx !== null && (
+								<>
+									<span
+										className='hidden h-3 w-px bg-slate-300 dark:bg-slate-700 sm:inline'
+										aria-hidden
+									/>
+									<button
+										type='button'
+										onClick={bringCanvasForward}
+										disabled={
+											selectedIdx !== null &&
+											isSectionLocked(
+												sections[selectedIdx],
+											)
+										}
+										className='rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+										title='Bring forward (stacking)'
+									>
+										Forward
+									</button>
+									<button
+										type='button'
+										onClick={sendCanvasBackward}
+										disabled={
+											selectedIdx !== null &&
+											isSectionLocked(
+												sections[selectedIdx],
+											)
+										}
+										className='rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+										title='Send backward (stacking)'
+									>
+										Back
+									</button>
+									<button
+										type='button'
+										onClick={duplicateSelectedSection}
+										className='rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+									>
+										Duplicate
+									</button>
+									<button
+										type='button'
+										onClick={deleteSelectedSection}
+										className='rounded-lg border border-red-200 bg-white px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:bg-slate-800 dark:text-red-400 dark:hover:bg-slate-700'
+									>
+										Delete
+									</button>
+								</>
+							)}
+						</div>
+						<div className='flex flex-wrap items-center justify-center gap-3'>
+							<span className='text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-500'>
+								Zoom
+							</span>
+							<button
+								type='button'
+								className='rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+								onClick={() =>
+									setPreviewScale((s) =>
+										Math.max(
+											1,
+											Math.round((s - 0.2) * 100) / 100,
+										),
+									)
+								}
+							>
+								-
+							</button>
+							<input
+								type='range'
+								min={1}
+								max={4}
+								step={0.05}
+								value={previewScale}
+								onChange={(e) =>
+									setPreviewScale(Number(e.target.value))
+								}
+								className='h-1.5 w-36 cursor-pointer accent-emerald-600'
+							/>
+							<button
+								type='button'
+								className='rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+								onClick={() =>
+									setPreviewScale((s) =>
+										Math.min(
+											4,
+											Math.round((s + 0.2) * 100) / 100,
+										),
+									)
+								}
+							>
+								+
+							</button>
+							<span className='w-12 text-right font-mono text-[10px] text-slate-500 dark:text-slate-400'>
+								{Math.round(previewScale * 100)}%
+							</span>
+						</div>
+					</div>
+				</div>
 
-        <div className="allow-text-select flex h-full min-h-0 w-[21rem] shrink-0 flex-col border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 xl:w-[22rem]">
-          <div className="flex shrink-0 border-b border-slate-200 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={() => setRightPanel('properties')}
-              className={`flex-1 py-3 text-xs font-semibold ${
-                rightPanel === 'properties'
-                  ? 'border-b-2 border-emerald-500 bg-slate-50 text-emerald-700 dark:bg-slate-900 dark:text-emerald-400'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300'
-              }`}
-            >
-              Block settings
-            </button>
-            <button
-              type="button"
-              onClick={() => setRightPanel('data')}
-              className={`flex-1 py-3 text-xs font-semibold ${
-                rightPanel === 'data'
-                  ? 'border-b-2 border-emerald-500 bg-slate-50 text-emerald-700 dark:bg-slate-900 dark:text-emerald-400'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300'
-              }`}
-            >
-              Data fields
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            {rightPanel === 'data' ? (
-              <DataFieldsExplorer itemType={String(template.itemType)} sampleData={previewData} />
-            ) : selectedSection ? (
-              <SectionEditor
-                section={selectedSection}
-                itemType={template.itemType}
-                locked={isSectionLocked(selectedSection)}
-                companyId={companyId}
-                canvasRect={
-                  CANVAS_MODE && selectedIdx != null ? canvasRects[selectedIdx] ?? null : null
-                }
-                canvasRectIndex={CANVAS_MODE ? selectedIdx : null}
-                contentWidthMm={CANVAS_MODE ? contentWidthMm(margins, pageStyle) : undefined}
-                contentHeightMm={CANVAS_MODE ? contentHeightMm(margins, pageStyle) : undefined}
-                onCanvasRectChange={(idx, rect) =>
-                  setCanvasRects((prev) => prev.map((r, i) => (i === idx ? { ...rect } : r)))
-                }
-                onChange={(updated) => updateSection(selectedIdx!, updated)}
-              />
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-xs leading-relaxed text-slate-500 dark:border-slate-700 dark:bg-slate-950/40">
-                <p className="mb-2">
-                  Click a block on the page, or choose one under <span className="text-slate-700 dark:text-slate-400">Blocks</span>{' '}
-                  on the left.
-                </p>
-                <p className="text-slate-600 dark:text-slate-500">
-                  Select a block on the page, then use <span className="text-slate-700 dark:text-slate-400">Layout</span> for snap
-                  options or drag and resize in the preview.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+				<div className='allow-text-select flex h-full min-h-0 w-84 shrink-0 flex-col border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 xl:w-88'>
+					<div className='flex shrink-0 border-b border-slate-200 dark:border-slate-700'>
+						<button
+							type='button'
+							onClick={() => setRightPanel('properties')}
+							className={`flex-1 py-3 text-xs font-semibold ${
+								rightPanel === 'properties'
+									? 'border-b-2 border-emerald-500 bg-slate-50 text-emerald-700 dark:bg-slate-900 dark:text-emerald-400'
+									: 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300'
+							}`}
+						>
+							Block settings
+						</button>
+						<button
+							type='button'
+							onClick={() => setRightPanel('data')}
+							className={`flex-1 py-3 text-xs font-semibold ${
+								rightPanel === 'data'
+									? 'border-b-2 border-emerald-500 bg-slate-50 text-emerald-700 dark:bg-slate-900 dark:text-emerald-400'
+									: 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300'
+							}`}
+						>
+							Data fields
+						</button>
+					</div>
+					<div className='min-h-0 flex-1 overflow-y-auto p-3'>
+						{rightPanel === 'data' ? (
+							<DataFieldsExplorer
+								itemType={String(template.itemType)}
+								sampleData={previewData}
+							/>
+						) : selectedSection ? (
+							<SectionEditor
+								section={selectedSection}
+								itemType={template.itemType}
+								locked={isSectionLocked(selectedSection)}
+								companyId={companyId}
+								canvasRect={
+									CANVAS_MODE && selectedIdx != null
+										? (canvasRects[selectedIdx] ?? null)
+										: null
+								}
+								canvasRectIndex={
+									CANVAS_MODE ? selectedIdx : null
+								}
+								contentWidthMm={
+									CANVAS_MODE
+										? contentWidthMm(margins, pageStyle)
+										: undefined
+								}
+								contentHeightMm={
+									CANVAS_MODE
+										? contentHeightMm(margins, pageStyle)
+										: undefined
+								}
+								onCanvasRectChange={(idx, rect) =>
+									setCanvasRects((prev) =>
+										prev.map((r, i) =>
+											i === idx ? { ...rect } : r,
+										),
+									)
+								}
+								onChange={(updated) =>
+									updateSection(selectedIdx!, updated)
+								}
+							/>
+						) : (
+							<div className='rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-xs leading-relaxed text-slate-500 dark:border-slate-700 dark:bg-slate-950/40'>
+								<p className='mb-2'>
+									Click a block on the page, or choose one
+									under{' '}
+									<span className='text-slate-700 dark:text-slate-400'>
+										Blocks
+									</span>{' '}
+									on the left.
+								</p>
+								<p className='text-slate-600 dark:text-slate-500'>
+									Select a block on the page, then use{' '}
+									<span className='text-slate-700 dark:text-slate-400'>
+										Layout
+									</span>{' '}
+									for snap options or drag and resize in the
+									preview.
+								</p>
+							</div>
+						)}
+					</div>
+				</div>
+			</div>
+		</div>
   );
 }

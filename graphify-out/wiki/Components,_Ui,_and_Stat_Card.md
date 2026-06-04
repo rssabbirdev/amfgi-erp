@@ -1,12 +1,13 @@
 # Components, Ui, and Stat Card
 
-> 3 nodes · cohesion 0.67
+> 4 nodes · cohesion 0.50
 
 ## Key Concepts
 
-- **StatCard()** (2 connections) — `components/ui/StatCard.tsx`
-- **StatCard.tsx** (1 connections) — `components/ui/StatCard.tsx`
-- **StatCard.tsx** (1 connections) — `components/ui/StatCard.tsx`
+- **StatCard.tsx** (3 connections) — `components/ui/StatCard.tsx`
+- **StatCardProps** (1 connections) — `components/ui/StatCard.tsx`
+- **colorMap** (1 connections) — `components/ui/StatCard.tsx`
+- **StatCard()** (1 connections) — `components/ui/StatCard.tsx`
 
 ## Relationships
 
@@ -18,7 +19,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 4 (100%)
+- EXTRACTED: 6 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

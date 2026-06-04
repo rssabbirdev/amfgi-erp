@@ -1,10 +1,12 @@
 # Lib, Validations, and Transaction.schema
 
-> 1 nodes · cohesion 1.00
+> 3 nodes · cohesion 0.67
 
 ## Key Concepts
 
-- **transaction.schema.ts** (0 connections) — `lib/validations/transaction.schema.ts`
+- **transaction.schema.ts** (2 connections) — `lib/validations/transaction.schema.ts`
+- **TransactionSchema** (1 connections) — `lib/validations/transaction.schema.ts`
+- **TransactionInput** (1 connections) — `lib/validations/transaction.schema.ts`
 
 ## Relationships
 
@@ -16,7 +18,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 0 (0%)
+- EXTRACTED: 4 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

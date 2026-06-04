@@ -1,15 +1,15 @@
 # Lib, Utils, and Unit Conversion
 
-> 6 nodes · cohesion 0.53
+> 6 nodes · cohesion 0.33
 
 ## Key Concepts
 
-- **unitConversion.ts** (4 connections) — `lib/utils/unitConversion.ts`
-- **unitConversion.ts** (4 connections) — `lib/utils/unitConversion.ts`
-- **toBaseUnit()** (2 connections) — `lib/utils/unitConversion.ts`
-- **fromBaseUnit()** (2 connections) — `lib/utils/unitConversion.ts`
-- **buildUnitOptions()** (2 connections) — `lib/utils/unitConversion.ts`
-- **validateConversions()** (2 connections) — `lib/utils/unitConversion.ts`
+- **unitConversion.ts** (5 connections) — `lib/utils/unitConversion.ts`
+- **UnitConversionDef** (1 connections) — `lib/utils/unitConversion.ts`
+- **toBaseUnit()** (1 connections) — `lib/utils/unitConversion.ts`
+- **fromBaseUnit()** (1 connections) — `lib/utils/unitConversion.ts`
+- **buildUnitOptions()** (1 connections) — `lib/utils/unitConversion.ts`
+- **validateConversions()** (1 connections) — `lib/utils/unitConversion.ts`
 
 ## Relationships
 
@@ -21,7 +21,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 16 (100%)
+- EXTRACTED: 10 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

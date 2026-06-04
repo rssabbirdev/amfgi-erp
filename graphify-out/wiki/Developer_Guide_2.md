@@ -4,12 +4,12 @@
 
 ## Key Concepts
 
-- **Debugging** (4 connections) — `DEVELOPER_GUIDE.md`
-- **Enable Query Logging** (2 connections) — `DEVELOPER_GUIDE.md`
-- **Inspect Query** (2 connections) — `DEVELOPER_GUIDE.md`
-- **Test Transaction Rollback** (2 connections) — `DEVELOPER_GUIDE.md`
-- **code:typescript (// In lib/db/prisma.ts)** (1 connections) — `DEVELOPER_GUIDE.md`
-- **code:typescript (// Use Prisma Studio)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **Error Handling** (4 connections) — `DEVELOPER_GUIDE.md`
+- **Unique Constraint Error** (2 connections) — `DEVELOPER_GUIDE.md`
+- **Not Found Error** (2 connections) — `DEVELOPER_GUIDE.md`
+- **Transaction Rollback** (2 connections) — `DEVELOPER_GUIDE.md`
+- **code:typescript (try {)** (1 connections) — `DEVELOPER_GUIDE.md`
+- **code:typescript (const material = await prisma.material.findUnique({ where: {)** (1 connections) — `DEVELOPER_GUIDE.md`
 - **code:typescript (try {)** (1 connections) — `DEVELOPER_GUIDE.md`
 
 ## Relationships

@@ -1,25 +1,32 @@
 # Store, API, and Endpoints
 
-> 4 nodes · cohesion 0.67
+> 9 nodes · cohesion 0.22
 
 ## Key Concepts
 
-- **materials.ts** (3 connections) — `store/api/endpoints/materials.ts`
-- **normalizeMaterial()** (2 connections) — `store/api/endpoints/materials.ts`
-- **normalizeCrossCompanyMaterial()** (2 connections) — `store/api/endpoints/materials.ts`
-- **materials.ts** (2 connections) — `store/api/endpoints/materials.ts`
+- **receipts.ts** (13 connections) — `store/api/endpoints/receipts.ts`
+- **ReceiptEntry** (2 connections) — `store/api/endpoints/receipts.ts`
+- **ReceiptAdjustmentImpactResponse** (2 connections) — `store/api/endpoints/receipts.ts`
+- **ReceiptMaterial** (1 connections) — `store/api/endpoints/receipts.ts`
+- **ReceiptAdjustmentImpactTransaction** (1 connections) — `store/api/endpoints/receipts.ts`
+- **ReceiptAdjustmentImpactRow** (1 connections) — `store/api/endpoints/receipts.ts`
+- **ReceiptEntriesListParams** (1 connections) — `store/api/endpoints/receipts.ts`
+- **ReceiptEntriesListResponse** (1 connections) — `store/api/endpoints/receipts.ts`
+- **receiptsApi** (1 connections) — `store/api/endpoints/receipts.ts`
 
 ## Relationships
 
-- [[Jobs, Id, and Cost Engine]] (1 shared connections)
+- [[Stock, Customers, and Settings]] (3 shared connections)
+- [[Stock Job Budget, Daily Quantity Log, and Integrity]] (2 shared connections)
+- [[Store API]] (2 shared connections)
 
 ## Source Files
 
-- `store/api/endpoints/materials.ts`
+- `store/api/endpoints/receipts.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 9 (100%)
+- EXTRACTED: 23 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

@@ -1,12 +1,11 @@
 # Jobs, Id, and Budget
 
-> 3 nodes · cohesion 0.67
+> 2 nodes · cohesion 1.00
 
 ## Key Concepts
 
-- **JobBudgetAliasPage()** (2 connections) — `app/(app)/jobs/[id]/budget/page.tsx`
 - **page.tsx** (1 connections) — `app/(app)/jobs/[id]/budget/page.tsx`
-- **page.tsx** (1 connections) — `app/(app)/jobs/[id]/budget/page.tsx`
+- **JobBudgetAliasPage()** (1 connections) — `app/(app)/jobs/[id]/budget/page.tsx`
 
 ## Relationships
 
@@ -18,7 +17,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 4 (100%)
+- EXTRACTED: 2 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

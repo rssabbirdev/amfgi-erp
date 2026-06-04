@@ -1,22 +1,47 @@
 # Store, API, and Endpoints
 
-> 1 nodes · cohesion 1.00
+> 29 nodes · cohesion 0.07
 
 ## Key Concepts
 
-- **customers.ts** (0 connections) — `store/api/endpoints/customers.ts`
+- **reports.ts** (30 connections) — `store/api/endpoints/reports.ts`
+- **Material** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockValuationResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **ConsumptionData** (1 connections) — `store/api/endpoints/reports.ts`
+- **ConsumptionResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **JobConsumptionRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **ProductionByJobRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **InventoryByWarehouseWarehouseCol** (1 connections) — `store/api/endpoints/reports.ts`
+- **InventoryByWarehouseRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **InventoryByWarehouseResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockIntegrityRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockIntegrityResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **JobProfitabilityRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **JobProfitabilityResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **SupplierTraceabilityPartyRef** (1 connections) — `store/api/endpoints/reports.ts`
+- **SupplierTraceabilityJobRef** (1 connections) — `store/api/endpoints/reports.ts`
+- **SupplierTraceabilityRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **SupplierTraceabilityResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockExceptionRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockExceptionsResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockExceptionApprovalRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockExceptionApprovalsResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockAdjustmentRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockAdjustmentsResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockCountSessionReportRow** (1 connections) — `store/api/endpoints/reports.ts`
+- *... and 4 more nodes in this community*
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [[Store API]] (2 shared connections)
 
 ## Source Files
 
-- `store/api/endpoints/customers.ts`
+- `store/api/endpoints/reports.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 0 (0%)
+- EXTRACTED: 58 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

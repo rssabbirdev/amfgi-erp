@@ -1,53 +1,62 @@
 # Lib Utils and Types
 
-> 36 nodes · cohesion 0.13
+> 26 nodes · cohesion 0.13
 
 ## Key Concepts
 
-- **canvasLayout.ts** (13 connections) — `lib/utils/canvasLayout.ts`
-- **canvasLayout.ts** (13 connections) — `lib/utils/canvasLayout.ts`
-- **documentTemplate.ts** (9 connections) — `lib/types/documentTemplate.ts`
-- **CanvasPreview.tsx** (7 connections) — `components/print-builder/CanvasPreview.tsx`
-- **isSectionLocked()** (7 connections) — `lib/types/documentTemplate.ts`
-- **CanvasPreview.tsx** (7 connections) — `components/print-builder/CanvasPreview.tsx`
-- **documentTemplate.ts** (7 connections) — `lib/types/documentTemplate.ts`
-- **onMove()** (6 connections) — `components/print-builder/CanvasPreview.tsx`
-- **contentWidthMm()** (6 connections) — `lib/utils/canvasLayout.ts`
-- **buildCanvasRectsFromSections()** (5 connections) — `lib/utils/canvasLayout.ts`
-- **snapCanvasRect()** (5 connections) — `lib/utils/canvasLayout.ts`
-- **getCanvasMoveIndicesForSection()** (4 connections) — `lib/types/documentTemplate.ts`
-- **getSectionTypeLabel()** (4 connections) — `lib/types/documentTemplate.ts`
-- **getSectionOrderDisplay()** (4 connections) — `lib/types/documentTemplate.ts`
-- **getPageDimensionsMm()** (4 connections) — `lib/utils/canvasLayout.ts`
-- **contentHeightMm()** (4 connections) — `lib/utils/canvasLayout.ts`
-- **marginBleedBox()** (4 connections) — `lib/utils/canvasLayout.ts`
-- **estimateSectionHeightMm()** (4 connections) — `lib/utils/canvasLayout.ts`
-- **ensureCanvasRects()** (4 connections) — `lib/utils/canvasLayout.ts`
-- **clampRectToContent()** (4 connections) — `lib/utils/canvasLayout.ts`
-- **handleFlowResizeStart()** (3 connections) — `components/print-builder/CanvasPreview.tsx`
-- **handleCanvasOverlayMouseDown()** (3 connections) — `components/print-builder/CanvasPreview.tsx`
-- **startCanvasResize()** (3 connections) — `components/print-builder/CanvasPreview.tsx`
-- **overlayChrome()** (3 connections) — `components/print-builder/CanvasPreview.tsx`
-- **getSectionOrderLabel()** (3 connections) — `lib/types/documentTemplate.ts`
-- *... and 11 more nodes in this community*
+- **companyPrintTemplates.ts** (21 connections) — `lib/utils/companyPrintTemplates.ts`
+- **DocumentTemplate** (15 connections) — `lib/types/documentTemplate.ts`
+- **page.tsx** (14 connections) — `app/hr-schedule-print/page.tsx`
+- **page.tsx** (11 connections) — `app/settings/print-template/edit/page.tsx`
+- **printTemplateSession.ts** (11 connections) — `lib/utils/printTemplateSession.ts`
+- **readCompanyDocumentTemplates()** (7 connections) — `lib/utils/companyPrintTemplates.ts`
+- **normalizeCompanyPrintTemplateShape()** (7 connections) — `lib/utils/companyPrintTemplates.ts`
+- **WorkScheduleContext** (5 connections) — `lib/utils/templateData.ts`
+- **toObjectRoot()** (4 connections) — `lib/utils/companyPrintTemplates.ts`
+- **readCompanyGoogleDriveFolderRegistry()** (4 connections) — `lib/utils/companyPrintTemplates.ts`
+- **writeCompanyGoogleDriveFolderRegistry()** (4 connections) — `lib/utils/companyPrintTemplates.ts`
+- **writeCompanyDocumentTemplates()** (3 connections) — `lib/utils/companyPrintTemplates.ts`
+- **WorkSchedulePrintPayload** (3 connections) — `lib/utils/printTemplateSession.ts`
+- **extractIndexedTemplates()** (2 connections) — `lib/utils/companyPrintTemplates.ts`
+- **readCompanyGoogleDriveOAuthConfig()** (2 connections) — `lib/utils/companyPrintTemplates.ts`
+- **writeCompanyGoogleDriveOAuthConfig()** (2 connections) — `lib/utils/companyPrintTemplates.ts`
+- **NewPrintTemplateDraft** (2 connections) — `lib/utils/printTemplateSession.ts`
+- **PrintState** (1 connections) — `app/hr-schedule-print/page.tsx`
+- **WorkSchedulePrintPage()** (1 connections) — `app/hr-schedule-print/page.tsx`
+- **PrintTemplateEditInner()** (1 connections) — `app/settings/print-template/edit/page.tsx`
+- **PrintTemplateEditPage()** (1 connections) — `app/settings/print-template/edit/page.tsx`
+- **PrintTemplatesRoot** (1 connections) — `lib/utils/companyPrintTemplates.ts`
+- **GoogleDriveOAuthConfig** (1 connections) — `lib/utils/companyPrintTemplates.ts`
+- **GoogleDriveFolderRegistryEntry** (1 connections) — `lib/utils/companyPrintTemplates.ts`
+- **GoogleDriveFolderRegistry** (1 connections) — `lib/utils/companyPrintTemplates.ts`
+- *... and 1 more nodes in this community*
 
 ## Relationships
 
-- [[Settings API]] (2 shared connections)
-- [[Components Print Builder]] (2 shared connections)
-- [[Stock Dispatch]] (1 shared connections)
+- [[Components Print Builder]] (10 shared connections)
+- [[Lib Types and Utils]] (5 shared connections)
+- [[Lib, Print, and Scripts]] (5 shared connections)
+- [[Stock, Customers, and Settings]] (5 shared connections)
+- [[Lib and API]] (5 shared connections)
+- [[API and Lib]] (4 shared connections)
+- [[Lib Utils]] (3 shared connections)
+- [[HR Schedule]] (3 shared connections)
+- [[Components, Stock, and Lib]] (1 shared connections)
+- [[Lib and Components]] (1 shared connections)
 
 ## Source Files
 
-- `components/print-builder/CanvasPreview.tsx`
+- `app/hr-schedule-print/page.tsx`
+- `app/settings/print-template/edit/page.tsx`
 - `lib/types/documentTemplate.ts`
-- `lib/utils/canvasLayout.ts`
-- `lib/utils/documentDefaults.ts`
+- `lib/utils/companyPrintTemplates.ts`
+- `lib/utils/printTemplateSession.ts`
+- `lib/utils/templateData.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 143 (88%)
-- INFERRED: 20 (12%)
+- EXTRACTED: 124 (98%)
+- INFERRED: 2 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

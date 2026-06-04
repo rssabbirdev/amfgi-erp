@@ -218,24 +218,6 @@ function progressStatusLabel(status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED
   }
 }
 
-function scheduleStatusLabel(status?: 'NOT_DUE' | 'ON_TRACK' | 'AT_RISK' | 'DELAYED' | 'COMPLETED' | 'ON_HOLD') {
-  switch (status) {
-    case 'NOT_DUE':
-      return 'Not due';
-    case 'AT_RISK':
-      return 'At risk';
-    case 'DELAYED':
-      return 'Delayed';
-    case 'COMPLETED':
-      return 'Completed';
-    case 'ON_HOLD':
-      return 'On hold';
-    case 'ON_TRACK':
-    default:
-      return 'On track';
-  }
-}
-
 function issuePaceLabel(status?: 'NOT_DUE' | 'ON_PLAN' | 'UNDER_ISSUED' | 'OVER_ISSUED') {
   switch (status) {
     case 'UNDER_ISSUED':
@@ -1309,11 +1291,6 @@ export default function JobCostEnginePage({ embeddedTab, hiddenTabs }: JobCostEn
   }, [displayResult, overallProgress, job?.lpoValue]);
 
   /** Schedule status is computed the same for every line once job-level dates apply. */
-  const jobScheduleRollupStatus = useMemo(() => {
-    const items = displayResult?.items ?? [];
-    if (items.length === 0) return undefined;
-    return items[0]?.progress?.scheduleStatus;
-  }, [displayResult?.items]);
 
   const headerOverviewStats = useMemo(() => {
     const items = jobItemsData?.items ?? [];
@@ -3229,7 +3206,7 @@ export default function JobCostEnginePage({ embeddedTab, hiddenTabs }: JobCostEn
                   </Button>
                 </div>
                 <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-white dark:border-border dark:bg-card">
-                  <table className="w-full min-w-[40rem] text-left text-sm">
+                  <table className="w-full min-w-160 text-left text-sm">
                     <thead className="bg-muted/50 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2.5 font-semibold">#</th>

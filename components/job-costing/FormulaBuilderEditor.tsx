@@ -1,6 +1,6 @@
 'use client';
 
-import { type ChangeEvent, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -1454,7 +1454,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     setRedoStack([]);
   };
 
-  const undoFormState = () => {
+  const undoFormState = useCallback(() => {
     setUndoStack((stack) => {
       if (stack.length === 0) return stack;
       const previous = cloneBuilderState(stack[stack.length - 1]);
@@ -1462,9 +1462,9 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
       setDraft(previous);
       return stack.slice(0, -1);
     });
-  };
+  }, [form]);
 
-  const redoFormState = () => {
+  const redoFormState = useCallback(() => {
     setRedoStack((stack) => {
       if (stack.length === 0) return stack;
       const next = cloneBuilderState(stack[stack.length - 1]);
@@ -1472,7 +1472,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
       setDraft(next);
       return stack.slice(0, -1);
     });
-  };
+  }, [form]);
 
   const exportFormulaJson = () => {
     if (typeof window === 'undefined') return;
@@ -1627,7 +1627,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [redoStack.length, undoStack.length, form]);
+  }, [redoFormState, undoFormState]);
 
   const saveFormula = async ({ mode }: { mode: 'manual' | 'auto' }) => {
     const issue = validate(form);
@@ -2231,7 +2231,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                         }));
                         setDraggingAreaId(null);
                       }}
-                      className={`overflow-visible rounded-[1.5rem] border bg-slate-50 shadow-sm transition ${
+                      className={`overflow-visible rounded-3xl border bg-slate-50 shadow-sm transition ${
                         draggingAreaId === area.id
                           ? 'border-emerald-300 ring-2 ring-emerald-500/20 dark:border-emerald-500/40'
                           : 'border-slate-200 dark:border-slate-700'
@@ -2587,7 +2587,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
             onClick={attemptCloseFormulaConstantEditor}
             className="drawer-backdrop-enter absolute inset-0 bg-slate-950/35 backdrop-blur-sm transition-opacity duration-200"
           />
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-[42rem]">
+          <div className="absolute inset-y-0 right-0 flex w-full max-w-2xl">
             <div ref={formulaConstantPanelRef} className="drawer-panel-enter ml-auto flex h-full w-full flex-col border-l border-slate-200 bg-white/98 shadow-2xl shadow-slate-950/25 backdrop-blur-sm transition-all duration-200 dark:border-slate-800 dark:bg-slate-950/98">
               <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
                 <div className="flex items-start justify-between gap-4">
@@ -2753,7 +2753,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
             onClick={attemptCloseAreaFieldEditor}
             className="drawer-backdrop-enter absolute inset-0 bg-slate-950/35 backdrop-blur-sm transition-opacity duration-200"
           />
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-[34rem]">
+          <div className="absolute inset-y-0 right-0 flex w-full max-w-136">
             <div ref={areaFieldPanelRef} className="drawer-panel-enter ml-auto flex h-full w-full flex-col border-l border-slate-200 bg-white/98 shadow-2xl shadow-slate-950/25 backdrop-blur-sm transition-all duration-200 dark:border-slate-800 dark:bg-slate-950/98">
               <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
                 <div className="flex items-start justify-between gap-4">
@@ -2901,7 +2901,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
             onClick={attemptCloseAreaFormulaValueEditor}
             className="drawer-backdrop-enter absolute inset-0 bg-slate-950/35 backdrop-blur-sm transition-opacity duration-200"
           />
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-[42rem]">
+          <div className="absolute inset-y-0 right-0 flex w-full max-w-2xl">
             <div ref={areaFormulaValuePanelRef} className="drawer-panel-enter ml-auto flex h-full w-full flex-col border-l border-slate-200 bg-white/98 shadow-2xl shadow-slate-950/25 backdrop-blur-sm transition-all duration-200 dark:border-slate-800 dark:bg-slate-950/98">
               <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
                 <div className="flex items-start justify-between gap-4">
@@ -3056,7 +3056,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
             onClick={attemptCloseGlobalFieldEditor}
             className="drawer-backdrop-enter absolute inset-0 bg-slate-950/35 backdrop-blur-sm transition-opacity duration-200"
           />
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-[34rem]">
+          <div className="absolute inset-y-0 right-0 flex w-full max-w-136">
             <div ref={globalFieldPanelRef} className="drawer-panel-enter ml-auto flex h-full w-full flex-col border-l border-slate-200 bg-white/98 shadow-2xl shadow-slate-950/25 backdrop-blur-sm transition-all duration-200 dark:border-slate-800 dark:bg-slate-950/98">
               <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
                 <div className="flex items-start justify-between gap-4">
@@ -3347,7 +3347,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
               </div>
             </div>
           </div>
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-[42rem]">
+          <div className="absolute inset-y-0 right-0 flex w-full max-w-2xl">
             <div className="ml-auto flex h-full w-full flex-col border-l border-slate-200 bg-white shadow-2xl shadow-slate-950/25 dark:border-slate-800 dark:bg-slate-950">
               <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
                 <div className="flex items-start justify-between gap-4">
@@ -3425,7 +3425,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                         value={formulaEditorSearch}
                         onChange={(event) => setFormulaEditorSearch(event.target.value)}
                         placeholder="Search token"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-300 dark:border-slate-700 dark:bg-slate-950 dark:text-white sm:max-w-[14rem]"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-300 dark:border-slate-700 dark:bg-slate-950 dark:text-white sm:max-w-56"
                       />
                     </div>
                   </div>

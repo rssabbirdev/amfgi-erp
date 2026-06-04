@@ -1,59 +1,59 @@
 # Lib Utils
 
-> 37 nodes · cohesion 0.16
+> 22 nodes · cohesion 0.15
 
 ## Key Concepts
 
-- **googleDrive.ts** (27 connections) — `lib/utils/googleDrive.ts`
-- **googleDrive.ts** (24 connections) — `lib/utils/googleDrive.ts`
-- **companyPrintTemplates.ts** (12 connections) — `lib/utils/companyPrintTemplates.ts`
-- **sanitizeFolderName()** (12 connections) — `lib/utils/googleDrive.ts`
-- **ensureFolderPath()** (11 connections) — `lib/utils/googleDrive.ts`
-- **deleteFromDrive()** (10 connections) — `lib/utils/googleDrive.ts`
-- **moveDriveFile()** (10 connections) — `lib/utils/googleDrive.ts`
-- **companyPrintTemplates.ts** (10 connections) — `lib/utils/companyPrintTemplates.ts`
-- **normalizeCompanyPrintTemplateShape()** (9 connections) — `lib/utils/companyPrintTemplates.ts`
-- **explainGoogleDriveError()** (9 connections) — `lib/utils/googleDrive.ts`
-- **createOAuthClient()** (7 connections) — `lib/utils/googleDrive.ts`
-- **getDriveClientForCompany()** (7 connections) — `lib/utils/googleDrive.ts`
-- **readCompanyDocumentTemplates()** (6 connections) — `lib/utils/companyPrintTemplates.ts`
-- **uploadToDrive()** (6 connections) — `lib/utils/googleDrive.ts`
-- **validateDriveFolderAccess()** (6 connections) — `lib/utils/googleDrive.ts`
-- **toObjectRoot()** (5 connections) — `lib/utils/companyPrintTemplates.ts`
-- **readCompanyGoogleDriveOAuthConfig()** (5 connections) — `lib/utils/companyPrintTemplates.ts`
-- **writeCompanyGoogleDriveOAuthConfig()** (5 connections) — `lib/utils/companyPrintTemplates.ts`
-- **readCompanyGoogleDriveFolderRegistry()** (5 connections) — `lib/utils/companyPrintTemplates.ts`
-- **ensureChildFolder()** (5 connections) — `lib/utils/googleDrive.ts`
-- **renameFolderIfNeeded()** (5 connections) — `lib/utils/googleDrive.ts`
-- **writeCompanyGoogleDriveFolderRegistry()** (4 connections) — `lib/utils/companyPrintTemplates.ts`
-- **loadGlobalDriveOAuthRefreshToken()** (4 connections) — `lib/utils/googleDrive.ts`
-- **isFolderAccessible()** (4 connections) — `lib/utils/googleDrive.ts`
-- **buildEmployeeDriveFolderName()** (4 connections) — `lib/utils/googleDrive.ts`
-- *... and 12 more nodes in this community*
+- **route.ts** (24 connections) — `app/api/stock-exception-approvals/[id]/route.ts`
+- **manualStockAdjustmentRequest.ts** (17 connections) — `lib/utils/manualStockAdjustmentRequest.ts`
+- **route.ts** (16 connections) — `app/api/transactions/manual-adjustment/route.ts`
+- **manual-stock-adjustment-approval.test.ts** (13 connections) — `__tests__/integration/manual-stock-adjustment-approval.test.ts`
+- **manualStockAdjustmentPolicy.ts** (10 connections) — `lib/utils/manualStockAdjustmentPolicy.ts`
+- **createManualStockAdjustmentRequest()** (9 connections) — `lib/utils/manualStockAdjustmentRequest.ts`
+- **POST()** (7 connections) — `app/api/transactions/manual-adjustment/route.ts`
+- **stockExceptionApproval.ts** (7 connections) — `lib/utils/stockExceptionApproval.ts`
+- **upsertStockExceptionApproval()** (6 connections) — `lib/utils/stockExceptionApproval.ts`
+- **ManualStockAdjustmentLinePayload** (5 connections) — `lib/utils/manualStockAdjustmentExecution.ts`
+- **validateManualStockAdjustmentRequest()** (5 connections) — `lib/utils/manualStockAdjustmentPolicy.ts`
+- **summarizeManualStockAdjustmentPolicy()** (2 connections) — `lib/utils/manualStockAdjustmentPolicy.ts`
+- **buildReferenceNumber()** (2 connections) — `lib/utils/manualStockAdjustmentRequest.ts`
+- **ManualStockAdjustmentLineSchema** (1 connections) — `app/api/transactions/manual-adjustment/route.ts`
+- **ManualStockAdjustmentSchema** (1 connections) — `app/api/transactions/manual-adjustment/route.ts`
+- **EvidenceType** (1 connections) — `lib/utils/manualStockAdjustmentPolicy.ts`
+- **Tx** (1 connections) — `lib/utils/manualStockAdjustmentRequest.ts`
+- **ManualStockAdjustmentRequestSource** (1 connections) — `lib/utils/manualStockAdjustmentRequest.ts`
+- **Tx** (1 connections) — `lib/utils/stockExceptionApproval.ts`
+- **StockExceptionApprovalInput** (1 connections) — `lib/utils/stockExceptionApproval.ts`
+- **decreaseTxn** (1 connections) — `__tests__/integration/manual-stock-adjustment-approval.test.ts`
+- **increaseTxn** (1 connections) — `__tests__/integration/manual-stock-adjustment-approval.test.ts`
 
 ## Relationships
 
-- [[API Reports, Materials, and HR]] (9 shared connections)
-- [[API HR, Materials, and Upload]] (9 shared connections)
-- [[Lib Utils and Media]] (7 shared connections)
-- [[HR Schedule and Settings]] (4 shared connections)
-- [[API HR, Jobs, and Materials]] (4 shared connections)
-- [[API Media, Companies, and Materials]] (4 shared connections)
-- [[Settings API]] (3 shared connections)
-- [[Lib Utils, HR, and Material Master Data]] (3 shared connections)
-- [[Lib, API, and Auth]] (1 shared connections)
-- [[Lib, Scripts, and Settings]] (1 shared connections)
-- [[Lib, Utils, and Global Settings]] (1 shared connections)
+- [[API Materials, Transactions, and Stock Exception Approvals]] (13 shared connections)
+- [[Tests Integration]] (12 shared connections)
+- [[Lib Utils, Stock, and Warehouses]] (8 shared connections)
+- [[Stock, Lib, and Components]] (8 shared connections)
+- [[API and Lib]] (7 shared connections)
+- [[Lib, API, and Tests]] (7 shared connections)
+- [[API HR and Stock Exception Approvals]] (3 shared connections)
+- [[API Me, Settings, and Jobs]] (2 shared connections)
+- [[Lib Stock and Utils]] (2 shared connections)
+- [[Lib and API]] (2 shared connections)
 
 ## Source Files
 
-- `lib/utils/companyPrintTemplates.ts`
-- `lib/utils/googleDrive.ts`
+- `__tests__/integration/manual-stock-adjustment-approval.test.ts`
+- `app/api/stock-exception-approvals/[id]/route.ts`
+- `app/api/transactions/manual-adjustment/route.ts`
+- `lib/utils/manualStockAdjustmentExecution.ts`
+- `lib/utils/manualStockAdjustmentPolicy.ts`
+- `lib/utils/manualStockAdjustmentRequest.ts`
+- `lib/utils/stockExceptionApproval.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 215 (85%)
-- INFERRED: 39 (15%)
+- EXTRACTED: 132 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

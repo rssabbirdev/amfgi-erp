@@ -1,17 +1,18 @@
 # Components, Jobs, and Consumption Costing Modal
 
-> 4 nodes · cohesion 0.67
+> 4 nodes · cohesion 0.50
 
 ## Key Concepts
 
-- **ConsumptionCostingModal.tsx** (2 connections) — `components/jobs/ConsumptionCostingModal.tsx`
-- **fetchData()** (2 connections) — `components/jobs/ConsumptionCostingModal.tsx`
-- **toggleVariation()** (2 connections) — `components/jobs/ConsumptionCostingModal.tsx`
-- **ConsumptionCostingModal.tsx** (2 connections) — `components/jobs/ConsumptionCostingModal.tsx`
+- **ConsumptionCostingModal.tsx** (6 connections) — `components/jobs/ConsumptionCostingModal.tsx`
+- **ConsumptionData** (1 connections) — `components/jobs/ConsumptionCostingModal.tsx`
+- **ConsumptionCostingModalProps** (1 connections) — `components/jobs/ConsumptionCostingModal.tsx`
+- **ConsumptionCostingModal()** (1 connections) — `components/jobs/ConsumptionCostingModal.tsx`
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [[Components, Customers, and Lib]] (2 shared connections)
+- [[Store, API, and Endpoints]] (1 shared connections)
 
 ## Source Files
 
@@ -19,7 +20,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 8 (100%)
+- EXTRACTED: 9 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
