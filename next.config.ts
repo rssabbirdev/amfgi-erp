@@ -1,7 +1,16 @@
 import type { NextConfig } from 'next';
 
+const skipNextTypecheck = process.env.SKIP_NEXT_TYPECHECK === '1';
+
 const nextConfig: NextConfig = {
 	output: 'standalone',
+	// VPS/Docker builds: run `npm run typecheck` locally or in CI instead.
+	typescript: {
+		ignoreBuildErrors: skipNextTypecheck,
+	},
+	eslint: {
+		ignoreDuringBuilds: skipNextTypecheck,
+	},
 	// Optimize for Vercel
 	productionBrowserSourceMaps: false,
 	// Keep Prisma on Node resolution so Turbopack does not bundle a stale generated client.
