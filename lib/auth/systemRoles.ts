@@ -49,6 +49,23 @@ export async function ensureAllSystemRoles(db: RoleDb): Promise<Record<string, R
   return bySlug;
 }
 
+/** Merge any permissions from ROLE_PRESETS that are missing on existing system roles. */
+export async function syncSystemRolePermissionsFromPresets(db: RoleDb): Promise<void> {
+  for (const def of SYSTEM_ROLE_DEFINITIONS) {
+    const role = await db.role.findFirst({ where: { slug: def.slug, isSystem: true } });
+    if (!role) continue;
+    const preset = ROLE_PRESETS[def.preset] as string[];
+    const current = Array.isArray(role.permissions) ? (role.permissions as string[]) : [];
+    const merged = [...new Set([...current, ...preset])];
+    if (merged.length > current.length) {
+      await db.role.update({
+        where: { id: role.id },
+        data: { permissions: merged },
+      });
+    }
+  }
+}
+
 /** Creates any system roles missing from the database (safe on every request). */
 export async function ensureMissingSystemRoles(db: RoleDb): Promise<void> {
   const existing = await db.role.findMany({
@@ -61,4 +78,5 @@ export async function ensureMissingSystemRoles(db: RoleDb): Promise<void> {
       await ensureSystemRole(db, def.slug);
     }
   }
+  await syncSystemRolePermissionsFromPresets(db);
 }

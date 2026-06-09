@@ -159,14 +159,14 @@ const config: NextAuthConfig = {
     async signIn({ user, account }) {
       if (account?.provider === 'google') {
         const prisma = await getPrisma();
+        const email = (user.email ?? '').trim().toLowerCase();
         const dbUser = await prisma.user.findUnique({
-          where: { email: user.email ?? '' },
+          where: { email },
           include: {
             companyAccess: {
               include: { company: true },
             },
           },
-          // linkedEmployeeId is on User root
         });
 
         if (!dbUser) return '/login?error=GoogleNotRegistered';
@@ -188,7 +188,19 @@ const config: NextAuthConfig = {
         const permissions       = await resolvePermissions(userId, companyId);
         const allowedCompanyIds = dbUser.companyAccess.map((a) => a.companyId);
 
+        const profileImg = dbUser.image?.trim()
+          ? convertGoogleDriveUrl(dbUser.image.trim())
+          : null;
+        const sigImg = dbUser.signatureUrl?.trim()
+          ? convertGoogleDriveUrl(dbUser.signatureUrl.trim())
+          : null;
+
+        // Match by email only — keep name/photo from our database, not Google profile.
         user.id                = userId;
+        user.name              = dbUser.name;
+        user.email             = dbUser.email;
+        user.image             = profileImg;
+        user.signatureUrl      = sigImg;
         user.isSuperAdmin      = dbUser.isSuperAdmin;
         user.activeCompanyId   = companyId;
         user.activeCompanySlug = activeCompanySlug;
@@ -211,7 +223,7 @@ const config: NextAuthConfig = {
         token.activeCompanyName   = user.activeCompanyName;
         token.permissions         = user.permissions;
         token.allowedCompanyIds   = user.allowedCompanyIds;
-        token.picture             = user.image ?? token.picture;
+        token.picture             = user.image ?? null;
         token.signatureUrl        = user.signatureUrl ?? null;
         token.linkedEmployeeId    = user.linkedEmployeeId ?? null;
       }
@@ -220,17 +232,19 @@ const config: NextAuthConfig = {
         const u = await prisma.user.findUnique({
           where: { id: token.sub as string },
           select: {
+            name: true,
             image: true,
             signatureUrl: true,
             linkedEmployeeId: true,
           },
         });
         if (u) {
+          token.name               = u.name ?? token.name;
           token.linkedEmployeeId   = u.linkedEmployeeId ?? null;
-          token.picture =
+          token.picture            =
             (u.image?.trim() ? convertGoogleDriveUrl(u.image.trim()) : null) ??
-            token.picture;
-          token.signatureUrl =
+            null;
+          token.signatureUrl       =
             (u.signatureUrl?.trim() ? convertGoogleDriveUrl(u.signatureUrl.trim()) : null) ??
             null;
         }

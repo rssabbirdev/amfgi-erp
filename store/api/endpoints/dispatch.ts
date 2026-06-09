@@ -64,8 +64,8 @@ export const dispatchApi = appApi.injectEndpoints({
       {
         filterType?: string;
         date?: string;
-        limit: number;
-        offset: number;
+        limit?: number;
+        offset?: number;
         noteType?: 'all' | 'dispatch' | 'delivery';
         jobSearch?: string;
         deliveryNoteSearch?: string;
@@ -75,8 +75,8 @@ export const dispatchApi = appApi.injectEndpoints({
         const params = new URLSearchParams();
         params.set('filterType', filterType);
         if (date) params.set('date', date);
-        params.set('limit', String(limit));
-        params.set('offset', String(offset));
+        if (limit != null) params.set('limit', String(limit));
+        if (offset != null) params.set('offset', String(offset));
         if (noteType && noteType !== 'all') params.set('noteType', noteType);
         if (jobSearch?.trim()) params.set('jobSearch', jobSearch.trim());
         if (deliveryNoteSearch?.trim()) params.set('deliveryNoteSearch', deliveryNoteSearch.trim());
@@ -84,6 +84,7 @@ export const dispatchApi = appApi.injectEndpoints({
       },
       transformResponse: (r: { data: { entries: DispatchEntry[]; total: number; dateRange?: unknown } }) => r.data,
       providesTags: [{ type: 'DispatchEntry' }],
+      keepUnusedDataFor: 600,
     }),
 
     deleteDeliveryNote: builder.mutation<{ deleted: boolean }, string>({

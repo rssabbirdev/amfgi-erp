@@ -109,6 +109,7 @@
 - [[Developer Guide]] — 15 nodes
 - [[Lib Utils]] — 15 nodes
 - [[Lib Utils]] — 14 nodes
+- [[Lib Job Costing]] — 14 nodes
 - [[Lib HR]] — 14 nodes
 - [[.agents, Skills, and Shadcn]] — 14 nodes
 - [[Lib and API]] — 14 nodes
@@ -128,9 +129,7 @@
 - [[Lib Auth, HR, and Permissions]] — 12 nodes
 - [[Lib Stock and Utils]] — 12 nodes
 - [[Lib Warehouses]] — 12 nodes
-- [[Lib, Job Costing, and Expression Evaluator]] — 11 nodes
 - [[Lib Utils]] — 11 nodes
-- [[Components Job Costing]] — 11 nodes
 - [[.agents, Skills, and Shadcn]] — 11 nodes
 - [[Components Ui, Company Switcher, and Sidebar Nav User]] — 10 nodes
 - [[Components, Ui, and Flexible Table]] — 10 nodes
@@ -147,6 +146,7 @@
 - [[Jobs, Id, and Cost Engine]] — 9 nodes
 - [[Tests, Integration, and Stock Count Sessions Report.test]] — 8 nodes
 - [[API, HR, and Attendance]] — 8 nodes
+- [[Components, Job Costing, and Formula Builder]] — 8 nodes
 - [[Components Ui]] — 8 nodes
 - [[Components HR]] — 8 nodes
 - [[Package]] — 8 nodes

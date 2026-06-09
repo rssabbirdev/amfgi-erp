@@ -73,6 +73,7 @@ const MaterialSchema = z.object({
   currentStock:        z.number().finite().min(0).optional(),
   assemblyOutputQuantity: z.number().finite().positive().optional(),
   assemblyOverheadPercent: z.number().finite().min(0).optional(),
+  assemblyUseDynamicCost: z.boolean().optional(),
   imageUrl: z.string().url().optional(),
   attachmentUrl: z.string().url().optional(),
   attachmentName: z.string().min(1).max(255).optional(),
@@ -200,6 +201,7 @@ export async function POST(req: Request) {
         currentStock: decimalToNumber(parsed.data.currentStock) ?? 0,
         assemblyOutputQuantity: decimalToNumber(parsed.data.assemblyOutputQuantity) ?? 1,
         assemblyOverheadPercent: decimalToNumber(parsed.data.assemblyOverheadPercent) ?? 0,
+        assemblyUseDynamicCost: parsed.data.assemblyUseDynamicCost ?? true,
         isActive: true,
       },
     });

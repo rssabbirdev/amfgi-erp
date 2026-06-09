@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { dubaiWallTimeToUtc, parseTimeCell } from '@/lib/hr/dubaiShift';
 import { parseWorkforceProfile } from '@/lib/hr/workforceProfile';
 import { readEmployeeTypeSettingsFromCompanyData } from '@/lib/hr/employeeTypeSettings';
+import { resolveBasicHoursForEmployee } from '@/lib/hr/attendanceBasicHours';
 
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -113,6 +114,7 @@ export async function regenerateAttendanceBoilerplate(
       workforce.employeeType === 'HYBRID_STAFF'
         ? 'PRESENT'
         : 'ABSENT';
+    const basicHours = resolveBasicHoursForEmployee(emp.profileExtension, typeSettings);
     createRows.push({
       companyId: sch.companyId,
       employeeId,
@@ -123,6 +125,7 @@ export async function regenerateAttendanceBoilerplate(
       breakStartAt: onLeave ? null : breakStartAt,
       breakEndAt: onLeave ? null : breakEndAt,
       status: onLeave ? 'LEAVE' : defaultStatus,
+      basicHours,
       workflowStatus: 'DRAFT',
       source: 'SCHEDULE_BOILERPLATE',
     });

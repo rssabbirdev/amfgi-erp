@@ -16,6 +16,7 @@ export const MaterialSchema = z.object({
   unitCost: z.number().min(0).optional(),
   assemblyOutputQuantity: z.number().positive().optional(),
   assemblyOverheadPercent: z.number().min(0).optional(),
+  assemblyUseDynamicCost: z.boolean().optional(),
 });
 
 export type MaterialInput = z.infer<typeof MaterialSchema>;

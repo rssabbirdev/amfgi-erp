@@ -28,7 +28,7 @@
 - **cloneDraftRows()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **applyAbsentToDraft()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **combineDateAndTimeToIso()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **formatHourValue()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
+- **employeeDisplayName()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - *... and 2 more nodes in this community*
 
 ## Relationships

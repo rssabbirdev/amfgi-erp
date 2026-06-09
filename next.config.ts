@@ -3,6 +3,8 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
 	// Optimize for Vercel
 	productionBrowserSourceMaps: false,
+	// Keep Prisma on Node resolution so Turbopack does not bundle a stale generated client.
+	serverExternalPackages: ['@prisma/client', '@prisma/adapter-pg', 'pg'],
 	// Use Turbopack configuration (Next.js 16 default)
 	turbopack: {},
 	// Google profile / Drive-hosted uploads (user avatar, signature, print assets)
@@ -26,7 +28,7 @@ const nextConfig: NextConfig = {
 			},
 		],
 	},
-	allowedDevOrigins: ['10.255.254.20'],
+	allowedDevOrigins: ['10.255.254.55'],
 	async headers() {
 		return [
 			{

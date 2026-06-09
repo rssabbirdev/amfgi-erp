@@ -70,12 +70,17 @@ export const P = {
   HR_ATTENDANCE_EDIT: 'hr.attendance.edit',
   HR_ATTENDANCE_APPROVE: 'hr.attendance.approve',
   HR_SETTINGS_DOC_TYPES: 'hr.settings.document_types',
+  HR_LEAVE_VIEW: 'hr.leave.view',
+  HR_LEAVE_APPROVE: 'hr.leave.approve',
+  HR_PAYROLL_SETTINGS: 'hr.payroll.settings',
+  HR_PAYROLL_COMPENSATION: 'hr.payroll.compensation',
 
   // Employee self-service (linked User.linkedEmployeeId)
   SELF_EMPLOYEE_VIEW: 'self.employee.view',
   SELF_EMPLOYEE_DOCUMENTS: 'self.employee.documents',
   SELF_EMPLOYEE_SCHEDULE: 'self.employee.schedule',
   SELF_EMPLOYEE_ATTENDANCE: 'self.employee.attendance',
+  SELF_LEAVE_REQUEST: 'self.leave.request',
 } as const;
 
 export type Permission = (typeof P)[keyof typeof P];
@@ -104,6 +109,8 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.HR_SCHEDULE_VIEW, P.HR_SCHEDULE_EDIT, P.HR_SCHEDULE_PUBLISH,
     P.HR_ATTENDANCE_VIEW, P.HR_ATTENDANCE_EDIT, P.HR_ATTENDANCE_APPROVE,
     P.HR_SETTINGS_DOC_TYPES,
+    P.HR_LEAVE_VIEW, P.HR_LEAVE_APPROVE,
+    P.HR_PAYROLL_SETTINGS, P.HR_PAYROLL_COMPENSATION,
     P.STOCK_JOB_BUDGET_VIEW,
     P.STOCK_JOB_BUDGET_EDIT,
     P.STOCK_FORMULA_VIEW,
@@ -128,6 +135,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.SELF_EMPLOYEE_DOCUMENTS,
     P.SELF_EMPLOYEE_SCHEDULE,
     P.SELF_EMPLOYEE_ATTENDANCE,
+    P.SELF_LEAVE_REQUEST,
   ],
 
   /** System HR role preset (also created as role slug `hr` on bootstrap). */
@@ -143,6 +151,10 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.HR_ATTENDANCE_EDIT,
     P.HR_ATTENDANCE_APPROVE,
     P.HR_SETTINGS_DOC_TYPES,
+    P.HR_LEAVE_VIEW,
+    P.HR_LEAVE_APPROVE,
+    P.HR_PAYROLL_SETTINGS,
+    P.HR_PAYROLL_COMPENSATION,
   ],
 };
 
@@ -296,12 +308,27 @@ export const PERMISSION_GROUPS: Array<{
     perms: [{ key: P.HR_SETTINGS_DOC_TYPES, label: 'Document types' }],
   },
   {
+    group: 'HR — Leave',
+    perms: [
+      { key: P.HR_LEAVE_VIEW, label: 'View leave requests' },
+      { key: P.HR_LEAVE_APPROVE, label: 'Approve / reject leave' },
+    ],
+  },
+  {
+    group: 'HR — Payroll setup',
+    perms: [
+      { key: P.HR_PAYROLL_SETTINGS, label: 'Manage salary structure' },
+      { key: P.HR_PAYROLL_COMPENSATION, label: 'Manage employee compensation' },
+    ],
+  },
+  {
     group: 'Employee self-service',
     perms: [
       { key: P.SELF_EMPLOYEE_VIEW, label: 'View own profile' },
       { key: P.SELF_EMPLOYEE_DOCUMENTS, label: 'View own documents' },
       { key: P.SELF_EMPLOYEE_SCHEDULE, label: 'View own schedule' },
       { key: P.SELF_EMPLOYEE_ATTENDANCE, label: 'View own attendance' },
+      { key: P.SELF_LEAVE_REQUEST, label: 'Submit leave requests' },
     ],
   },
 ];

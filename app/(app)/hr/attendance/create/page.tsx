@@ -8,6 +8,12 @@ import AttendanceEntryGrid, {
   type AttendanceGridDraftRow,
   type AttendanceGridEmployee,
 } from '@/components/hr/AttendanceEntryGrid';
+import {
+  defaultUnpaidLeaveTypeId,
+  isDraftNonWorking,
+  normalizeDraftStatusFromApi,
+  type LeaveTypeOption,
+} from '@/lib/hr/attendanceDraftStatus';
 import { Alert, AlertDescription } from '@/components/ui/shadcn/alert';
 import { Badge } from '@/components/ui/shadcn/badge';
 import { Button, buttonVariants } from '@/components/ui/shadcn/button';
@@ -176,10 +182,16 @@ const TOOLBAR_TAG_CLASS =
 const DAY_SHEET_FIELD_CLASS =
   'h-7 min-h-7 rounded-md border border-border bg-background px-2 py-0 text-xs leading-7 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring';
 
-function applyAbsentToDraft(draft: AttendanceDraftRow): AttendanceDraftRow {
+function applyAbsentToDraft(
+  draft: AttendanceDraftRow,
+  leaveTypes: LeaveTypeOption[]
+): AttendanceDraftRow {
   return {
     ...draft,
     status: 'ABSENT',
+    leaveTypeId: defaultUnpaidLeaveTypeId(leaveTypes),
+    leaveRequestId: null,
+    attendanceSource: null,
     checkInAt: '',
     checkOutAt: '',
     breakInAt: '',
@@ -226,7 +238,7 @@ function diffMinutes(start: string, end: string): number {
 }
 
 function calculateWorkedMinutes(draft: AttendanceDraftRow): number {
-  if (draft.status === 'ABSENT' || draft.status === 'LEAVE') return 0;
+  if (isDraftNonWorking(draft)) return 0;
   const dutyMinutes = diffMinutes(draft.checkInAt, draft.checkOutAt);
   const breakMinutes = diffMinutes(draft.breakInAt, draft.breakOutAt);
   return Math.max(0, dutyMinutes - breakMinutes);
@@ -250,22 +262,27 @@ function employeeTypeSortValue(employee: EmployeeRow | undefined): number {
 function buildDraftFromDefaults(
   employee: EmployeeRow,
   assigned: AssignmentRow | undefined,
-  absentEmployeeIds: Set<string>
+  absentEmployeeIds: Set<string>,
+  leaveTypes: LeaveTypeOption[]
 ): AttendanceDraftRow {
   const employeeType = employee.employeeType ?? 'LABOUR_WORKER';
   const defaultTiming = employee.defaultTiming ?? null;
   const scheduledBreak = parseBreakWindow(assigned?.breakWindow);
+  const basicHours = employee.basicHoursPerDay ?? 8;
 
   if (assigned && absentEmployeeIds.has(employee.id)) {
     return {
       employeeId: employee.id,
       workAssignmentId: assigned?.id ?? '',
       jobNumber: assigned?.jobNumberSnapshot ?? '',
-      status: 'LEAVE',
+      status: 'ABSENT',
+      leaveTypeId: defaultUnpaidLeaveTypeId(leaveTypes),
+      basicHours,
       checkInAt: '',
       checkOutAt: '',
       breakInAt: '',
       breakOutAt: '',
+      remarks: '',
       source: assigned ? 'schedule' : 'manual',
     };
   }
@@ -276,10 +293,12 @@ function buildDraftFromDefaults(
       workAssignmentId: assigned?.id ?? '',
       jobNumber: employeeType === 'DRIVER' ? assigned?.jobNumberSnapshot ?? '' : '',
       status: 'PRESENT',
+      basicHours,
       checkInAt: defaultTiming?.dutyStart || '',
       checkOutAt: defaultTiming?.dutyEnd || '',
       breakInAt: defaultTiming?.breakStart || '',
       breakOutAt: defaultTiming?.breakEnd || '',
+      remarks: '',
       source: assigned ? 'schedule' : 'manual',
     };
   }
@@ -290,10 +309,12 @@ function buildDraftFromDefaults(
       workAssignmentId: assigned?.id ?? '',
       jobNumber: assigned?.jobNumberSnapshot ?? '',
       status: 'PRESENT',
+      basicHours,
       checkInAt: assigned?.shiftStart || defaultTiming?.dutyStart || '',
       checkOutAt: assigned?.shiftEnd || defaultTiming?.dutyEnd || '',
       breakInAt: assigned ? scheduledBreak.breakInAt : defaultTiming?.breakStart || '',
       breakOutAt: assigned ? scheduledBreak.breakOutAt : defaultTiming?.breakEnd || '',
+      remarks: '',
       source: assigned ? 'schedule' : 'manual',
     };
   }
@@ -303,29 +324,44 @@ function buildDraftFromDefaults(
     workAssignmentId: assigned?.id ?? '',
     jobNumber: assigned?.jobNumberSnapshot ?? '',
     status: assigned ? 'PRESENT' : 'ABSENT',
+    leaveTypeId: assigned ? undefined : defaultUnpaidLeaveTypeId(leaveTypes),
+    basicHours,
     checkInAt: assigned?.shiftStart || '',
     checkOutAt: assigned?.shiftEnd || '',
     breakInAt: scheduledBreak.breakInAt,
     breakOutAt: scheduledBreak.breakOutAt,
+    remarks: '',
     source: assigned ? 'schedule' : 'manual',
   };
 }
 
 function buildDraftFromExistingRow(
   employee: EmployeeRow,
-  row: Record<string, unknown>
+  row: Record<string, unknown>,
+  leaveTypes: LeaveTypeOption[]
 ): AttendanceDraftRow {
   const existingAssignment = (row.workAssignment as Record<string, unknown> | null) ?? null;
   const scheduledBreak = parseBreakWindow((existingAssignment?.breakWindow as string | null | undefined) ?? undefined);
   const defaultTiming = employee.defaultTiming ?? null;
-  const status = ((row.status as AttendanceDraftRow['status']) ?? 'PRESENT') as AttendanceDraftRow['status'];
-  const shouldClearTiming = status === 'ABSENT' || status === 'LEAVE';
+  const storedStatus = (row.status as AttendanceDraftRow['status'] | 'LEAVE' | 'HALF_DAY' | 'MISSING_PUNCH') ?? 'PRESENT';
+  const normalized = normalizeDraftStatusFromApi(
+    storedStatus,
+    (row.leaveTypeId as string | null | undefined) ?? null,
+    (row.leaveType as 'ANNUAL' | 'SICK' | 'EMERGENCY' | 'ONE_DAY' | null | undefined) ?? null,
+    leaveTypes
+  );
+  const shouldClearTiming = isDraftNonWorking(normalized);
+
+  const snapBasic = Number(row.basicHours);
+  const basicHours = Number.isFinite(snapBasic) && snapBasic > 0 ? snapBasic : employee.basicHoursPerDay ?? 8;
 
   return {
     employeeId: employee.id,
     workAssignmentId: String((existingAssignment?.id as string | undefined) ?? ''),
     jobNumber: String((existingAssignment?.jobNumberSnapshot as string | undefined) ?? ''),
-    status,
+    status: normalized.status,
+    leaveTypeId: normalized.leaveTypeId,
+    basicHours,
     checkInAt: shouldClearTiming
       ? ''
       : toLocalTimeInput((row.checkInAt as string | null) ?? null) ||
@@ -348,7 +384,10 @@ function buildDraftFromExistingRow(
         scheduledBreak.breakOutAt ||
         defaultTiming?.breakEnd ||
         '',
+    remarks: String((row.remarks as string | null | undefined) ?? ''),
     source: 'existing',
+    leaveRequestId: (row.leaveRequestId as string | null | undefined) ?? null,
+    attendanceSource: (row.source as string | null | undefined) ?? null,
   };
 }
 
@@ -361,6 +400,7 @@ export default function AttendanceCreatePage() {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [schedule, setSchedule] = useState<SchedulePayload | null>(null);
   const [drafts, setDrafts] = useState<AttendanceDraftRow[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -376,6 +416,7 @@ export default function AttendanceCreatePage() {
   const perms = (session?.user?.permissions ?? []) as string[];
   const canView = isSA || perms.includes('hr.attendance.view');
   const canEdit = isSA || perms.includes('hr.attendance.edit');
+  const canApprove = isSA || perms.includes('hr.attendance.approve');
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -406,12 +447,28 @@ export default function AttendanceCreatePage() {
         setBulkAbsentSnapshot(null);
       }
 
-      const [scheduleRes, attendanceRes] = await Promise.all([
+      const [scheduleRes, attendanceRes, leaveTypesRes] = await Promise.all([
         fetch(`/api/hr/schedule?workDate=${encodeURIComponent(workDate)}`, { cache: 'no-store' }),
         fetch(`/api/hr/attendance?workDate=${encodeURIComponent(workDate)}`, { cache: 'no-store' }),
+        fetch('/api/hr/leave-types', { cache: 'no-store' }),
       ]);
-      const [scheduleJson, attendanceJson] = await Promise.all([scheduleRes.json(), attendanceRes.json()]);
+      const [scheduleJson, attendanceJson, leaveTypesJson] = await Promise.all([
+        scheduleRes.json(),
+        attendanceRes.json(),
+        leaveTypesRes.json(),
+      ]);
       if (cancelled) return;
+
+      const loadedLeaveTypes: LeaveTypeOption[] =
+        leaveTypesRes.ok && leaveTypesJson?.success && Array.isArray(leaveTypesJson.data)
+          ? (leaveTypesJson.data as LeaveTypeOption[]).map((t) => ({
+              id: t.id,
+              code: t.code,
+              name: t.name,
+              isActive: t.isActive,
+            }))
+          : [];
+      setLeaveTypes(loadedLeaveTypes);
 
       const scheduleData: SchedulePayload | null = scheduleRes.ok && scheduleJson?.success ? scheduleJson.data : null;
       const asgs: AssignmentRow[] = Array.isArray(scheduleData?.assignments)
@@ -493,10 +550,14 @@ export default function AttendanceCreatePage() {
 
       const nextDrafts = hasExistingAttendance
         ? [...existingByEmp.entries()].map(([employeeId, row]) =>
-            buildDraftFromExistingRow(nextEmployees.get(employeeId) ?? existingEmployees.get(employeeId)!, row)
+            buildDraftFromExistingRow(
+              nextEmployees.get(employeeId) ?? existingEmployees.get(employeeId)!,
+              row,
+              loadedLeaveTypes
+            )
           )
         : activeEmployees.map((employee) =>
-            buildDraftFromDefaults(employee, assignedByEmp.get(employee.id)?.[0], absentEmployeeIds)
+            buildDraftFromDefaults(employee, assignedByEmp.get(employee.id)?.[0], absentEmployeeIds, loadedLeaveTypes)
           );
 
       setEmployees([...nextEmployees.values()]);
@@ -564,12 +625,13 @@ export default function AttendanceCreatePage() {
     return drafts.reduce(
       (acc, row) => {
         const employee = employeeById.get(row.employeeId);
-        const basicMinutes = Math.round((employee?.basicHoursPerDay ?? 0) * 60);
+        const basicHours = row.basicHours ?? employee?.basicHoursPerDay ?? 0;
+        const basicMinutes = Math.round(basicHours * 60);
         const workedMinutes = calculateWorkedMinutes(row);
         acc.total += 1;
         if (row.workAssignmentId) acc.assigned += 1;
         if (row.source === 'existing') acc.existing += 1;
-        if (row.status !== 'PRESENT') acc.exceptions += 1;
+        if (isDraftNonWorking(row)) acc.exceptions += 1;
         acc.workedMinutes += workedMinutes;
         acc.overtimeMinutes += Math.max(0, workedMinutes - basicMinutes);
         return acc;
@@ -602,7 +664,7 @@ export default function AttendanceCreatePage() {
             .includes(deferredSearch);
         if (!matchesSearch) return false;
         if (scopeFilter === 'assigned') return Boolean(draft.workAssignmentId);
-        if (scopeFilter === 'exceptions') return draft.status !== 'PRESENT' || !draft.workAssignmentId;
+        if (scopeFilter === 'exceptions') return isDraftNonWorking(draft) || !draft.workAssignmentId;
         return true;
       })
       .sort((a, b) => {
@@ -626,7 +688,7 @@ export default function AttendanceCreatePage() {
                 ...patch,
                 source: draft.source === 'existing' ? 'existing' : 'manual',
               };
-              if (next.status === 'ABSENT' || next.status === 'LEAVE') {
+              if (isDraftNonWorking(next)) {
                 return {
                   ...next,
                   checkInAt: '',
@@ -651,6 +713,7 @@ export default function AttendanceCreatePage() {
         workAssignmentId: '',
         jobNumber: '',
         status: 'ABSENT',
+        leaveTypeId: defaultUnpaidLeaveTypeId(leaveTypes),
         checkInAt: '',
         checkOutAt: '',
         breakInAt: '',
@@ -659,7 +722,7 @@ export default function AttendanceCreatePage() {
       });
       return;
     }
-    const next = buildDraftFromDefaults(employee, assignment, new Set<string>());
+    const next = buildDraftFromDefaults(employee, assignment, new Set<string>(), leaveTypes);
     updateDraft(employeeId, next);
   };
 
@@ -667,7 +730,7 @@ export default function AttendanceCreatePage() {
     if (!insertEmployeeId) return;
     const employee = employeeById.get(insertEmployeeId);
     if (!employee || drafts.some((draft) => draft.employeeId === insertEmployeeId)) return;
-    setDrafts((prev) => [...prev, buildDraftFromDefaults(employee, undefined, new Set<string>())]);
+    setDrafts((prev) => [...prev, buildDraftFromDefaults(employee, undefined, new Set<string>(), leaveTypes)]);
     setInsertEmployeeId('');
   };
 
@@ -684,21 +747,45 @@ export default function AttendanceCreatePage() {
       setBulkAbsentSnapshot(null);
     } else if (bulkAbsentConfirm === 'mark') {
       setBulkAbsentSnapshot(cloneDraftRows(drafts));
-      setDrafts((prev) => prev.map(applyAbsentToDraft));
+      setDrafts((prev) => prev.map((d) => applyAbsentToDraft(d, leaveTypes)));
     }
 
     setBulkAbsentConfirm(null);
   };
 
-  const saveAll = async () => {
+  const runWorkflow = async (action: 'submit' | 'approve') => {
+    const res = await fetch('/api/hr/attendance/workflow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workDate, action }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      toast.error(json?.error ?? 'Workflow action failed');
+      return;
+    }
+    toast.success(`${action === 'approve' ? 'Approved' : 'Submitted'} ${json.data?.updated ?? 0} rows`);
+    router.push(`/hr/attendance?workDate=${encodeURIComponent(workDate)}`);
+  };
+
+  const saveAll = async (options?: { refreshBasicHoursFromTypeSettings?: boolean }) => {
     if (!canEdit) return;
     setSaving(true);
     const payload = {
       workDate,
+      refreshBasicHoursFromTypeSettings: options?.refreshBasicHoursFromTypeSettings ?? false,
       rows: drafts.map((draft) => ({
         employeeId: draft.employeeId,
         workAssignmentId: draft.workAssignmentId || null,
-        status: draft.status,
+        status:
+          draft.status === 'LEAVE' ? 'LEAVE' : draft.status === 'ABSENT' ? 'ABSENT' : 'PRESENT',
+        leaveTypeId:
+          draft.status === 'ABSENT'
+            ? defaultUnpaidLeaveTypeId(leaveTypes)
+            : draft.status === 'LEAVE'
+              ? draft.leaveTypeId ?? null
+              : null,
+        remarks: draft.remarks?.trim() || null,
         checkInAt: combineDateAndTimeToIso(workDate, draft.checkInAt),
         checkOutAt: combineDateAndTimeToIso(workDate, draft.checkOutAt),
         breakInAt: combineDateAndTimeToIso(workDate, draft.breakInAt),
@@ -717,6 +804,10 @@ export default function AttendanceCreatePage() {
       return;
     }
     toast.success(`Saved ${json.data?.affectedRows ?? 0} attendance rows`);
+    if (options?.refreshBasicHoursFromTypeSettings) {
+      window.location.reload();
+      return;
+    }
     router.push(`/hr/attendance?workDate=${encodeURIComponent(workDate)}`);
   };
 
@@ -753,7 +844,8 @@ export default function AttendanceCreatePage() {
             Attendance day sheet · {formatWorkDateLabel(workDate)}
           </h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Preloads from the schedule when available. Edit duty times, job assignments, and status in one worksheet.
+            Preloads from the schedule when available. Mark absent as unpaid leave; annual, sick, and other paid
+            leave is applied via leave management when approved.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -809,6 +901,28 @@ export default function AttendanceCreatePage() {
               {saving ? 'Saving…' : 'Save attendance'}
             </Button>
           ) : null}
+          {canEdit ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={saving}
+              title="Re-apply current Employee Type Timings basic hours to all rows (e.g. after Ramadan change)"
+              onClick={() => void saveAll({ refreshBasicHoursFromTypeSettings: true })}
+            >
+              Refresh basic hrs
+            </Button>
+          ) : null}
+          {canEdit ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => void runWorkflow('submit')}>
+              Submit day
+            </Button>
+          ) : null}
+          {canApprove ? (
+            <Button type="button" variant="secondary" size="sm" onClick={() => void runWorkflow('approve')}>
+              Approve day
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -830,6 +944,7 @@ export default function AttendanceCreatePage() {
           employeesById={employeeById}
           assignmentsById={assignmentsById}
           assignmentOptions={assignmentOptions}
+          leaveTypes={leaveTypes}
           canEdit={canEdit}
           emptyMessage="No employees match the current filters."
           onUpdateRow={updateDraft}

@@ -30,8 +30,22 @@ function resolvePoolMax(): number {
     const parsed = Number(fromEnv);
     if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
   }
-  // Dev + HMR: keep a small pool so parallel route handlers do not exhaust hosted DB slots.
-  return process.env.NODE_ENV === 'development' ? 5 : 10;
+  // Hosted Postgres (e.g. Aiven) has low max_connections. Each Node process (dev
+  // server, Vercel lambda, script) gets its own pool — keep defaults tiny.
+  if (process.env.VERCEL) return 1;
+  return process.env.NODE_ENV === 'development' ? 2 : 1;
+}
+
+const POOL_IDLE_TIMEOUT_MS = 10_000;
+const POOL_CONNECT_TIMEOUT_MS = 10_000;
+
+function withPoolTimeouts(config: PoolConfig): PoolConfig {
+  return {
+    ...config,
+    idleTimeoutMillis: POOL_IDLE_TIMEOUT_MS,
+    connectionTimeoutMillis: POOL_CONNECT_TIMEOUT_MS,
+    allowExitOnIdle: true,
+  };
 }
 
 /**
@@ -59,7 +73,7 @@ export function resolvePostgresPoolConfig(connectionString: string): PoolConfig 
     rejectUnauthorizedEnv === 'false';
 
   if (!wantsTls || (isLocalHost && !sslModeRequiresTls(sslmode) && !caEnv)) {
-    return { connectionString: normalized, max };
+    return withPoolTimeouts({ connectionString: normalized, max });
   }
 
   const config = poolConfigFromUrl(normalized);
@@ -68,9 +82,9 @@ export function resolvePostgresPoolConfig(connectionString: string): PoolConfig 
   if (caEnv) {
     const ca = caEnv.includes('-----BEGIN') ? caEnv : readFileSync(caEnv, 'utf8');
     config.ssl = { ca, rejectUnauthorized: rejectUnauthorizedEnv !== 'false' };
-    return config;
+    return withPoolTimeouts(config);
   }
 
   config.ssl = { rejectUnauthorized: rejectUnauthorizedEnv === 'true' };
-  return config;
+  return withPoolTimeouts(config);
 }

@@ -27,6 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/shadcn/table';
+import ScheduleAbsencesPanel from '@/components/hr/ScheduleAbsencesPanel';
 import ScheduleSearchSelect from '@/components/hr/ScheduleSearchSelect';
 import {
   parseScheduleTeamDropId,
@@ -3007,6 +3008,23 @@ export default function HrScheduleDayPage() {
             </Card>
           ) : null}
         </div>
+
+        <ScheduleAbsencesPanel
+          scheduleId={schedule?.id ? String(schedule.id) : null}
+          workDate={workDate}
+          initialAbsences={
+            ((schedule?.absences as Array<{ employeeId: string; reason?: string | null }>) ?? []).map((a) => ({
+              employeeId: a.employeeId,
+              reason: a.reason,
+            }))
+          }
+          employees={employeeProfiles.map((e) => ({
+            id: e.id,
+            fullName: e.preferredName || e.fullName,
+            employeeCode: e.employeeCode,
+          }))}
+          disabled={dis}
+        />
 
         <section className="w-full overflow-hidden rounded-lg border border-border bg-card shadow-sm">
           <div className="border-b border-border px-5 py-4">

@@ -21,6 +21,7 @@ export default function EmployeePortalLayout({ children }: { children: React.Rea
   const tabs = [
     { href: '/me/profile', label: 'Profile' },
     { href: '/me/attendance', label: 'Attendance' },
+    { href: '/me/leave', label: 'Leave' },
   ];
 
   return (

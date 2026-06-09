@@ -112,6 +112,25 @@ export async function GET(req: Request) {
     : [];
   const creatorsById = new Map(creators.map((u) => [u.id, u]));
 
+  const stockOutIds = transactions.map((txn) => txn.id);
+  const returnQuantityByParentId = new Map<string, number>();
+  if (stockOutIds.length > 0) {
+    const returnTxns = await prisma.transaction.findMany({
+      where: {
+        companyId,
+        type: 'RETURN',
+        parentTransactionId: { in: stockOutIds },
+      },
+      select: { parentTransactionId: true, quantity: true },
+    });
+    for (const returnTxn of returnTxns) {
+      const parentId = returnTxn.parentTransactionId;
+      if (!parentId) continue;
+      const qty = decimalToNumberOrZero(returnTxn.quantity);
+      returnQuantityByParentId.set(parentId, (returnQuantityByParentId.get(parentId) ?? 0) + qty);
+    }
+  }
+
   const groupedMap = new Map<string, typeof transactions>();
   for (const txn of transactions) {
     const dateOnly = txn.date.toISOString().split('T')[0];
@@ -127,8 +146,7 @@ export async function GET(req: Request) {
     groupedMap.get(key)!.push(txn);
   }
 
-  const enrichedEntries = await Promise.all(
-    Array.from(groupedMap.entries()).map(async ([, groupedTxns]) => {
+  const enrichedEntries = Array.from(groupedMap.values()).map((groupedTxns) => {
       const materialsMap = new Map<
         string,
         {
@@ -146,15 +164,7 @@ export async function GET(req: Request) {
       let totalValuation = 0;
 
       for (const txn of groupedTxns) {
-        const returnTxns = await prisma.transaction.findMany({
-          where: {
-            companyId,
-            type: 'RETURN',
-            parentTransactionId: txn.id ?? undefined,
-          },
-        });
-
-        const returnQuantity = returnTxns.reduce((sum, rt) => sum + decimalToNumberOrZero(rt.quantity), 0);
+        const returnQuantity = returnQuantityByParentId.get(txn.id) ?? 0;
         const netQuantity = decimalToNumberOrZero(txn.quantity) - returnQuantity;
         totalNetQuantity += netQuantity;
 
@@ -237,8 +247,7 @@ export async function GET(req: Request) {
           (firstTxn.performedByUserId ? creatorsById.get(firstTxn.performedByUserId)?.signatureUrl : undefined) ??
           undefined,
       };
-    })
-  );
+  });
 
   const seenDeliveryNoteIds = new Set(
     enrichedEntries.map((e) => e.deliveryNoteId).filter((id): id is string => Boolean(id))
@@ -345,6 +354,7 @@ export async function GET(req: Request) {
 
   return successResponse({
     entries: filteredEntries,
+    total: filteredEntries.length,
     dateRange,
   });
 }

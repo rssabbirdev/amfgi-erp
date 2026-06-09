@@ -16,16 +16,19 @@ export async function restoreTransactionBatchQuantities(
   tx: Tx,
   links: readonly TransactionBatchLinkInput[]
 ) {
-  for (const link of links) {
-    await tx.stockBatch.update({
-      where: { id: link.batchId },
-      data: {
-        quantityAvailable: {
-          increment: link.quantityFromBatch,
+  if (links.length === 0) return;
+  await Promise.all(
+    links.map((link) =>
+      tx.stockBatch.update({
+        where: { id: link.batchId },
+        data: {
+          quantityAvailable: {
+            increment: link.quantityFromBatch,
+          },
         },
-      },
-    });
-  }
+      })
+    )
+  );
 }
 
 export async function consumeTransactionBatchQuantities(
@@ -33,23 +36,26 @@ export async function consumeTransactionBatchQuantities(
   links: readonly TransactionBatchLinkInput[],
   errorMessage: string
 ) {
-  for (const link of links) {
-    const batchUpdateResult = await tx.stockBatch.updateMany({
-      where: {
-        id: link.batchId,
-        quantityAvailable: {
-          gte: link.quantityFromBatch,
+  if (links.length === 0) return;
+  const results = await Promise.all(
+    links.map((link) =>
+      tx.stockBatch.updateMany({
+        where: {
+          id: link.batchId,
+          quantityAvailable: {
+            gte: link.quantityFromBatch,
+          },
         },
-      },
-      data: {
-        quantityAvailable: {
-          decrement: link.quantityFromBatch,
+        data: {
+          quantityAvailable: {
+            decrement: link.quantityFromBatch,
+          },
         },
-      },
-    });
-    if (batchUpdateResult.count === 0) {
-      throw new Error(errorMessage);
-    }
+      })
+    )
+  );
+  if (results.some((result) => result.count === 0)) {
+    throw new Error(errorMessage);
   }
 }
 

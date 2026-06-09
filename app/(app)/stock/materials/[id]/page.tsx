@@ -107,7 +107,8 @@ const STOCK_TYPE_OPTIONS = [
   'Work In Progress',
   'Finished Goods',
   'Semi-finished',
-  'Consumable',
+  'Asset',
+  'Service',
   'Stock Assembly',
   'Non-Stock',
   'Other',
@@ -229,6 +230,7 @@ function MaterialEditor({
   const [deriveFactor, setDeriveFactor] = useState('');
   const [assemblyOutputQuantity, setAssemblyOutputQuantity] = useState(material?.assemblyOutputQuantity?.toString() ?? '1');
   const [assemblyOverheadPercent, setAssemblyOverheadPercent] = useState(material?.assemblyOverheadPercent?.toString() ?? '0');
+  const [assemblyUseDynamicCost, setAssemblyUseDynamicCost] = useState(material?.assemblyUseDynamicCost ?? true);
   const [assemblyComponents, setAssemblyComponents] = useState<DraftAssemblyComponent[]>([]);
   const [uploadType, setUploadType] = useState<MaterialUploadType>('feature-image');
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
@@ -260,6 +262,7 @@ function MaterialEditor({
     setUnitCost(material.unitCost?.toString() ?? '');
     setAssemblyOutputQuantity(material.assemblyOutputQuantity?.toString() ?? '1');
     setAssemblyOverheadPercent(material.assemblyOverheadPercent?.toString() ?? '0');
+    setAssemblyUseDynamicCost(material.assemblyUseDynamicCost ?? true);
     setExistingImageUrl(material.imageUrl ?? '');
     setExistingGalleryFiles(normalizeStoredFiles(material.photoGallery));
     setExistingDocumentFiles(normalizeStoredFiles(material.documentFiles));
@@ -273,6 +276,7 @@ function MaterialEditor({
   const availableDerivedUnits = units.filter((entry) => !materialUoms.some((uom) => uom.unitId === entry.id));
   const latestPriceLog = priceLogs[0];
   const isStockAssembly = stockType === 'Stock Assembly';
+  const useAssemblyDynamicCost = isStockAssembly && assemblyUseDynamicCost;
 
   const { data: allMaterials = [] } = useGetMaterialsQuery(undefined, {
     refetchOnMountOrArgChange: 30,
@@ -322,7 +326,9 @@ function MaterialEditor({
   );
   const assemblyTotalCostWithOverhead = assemblyTotalCost * (1 + assemblyOverheadPercentValue / 100);
   const calculatedAssemblyUnitCost = assemblyTotalCostWithOverhead / assemblyOutputQuantityValue;
-
+  const resolvedUnitCostValue = useAssemblyDynamicCost
+    ? calculatedAssemblyUnitCost
+    : parseFloat(unitCost) || 0;
 
   const pageTitle = isCreateMode ? 'New material' : material.name;
   const pageSubtitle = isCreateMode
@@ -429,7 +435,7 @@ function MaterialEditor({
       toast.error('Stock Type is required');
       return;
     }
-    if (!isStockAssembly && !unitCost.trim()) {
+    if ((!isStockAssembly || !assemblyUseDynamicCost) && !unitCost.trim()) {
       toast.error('Unit Cost is required');
       return;
     }
@@ -486,9 +492,10 @@ function MaterialEditor({
         documentFiles,
         ...(isCreateMode && { currentStock: parseFloat(currentStock) || 0 }),
         reorderLevel: reorderLevel ? parseFloat(reorderLevel) : undefined,
-        unitCost: isStockAssembly ? calculatedAssemblyUnitCost : unitCost ? parseFloat(unitCost) : undefined,
+        unitCost: useAssemblyDynamicCost ? calculatedAssemblyUnitCost : unitCost ? parseFloat(unitCost) : undefined,
         assemblyOutputQuantity: parseFloat(assemblyOutputQuantity) || 1,
         assemblyOverheadPercent: parseFloat(assemblyOverheadPercent) || 0,
+        assemblyUseDynamicCost: isStockAssembly ? assemblyUseDynamicCost : true,
       };
 
       if (isCreateMode) {
@@ -516,7 +523,7 @@ function MaterialEditor({
           changes,
         }).unwrap();
 
-        const parsedUnitCost = isStockAssembly ? calculatedAssemblyUnitCost : parseFloat(unitCost) || 0;
+        const parsedUnitCost = useAssemblyDynamicCost ? calculatedAssemblyUnitCost : parseFloat(unitCost) || 0;
         if (parsedUnitCost > 0) {
           await createPriceLog({
             materialId: result.id,
@@ -546,7 +553,7 @@ function MaterialEditor({
       }
 
       const previousUnitCost = material.unitCost || 0;
-      const newUnitCost = isStockAssembly ? calculatedAssemblyUnitCost : parseFloat(unitCost) || 0;
+      const newUnitCost = useAssemblyDynamicCost ? calculatedAssemblyUnitCost : parseFloat(unitCost) || 0;
 
       await updateMaterial({ id: material.id, data: payload }).unwrap();
 
@@ -748,10 +755,14 @@ function MaterialEditor({
           {
             label: 'Unit cost',
             value:
-              unitCost || material?.unitCost !== undefined
-                ? `${currencyCode} ${Number(unitCost || material?.unitCost || 0).toFixed(2)}`
+              resolvedUnitCostValue > 0 || unitCost || material?.unitCost !== undefined
+                ? `${currencyCode} ${resolvedUnitCostValue.toFixed(2)}`
                 : '-',
-            note: latestPriceLog ? `Latest change ${new Date(latestPriceLog.timestamp).toLocaleDateString()}` : 'Manual cost baseline',
+            note: useAssemblyDynamicCost
+              ? 'Calculated from assembly components'
+              : latestPriceLog
+                ? `Latest change ${new Date(latestPriceLog.timestamp).toLocaleDateString()}`
+                : 'Manual cost baseline',
           },
           {
             label: 'UOM chain',
@@ -841,6 +852,7 @@ function MaterialEditor({
                     setStockType(nextType);
                     if (nextType !== 'Stock Assembly') {
                       setAssemblyComponents([]);
+                      setAssemblyUseDynamicCost(true);
                     }
                   }}
                   placeholder="Select stock type"
@@ -935,15 +947,35 @@ function MaterialEditor({
                 </FieldShell>
               )}
 
-              <FieldShell label={`Unit cost (${currencyCode})`}>
+              {isStockAssembly ? (
+                <FieldShell
+                  label="Assembly costing"
+                  hint="Use component costs automatically, or enter a fixed unit cost."
+                >
+                  <label className="flex min-h-[46px] items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm text-foreground dark:border-border dark:bg-muted/30">
+                    <span>{assemblyUseDynamicCost ? 'Dynamic cost from components' : 'Direct unit cost'}</span>
+                    <input
+                      type="checkbox"
+                      checked={assemblyUseDynamicCost}
+                      onChange={(e) => setAssemblyUseDynamicCost(e.target.checked)}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-ring"
+                    />
+                  </label>
+                </FieldShell>
+              ) : null}
+
+              <FieldShell
+                label={`Unit cost (${currencyCode})`}
+                hint={useAssemblyDynamicCost ? 'Auto-calculated from assembly components below.' : undefined}
+              >
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  value={isStockAssembly ? calculatedAssemblyUnitCost.toFixed(4) : unitCost}
+                  value={useAssemblyDynamicCost ? calculatedAssemblyUnitCost.toFixed(4) : unitCost}
                   onChange={(e) => setUnitCost(e.target.value)}
                   className={inputClassName()}
-                  disabled={isStockAssembly}
+                  disabled={useAssemblyDynamicCost}
                 />
               </FieldShell>
 
@@ -1004,7 +1036,10 @@ function MaterialEditor({
               <div className="mt-5 border-t border-border pt-4 dark:border-border">
                 <h3 className="text-sm font-semibold text-foreground">Assembly components</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Build this stock item from existing materials. Cost updates automatically from component costs.
+                  Build this stock item from existing materials.
+                  {assemblyUseDynamicCost
+                    ? ' Cost updates automatically from component costs.'
+                    : ' Components are tracked for stock; unit cost stays on the direct value above.'}
                 </p>
                 <div className="mt-4 space-y-3">
                   {assemblyComponents.map((row, index) => {
@@ -1501,10 +1536,9 @@ function MaterialEditor({
                 { label: 'Reorder level', value: reorderLevel || formatNumber(material?.reorderLevel) },
                 {
                   label: 'Unit cost',
-                  value: unitCost
-                    ? `${currencyCode} ${Number(unitCost || 0).toFixed(2)}`
-                    : material?.unitCost !== undefined
-                      ? `${currencyCode} ${Number(material.unitCost || 0).toFixed(2)}`
+                  value:
+                    resolvedUnitCostValue > 0 || unitCost || material?.unitCost !== undefined
+                      ? `${currencyCode} ${resolvedUnitCostValue.toFixed(2)}`
                       : '-',
                 },
                 { label: 'Warehouse', value: warehouse || material?.warehouse || '-' },

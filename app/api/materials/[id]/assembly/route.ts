@@ -91,7 +91,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     await prisma.$transaction(async (tx) => {
       const assembly = await tx.material.findUnique({
         where: { id },
-        select: { id: true, companyId: true, stockType: true },
+        select: { id: true, companyId: true, stockType: true, assemblyUseDynamicCost: true },
       });
       if (!assembly || assembly.companyId !== companyId) {
         throw new Error('Material not found');
@@ -152,7 +152,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         });
       }
 
-      await recalculateAssemblyUnitCostTx(tx, companyId, id, changedBy);
+      if (assembly.assemblyUseDynamicCost !== false) {
+        await recalculateAssemblyUnitCostTx(tx, companyId, id, changedBy);
+      }
     });
   } catch (error: unknown) {
     return errorResponse(error instanceof Error ? error.message : 'Failed to save assembly components', 400);

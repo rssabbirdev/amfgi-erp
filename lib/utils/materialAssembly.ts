@@ -22,10 +22,16 @@ export async function recalculateAssemblyUnitCostTx(
       unitCost: true,
       assemblyOutputQuantity: true,
       assemblyOverheadPercent: true,
+      assemblyUseDynamicCost: true,
     },
   });
 
-  if (!assembly || assembly.companyId !== companyId || assembly.stockType !== 'Stock Assembly') {
+  if (
+    !assembly ||
+    assembly.companyId !== companyId ||
+    assembly.stockType !== 'Stock Assembly' ||
+    assembly.assemblyUseDynamicCost === false
+  ) {
     return;
   }
 

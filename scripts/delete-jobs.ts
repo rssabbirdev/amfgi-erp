@@ -16,12 +16,32 @@ async function seed() {
   // ── Delete old data (clean slate) ────────────────────────────────────────────
   console.log('Clearing old data…');
  
-  await prisma.job.deleteMany({});
+  
+  await prisma.stockBatch.updateMany({ data: { businessDocumentId: null } });
+  await prisma.transaction.updateMany({ data: { businessDocumentId: null } });
+  await prisma.materialAssemblyComponent.deleteMany({});
+  await prisma.stockCountSessionRevision.deleteMany({});
+  await prisma.stockCountSessionLine.deleteMany({});
+  await prisma.stockCountSession.deleteMany({});
+  await prisma.stockExceptionApproval.deleteMany({});
+  await prisma.transactionBatch.deleteMany({});
+  await prisma.transaction.deleteMany({});
+  await prisma.deliveryNote.deleteMany({});
+  await prisma.priceLog.deleteMany({});
+  await prisma.materialLog.deleteMany({});
+  await prisma.materialUom.updateMany({ data: { parentUomId: null } });
+  await prisma.materialUom.deleteMany({});
+  await prisma.stockBatch.deleteMany({});
+  await prisma.materialWarehouseStock.deleteMany({});
+  await prisma.material.deleteMany({});
+  // await prisma.category.deleteMany({});
+  // await prisma.unit.deleteMany({});
 
-  await prisma.$disconnect();
 }
 
-seed().catch((err) => {
-  console.error('❌ Seed failed:', err);
-  process.exit(1);
-});
+seed()
+  .catch((err) => {
+    console.error('❌ Seed failed:', err);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

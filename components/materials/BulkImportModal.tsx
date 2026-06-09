@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/shadcn/button';
 import Modal from '@/components/ui/Modal';
+import { runChunkedBulkImport } from '@/lib/import-export/chunkedBulkImport';
 import { useBulkCreateMaterialsMutation, useGetWarehousesQuery, type Material } from '@/store/hooks';
 
 interface Props {
@@ -24,6 +25,7 @@ interface MaterialRow {
   warehouseId?: string;
   stockType: string;
   allowNegativeConsumption?: boolean;
+  assemblyUseDynamicCost?: boolean;
   externalItemName?: string;
   unitCost?: number;
   reorderLevel?: number;
@@ -56,6 +58,7 @@ const SYSTEM_FIELDS = [
   { key: 'warehouse', label: 'Warehouse', required: false },
   { key: 'warehouseId', label: 'Warehouse ID', required: false },
   { key: 'allowNegativeConsumption', label: 'Allow Negative Consumption', required: false },
+  { key: 'assemblyUseDynamicCost', label: 'Assembly Use Dynamic Cost', required: false },
   { key: 'externalItemName', label: 'External Item Name', required: false },
   { key: 'unitCost', label: 'Unit Cost', required: false },
   { key: 'reorderLevel', label: 'Reorder Level', required: false },
@@ -104,12 +107,13 @@ function downloadTemplate() {
     ['Item Name', 'Yes', 'Primary material name. Required for every non-empty row.'],
     ['Description', 'No', 'Optional free-text note.'],
     ['Unit', 'Yes', 'Base stock unit, such as KG, PCS, MTR, or LTR.'],
-    ['Stock Type', 'Yes', 'Example values: Raw Material, Consumable, Finished Goods.'],
+    ['Stock Type', 'Yes', 'Example values: Raw Material, Asset, Service, Finished Goods, Stock Assembly.'],
     ['Category', 'No', 'Category name. If Category ID is provided, ID takes priority.'],
     ['Category ID', 'No', 'Existing category ID from the system, if known.'],
     ['Warehouse', 'No', 'Default warehouse name. If Warehouse ID is provided, ID takes priority.'],
     ['Warehouse ID', 'No', 'Existing warehouse ID from the system, if known.'],
     ['Allow Negative Consumption', 'No', 'Use TRUE/FALSE, YES/NO, 1/0, or Allowed/Blocked.'],
+    ['Assembly Use Dynamic Cost', 'No', 'For Stock Assembly rows only. TRUE = cost from components (default). FALSE = use Unit Cost directly.'],
     ['External Item Name', 'No', 'Optional external system item name.'],
     ['Unit Cost', 'No', 'Numeric only. Example: 12.5'],
     ['Reorder Level', 'No', 'Numeric only. Example: 25'],
@@ -128,6 +132,7 @@ function downloadTemplate() {
       Warehouse: 'Main Warehouse',
       'Warehouse ID': '',
       'Allow Negative Consumption': 'FALSE',
+      'Assembly Use Dynamic Cost': 'TRUE',
       'External Item Name': 'FG-MAT-300',
       'Unit Cost': 18.75,
       'Reorder Level': 50,
@@ -146,6 +151,7 @@ function downloadTemplate() {
 
 export default function BulkImportModal({ isOpen, onClose, existingMaterials }: Props) {
   const [bulkCreate, { isLoading: isSubmitting }] = useBulkCreateMaterialsMutation();
+  const [importProgress, setImportProgress] = useState<{ processed: number; total: number } | null>(null);
   const { data: warehouses = [] } = useGetWarehousesQuery();
   const [step, setStep] = useState(0);
   const [rawRows, setRawRows] = useState<(string | number | boolean | null)[][]>([]);
@@ -165,6 +171,7 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
     setAllRows([]);
     setInvalidRows([]);
     setPreviewTab('new');
+    setImportProgress(null);
   }, []);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -253,7 +260,7 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
           return;
         }
 
-        if (fieldKey === 'allowNegativeConsumption') {
+        if (fieldKey === 'allowNegativeConsumption' || fieldKey === 'assemblyUseDynamicCost') {
           if (value === null || value === undefined || value === '') {
             parsedValues[fieldKey] = undefined;
             return;
@@ -367,16 +374,27 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
     const cleanRows = (rows: PreviewRow[]): MaterialRow[] =>
       rows.map(({ __rowIndex, __errors, __isDuplicate, __action, ...rest }) => rest as MaterialRow);
 
+    const totalRows = newRows.length + selectedForUpdate.length;
+
     try {
-      const result = await bulkCreate({
-        newRows: cleanRows(newRows),
-        updateRows: cleanRows(selectedForUpdate),
-      }).unwrap();
+      setImportProgress({ processed: 0, total: totalRows });
+      const result = await runChunkedBulkImport(
+        {
+          newRows: cleanRows(newRows),
+          updateRows: cleanRows(selectedForUpdate),
+        },
+        (chunk) => bulkCreate(chunk).unwrap(),
+        {
+          onProgress: (processed, total) => setImportProgress({ processed, total }),
+        }
+      );
 
       toast.success(`Imported ${result.created} new, updated ${result.updated}`);
+      setImportProgress(null);
       resetState();
       onClose();
     } catch (err: unknown) {
+      setImportProgress(null);
       const message =
         typeof err === 'object' &&
         err !== null &&
@@ -714,6 +732,11 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
                 Ready to import: <span className="font-semibold">{newRows.length}</span> new +{' '}
                 <span className="font-semibold">{selectedForUpdate.length}</span> updates
               </p>
+              {importProgress ? (
+                <p className="text-xs text-emerald-300">
+                  Processing batch {importProgress.processed} / {importProgress.total}…
+                </p>
+              ) : null}
               <div className="space-y-1 text-xs text-slate-400">
                 <p>New items create base UOMs and opening-stock batches.</p>
                 <p>Duplicate updates preserve live stock and only refresh the master data.</p>
@@ -730,7 +753,11 @@ export default function BulkImportModal({ isOpen, onClose, existingMaterials }: 
                 disabled={isSubmitting || (newRows.length === 0 && selectedForUpdate.length === 0)}
                 className="flex-1"
               >
-                {isSubmitting ? 'Importing…' : `Import ${newRows.length + selectedForUpdate.length} rows`}
+                {isSubmitting
+                  ? importProgress
+                    ? `Importing ${importProgress.processed}/${importProgress.total}…`
+                    : 'Importing…'
+                  : `Import ${newRows.length + selectedForUpdate.length} rows`}
               </Button>
             </div>
           </div>

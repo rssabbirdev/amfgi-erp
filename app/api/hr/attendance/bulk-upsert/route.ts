@@ -5,16 +5,21 @@ import { P } from '@/lib/permissions';
 import { dateFromYmd, ymdFromInput } from '@/lib/hr/workDate';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { readEmployeeTypeSettingsFromCompanyData } from '@/lib/hr/employeeTypeSettings';
 import {
-  basicHoursForProfileExtension,
-  readEmployeeTypeSettingsFromCompanyData,
-} from '@/lib/hr/employeeTypeSettings';
+  calculateOvertimeMinutes,
+  resolveBasicHoursForEmployee,
+} from '@/lib/hr/attendanceBasicHours';
+import { resolveAttendanceFromLeaveType } from '@/lib/hr/leaveTypeRules';
+import { ensureLeaveTypesReady } from '@/lib/hr/seedLeaveTypes';
 import { z } from 'zod';
 
 const RowSchema = z.object({
   employeeId: z.string().min(1),
   workAssignmentId: z.string().optional().nullable(),
-  status: z.enum(['PRESENT', 'ABSENT', 'LEAVE', 'HALF_DAY', 'MISSING_PUNCH']),
+  status: z.enum(['PRESENT', 'ABSENT', 'LEAVE']),
+  leaveTypeId: z.string().optional().nullable(),
+  remarks: z.string().max(2000).optional().nullable(),
   checkInAt: z.string().optional().nullable(),
   checkOutAt: z.string().optional().nullable(),
   breakInAt: z.string().optional().nullable(),
@@ -24,6 +29,7 @@ const RowSchema = z.object({
 const BodySchema = z.object({
   workDate: z.string().min(1),
   rows: z.array(RowSchema).min(1),
+  refreshBasicHoursFromTypeSettings: z.boolean().optional(),
 });
 
 function parseDt(s: string | null | undefined): Date | null {
@@ -57,12 +63,14 @@ export async function POST(req: Request) {
   }
   const workDate = dateFromYmd(workDateYmd);
 
+  await ensureLeaveTypesReady(prisma, companyId);
+
   const employeeIds = [...new Set(parsed.data.rows.map((r) => r.employeeId))];
   const assignmentIds = [
     ...new Set(parsed.data.rows.map((r) => r.workAssignmentId).filter((x): x is string => Boolean(x))),
   ];
 
-  const [company, employees, assignments, existing] = await Promise.all([
+  const [company, employees, assignments, existing, leaveTypes] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { hrEmployeeTypeSettings: true, printTemplates: true } }),
     prisma.employee.findMany({
       where: { companyId, id: { in: employeeIds } },
@@ -83,7 +91,16 @@ export async function POST(req: Request) {
         id: true,
         employeeId: true,
         workflowStatus: true,
+        basicHours: true,
+        leaveRequestId: true,
+        source: true,
+        status: true,
+        leaveTypeId: true,
       },
+    }),
+    prisma.leaveType.findMany({
+      where: { companyId, isActive: true },
+      select: { id: true, code: true, rules: true },
     }),
   ]);
   const typeSettings = readEmployeeTypeSettingsFromCompanyData(company);
@@ -91,6 +108,8 @@ export async function POST(req: Request) {
   const empById = new Map(employees.map((e) => [e.id, e]));
   const asgById = new Map(assignments.map((a) => [a.id, a]));
   const existingByEmployee = new Map(existing.map((e) => [e.employeeId, e]));
+  const leaveTypeById = new Map(leaveTypes.map((t) => [t.id, t]));
+  const unpaidLeaveType = leaveTypes.find((t) => t.code.toUpperCase() === 'UNPAID') ?? null;
 
   const txOps: Prisma.PrismaPromise<unknown>[] = [];
   for (const row of parsed.data.rows) {
@@ -99,11 +118,62 @@ export async function POST(req: Request) {
     const existingRow = existingByEmployee.get(row.employeeId);
     if (existingRow?.workflowStatus === 'APPROVED') continue;
 
+    let resolvedStatus: 'PRESENT' | 'ABSENT' | 'LEAVE' = 'PRESENT';
+    let leaveTypeId: string | null = null;
+    let legacyLeaveType: 'ANNUAL' | 'SICK' | 'EMERGENCY' | 'ONE_DAY' | null = null;
+    let attendanceSource: 'MANUAL' | 'LEAVE_REQUEST' = 'MANUAL';
+    let leaveRequestId: string | null = null;
+
+    if (row.status === 'LEAVE') {
+      const lt = row.leaveTypeId ? leaveTypeById.get(row.leaveTypeId) : null;
+      if (lt) {
+        const resolved = resolveAttendanceFromLeaveType(lt);
+        if (resolved.status === 'LEAVE') {
+          leaveTypeId = lt.id;
+          resolvedStatus = 'LEAVE';
+          legacyLeaveType = resolved.legacyLeaveType;
+          if (existingRow?.source === 'LEAVE_REQUEST' && existingRow.leaveRequestId) {
+            attendanceSource = 'LEAVE_REQUEST';
+            leaveRequestId = existingRow.leaveRequestId;
+          }
+        } else if (unpaidLeaveType) {
+          leaveTypeId = unpaidLeaveType.id;
+          resolvedStatus = 'ABSENT';
+        } else {
+          resolvedStatus = 'ABSENT';
+        }
+      } else if (existingRow?.status === 'LEAVE' && existingRow.leaveTypeId) {
+        const existingLeaveType = leaveTypeById.get(existingRow.leaveTypeId);
+        leaveTypeId = existingRow.leaveTypeId;
+        resolvedStatus = 'LEAVE';
+        legacyLeaveType = existingLeaveType
+          ? resolveAttendanceFromLeaveType(existingLeaveType).legacyLeaveType
+          : null;
+        if (existingRow.source === 'LEAVE_REQUEST' && existingRow.leaveRequestId) {
+          attendanceSource = 'LEAVE_REQUEST';
+          leaveRequestId = existingRow.leaveRequestId;
+        }
+      } else {
+        resolvedStatus = 'ABSENT';
+        leaveTypeId = unpaidLeaveType?.id ?? null;
+      }
+    } else if (row.status === 'ABSENT') {
+      if (unpaidLeaveType) {
+        leaveTypeId = unpaidLeaveType.id;
+      }
+      resolvedStatus = 'ABSENT';
+      legacyLeaveType = null;
+    }
+
     const checkInAt = parseDt(row.checkInAt);
     const checkOutAt = parseDt(row.checkOutAt);
     const breakInAt = parseDt(row.breakInAt);
     const breakOutAt = parseDt(row.breakOutAt);
-    const basicMinutes = Math.round(basicHoursForProfileExtension(emp.profileExtension, typeSettings) * 60);
+    const typeBasicHours = resolveBasicHoursForEmployee(emp.profileExtension, typeSettings);
+    const basicHours =
+      existingRow && !parsed.data.refreshBasicHoursFromTypeSettings
+        ? Number(existingRow.basicHours)
+        : typeBasicHours;
     const breakMinutes = diffMinutes(breakInAt, breakOutAt);
     const workedMinutes = Math.max(0, diffMinutes(checkInAt, checkOutAt) - breakMinutes);
 
@@ -115,7 +185,7 @@ export async function POST(req: Request) {
 
     const lateMinutes = dutyStart && checkInAt ? Math.max(0, diffMinutes(dutyStart, checkInAt)) : 0;
     const earlyLeaveMinutes = dutyEnd && checkOutAt ? Math.max(0, diffMinutes(checkOutAt, dutyEnd)) : 0;
-    const overtimeMinutes = row.status === 'ABSENT' || row.status === 'LEAVE' ? 0 : Math.max(0, workedMinutes - basicMinutes);
+    const overtimeMinutes = calculateOvertimeMinutes(workedMinutes, basicHours, resolvedStatus);
 
     const data: Record<string, unknown> = {
       companyId,
@@ -126,12 +196,17 @@ export async function POST(req: Request) {
       checkOutAt,
       breakStartAt: breakInAt,
       breakEndAt: breakOutAt,
-      status: row.status,
+      status: resolvedStatus,
+      leaveType: legacyLeaveType,
+      leaveTypeId,
+      remarks: row.remarks?.trim() || null,
+      basicHours,
       lateMinutes,
       earlyLeaveMinutes,
       overtimeMinutes,
       workflowStatus: 'DRAFT',
-      source: 'MANUAL',
+      source: attendanceSource,
+      leaveRequestId,
     };
 
     if (existingRow) {

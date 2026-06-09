@@ -163,6 +163,7 @@ export default function MaterialsPage() {
       Warehouse: material.warehouse || '',
       'Warehouse ID': material.warehouseId || '',
       'Allow Negative Consumption': material.allowNegativeConsumption,
+      'Assembly Use Dynamic Cost': material.assemblyUseDynamicCost ?? true,
       'External Item Name': material.externalItemName || '',
       'Unit Cost': material.unitCost ?? '',
       'Reorder Level': material.reorderLevel ?? '',

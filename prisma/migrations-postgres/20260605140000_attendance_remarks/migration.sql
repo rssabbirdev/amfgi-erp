@@ -1,0 +1,1 @@
+ALTER TABLE "AttendanceEntry" ADD COLUMN IF NOT EXISTS "remarks" TEXT;

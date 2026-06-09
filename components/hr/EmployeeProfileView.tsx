@@ -17,8 +17,9 @@ import {
 import { NATIONALITY_OPTIONS } from '@/lib/hr/employeeMeta';
 import toast from 'react-hot-toast';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
+import EmployeeCompensationPanel from '@/components/hr/EmployeeCompensationPanel';
 
-type Tab = 'overview' | 'visa' | 'documents' | 'access';
+type Tab = 'overview' | 'visa' | 'documents' | 'compensation' | 'access';
 
 interface CatalogDocType {
   id: string;
@@ -246,6 +247,8 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const perms = (session?.user?.permissions ?? []) as string[];
   const canView = isSA || perms.includes('hr.employee.view');
   const canEdit = isSA || perms.includes('hr.employee.edit');
+  const canCompensation =
+    isSA || perms.includes('hr.payroll.compensation') || perms.includes('hr.payroll.settings');
   const canDoc = isSA || perms.includes('hr.document.edit');
   const canDocView = isSA || perms.includes('hr.document.view');
   const canCatalogTypes = isSA || perms.includes('hr.settings.document_types');
@@ -754,6 +757,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     { id: 'overview', label: 'Overview', hint: 'Identity, employment, emergency' },
     { id: 'visa', label: 'Visa & authorization', hint: 'Work authorization periods' },
     { id: 'documents', label: 'Documents', hint: 'Files, scans, and expiry tracking' },
+    ...(canCompensation
+      ? [{ id: 'compensation' as const, label: 'Compensation', hint: 'Pay type and salary rates' }]
+      : []),
     { id: 'access', label: 'Account access', hint: 'Portal login & Google sign-in' },
   ];
 
@@ -1542,6 +1548,15 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                   </table>
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === 'compensation' && canCompensation && (
+            <div className="rounded-2xl border border-white/10 bg-slate-900/35 p-6">
+              <EmployeeCompensationPanel
+                employeeId={employeeId}
+                canEdit={isSA || perms.includes('hr.payroll.compensation')}
+              />
             </div>
           )}
 

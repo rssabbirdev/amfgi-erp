@@ -1752,6 +1752,7 @@ async function seedHrWorkforceDemo(
         checkInAt: checkIn,
         checkOutAt: checkOut,
         status: absent ? 'ABSENT' : halfDay ? 'HALF_DAY' : 'PRESENT',
+        basicHours: 8,
         workflowStatus: 'APPROVED',
         source: 'SCHEDULE_BOILERPLATE',
         lateMinutes: absent ? 0 : halfDay ? 30 : 0,
@@ -1773,6 +1774,69 @@ async function seedHrWorkforceDemo(
   console.log('  ✓ 4 employee self-service logins linked to employees');
   console.log('  ✓ 6 schedules with schedule-level notes and driver trip logs');
   console.log('  ✓ Attendance entries generated for schedulable employees');
+
+  await seedHrPayrollFoundation(companyId, schedulableEmployees.map((e) => e.id));
+}
+
+async function seedHrPayrollFoundation(companyId: string, employeeIds: string[]) {
+  const { ensureDefaultPayTypes } = await import('../lib/hr/payroll/seedPayTypes');
+  const { ensureDefaultAllowanceTypes } = await import('../lib/hr/payroll/seedAllowanceTypes');
+  await ensureDefaultPayTypes(prisma, companyId);
+  await ensureDefaultAllowanceTypes(prisma, companyId);
+
+  const fixedType = await prisma.payType.findFirst({
+    where: { companyId, code: 'FIXED_MONTHLY' },
+  });
+  const dailyType = await prisma.payType.findFirst({
+    where: { companyId, code: 'DAILY_WAGE_9_10' },
+  });
+  if (fixedType && employeeIds[0]) {
+    await prisma.employeeCompensation.create({
+      data: {
+        companyId,
+        employeeId: employeeIds[0],
+        payTypeId: fixedType.id,
+        monthlyBasic: 3500,
+        effectiveFrom: new Date('2024-01-01'),
+      },
+    });
+  }
+  if (dailyType && employeeIds[10]) {
+    await prisma.employeeCompensation.create({
+      data: {
+        companyId,
+        employeeId: employeeIds[10],
+        payTypeId: dailyType.id,
+        dailyRate: 120,
+        effectiveFrom: new Date('2024-01-01'),
+      },
+    });
+  }
+
+  const year = new Date().getFullYear();
+  for (const employeeId of employeeIds.slice(0, 8)) {
+    await prisma.leaveBalance.upsert({
+      where: { companyId_employeeId_year: { companyId, employeeId, year } },
+      create: { companyId, employeeId, year, entitlementDays: 30, usedDays: 0 },
+      update: { entitlementDays: 30 },
+    });
+  }
+
+  if (employeeIds[4]) {
+    await prisma.leaveRequest.create({
+      data: {
+        companyId,
+        employeeId: employeeIds[4],
+        leaveType: 'SICK',
+        startDate: new Date(),
+        endDate: new Date(),
+        status: 'PENDING',
+        reason: 'Seed demo sick leave request',
+      },
+    });
+  }
+
+  console.log('  ✓ Pay types, sample compensation, leave balances, pending leave request');
 }
 
 async function seed() {
@@ -2323,10 +2387,11 @@ async function seed() {
   console.log('  4. Go to HR → Schedule or Dispatch to print with those templates');
   console.log('─────────────────────────────────────────────────────');
 
-  await prisma.$disconnect();
 }
 
-seed().catch((err) => {
-  console.error('❌ Seed failed:', err);
-  process.exit(1);
-});
+seed()
+  .catch((err) => {
+    console.error('❌ Seed failed:', err);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

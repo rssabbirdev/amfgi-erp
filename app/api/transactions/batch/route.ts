@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
+import { heavyTransactionOptions } from '@/lib/db/transactionOptions';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { buildTransactionActorFields } from '@/lib/utils/auditActor';
 import { decimalEqualsNullable, decimalToNumber, decimalToNumberOrZero } from '@/lib/utils/decimal';
@@ -212,6 +213,8 @@ const BatchSchema = z.object({
     { message: 'Warehouse is required for every stock line', path: ['lines'] }
   );
 
+export const maxDuration = 120;
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
@@ -344,11 +347,35 @@ export async function POST(req: Request) {
           },
         });
 
-        for (const txnId of existingTransactionIds) {
-          const existingTxn = await tx.transaction.findUnique({
-            where: { id: txnId },
+        const existingTxns = await tx.transaction.findMany({
+          where: { id: { in: existingTransactionIds }, companyId },
+          include: { batchesUsed: true },
+        });
+        const existingTxnById = new Map(existingTxns.map((txn) => [txn.id, txn]));
+        const stockOutIds = existingTxns
+          .filter((txn) => txn.type === 'STOCK_OUT')
+          .map((txn) => txn.id);
+        const returnTxnsByParentId = new Map<
+          string,
+          Prisma.TransactionGetPayload<{ include: { batchesUsed: true } }>[]
+        >();
+
+        if (stockOutIds.length > 0) {
+          const linkedReturns = await tx.transaction.findMany({
+            where: { parentTransactionId: { in: stockOutIds } },
             include: { batchesUsed: true },
           });
+          for (const returnTxn of linkedReturns) {
+            const parentId = returnTxn.parentTransactionId;
+            if (!parentId) continue;
+            const bucket = returnTxnsByParentId.get(parentId) ?? [];
+            bucket.push(returnTxn);
+            returnTxnsByParentId.set(parentId, bucket);
+          }
+        }
+
+        for (const txnId of existingTransactionIds) {
+          const existingTxn = existingTxnById.get(txnId);
 
           if (existingTxn) {
             if (!preservedSignedCopy && existingTxn.signedCopyUrl) {
@@ -413,14 +440,7 @@ export async function POST(req: Request) {
 
             // Delete any linked RETURN transactions
             if (existingTxn.type === 'STOCK_OUT') {
-              const returnTxns = await tx.transaction.findMany({
-                where: {
-                  parentTransactionId: existingTxn.id,
-                },
-                include: {
-                  batchesUsed: true,
-                },
-              });
+              const returnTxns = returnTxnsByParentId.get(existingTxn.id) ?? [];
 
               for (const returnTxn of returnTxns) {
                 // Reverse RETURN stock impact
@@ -955,7 +975,7 @@ export async function POST(req: Request) {
         deliveryNoteNumber: reportedDeliveryNoteNumber,
         deliveryNoteId: activeDeliveryNoteId,
       };
-    });
+    }, heavyTransactionOptions);
 
     if (type === 'STOCK_OUT' && jobId?.trim()) {
       try {

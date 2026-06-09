@@ -33,13 +33,13 @@
 
 ## Relationships
 
-- [[Components Job Costing]] (52 shared connections)
+- [[Components Job Costing]] (41 shared connections)
+- [[Components, Job Costing, and Formula Builder]] (8 shared connections)
+- [[Lib Job Costing]] (7 shared connections)
 - [[Store, API, and Endpoints]] (4 shared connections)
-- [[Lib, Job Costing, and Expression Evaluator]] (3 shared connections)
 - [[Stock, Components, and Settings]] (1 shared connections)
 - [[Reports, Components, and Admin]] (1 shared connections)
 - [[Components HR and Ui]] (1 shared connections)
-- [[Lib Job Costing]] (1 shared connections)
 
 ## Source Files
 

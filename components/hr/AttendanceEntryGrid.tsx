@@ -7,6 +7,11 @@ import LineGridColumnSettings, {
   type LineGridColumnConfig,
 } from '@/components/stock/LineGridColumnSettings';
 import { Badge } from '@/components/ui/shadcn/badge';
+import {
+  defaultUnpaidLeaveTypeId,
+  isDraftNonWorking,
+  type LeaveTypeOption,
+} from '@/lib/hr/attendanceDraftStatus';
 import { cn } from '@/lib/utils';
 
 export interface AttendanceGridEmployee {
@@ -24,11 +29,22 @@ export interface AttendanceGridDraftRow {
   workAssignmentId: string;
   jobNumber: string;
   status: 'PRESENT' | 'ABSENT' | 'LEAVE' | 'HALF_DAY' | 'MISSING_PUNCH';
+  leaveTypeId?: string | null;
+  /** Snapshotted basic duty hours for this day (from row or type settings at create). */
+  basicHours?: number;
   checkInAt: string;
   checkOutAt: string;
   breakInAt: string;
   breakOutAt: string;
+  remarks?: string;
   source: 'existing' | 'schedule' | 'manual';
+  leaveRequestId?: string | null;
+  attendanceSource?: string | null;
+}
+
+function draftBasicMinutes(draft: AttendanceGridDraftRow, employee: AttendanceGridEmployee | undefined): number {
+  const hours = draft.basicHours ?? employee?.basicHoursPerDay ?? 0;
+  return Math.round(hours * 60);
 }
 
 interface AssignmentOption {
@@ -48,6 +64,7 @@ interface AttendanceEntryGridProps {
   employeesById: Map<string, AttendanceGridEmployee>;
   assignmentsById: Map<string, AttendanceGridAssignmentMeta>;
   assignmentOptions: AssignmentOption[];
+  leaveTypes: LeaveTypeOption[];
   canEdit: boolean;
   emptyMessage: string;
   /** Left side of the day-sheet chrome row (search, scope, add employee). */
@@ -60,12 +77,10 @@ interface AttendanceEntryGridProps {
 
 const ATTENDANCE_GRID_PREFERENCE_KEY = 'hr-attendance-create-line-grid';
 
-const STATUS_OPTIONS: Array<AttendanceGridDraftRow['status']> = [
-  'PRESENT',
-  'ABSENT',
-  'LEAVE',
-  'HALF_DAY',
-  'MISSING_PUNCH',
+const STATUS_OPTIONS: Array<{ value: AttendanceGridDraftRow['status']; label: string }> = [
+  { value: 'PRESENT', label: 'Present' },
+  { value: 'ABSENT', label: 'Absent' },
+  { value: 'LEAVE', label: 'On leave' },
 ];
 
 type AttendanceGridColumnKey =
@@ -82,7 +97,8 @@ type AttendanceGridColumnKey =
   | 'basicHr'
   | 'totalHr'
   | 'overtime'
-  | 'status';
+  | 'status'
+  | 'remarks';
 
 const DEFAULT_GRID_COLUMNS: LineGridColumnConfig[] = [
   { key: 'line', label: '#', visible: true, width: 48, minWidth: 40, maxWidth: 72 },
@@ -99,6 +115,7 @@ const DEFAULT_GRID_COLUMNS: LineGridColumnConfig[] = [
   { key: 'totalHr', label: 'Total hr', visible: true, width: 96, minWidth: 72, maxWidth: 140 },
   { key: 'overtime', label: 'Overtime', visible: true, width: 96, minWidth: 72, maxWidth: 140 },
   { key: 'status', label: 'Status', visible: true, width: 148, minWidth: 120, maxWidth: 220 },
+  { key: 'remarks', label: 'Remarks', visible: true, width: 180, minWidth: 120, maxWidth: 320 },
 ];
 
 /** Row fill + left accent — higher opacity for readable contrast on card background. */
@@ -295,7 +312,7 @@ function diffMinutes(start: string, end: string): number {
 }
 
 function calculateWorkedMinutes(draft: AttendanceGridDraftRow): number {
-  if (draft.status === 'ABSENT' || draft.status === 'LEAVE') return 0;
+  if (isDraftNonWorking(draft)) return 0;
   const dutyMinutes = diffMinutes(draft.checkInAt, draft.checkOutAt);
   const breakMinutes = diffMinutes(draft.breakInAt, draft.breakOutAt);
   return Math.max(0, dutyMinutes - breakMinutes);
@@ -403,6 +420,7 @@ export default function AttendanceEntryGrid({
   employeesById,
   assignmentsById,
   assignmentOptions,
+  leaveTypes,
   canEdit,
   emptyMessage,
   filters,
@@ -753,25 +771,68 @@ export default function AttendanceEntryGrid({
             {formatHourValue(overtimeMinutes)}
           </div>
         );
-      case 'status':
+      case 'status': {
+        const unpaidLeaveTypeId = defaultUnpaidLeaveTypeId(leaveTypes);
+        const leaveTypeName = leaveTypes.find((t) => t.id === draft.leaveTypeId)?.name;
+        const statusValue =
+          draft.status === 'LEAVE' ? 'LEAVE' : draft.status === 'ABSENT' ? 'ABSENT' : 'PRESENT';
+        const statusOptions =
+          draft.status === 'LEAVE'
+            ? STATUS_OPTIONS
+            : STATUS_OPTIONS.filter((opt) => opt.value !== 'LEAVE');
+
         return (
-          <div key={columnKey} className={cellClassName}>
+          <div key={columnKey} className={cn(cellClassName, 'flex flex-col gap-0.5 py-1')}>
             <select
-              value={draft.status}
-              onChange={(e) =>
+              value={statusValue}
+              onChange={(e) => {
+                const next = e.target.value as AttendanceGridDraftRow['status'];
+                if (next === 'PRESENT') {
+                  onUpdateRow(draft.employeeId, { status: 'PRESENT', leaveTypeId: null });
+                  return;
+                }
+                if (next === 'ABSENT') {
+                  onUpdateRow(draft.employeeId, {
+                    status: 'ABSENT',
+                    leaveTypeId: unpaidLeaveTypeId,
+                    leaveRequestId: null,
+                    attendanceSource: null,
+                  });
+                  return;
+                }
                 onUpdateRow(draft.employeeId, {
-                  status: e.target.value as AttendanceGridDraftRow['status'],
-                })
-              }
+                  status: 'LEAVE',
+                  leaveTypeId: draft.leaveTypeId,
+                });
+              }}
               disabled={!canEdit}
               className={cn(FLAT_INPUT_CLASS, 'text-xs')}
             >
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {status.replace('_', ' ')}
+              {statusOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
                 </option>
               ))}
             </select>
+            {draft.status === 'LEAVE' ? (
+              <span className="px-0.5 text-[10px] text-muted-foreground">
+                {leaveTypeName ?? 'Leave'} · via leave management
+              </span>
+            ) : null}
+          </div>
+        );
+      }
+      case 'remarks':
+        return (
+          <div key={columnKey} className={cn(cellClassName, 'bg-background/60 dark:bg-background/40')}>
+            <input
+              type="text"
+              value={draft.remarks ?? ''}
+              onChange={(e) => onUpdateRow(draft.employeeId, { remarks: e.target.value })}
+              disabled={!canEdit}
+              placeholder="Notes…"
+              className={cn(FLAT_INPUT_CLASS, 'text-xs')}
+            />
           </div>
         );
       default:
@@ -863,21 +924,16 @@ export default function AttendanceEntryGrid({
 							const employee = employeesById.get(
 								draft.employeeId,
 							);
-							const basicMinutes = Math.round(
-								(employee?.basicHoursPerDay ?? 0) * 60,
-							);
+							const basicMinutes = draftBasicMinutes(draft, employee);
 							const workedMinutes = calculateWorkedMinutes(draft);
-							const overtimeMinutes =
-								draft.status === 'ABSENT' ||
-								draft.status === 'LEAVE'
-									? 0
-									: Math.max(0, workedMinutes - basicMinutes);
+							const overtimeMinutes = isDraftNonWorking(draft)
+								? 0
+								: Math.max(0, workedMinutes - basicMinutes);
 							const employeeType =
 								employee?.employeeType ?? 'LABOUR_WORKER';
-							const rowTone =
-								draft.status === 'ABSENT'
-									? ABSENT_ROW_TONE
-									: EMPLOYEE_TYPE_ROW_TONE[employeeType];
+							const rowTone = isDraftNonWorking(draft)
+								? ABSENT_ROW_TONE
+								: EMPLOYEE_TYPE_ROW_TONE[employeeType];
 							const sourceBadgeVariant: 'default' | 'secondary' | 'outline' =
 								draft.source === 'existing'
 									? 'default'

@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/shadcn/button';
@@ -32,6 +33,8 @@ type EmployeeSummary = {
   presentDays: number;
   absentDays: number;
   leaveDays: number;
+  paidLeaveDays: number;
+  unpaidLeaveDays: number;
   halfDayDays: number;
   workedHours: number;
   overtimeHours: number;
@@ -41,6 +44,7 @@ type EmployeeEntry = {
   workDate: string;
   workLocation: string;
   status: string;
+  leaveType: string | null;
   workflowStatus: string;
   jobNumber: string;
   groupLabel: string;
@@ -80,6 +84,8 @@ type SelectedEmployeeReport = {
   presentDays: number;
   absentDays: number;
   leaveDays: number;
+  paidLeaveDays: number;
+  unpaidLeaveDays: number;
   halfDayDays: number;
   workedMinutes: number;
   overtimeMinutes: number;
@@ -156,8 +162,12 @@ function buildQueryString(
 }
 
 export default function HrAttendanceReportPage() {
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
-  const [month, setMonth] = useState(currentMonth());
+  const [month, setMonth] = useState(() => {
+    const fromUrl = searchParams.get('month');
+    return fromUrl && /^\d{4}-\d{2}$/.test(fromUrl) ? fromUrl : currentMonth();
+  });
   const [report, setReport] = useState<MonthlyReportPayload | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -379,7 +389,7 @@ export default function HrAttendanceReportPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
                   <div className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
                     <p className="text-[11px] uppercase tracking-wide text-slate-500">Attendance days</p>
                     <p className="mt-2 text-xl font-semibold text-white">{selectedEmployee.attendanceDays}</p>
@@ -395,6 +405,14 @@ export default function HrAttendanceReportPage() {
                   <div className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
                     <p className="text-[11px] uppercase tracking-wide text-slate-500">Leave</p>
                     <p className="mt-2 text-xl font-semibold text-white">{selectedEmployee.leaveDays}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Paid leave</p>
+                    <p className="mt-2 text-xl font-semibold text-emerald-300">{selectedEmployee.paidLeaveDays}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Unpaid leave</p>
+                    <p className="mt-2 text-xl font-semibold text-amber-300">{selectedEmployee.unpaidLeaveDays}</p>
                   </div>
                   <div className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
                     <p className="text-[11px] uppercase tracking-wide text-slate-500">Half day</p>

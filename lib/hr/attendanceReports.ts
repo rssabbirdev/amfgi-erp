@@ -5,6 +5,7 @@ import {
   readEmployeeTypeSettingsFromCompanyData,
 } from '@/lib/hr/employeeTypeSettings';
 import { Prisma } from '@prisma/client';
+import { isPaidLeaveType } from '@/lib/hr/leaveTypes';
 import { attendanceReportStatusLabel } from '@/lib/hr/attendanceReportFormatting';
 import type { AttendanceReportBuilderRow } from '@/lib/hr/attendanceReportBuilder';
 
@@ -12,6 +13,7 @@ export type AttendanceReportRow = AttendanceReportBuilderRow & {
   workLocation: string;
   jobNumber: string;
   groupLabel: string;
+  leaveType: string | null;
   workedMinutes: number;
   overtimeMinutes: number;
 };
@@ -24,6 +26,8 @@ export type AttendanceEmployeeReport = {
   presentDays: number;
   absentDays: number;
   leaveDays: number;
+  paidLeaveDays: number;
+  unpaidLeaveDays: number;
   halfDayDays: number;
   missingPunchDays: number;
   workedMinutes: number;
@@ -158,6 +162,8 @@ async function findMonthlyAttendanceRows(companyId: string, start: Date, end: Da
         employeeId: true,
         workDate: true,
         status: true,
+        leaveType: true,
+        basicHours: true,
         workflowStatus: true,
         checkInAt: true,
         checkOutAt: true,
@@ -216,6 +222,8 @@ export async function getMonthlyAttendanceReports(companyId: string, month: stri
     employeeId: string;
     workDate: Date;
     status: string;
+    leaveType: string | null;
+    basicHours: { toString(): string } | number;
     workflowStatus: string;
     checkInAt: Date | null;
     checkOutAt: Date | null;
@@ -259,7 +267,10 @@ export async function getMonthlyAttendanceReports(companyId: string, month: stri
   for (const row of rows) {
     const employeeName = row.employee.preferredName || row.employee.fullName;
     const employeeType = employeeTypeFromProfileExtension(row.employee.profileExtension);
-    const basicHours = basicHoursForProfileExtension(row.employee.profileExtension, typeSettings);
+    const snapBasic = Number(row.basicHours);
+    const basicHours = Number.isFinite(snapBasic) && snapBasic > 0
+      ? snapBasic
+      : basicHoursForProfileExtension(row.employee.profileExtension, typeSettings);
     const breakMinutes = diffMinutes(row.breakStartAt, row.breakEndAt);
     const workedMinutes = Math.max(0, diffMinutes(row.checkInAt, row.checkOutAt) - breakMinutes);
     const resolvedLocation = locationLabel(employeeType, row.workAssignment);
@@ -271,6 +282,7 @@ export async function getMonthlyAttendanceReports(companyId: string, month: stri
       workDate: isoDay(row.workDate),
       workLocation: exportWorkLocation(row.status, resolvedLocation),
       status: row.status,
+      leaveType: row.leaveType ?? null,
       workflowStatus: row.workflowStatus,
       jobNumber,
       groupLabel: row.workAssignment?.label || '',
@@ -310,6 +322,8 @@ export async function getMonthlyAttendanceReports(companyId: string, month: stri
       presentDays: 0,
       absentDays: 0,
       leaveDays: 0,
+      paidLeaveDays: 0,
+      unpaidLeaveDays: 0,
       halfDayDays: 0,
       missingPunchDays: 0,
       workedMinutes: 0,
@@ -322,7 +336,14 @@ export async function getMonthlyAttendanceReports(companyId: string, month: stri
     current.attendanceDays += 1;
     if (row.status === 'PRESENT') current.presentDays += 1;
     if (row.status === 'ABSENT') current.absentDays += 1;
-    if (row.status === 'LEAVE') current.leaveDays += 1;
+    if (row.status === 'LEAVE') {
+      current.leaveDays += 1;
+      if (isPaidLeaveType(row.leaveType as 'ANNUAL' | 'SICK' | 'EMERGENCY' | 'ONE_DAY')) {
+        current.paidLeaveDays += 1;
+      } else {
+        current.unpaidLeaveDays += 1;
+      }
+    }
     if (row.status === 'HALF_DAY') current.halfDayDays += 1;
     if (row.status === 'MISSING_PUNCH') current.missingPunchDays += 1;
     current.workedMinutes += workedMinutes;

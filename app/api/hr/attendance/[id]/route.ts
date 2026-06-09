@@ -4,10 +4,11 @@ import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { readEmployeeTypeSettingsFromCompanyData } from '@/lib/hr/employeeTypeSettings';
 import {
-  basicHoursForProfileExtension,
-  readEmployeeTypeSettingsFromCompanyData,
-} from '@/lib/hr/employeeTypeSettings';
+  calculateOvertimeMinutes,
+  resolveBasicHoursForEmployee,
+} from '@/lib/hr/attendanceBasicHours';
 import { z } from 'zod';
 
 const PatchSchema = z.object({
@@ -16,10 +17,13 @@ const PatchSchema = z.object({
   breakStartAt: z.string().optional().nullable(),
   breakEndAt: z.string().optional().nullable(),
   status: z.enum(['PRESENT', 'ABSENT', 'LEAVE', 'HALF_DAY', 'MISSING_PUNCH']).optional(),
+  leaveType: z.enum(['ANNUAL', 'SICK', 'EMERGENCY', 'ONE_DAY']).optional().nullable(),
+  remarks: z.string().max(2000).optional().nullable(),
   workflowStatus: z.enum(['DRAFT', 'SUBMITTED', 'APPROVED']).optional(),
   lateMinutes: z.number().int().min(0).optional(),
   earlyLeaveMinutes: z.number().int().min(0).optional(),
   overtimeMinutes: z.number().int().min(0).optional(),
+  refreshBasicHoursFromTypeSettings: z.boolean().optional(),
 });
 
 function parseDt(s: string | null): Date | null {
@@ -63,6 +67,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (d.breakStartAt !== undefined) data.breakStartAt = parseDt(d.breakStartAt);
   if (d.breakEndAt !== undefined) data.breakEndAt = parseDt(d.breakEndAt);
   if (d.status !== undefined) data.status = d.status;
+  if (d.remarks !== undefined) data.remarks = d.remarks?.trim() || null;
+  const nextStatusForLeave = d.status ?? existing.status;
+  if (d.leaveType !== undefined) {
+    data.leaveType = d.leaveType;
+  } else if (d.status !== undefined && d.status !== 'LEAVE') {
+    data.leaveType = null;
+  } else if (nextStatusForLeave === 'LEAVE' && !existing.leaveType && d.leaveType === undefined) {
+    data.leaveType = 'ANNUAL';
+  }
 
   const nextCheckIn = d.checkInAt !== undefined ? parseDt(d.checkInAt) : existing.checkInAt;
   const nextCheckOut = d.checkOutAt !== undefined ? parseDt(d.checkOutAt) : existing.checkOutAt;
@@ -82,14 +95,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     select: { hrEmployeeTypeSettings: true, printTemplates: true },
   });
   const typeSettings = readEmployeeTypeSettingsFromCompanyData(company);
-  const basicHoursPerDay = basicHoursForProfileExtension(existing.employee.profileExtension, typeSettings);
-  const basicMinutes = Math.round(basicHoursPerDay * 60);
+  const basicHours = d.refreshBasicHoursFromTypeSettings
+    ? resolveBasicHoursForEmployee(existing.employee.profileExtension, typeSettings)
+    : Number(existing.basicHours);
+  if (d.refreshBasicHoursFromTypeSettings) {
+    data.basicHours = basicHours;
+  }
 
   const calculatedLate = dutyStart && nextCheckIn ? Math.max(0, diffMinutes(dutyStart, nextCheckIn)) : 0;
   const calculatedEarly = dutyEnd && nextCheckOut ? Math.max(0, diffMinutes(nextCheckOut, dutyEnd)) : 0;
   const workedMinutes = Math.max(0, diffMinutes(nextCheckIn, nextCheckOut) - diffMinutes(nextBreakStart, nextBreakEnd));
-  const calculatedOvertime =
-    nextStatus === 'ABSENT' || nextStatus === 'LEAVE' ? 0 : Math.max(0, workedMinutes - basicMinutes);
+  const calculatedOvertime = calculateOvertimeMinutes(workedMinutes, basicHours, nextStatus);
 
   data.lateMinutes = d.lateMinutes ?? calculatedLate;
   data.earlyLeaveMinutes = d.earlyLeaveMinutes ?? calculatedEarly;

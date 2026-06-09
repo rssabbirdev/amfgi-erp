@@ -124,24 +124,34 @@ export default function DispatchPage() {
 
   const [deleteTransaction] = useDeleteTransactionMutation();
   const [deleteDeliveryNote] = useDeleteDeliveryNoteMutation();
-  useEffect(() => {
-    setPage(1);
-  }, [filterType, selectedDate, noteTypeFilter, deferredJobSearch, deferredDeliveryNoteSearch, pageSize]);
-
-  const { data: dispatchPage, isFetching: loading } = useGetDispatchEntriesPageQuery(
-    {
+  const listQueryArgs = useMemo(
+    () => ({
       filterType,
       date: selectedDate,
-      limit: pageSize,
-      offset: (page - 1) * pageSize,
       noteType: noteTypeFilter,
       jobSearch: deferredJobSearch,
       deliveryNoteSearch: deferredDeliveryNoteSearch,
-    },
-    { skip: !canView, refetchOnMountOrArgChange: 30 },
+    }),
+    [filterType, selectedDate, noteTypeFilter, deferredJobSearch, deferredDeliveryNoteSearch],
   );
-  const entries = (dispatchPage?.entries ?? []) as Entry[];
-  const totalEntries = dispatchPage?.total ?? 0;
+
+  useEffect(() => {
+    setPage(1);
+  }, [listQueryArgs, pageSize]);
+
+  const { data: dispatchPage, isLoading, isFetching } = useGetDispatchEntriesPageQuery(listQueryArgs, {
+    skip: !canView,
+    refetchOnMountOrArgChange: 300,
+  });
+
+  const allEntries = (dispatchPage?.entries ?? []) as Entry[];
+  const totalEntries = dispatchPage?.total ?? allEntries.length;
+  const entries = useMemo(
+    () => allEntries.slice((page - 1) * pageSize, page * pageSize),
+    [allEntries, page, pageSize],
+  );
+  const loading = isLoading;
+  const isRefreshing = isFetching && !isLoading;
   const totalPages = Math.max(1, Math.ceil(totalEntries / pageSize));
   const pageStart = totalEntries === 0 ? 0 : (page - 1) * pageSize + 1;
   const pageEnd = Math.min(page * pageSize, totalEntries);
@@ -480,6 +490,9 @@ export default function DispatchPage() {
         </div>
 
         <div className="mt-4 rounded-md border border-border">
+          {isRefreshing ? (
+            <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">Refreshing list…</p>
+          ) : null}
           {loading ? (
             <div className="space-y-2 p-4">
               <Skeleton className="h-10 w-full" />

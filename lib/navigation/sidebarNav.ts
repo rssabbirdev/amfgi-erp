@@ -91,11 +91,20 @@ export const SIDEBAR_NAV_ENTRIES: SidebarNavEntry[] = [
     label: 'HR',
     icon: UserCircle,
     href: '/hr',
-    anyPerms: ['hr.employee.view', 'hr.schedule.view', 'hr.attendance.view'],
+    anyPerms: [
+      'hr.employee.view',
+      'hr.schedule.view',
+      'hr.attendance.view',
+      'hr.leave.view',
+      'hr.payroll.compensation',
+    ],
     children: [
       { href: '/hr/employees', label: 'Employees', perm: 'hr.employee.view' },
       { href: '/hr/schedule', label: 'Schedule Planning', perm: 'hr.schedule.view' },
       { href: '/hr/attendance', label: 'Attendance Management', perm: 'hr.attendance.view' },
+      { href: '/hr/leave', label: 'Leave', perm: 'hr.leave.view' },
+      { href: '/hr/payroll/preview', label: 'Payroll preview', perm: 'hr.payroll.compensation' },
+      { href: '/hr/payroll/runs', label: 'Pay runs', perm: 'hr.payroll.compensation' },
     ],
   },
   { type: 'link', href: '/me', label: 'My HR', icon: User, linkedEmployeeOnly: true },
@@ -116,6 +125,7 @@ export const SIDEBAR_NAV_ENTRIES: SidebarNavEntry[] = [
 export const SIDEBAR_SELF_SERVICE_ENTRIES: SidebarNavEntry[] = [
   { type: 'link', href: '/me/profile', label: 'My Profile', icon: User, linkedEmployeeOnly: true },
   { type: 'link', href: '/me/attendance', label: 'My Attendance', icon: Calendar, linkedEmployeeOnly: true },
+  { type: 'link', href: '/me/leave', label: 'My Leave', icon: Calendar, linkedEmployeeOnly: true },
 ];
 
 export type SidebarNavVisibility = {

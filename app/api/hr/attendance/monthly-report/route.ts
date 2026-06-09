@@ -124,6 +124,8 @@ export async function GET(req: Request) {
       presentDays: employee.presentDays,
       absentDays: employee.absentDays,
       leaveDays: employee.leaveDays,
+      paidLeaveDays: employee.paidLeaveDays,
+      unpaidLeaveDays: employee.unpaidLeaveDays,
       halfDayDays: employee.halfDayDays,
       workedHours: formatHoursFromMinutes(employee.workedMinutes),
       overtimeHours: formatHoursFromMinutes(employee.overtimeMinutes),

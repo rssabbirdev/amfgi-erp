@@ -31,6 +31,15 @@ function labelForSegment(segment: string, previous?: string) {
     'document-types': 'Document Types',
     expertises: 'Expertises',
     'employee-types': 'Employee Types',
+    'salary-structure': 'Salary structure',
+    'pay-types': 'Salary structure',
+    'salary-component': 'Salary components',
+    'allowance-types': 'Salary components',
+    'leave-types': 'Leave types',
+    payroll: 'Payroll',
+    preview: 'Preview',
+    runs: 'Pay runs',
+    leave: 'Leave',
   };
 
   const dateLabel = prettifyDateSegment(segment);

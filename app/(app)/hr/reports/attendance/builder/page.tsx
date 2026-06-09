@@ -29,6 +29,8 @@ type EmployeeSummary = {
   presentDays: number;
   absentDays: number;
   leaveDays: number;
+  paidLeaveDays: number;
+  unpaidLeaveDays: number;
   halfDayDays: number;
   missingPunchDays: number;
   workedHours: number;
@@ -45,6 +47,8 @@ type SelectedEmployeeReport = {
   presentDays: number;
   absentDays: number;
   leaveDays: number;
+  paidLeaveDays: number;
+  unpaidLeaveDays: number;
   halfDayDays: number;
   missingPunchDays: number;
   workedMinutes: number;

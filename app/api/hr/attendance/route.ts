@@ -58,13 +58,17 @@ function serializeAttendanceRow(
   row: AttendanceEntryRow,
   typeSettings: ReturnType<typeof readEmployeeTypeSettingsFromCompanyData>,
 ) {
+  const snapshottedBasicHours = Number(row.basicHours);
   return {
     ...row,
+    basicHours: snapshottedBasicHours,
     employee: {
       ...row.employee,
       status: (row.employee as { status?: string }).status ?? 'ACTIVE',
       employeeType: employeeTypeFromProfileExtension(row.employee.profileExtension),
-      basicHoursPerDay: basicHoursForProfileExtension(row.employee.profileExtension, typeSettings),
+      basicHoursPerDay: Number.isFinite(snapshottedBasicHours)
+        ? snapshottedBasicHours
+        : basicHoursForProfileExtension(row.employee.profileExtension, typeSettings),
       defaultTiming: (() => {
         const employeeType = employeeTypeFromProfileExtension(row.employee.profileExtension);
         const timing = typeSettings[employeeType];

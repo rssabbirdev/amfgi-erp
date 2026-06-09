@@ -70,6 +70,15 @@ model Company {
   scheduleAbsences         ScheduleAbsence[]
   driverRunLogs            DriverRunLog[]
   attendanceEntries        AttendanceEntry[]
+  leaveRequests            LeaveRequest[]
+  leaveBalances            LeaveBalance[]
+  payTypes                 PayType[]
+  allowanceTypes           AllowanceType[]
+  leaveTypes               LeaveType[]
+  employeeCompensations    EmployeeCompensation[]
+  employeeAllowances       EmployeeAllowance[]
+  payRuns                  PayRun[]
+  payRunLines              PayRunLine[]
   mobileAccessTokens       EmployeeMobileAccessToken[]
   visaPeriods              VisaPeriod[]
   employeeDocuments        EmployeeDocument[]
@@ -119,6 +128,7 @@ model User {
   quantityLogAdhocJobsCreated QuantityLogAdhocJob[]
   dispatchEntryRevisionsWritten DispatchEntryRevision[] @relation("DispatchEntryRevisionActor")
   passwordResetTokens         PasswordResetToken[]
+  reviewedLeaveRequests       LeaveRequest[]         @relation("LeaveRequestReviewedBy")
 
   @@index([activeCompanyId])
 }
@@ -445,6 +455,7 @@ model Material {
   unitCost                 Decimal?                 @db.Decimal(18, 4)
   assemblyOutputQuantity   Decimal                  @default(1) @db.Decimal(18, 3)
   assemblyOverheadPercent  Decimal                  @default(0) @db.Decimal(8, 3)
+  assemblyUseDynamicCost   Boolean                  @default(true)
   isActive                 Boolean                  @default(true)
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
@@ -1356,6 +1367,28 @@ enum AttendanceSource {
   SCHEDULE_BOILERPLATE
   MANUAL
   IMPORT
+  LEAVE_REQUEST
+}
+
+enum AttendanceLeaveType {
+  ANNUAL
+  SICK
+  EMERGENCY
+  ONE_DAY
+}
+
+enum LeaveRequestType {
+  ANNUAL
+  SICK
+  EMERGENCY
+  ONE_DAY
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 model Employee {
@@ -1400,6 +1433,11 @@ model Employee {
   teamLeaderAssignments WorkAssignment[]            @relation("WorkAssignmentTeamLeader")
   driver1Assignments    WorkAssignment[]            @relation("WorkAssignmentDriver1")
   driver2Assignments    WorkAssignment[]            @relation("WorkAssignmentDriver2")
+  leaveRequests         LeaveRequest[]
+  leaveBalances         LeaveBalance[]
+  compensations         EmployeeCompensation[]
+  allowances            EmployeeAllowance[]
+  payRunLines           PayRunLine[]
 
   @@unique([companyId, id])
   @@unique([companyId, employeeCode])
@@ -1422,9 +1460,10 @@ model VisaPeriod {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  employee  Employee           @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
-  documents EmployeeDocument[]
+  company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee       Employee               @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
+  documents      EmployeeDocument[]
+  compensations  EmployeeCompensation[]
 
   @@unique([companyId, id])
   @@index([companyId, employeeId])
@@ -1613,11 +1652,17 @@ model AttendanceEntry {
   breakStartAt       DateTime?
   breakEndAt         DateTime?
   status             AttendanceEntryStatus    @default(PRESENT)
+  /// Snapshot of basic duty hours for this day (from employee type settings at create time)
+  basicHours         Decimal                  @default(8) @db.Decimal(4, 2)
+  leaveType          AttendanceLeaveType?
+  leaveTypeId        String?
   lateMinutes        Int                      @default(0)
   earlyLeaveMinutes  Int                      @default(0)
   overtimeMinutes    Int                      @default(0)
   workflowStatus     AttendanceWorkflowStatus @default(DRAFT)
   source             AttendanceSource         @default(SCHEDULE_BOILERPLATE)
+  leaveRequestId     String?
+  remarks            String?                  @db.Text
   approvedById       String?
   approvedAt         DateTime?
   createdAt          DateTime                 @default(now())
@@ -1626,11 +1671,239 @@ model AttendanceEntry {
   company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee       Employee        @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
   workAssignment WorkAssignment? @relation(fields: [companyId, workAssignmentId], references: [companyId, id], onDelete: Restrict)
+  leaveRequest   LeaveRequest?   @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+  leaveTypeRef   LeaveType?      @relation(fields: [companyId, leaveTypeId], references: [companyId, id], onDelete: Restrict)
 
   @@index([companyId, workDate])
   @@index([companyId, employeeId, workDate])
   @@index([companyId, workAssignmentId])
+  @@index([companyId, leaveTypeId])
   @@index([workflowStatus])
+  @@index([leaveRequestId])
+}
+
+model LeaveRequest {
+  id               String             @id @default(cuid())
+  companyId        String
+  employeeId       String
+  leaveType        LeaveRequestType
+  leaveTypeId      String?
+  startDate        DateTime           @db.Date
+  endDate          DateTime           @db.Date
+  status           LeaveRequestStatus @default(PENDING)
+  reason           String?            @db.Text
+  deductFromBalance Boolean           @default(true)
+  submittedAt      DateTime           @default(now())
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewNote       String?            @db.Text
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  company            Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee           Employee          @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
+  reviewedBy         User?             @relation("LeaveRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  leaveTypeRef       LeaveType?        @relation(fields: [companyId, leaveTypeId], references: [companyId, id], onDelete: Restrict)
+  attendanceEntries  AttendanceEntry[]
+
+  @@index([companyId, status])
+  @@index([companyId, employeeId])
+  @@index([companyId, leaveTypeId])
+  @@index([companyId, startDate, endDate])
+}
+
+model LeaveBalance {
+  id               String   @id @default(cuid())
+  companyId        String
+  employeeId       String
+  year             Int
+  entitlementDays  Decimal  @default(0) @db.Decimal(6, 2)
+  usedDays         Decimal  @default(0) @db.Decimal(6, 2)
+  adjustedDays     Decimal  @default(0) @db.Decimal(6, 2)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
+
+  @@unique([companyId, employeeId, year])
+  @@index([companyId, year])
+}
+
+model PayType {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  code      String
+  isActive  Boolean  @default(true)
+  isSystem  Boolean  @default(false)
+  config    Json
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company       Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  compensations EmployeeCompensation[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+}
+
+model EmployeeCompensation {
+  id               String    @id @default(cuid())
+  companyId        String
+  employeeId       String
+  payTypeId        String
+  visaPeriodId     String?
+  monthlyBasic     Decimal?  @db.Decimal(12, 2)
+  monthlyAllowance Decimal?  @db.Decimal(12, 2)
+  dailyRate        Decimal?  @db.Decimal(12, 2)
+  effectiveFrom    DateTime  @db.Date
+  effectiveTo      DateTime? @db.Date
+  notes            String?   @db.Text
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee   Employee            @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
+  payType    PayType             @relation(fields: [companyId, payTypeId], references: [companyId, id], onDelete: Restrict)
+  visaPeriod VisaPeriod?         @relation(fields: [companyId, visaPeriodId], references: [companyId, id], onDelete: SetNull)
+  allowances EmployeeAllowance[]
+
+  @@unique([companyId, id])
+  @@index([companyId, employeeId])
+  @@index([companyId, payTypeId])
+  @@index([companyId, visaPeriodId])
+  @@index([companyId, effectiveFrom])
+}
+
+enum SalaryComponentKind {
+  EARNING
+  DEDUCTION
+}
+
+enum SalaryComponentApplication {
+  FIXED_MONTHLY
+  ATTENDANCE_PRESENT
+}
+
+model AllowanceType {
+  id              String                     @id @default(cuid())
+  companyId       String
+  name            String
+  code            String
+  description     String?                    @db.Text
+  componentKind   SalaryComponentKind        @default(EARNING)
+  applicationMode SalaryComponentApplication @default(ATTENDANCE_PRESENT)
+  isActive        Boolean                    @default(true)
+  sortOrder       Int                        @default(0)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeAllowances EmployeeAllowance[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+}
+
+model LeaveType {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  code        String
+  description String?  @db.Text
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(100)
+  /// Pay tiers, entitlement, probation rules — see lib/hr/leaveTypeRules.ts
+  rules       Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  attendanceEntries AttendanceEntry[]
+  leaveRequests     LeaveRequest[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+}
+
+model EmployeeAllowance {
+  id                     String    @id @default(cuid())
+  companyId              String
+  employeeId             String
+  employeeCompensationId String?
+  allowanceTypeId        String
+  amount                 Decimal   @db.Decimal(12, 2)
+  effectiveFrom          DateTime  @db.Date
+  effectiveTo            DateTime? @db.Date
+  notes                  String?   @db.Text
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee             Employee              @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade)
+  employeeCompensation EmployeeCompensation? @relation(fields: [companyId, employeeCompensationId], references: [companyId, id], onDelete: Cascade)
+  allowanceType        AllowanceType         @relation(fields: [companyId, allowanceTypeId], references: [companyId, id], onDelete: Restrict)
+
+  @@index([companyId, employeeId])
+  @@index([companyId, employeeCompensationId])
+  @@index([companyId, allowanceTypeId])
+  @@index([companyId, effectiveFrom])
+}
+
+enum PayRunStatus {
+  FINALIZED
+}
+
+model PayRun {
+  id              String       @id @default(cuid())
+  companyId       String
+  month           String
+  status          PayRunStatus @default(FINALIZED)
+  totalGross      Decimal      @db.Decimal(14, 2)
+  employeeCount   Int
+  includedCount   Int
+  note            String?      @db.Text
+  createdByUserId String?
+  createdAt       DateTime     @default(now())
+
+  company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lines   PayRunLine[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, month])
+  @@index([companyId, createdAt])
+}
+
+model PayRunLine {
+  id                        String   @id @default(cuid())
+  companyId                 String
+  payRunId                  String
+  employeeId                String
+  employeeCode              String
+  employeeName              String
+  payTypeId                 String?
+  payTypeName               String?
+  payTypeCode               String?
+  compensationEffectiveFrom DateTime? @db.Date
+  gross                     Decimal  @default(0) @db.Decimal(12, 2)
+  breakdown                 Json
+  dayDetails                Json?
+  approvedAttendanceRows    Int      @default(0)
+  draftAttendanceRows       Int      @default(0)
+  skipped                   Boolean  @default(false)
+  skipReason                String?
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payRun   PayRun   @relation(fields: [companyId, payRunId], references: [companyId, id], onDelete: Cascade)
+  employee Employee @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Restrict)
+
+  @@index([companyId, payRunId])
+  @@index([companyId, employeeId])
 }
 
 model EmployeeMobileAccessToken {

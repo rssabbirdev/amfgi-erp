@@ -55,6 +55,7 @@ export interface Material {
   unitCost?: number;
   assemblyOutputQuantity?: number;
   assemblyOverheadPercent?: number;
+  assemblyUseDynamicCost?: boolean;
   isActive: boolean;
   createdAt?: string | Date;
   updatedAt?: string | Date;
@@ -209,15 +210,17 @@ export const materialsApi = appApi.injectEndpoints({
     }),
 
     bulkCreateMaterials: builder.mutation<
-      { created: number; updated: number },
-      { newRows: Partial<Material>[]; updateRows: Partial<Material>[] }
+      { created: number; updated: number; skipped: number; warnings: string[] },
+      { newRows: unknown[]; updateRows: unknown[] }
     >({
       query: (body) => ({
         url: '/materials/bulk',
         method: 'POST',
         body,
       }),
-      transformResponse: (r: { data: { created: number; updated: number } }) => r.data,
+      transformResponse: (r: {
+        data: { created: number; updated: number; skipped: number; warnings: string[] };
+      }) => r.data,
       invalidatesTags: [{ type: 'Material', id: 'LIST' }],
     }),
 

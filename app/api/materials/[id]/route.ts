@@ -24,6 +24,7 @@ const UpdateSchema = z.object({
   reorderLevel:        z.number().finite().min(0).optional(),
   assemblyOutputQuantity: z.number().finite().positive().optional(),
   assemblyOverheadPercent: z.number().finite().min(0).optional(),
+  assemblyUseDynamicCost: z.boolean().optional(),
   imageUrl: z.string().url().optional(),
   attachmentUrl: z.string().url().optional(),
   attachmentName: z.string().min(1).max(255).optional(),
@@ -156,6 +157,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             parsed.data.assemblyOverheadPercent !== undefined
               ? decimalToNumber(parsed.data.assemblyOverheadPercent) ?? 0
               : undefined,
+          assemblyUseDynamicCost: parsed.data.assemblyUseDynamicCost,
         },
       });
 

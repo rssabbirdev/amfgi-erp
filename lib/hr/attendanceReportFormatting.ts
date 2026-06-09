@@ -8,7 +8,8 @@ export type AttendanceReportColumnKey =
   | 'totalHours'
   | 'basicHours'
   | 'overtimeHours'
-  | 'status';
+  | 'status'
+  | 'leaveType';
 
 export type AttendanceReportFormatOptions = {
   dateFormat: 'long' | 'short';
@@ -20,6 +21,7 @@ export type AttendanceReportEntryLike = {
   workDate: string;
   workLocation: string;
   status: string;
+  leaveType?: string | null;
   jobNumber: string;
   checkInMinutes: number | null;
   checkOutMinutes: number | null;
@@ -43,6 +45,7 @@ export const ATTENDANCE_REPORT_COLUMN_OPTIONS: Array<{
   { key: 'basicHours', label: 'Basic Hrs' },
   { key: 'overtimeHours', label: 'OT Hrs' },
   { key: 'status', label: 'Status' },
+  { key: 'leaveType', label: 'Leave type' },
 ];
 
 export const DEFAULT_ATTENDANCE_REPORT_COLUMNS: AttendanceReportColumnKey[] =
@@ -150,6 +153,8 @@ export function formatAttendanceReportCell(
       return formatAttendanceReportHours(entry.overtimeHours, formats.hoursFormat);
     case 'status':
       return attendanceReportStatusLabel(entry.status);
+    case 'leaveType':
+      return entry.leaveType ? entry.leaveType.replace(/_/g, ' ') : '';
     default:
       return '';
   }
