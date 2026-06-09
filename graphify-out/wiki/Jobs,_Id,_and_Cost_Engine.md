@@ -35,13 +35,14 @@
 
 - [[Jobs, Id, and Cost Engine]] (23 shared connections)
 - [[Store, API, and Endpoints]] (10 shared connections)
+- [[Components, Reports, and HR]] (7 shared connections)
 - [[Lib Job Costing]] (6 shared connections)
-- [[Reports, Components, and Admin]] (5 shared connections)
-- [[Stock Job Budget, Daily Quantity Log, and Integrity]] (3 shared connections)
-- [[Stock, Components, and Settings]] (2 shared connections)
-- [[Components, Customers, and Lib]] (2 shared connections)
-- [[Components, Stock, and Lib]] (1 shared connections)
+- [[Stock, Components, and Customers]] (2 shared connections)
+- [[Stock, Components, and Suppliers]] (1 shared connections)
 - [[Components HR and Ui]] (1 shared connections)
+- [[Components Ui, Sidebar Nav Menu, and Workspace]] (1 shared connections)
+- [[Stock Goods Receipt and Dispatch]] (1 shared connections)
+- [[Lib Import Export]] (1 shared connections)
 
 ## Source Files
 

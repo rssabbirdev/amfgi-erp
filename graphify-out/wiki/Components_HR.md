@@ -4,7 +4,7 @@
 
 ## Key Concepts
 
-- **EmployeeProfileView.tsx** (34 connections) — `components/hr/EmployeeProfileView.tsx`
+- **EmployeeProfileView.tsx** (35 connections) — `components/hr/EmployeeProfileView.tsx`
 - **EmployeeProfileView()** (7 connections) — `components/hr/EmployeeProfileView.tsx`
 - **page.tsx** (3 connections) — `app/(app)/hr/employees/[id]/page.tsx`
 - **toInputDate()** (3 connections) — `components/hr/EmployeeProfileView.tsx`
@@ -30,11 +30,10 @@
 ## Relationships
 
 - [[Lib HR]] (6 shared connections)
-- [[Reports, Components, and Admin]] (3 shared connections)
-- [[Stock, Customers, and Settings]] (3 shared connections)
-- [[Components, Stock, and Lib]] (2 shared connections)
-- [[Stock, Components, and Settings]] (1 shared connections)
-- [[Components, Customers, and Lib]] (1 shared connections)
+- [[Components, Reports, and HR]] (5 shared connections)
+- [[Stock, Components, and Suppliers]] (3 shared connections)
+- [[Stock, Components, and Customers]] (2 shared connections)
+- [[Components HR and Ui]] (1 shared connections)
 - [[Components, Ui, and Multi Select Dropdown]] (1 shared connections)
 - [[Customers Jobs]] (1 shared connections)
 - [[Components Me]] (1 shared connections)
@@ -47,7 +46,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 73 (100%)
+- EXTRACTED: 74 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

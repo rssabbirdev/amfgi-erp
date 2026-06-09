@@ -1,50 +1,49 @@
 # Lib HR
 
-> 19 nodes · cohesion 0.19
+> 15 nodes · cohesion 0.21
 
 ## Key Concepts
 
-- **attendanceReports.ts** (24 connections) — `lib/hr/attendanceReports.ts`
-- **getMonthlyAttendanceReports()** (14 connections) — `lib/hr/attendanceReports.ts`
-- **basicHoursForProfileExtension()** (11 connections) — `lib/hr/employeeTypeSettings.ts`
-- **employeeTypeFromProfileExtension()** (8 connections) — `lib/hr/employeeTypeSettings.ts`
-- **attendanceReportStatusLabel()** (4 connections) — `lib/hr/attendanceReportFormatting.ts`
-- **serializeAttendanceRow()** (3 connections) — `app/api/hr/attendance/route.ts`
-- **formatHoursFromMinutes()** (3 connections) — `lib/hr/attendanceReports.ts`
-- **exportStatusLabel()** (3 connections) — `lib/hr/attendanceReports.ts`
-- **exportWorkLocation()** (3 connections) — `lib/hr/attendanceReports.ts`
-- **monthBounds()** (2 connections) — `lib/hr/attendanceReports.ts`
-- **diffMinutes()** (2 connections) — `lib/hr/attendanceReports.ts`
-- **minutesOfDay()** (2 connections) — `lib/hr/attendanceReports.ts`
-- **isoDay()** (2 connections) — `lib/hr/attendanceReports.ts`
-- **locationLabel()** (2 connections) — `lib/hr/attendanceReports.ts`
-- **findMonthlyAttendanceRows()** (2 connections) — `lib/hr/attendanceReports.ts`
-- **AttendanceReportRow** (1 connections) — `lib/hr/attendanceReports.ts`
-- **AttendanceEmployeeReport** (1 connections) — `lib/hr/attendanceReports.ts`
-- **attendanceReportEmployeeSelect** (1 connections) — `lib/hr/attendanceReports.ts`
-- **attendanceReportWorkAssignmentSelect** (1 connections) — `lib/hr/attendanceReports.ts`
+- **workforceProfile.ts** (25 connections) — `lib/hr/workforceProfile.ts`
+- **parseWorkforceProfile()** (20 connections) — `lib/hr/workforceProfile.ts`
+- **page.tsx** (13 connections) — `app/(app)/hr/settings/employee-types/page.tsx`
+- **buildWorkforceProfileExtension()** (10 connections) — `lib/hr/workforceProfile.ts`
+- **WORKFORCE_EMPLOYEE_TYPE_OPTIONS** (5 connections) — `lib/hr/workforceProfile.ts`
+- **WorkforceEmployeeType** (5 connections) — `lib/hr/workforceProfile.ts`
+- **normalizeType()** (3 connections) — `lib/hr/workforceProfile.ts`
+- **normalizeExpertises()** (3 connections) — `lib/hr/workforceProfile.ts`
+- **normalizeVisaHolding()** (3 connections) — `lib/hr/workforceProfile.ts`
+- **WorkforceVisaHolding** (2 connections) — `lib/hr/workforceProfile.ts`
+- **SettingsMap** (1 connections) — `app/(app)/hr/settings/employee-types/page.tsx`
+- **cellInputClass** (1 connections) — `app/(app)/hr/settings/employee-types/page.tsx`
+- **EmployeeTypeSettingsPage()** (1 connections) — `app/(app)/hr/settings/employee-types/page.tsx`
+- **WorkforceProfile** (1 connections) — `lib/hr/workforceProfile.ts`
+- **DEFAULT_WORKFORCE_PROFILE** (1 connections) — `lib/hr/workforceProfile.ts`
 
 ## Relationships
 
-- [[API HR and Stock Exception Approvals]] (6 shared connections)
-- [[API HR, Stock, and Me]] (5 shared connections)
-- [[Lib and HR]] (5 shared connections)
-- [[Lib and API]] (4 shared connections)
+- [[Lib, Store, and Components]] (10 shared connections)
+- [[Components, Reports, and HR]] (8 shared connections)
+- [[Components HR]] (6 shared connections)
+- [[Lib HR]] (4 shared connections)
+- [[Scripts Seed]] (4 shared connections)
+- [[Components Me]] (3 shared connections)
 - [[Lib, HR, and Employee Type Settings]] (3 shared connections)
-- [[API Me, Settings, and Jobs]] (1 shared connections)
-- [[Lib HR]] (1 shared connections)
+- [[Lib, HR, and Schedule Search API]] (3 shared connections)
+- [[Customers Jobs]] (2 shared connections)
+- [[HR Schedule]] (2 shared connections)
+- [[API HR, Settings, and Stock Exception Approvals]] (2 shared connections)
+- [[Lib Job Costing]] (2 shared connections)
 
 ## Source Files
 
-- `app/api/hr/attendance/route.ts`
-- `lib/hr/attendanceReportFormatting.ts`
-- `lib/hr/attendanceReports.ts`
-- `lib/hr/employeeTypeSettings.ts`
+- `app/(app)/hr/settings/employee-types/page.tsx`
+- `lib/hr/workforceProfile.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 88 (99%)
-- INFERRED: 1 (1%)
+- EXTRACTED: 94 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

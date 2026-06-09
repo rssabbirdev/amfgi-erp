@@ -1,8 +1,8 @@
 # cn()
 
-> God node · 169 connections · `lib/utils.ts`
+> God node · 172 connections · `lib/utils.ts`
 
-**Community:** [[Reports, Components, and Admin]]
+**Community:** [[Components Ui, Sidebar Nav Menu, and Workspace]]
 
 ## Connections by Relation
 
@@ -33,25 +33,25 @@
 
 ### imports
 - [[FormulaBuilderEditor.tsx]] `EXTRACTED`
+- [[button.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[ScheduleDayClient.tsx]] `EXTRACTED`
-- [[button.tsx]] `EXTRACTED`
-- [[sidebar.tsx]] `EXTRACTED`
-- [[card.tsx]] `EXTRACTED`
 - [[input.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[alert.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
+- [[sidebar.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[AttendanceEntryGrid.tsx]] `EXTRACTED`
+- [[card.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[alert.tsx]] `EXTRACTED`
+- [[badge.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
-- [[GoodsReceiptLineGrid.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[Modal.tsx]] `EXTRACTED`
 
 ---
 

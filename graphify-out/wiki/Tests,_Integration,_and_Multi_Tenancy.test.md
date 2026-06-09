@@ -13,7 +13,7 @@
 ## Relationships
 
 - [[Tests Integration]] (5 shared connections)
-- [[API Reports, Materials, and Transactions]] (2 shared connections)
+- [[API and Lib]] (2 shared connections)
 
 ## Source Files
 

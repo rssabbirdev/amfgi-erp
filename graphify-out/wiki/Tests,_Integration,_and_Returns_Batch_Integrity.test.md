@@ -4,7 +4,7 @@
 
 ## Key Concepts
 
-- **returns-batch-integrity.test.ts** (16 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
+- **returns-batch-integrity.test.ts** (17 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
 - **seedDispatchScenario()** (1 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
 - **stockOutTxn** (1 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
 - **returnTxn** (1 connections) — `__tests__/integration/returns-batch-integrity.test.ts`
@@ -14,9 +14,11 @@
 ## Relationships
 
 - [[Tests Integration]] (5 shared connections)
-- [[API and Lib]] (2 shared connections)
-- [[Lib and API]] (2 shared connections)
-- [[API Reports, Materials, and Transactions]] (2 shared connections)
+- [[API and Lib]] (3 shared connections)
+- [[API Materials, Settings, and Media]] (1 shared connections)
+- [[API HR, Settings, and Stock Exception Approvals]] (1 shared connections)
+- [[Lib Utils, Dispatch Entry Revision, and Db]] (1 shared connections)
+- [[API Upload, HR, and Transactions]] (1 shared connections)
 
 ## Source Files
 
@@ -24,7 +26,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 21 (100%)
+- EXTRACTED: 22 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

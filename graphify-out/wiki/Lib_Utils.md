@@ -1,58 +1,56 @@
 # Lib Utils
 
-> 22 nodes · cohesion 0.15
+> 33 nodes · cohesion 0.10
 
 ## Key Concepts
 
-- **route.ts** (24 connections) — `app/api/stock-exception-approvals/[id]/route.ts`
-- **manualStockAdjustmentRequest.ts** (17 connections) — `lib/utils/manualStockAdjustmentRequest.ts`
-- **route.ts** (16 connections) — `app/api/transactions/manual-adjustment/route.ts`
-- **manual-stock-adjustment-approval.test.ts** (13 connections) — `__tests__/integration/manual-stock-adjustment-approval.test.ts`
-- **manualStockAdjustmentPolicy.ts** (10 connections) — `lib/utils/manualStockAdjustmentPolicy.ts`
-- **createManualStockAdjustmentRequest()** (9 connections) — `lib/utils/manualStockAdjustmentRequest.ts`
-- **POST()** (7 connections) — `app/api/transactions/manual-adjustment/route.ts`
-- **stockExceptionApproval.ts** (7 connections) — `lib/utils/stockExceptionApproval.ts`
-- **upsertStockExceptionApproval()** (6 connections) — `lib/utils/stockExceptionApproval.ts`
-- **ManualStockAdjustmentLinePayload** (5 connections) — `lib/utils/manualStockAdjustmentExecution.ts`
-- **validateManualStockAdjustmentRequest()** (5 connections) — `lib/utils/manualStockAdjustmentPolicy.ts`
-- **summarizeManualStockAdjustmentPolicy()** (2 connections) — `lib/utils/manualStockAdjustmentPolicy.ts`
-- **buildReferenceNumber()** (2 connections) — `lib/utils/manualStockAdjustmentRequest.ts`
-- **ManualStockAdjustmentLineSchema** (1 connections) — `app/api/transactions/manual-adjustment/route.ts`
-- **ManualStockAdjustmentSchema** (1 connections) — `app/api/transactions/manual-adjustment/route.ts`
-- **EvidenceType** (1 connections) — `lib/utils/manualStockAdjustmentPolicy.ts`
-- **Tx** (1 connections) — `lib/utils/manualStockAdjustmentRequest.ts`
-- **ManualStockAdjustmentRequestSource** (1 connections) — `lib/utils/manualStockAdjustmentRequest.ts`
-- **Tx** (1 connections) — `lib/utils/stockExceptionApproval.ts`
-- **StockExceptionApprovalInput** (1 connections) — `lib/utils/stockExceptionApproval.ts`
-- **decreaseTxn** (1 connections) — `__tests__/integration/manual-stock-adjustment-approval.test.ts`
-- **increaseTxn** (1 connections) — `__tests__/integration/manual-stock-adjustment-approval.test.ts`
+- **templateData.ts** (53 connections) — `lib/utils/templateData.ts`
+- **buildDeliveryNoteTemplateData()** (9 connections) — `lib/utils/templateData.ts`
+- **buildTemplateData()** (9 connections) — `lib/utils/templateData.ts`
+- **jobTemplateSlice()** (6 connections) — `lib/utils/templateData.ts`
+- **buildDataContext()** (5 connections) — `lib/utils/templateData.ts`
+- **enrichWithPrimaryContact()** (4 connections) — `lib/utils/templateData.ts`
+- **parseDeliveryNoteNumber()** (4 connections) — `lib/utils/templateData.ts`
+- **parseCustomItems()** (4 connections) — `lib/utils/templateData.ts`
+- **stockOutMaterialTableRows()** (4 connections) — `lib/utils/templateData.ts`
+- **finiteNumber()** (3 connections) — `lib/utils/templateData.ts`
+- **parseDeliveryContactPerson()** (3 connections) — `lib/utils/templateData.ts`
+- **deliveryNoteTableRowsFromNotesAndTransactions()** (3 connections) — `lib/utils/templateData.ts`
+- **formatValue()** (3 connections) — `lib/utils/templateData.ts`
+- **userSliceFromSession()** (3 connections) — `lib/utils/templateData.ts`
+- **PrintDeliveryNotePage()** (2 connections) — `app/print/delivery-note/page.tsx`
+- **TemplateDataContext** (2 connections) — `lib/utils/templateData.ts`
+- **toIsoDateString()** (2 connections) — `lib/utils/templateData.ts`
+- **contactsJsonToString()** (2 connections) — `lib/utils/templateData.ts`
+- **parseJobContacts()** (2 connections) — `lib/utils/templateData.ts`
+- **getMockData()** (2 connections) — `lib/utils/templateData.ts`
+- **GoodsReceiptContext** (1 connections) — `lib/utils/templateData.ts`
+- **PackingSlipContext** (1 connections) — `lib/utils/templateData.ts`
+- **MaterialLabelContext** (1 connections) — `lib/utils/templateData.ts`
+- **UserPrintSlice** (1 connections) — `lib/utils/templateData.ts`
+- **AVAILABLE_FIELDS** (1 connections) — `lib/utils/templateData.ts`
+- *... and 8 more nodes in this community*
 
 ## Relationships
 
-- [[API Materials, Transactions, and Stock Exception Approvals]] (13 shared connections)
-- [[Tests Integration]] (12 shared connections)
-- [[Lib Utils, Stock, and Warehouses]] (8 shared connections)
-- [[Stock, Lib, and Components]] (8 shared connections)
-- [[API and Lib]] (7 shared connections)
-- [[Lib, API, and Tests]] (7 shared connections)
-- [[API HR and Stock Exception Approvals]] (3 shared connections)
-- [[API Me, Settings, and Jobs]] (2 shared connections)
-- [[Lib Stock and Utils]] (2 shared connections)
-- [[Lib and API]] (2 shared connections)
+- [[Components Print Builder]] (10 shared connections)
+- [[API and Lib]] (6 shared connections)
+- [[Components HR and Ui]] (4 shared connections)
+- [[Lib, Print, and Scripts]] (3 shared connections)
+- [[Lib Utils and Types]] (3 shared connections)
+- [[API Upload, HR, and Transactions]] (3 shared connections)
+- [[HR Schedule]] (1 shared connections)
+- [[Lib Types]] (1 shared connections)
+- [[Components and Lib]] (1 shared connections)
 
 ## Source Files
 
-- `__tests__/integration/manual-stock-adjustment-approval.test.ts`
-- `app/api/stock-exception-approvals/[id]/route.ts`
-- `app/api/transactions/manual-adjustment/route.ts`
-- `lib/utils/manualStockAdjustmentExecution.ts`
-- `lib/utils/manualStockAdjustmentPolicy.ts`
-- `lib/utils/manualStockAdjustmentRequest.ts`
-- `lib/utils/stockExceptionApproval.ts`
+- `app/print/delivery-note/page.tsx`
+- `lib/utils/templateData.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 132 (100%)
+- EXTRACTED: 138 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

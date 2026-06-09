@@ -4,7 +4,7 @@
 
 ## Key Concepts
 
-- **stock-count-sessions-report.test.ts** (14 connections) — `__tests__/integration/stock-count-sessions-report.test.ts`
+- **stock-count-sessions-report.test.ts** (15 connections) — `__tests__/integration/stock-count-sessions-report.test.ts`
 - **approvedDecisionAt** (1 connections) — `__tests__/integration/stock-count-sessions-report.test.ts`
 - **approvedCreatedAt** (1 connections) — `__tests__/integration/stock-count-sessions-report.test.ts`
 - **rejectedDecisionAt** (1 connections) — `__tests__/integration/stock-count-sessions-report.test.ts`
@@ -16,7 +16,8 @@
 ## Relationships
 
 - [[Tests Integration]] (5 shared connections)
-- [[API Materials, Transactions, and Stock Exception Approvals]] (2 shared connections)
+- [[API Materials, Settings, and Media]] (2 shared connections)
+- [[API Job Costing, Stock Count Sessions, and Jobs]] (1 shared connections)
 
 ## Source Files
 
@@ -24,7 +25,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 21 (100%)
+- EXTRACTED: 22 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

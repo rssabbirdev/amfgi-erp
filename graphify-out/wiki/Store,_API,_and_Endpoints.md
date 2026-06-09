@@ -1,32 +1,29 @@
 # Store, API, and Endpoints
 
-> 9 nodes · cohesion 0.22
+> 8 nodes · cohesion 0.25
 
 ## Key Concepts
 
-- **receipts.ts** (13 connections) — `store/api/endpoints/receipts.ts`
-- **ReceiptEntry** (2 connections) — `store/api/endpoints/receipts.ts`
-- **ReceiptAdjustmentImpactResponse** (2 connections) — `store/api/endpoints/receipts.ts`
-- **ReceiptMaterial** (1 connections) — `store/api/endpoints/receipts.ts`
-- **ReceiptAdjustmentImpactTransaction** (1 connections) — `store/api/endpoints/receipts.ts`
-- **ReceiptAdjustmentImpactRow** (1 connections) — `store/api/endpoints/receipts.ts`
-- **ReceiptEntriesListParams** (1 connections) — `store/api/endpoints/receipts.ts`
-- **ReceiptEntriesListResponse** (1 connections) — `store/api/endpoints/receipts.ts`
-- **receiptsApi** (1 connections) — `store/api/endpoints/receipts.ts`
+- **stockCountSessions.ts** (9 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **StockCountSessionLineDto** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **StockCountSessionRevisionDto** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **StockCountSessionDto** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **StockCountSessionListResponse** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **StockCountSessionSubmitResponse** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **UpsertStockCountSessionPayload** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
+- **stockCountSessionsApi** (1 connections) — `store/api/endpoints/stockCountSessions.ts`
 
 ## Relationships
 
-- [[Stock, Customers, and Settings]] (3 shared connections)
-- [[Stock Job Budget, Daily Quantity Log, and Integrity]] (2 shared connections)
 - [[Store API]] (2 shared connections)
 
 ## Source Files
 
-- `store/api/endpoints/receipts.ts`
+- `store/api/endpoints/stockCountSessions.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 23 (100%)
+- EXTRACTED: 16 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

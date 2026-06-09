@@ -33,8 +33,8 @@
 
 ## Relationships
 
-- [[Stock, Lib, and Components]] (4 shared connections)
-- [[Stock Job Budget, Daily Quantity Log, and Integrity]] (4 shared connections)
+- [[Stock, HR, and Customers]] (4 shared connections)
+- [[Stock, Components, and Lib]] (4 shared connections)
 - [[Store API]] (2 shared connections)
 
 ## Source Files

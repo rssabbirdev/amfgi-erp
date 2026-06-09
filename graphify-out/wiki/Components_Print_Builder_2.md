@@ -1,10 +1,12 @@
 # Components Print Builder
 
-> 31 nodes · cohesion 0.09
+> 37 nodes · cohesion 0.08
 
 ## Key Concepts
 
 - **DocumentRenderer.tsx** (48 connections) — `components/print-builder/DocumentRenderer.tsx`
+- **DocumentSection** (10 connections) — `lib/types/documentTemplate.ts`
+- **migrateDocumentSections.ts** (9 connections) — `lib/utils/migrateDocumentSections.ts`
 - **resolveField()** (7 connections) — `lib/utils/templateData.ts`
 - **BoxRenderer()** (5 connections) — `components/print-builder/DocumentRenderer.tsx`
 - **resolveInlineTemplate()** (4 connections) — `components/print-builder/DocumentRenderer.tsx`
@@ -14,10 +16,12 @@
 - **sectionStyleWrap.tsx** (4 connections) — `components/print-builder/sectionStyleWrap.tsx`
 - **migrateLegacyDocumentSections()** (4 connections) — `lib/utils/migrateDocumentSections.ts`
 - **TextRenderer()** (3 connections) — `components/print-builder/DocumentRenderer.tsx`
+- **ImageSection** (3 connections) — `lib/types/documentTemplate.ts`
 - **SectionRenderer()** (2 connections) — `components/print-builder/DocumentRenderer.tsx`
 - **ImageSectionRenderer()** (2 connections) — `components/print-builder/DocumentRenderer.tsx`
 - **boxShapeRadiusAndClip()** (2 connections) — `components/print-builder/DocumentRenderer.tsx`
 - **wrapSectionChrome()** (2 connections) — `components/print-builder/sectionStyleWrap.tsx`
+- **SectionBuilderMeta** (2 connections) — `lib/types/documentTemplate.ts`
 - **InfoGridSection** (2 connections) — `lib/types/documentTemplate.ts`
 - **TableSection** (2 connections) — `lib/types/documentTemplate.ts`
 - **SignaturesSection** (2 connections) — `lib/types/documentTemplate.ts`
@@ -25,21 +29,17 @@
 - **LineSection** (2 connections) — `lib/types/documentTemplate.ts`
 - **DocumentRendererProps** (1 connections) — `components/print-builder/DocumentRenderer.tsx`
 - **SectionRendererProps** (1 connections) — `components/print-builder/DocumentRenderer.tsx`
-- **getScheduleLocationCellTone()** (1 connections) — `components/print-builder/DocumentRenderer.tsx`
-- **FieldRowRenderer()** (1 connections) — `components/print-builder/DocumentRenderer.tsx`
-- **InfoGridRenderer()** (1 connections) — `components/print-builder/DocumentRenderer.tsx`
-- **ScheduleWorkerBlock** (1 connections) — `components/print-builder/DocumentRenderer.tsx`
-- *... and 6 more nodes in this community*
+- *... and 12 more nodes in this community*
 
 ## Relationships
 
-- [[Components Print Builder]] (10 shared connections)
-- [[Lib Types and Utils]] (10 shared connections)
+- [[Components Print Builder]] (14 shared connections)
+- [[Lib Types]] (12 shared connections)
 - [[Lib Utils]] (3 shared connections)
-- [[Lib and API]] (3 shared connections)
+- [[API and Lib]] (3 shared connections)
 - [[Lib Utils and Types]] (2 shared connections)
-- [[Lib and Components]] (2 shared connections)
-- [[Lib, Print, and Scripts]] (1 shared connections)
+- [[Lib, Print, and Scripts]] (2 shared connections)
+- [[Components and Lib]] (1 shared connections)
 
 ## Source Files
 
@@ -51,7 +51,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 117 (100%)
+- EXTRACTED: 143 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

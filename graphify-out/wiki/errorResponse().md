@@ -1,17 +1,18 @@
 # errorResponse()
 
-> God node · 336 connections · `lib/utils/apiResponse.ts`
+> God node · 385 connections · `lib/utils/apiResponse.ts`
 
-**Community:** [[API Materials, Transactions, and Stock Exception Approvals]]
+**Community:** [[API Materials, Settings, and Media]]
 
 ## Connections by Relation
 
 ### calls
 - [[requireCompanySession()]] `EXTRACTED`
-- [[PUT()]] `EXTRACTED`
 - [[DELETE()]] `EXTRACTED`
-- [[GET()]] `EXTRACTED`
 - [[PATCH()]] `EXTRACTED`
+- [[PUT()]] `EXTRACTED`
+- [[GET()]] `EXTRACTED`
+- [[POST()]] `EXTRACTED`
 - [[POST()]] `EXTRACTED`
 - [[POST()]] `EXTRACTED`
 - [[POST()]] `EXTRACTED`
@@ -26,14 +27,13 @@
 - [[GET()]] `EXTRACTED`
 - [[POST()]] `EXTRACTED`
 - [[POST()]] `EXTRACTED`
-- [[GET()]] `EXTRACTED`
 
 ### contains
 - [[apiResponse.ts]] `EXTRACTED`
 
 ### imports
-- [[route.ts]] `EXTRACTED`
 - [[requireCompanySession.ts]] `EXTRACTED`
+- [[route.ts]] `EXTRACTED`
 - [[route.ts]] `EXTRACTED`
 - [[route.ts]] `EXTRACTED`
 - [[route.ts]] `EXTRACTED`

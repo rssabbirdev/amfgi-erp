@@ -30,13 +30,13 @@
 
 ## Relationships
 
-- [[Reports, Components, and Admin]] (4 shared connections)
-- [[Stock, Components, and Settings]] (3 shared connections)
+- [[Components, Reports, and HR]] (4 shared connections)
+- [[Stock, Components, and Suppliers]] (2 shared connections)
+- [[Components Ui, Sidebar Nav Menu, and Workspace]] (2 shared connections)
 - [[Lib HR]] (2 shared connections)
 - [[Components, Ui, and Multi Select Dropdown]] (1 shared connections)
-- [[Stock Job Budget, Daily Quantity Log, and Integrity]] (1 shared connections)
 - [[Store, API, and Endpoints]] (1 shared connections)
-- [[Components, Customers, and Lib]] (1 shared connections)
+- [[Lib Import Export]] (1 shared connections)
 - [[Components HR]] (1 shared connections)
 
 ## Source Files

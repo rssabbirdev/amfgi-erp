@@ -1,8 +1,8 @@
 # Button
 
-> God node · 65 connections · `components/ui/shadcn/button.tsx`
+> God node · 79 connections · `components/ui/shadcn/button.tsx`
 
-**Community:** [[Reports, Components, and Admin]]
+**Community:** [[Components, Reports, and HR]]
 
 ## Connections by Relation
 
@@ -14,22 +14,22 @@
 - [[page.tsx]] `EXTRACTED`
 - [[ScheduleDayClient.tsx]] `EXTRACTED`
 - [[sidebar.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
 - [[sections.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
+- [[PayTypeEditorTable.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[EmployeeProfileView.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[EmployeeCompensationPanel.tsx]] `EXTRACTED`
 - [[LoginClient.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
 
 ---
 
