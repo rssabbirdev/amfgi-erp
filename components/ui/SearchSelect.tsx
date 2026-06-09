@@ -81,6 +81,12 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     : [];
   const selectedItem = items.find((item) => item.id === value);
 
+  useEffect(() => {
+    if (!value) {
+      setInput('');
+    }
+  }, [value]);
+
   // Reset input when opening
   useEffect(() => {
     if (isOpen) {

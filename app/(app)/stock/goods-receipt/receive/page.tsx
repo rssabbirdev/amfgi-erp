@@ -206,10 +206,11 @@ function ReceiptEditor({
           const updated = { ...line, [field]: value };
 
           if (field === 'materialId') {
-            updated.quantityUomId = '';
-            updated.warehouseId = '';
             if (!value) {
+              updated.quantity = '';
+              updated.quantityUomId = '';
               updated.unitCost = '';
+              updated.warehouseId = '';
             } else {
               const material = getMaterial(value);
               if (material) {

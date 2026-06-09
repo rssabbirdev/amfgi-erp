@@ -8,6 +8,7 @@ import { resolveCategoryRef, resolveWarehouseRef } from '@/lib/materialMasterDat
 import { applyMaterialWarehouseDelta } from '@/lib/warehouses/stockWarehouses';
 import { canViewFormulaMaterialsApi } from '@/lib/permissions/stockModuleAccess';
 import { publishLiveUpdate } from '@/lib/live-updates/server';
+import { sortMaterialsBySearchRelevance } from '@/lib/pagination/materialSearchRelevance';
 import { buildMaterialListOrderBy } from '@/lib/pagination/materialListSort';
 import { parseListLimit, parseListOffset } from '@/lib/pagination/serverList';
 import type { Prisma } from '@prisma/client';
@@ -132,8 +133,9 @@ export async function GET(req: Request) {
         }),
       ]);
 
+      const rows = materials.map(serializeMaterialListRow);
       return successResponse({
-        items: materials.map(serializeMaterialListRow),
+        items: search ? sortMaterialsBySearchRelevance(rows, search) : rows,
         total,
       });
     }

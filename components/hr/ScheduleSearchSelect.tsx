@@ -18,6 +18,8 @@ type ScheduleSearchSelectProps<T extends { id: string; label: string; searchText
   renderItem?: (item: T, isHighlighted: boolean) => React.ReactNode;
   inputProps?: React.ComponentProps<typeof SearchSelect<T>>['inputProps'];
   dropdownInPortal?: boolean;
+  allowClearButton?: boolean;
+  clearOnEmptyInput?: boolean;
 };
 
 export default function ScheduleSearchSelect<T extends { id: string; label: string; searchText?: string }>({
@@ -34,6 +36,8 @@ export default function ScheduleSearchSelect<T extends { id: string; label: stri
   renderItem,
   inputProps,
   dropdownInPortal = true,
+  allowClearButton,
+  clearOnEmptyInput,
 }: ScheduleSearchSelectProps<T>) {
   const [items, setItems] = useState<T[]>(() => (knownItem ? [knownItem] : []));
   const [loading, setLoading] = useState(false);
@@ -137,6 +141,8 @@ export default function ScheduleSearchSelect<T extends { id: string; label: stri
       renderItem={renderItem}
       inputProps={inputProps}
       dropdownInPortal={dropdownInPortal}
+      allowClearButton={allowClearButton}
+      clearOnEmptyInput={clearOnEmptyInput}
     />
   );
 }

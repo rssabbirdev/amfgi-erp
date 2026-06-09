@@ -160,6 +160,8 @@ const ReceiptMaterialSelectCell = memo(function ReceiptMaterialSelectCell({
         placeholder="Type to search material…"
         minCharactersToSearch={1}
         dropdownInPortal
+        allowClearButton={false}
+        clearOnEmptyInput
         inputProps={{
           className:
             '!rounded-none !border-0 !bg-transparent !px-2 !py-1.5 !text-sm focus:!ring-0 min-w-0',
