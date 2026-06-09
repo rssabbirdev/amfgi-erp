@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+	output: 'standalone',
 	// Optimize for Vercel
 	productionBrowserSourceMaps: false,
 	// Keep Prisma on Node resolution so Turbopack does not bundle a stale generated client.

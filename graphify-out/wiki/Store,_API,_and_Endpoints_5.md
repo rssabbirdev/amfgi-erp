@@ -21,9 +21,9 @@
 ## Relationships
 
 - [[Components Job Costing]] (4 shared connections)
-- [[Components Stock]] (3 shared connections)
-- [[Jobs, Id, and Cost Engine]] (2 shared connections)
-- [[Stock, Components, and Lib]] (2 shared connections)
+- [[Lib, Stock, and Paged Select Search]] (3 shared connections)
+- [[Jobs Id]] (2 shared connections)
+- [[Stock, Components, and HR]] (2 shared connections)
 - [[Store API]] (2 shared connections)
 
 ## Source Files

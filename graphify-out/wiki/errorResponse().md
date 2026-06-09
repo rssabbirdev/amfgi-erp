@@ -2,7 +2,7 @@
 
 > God node · 385 connections · `lib/utils/apiResponse.ts`
 
-**Community:** [[API Materials, Settings, and Media]]
+**Community:** [[API Stock Exception Approvals, Transactions, and Categories]]
 
 ## Connections by Relation
 

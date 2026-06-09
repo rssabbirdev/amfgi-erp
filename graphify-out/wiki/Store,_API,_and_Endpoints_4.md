@@ -33,8 +33,7 @@
 
 ## Relationships
 
-- [[Stock, HR, and Customers]] (4 shared connections)
-- [[Stock, Components, and Lib]] (4 shared connections)
+- [[Stock, Components, and HR]] (8 shared connections)
 - [[Store API]] (2 shared connections)
 
 ## Source Files

@@ -1,62 +1,59 @@
 # Lib HR
 
-> 25 nodes · cohesion 0.15
+> 23 nodes · cohesion 0.14
 
 ## Key Concepts
 
-- **buildFormulaPreviewContext.ts** (28 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
 - **PayFormulaLivePreview.tsx** (23 connections) — `components/hr/PayFormulaLivePreview.tsx`
 - **route.ts** (19 connections) — `app/api/hr/payroll/formula-preview/route.ts`
-- **parsePayTypeConfig()** (15 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
-- **resolveExcludedWeekdays()** (15 connections) — `lib/hr/payroll/payTypeConfigHelpers.ts`
-- **parsePayTypeConfig.ts** (14 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
+- **previewPayConfig.ts** (17 connections) — `lib/hr/payroll/previewPayConfig.ts`
 - **CompensationInput** (11 connections) — `lib/hr/payroll/types.ts`
-- **employeeFormulaPreviewContext()** (10 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
 - **POST()** (9 connections) — `app/api/hr/payroll/formula-preview/route.ts`
+- **PayLineInput** (9 connections) — `lib/hr/payroll/types.ts`
 - **formulaPreviewSamples.ts** (8 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
 - **previewPayConfig()** (8 connections) — `lib/hr/payroll/previewPayConfig.ts`
+- **lineBasicHours.ts** (7 connections) — `lib/hr/payroll/lineBasicHours.ts`
+- **lineBasicHours.test.ts** (6 connections) — `__tests__/lib/hr/payroll/lineBasicHours.test.ts`
+- **parseFormulaScript()** (5 connections) — `lib/hr/payroll/formulaEngine.ts`
 - **dummyFormulaPreviewContext()** (4 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
+- **averageLineBasicHours()** (4 connections) — `lib/hr/payroll/lineBasicHours.ts`
 - **getFormulaPreviewScenario()** (3 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
-- **parsePayTypeConfig.test.ts** (3 connections) — `__tests__/lib/hr/payroll/parsePayTypeConfig.test.ts`
 - **FORMULA_PREVIEW_SCENARIOS** (2 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
-- **normalizeExcludedWeekdays()** (2 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
 - **BodySchema** (1 connections) — `app/api/hr/payroll/formula-preview/route.ts`
 - **EmployeeOption** (1 connections) — `components/hr/PayFormulaLivePreview.tsx`
 - **PreviewContext** (1 connections) — `components/hr/PayFormulaLivePreview.tsx`
 - **PayFormulaLivePreview()** (1 connections) — `components/hr/PayFormulaLivePreview.tsx`
-- **FormulaPreviewContext** (1 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
-- **attendanceSelect** (1 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
 - **FormulaPreviewScenario** (1 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
-- **MODES** (1 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
-- **config** (1 connections) — `__tests__/lib/hr/payroll/parsePayTypeConfig.test.ts`
+- **PayConfigPreviewInput** (1 connections) — `lib/hr/payroll/previewPayConfig.ts`
+- **PayConfigPreviewResult** (1 connections) — `lib/hr/payroll/previewPayConfig.ts`
+- **line()** (1 connections) — `__tests__/lib/hr/payroll/lineBasicHours.test.ts`
 
 ## Relationships
 
-- [[Lib HR]] (62 shared connections)
-- [[API HR, Settings, and Stock Exception Approvals]] (15 shared connections)
-- [[Components, Reports, and HR]] (6 shared connections)
-- [[API Materials, Settings, and Media]] (3 shared connections)
-- [[HR Payroll and Settings]] (2 shared connections)
-- [[Stock Goods Receipt and Dispatch]] (1 shared connections)
-- [[API Customers, Categories, and Companies]] (1 shared connections)
-- [[API Me, HR, and Auth]] (1 shared connections)
+- [[Lib HR]] (41 shared connections)
+- [[Lib, Components, and HR]] (13 shared connections)
+- [[API HR, Settings, and Stock Exception Approvals]] (7 shared connections)
+- [[Components, HR, and Reports]] (6 shared connections)
+- [[API Materials, Me, and Reports]] (3 shared connections)
+- [[API Stock Exception Approvals, Transactions, and Categories]] (2 shared connections)
+- [[Components HR and Ui]] (1 shared connections)
 
 ## Source Files
 
-- `__tests__/lib/hr/payroll/parsePayTypeConfig.test.ts`
+- `__tests__/lib/hr/payroll/lineBasicHours.test.ts`
 - `app/api/hr/payroll/formula-preview/route.ts`
 - `components/hr/PayFormulaLivePreview.tsx`
 - `lib/hr/payroll/buildFormulaPreviewContext.ts`
+- `lib/hr/payroll/formulaEngine.ts`
 - `lib/hr/payroll/formulaPreviewSamples.ts`
-- `lib/hr/payroll/parsePayTypeConfig.ts`
-- `lib/hr/payroll/payTypeConfigHelpers.ts`
+- `lib/hr/payroll/lineBasicHours.ts`
 - `lib/hr/payroll/previewPayConfig.ts`
 - `lib/hr/payroll/types.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 182 (99%)
-- INFERRED: 1 (1%)
+- EXTRACTED: 143 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

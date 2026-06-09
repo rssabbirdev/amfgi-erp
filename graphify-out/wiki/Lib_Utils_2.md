@@ -21,7 +21,7 @@
 
 ## Relationships
 
-- [[Stock Manual Adjustments and Count Session]] (5 shared connections)
+- [[Stock, Customers, and Components]] (5 shared connections)
 
 ## Source Files
 

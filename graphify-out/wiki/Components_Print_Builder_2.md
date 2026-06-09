@@ -36,7 +36,7 @@
 - [[Components Print Builder]] (14 shared connections)
 - [[Lib Types]] (12 shared connections)
 - [[Lib Utils]] (3 shared connections)
-- [[API and Lib]] (3 shared connections)
+- [[Lib and API]] (3 shared connections)
 - [[Lib Utils and Types]] (2 shared connections)
 - [[Lib, Print, and Scripts]] (2 shared connections)
 - [[Components and Lib]] (1 shared connections)

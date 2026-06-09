@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+graphify-out
+coverage
+__tests__
+.cursor
+.agents
+*.md
+.env
+.env.*
+!.env.example

@@ -1,6 +1,6 @@
 # Lib HR
 
-> 15 nodes · cohesion 0.21
+> 14 nodes · cohesion 0.23
 
 ## Key Concepts
 
@@ -13,7 +13,6 @@
 - **normalizeType()** (3 connections) — `lib/hr/workforceProfile.ts`
 - **normalizeExpertises()** (3 connections) — `lib/hr/workforceProfile.ts`
 - **normalizeVisaHolding()** (3 connections) — `lib/hr/workforceProfile.ts`
-- **WorkforceVisaHolding** (2 connections) — `lib/hr/workforceProfile.ts`
 - **SettingsMap** (1 connections) — `app/(app)/hr/settings/employee-types/page.tsx`
 - **cellInputClass** (1 connections) — `app/(app)/hr/settings/employee-types/page.tsx`
 - **EmployeeTypeSettingsPage()** (1 connections) — `app/(app)/hr/settings/employee-types/page.tsx`
@@ -22,15 +21,15 @@
 
 ## Relationships
 
-- [[Lib, Store, and Components]] (10 shared connections)
-- [[Components, Reports, and HR]] (8 shared connections)
-- [[Components HR]] (6 shared connections)
-- [[Lib HR]] (4 shared connections)
+- [[Lib Import Export and HR]] (9 shared connections)
+- [[Components HR]] (7 shared connections)
+- [[Components, HR, and Reports]] (5 shared connections)
+- [[Lib, API, and Scripts]] (4 shared connections)
 - [[Scripts Seed]] (4 shared connections)
+- [[Stock, Components, and HR]] (3 shared connections)
 - [[Components Me]] (3 shared connections)
-- [[Lib, HR, and Employee Type Settings]] (3 shared connections)
+- [[Lib HR]] (3 shared connections)
 - [[Lib, HR, and Schedule Search API]] (3 shared connections)
-- [[Customers Jobs]] (2 shared connections)
 - [[HR Schedule]] (2 shared connections)
 - [[API HR, Settings, and Stock Exception Approvals]] (2 shared connections)
 - [[Lib Job Costing]] (2 shared connections)
@@ -42,7 +41,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 94 (100%)
+- EXTRACTED: 92 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

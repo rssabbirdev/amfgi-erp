@@ -1,11 +1,12 @@
 # HR Schedule
 
-> 47 nodes · cohesion 0.05
+> 52 nodes · cohesion 0.05
 
 ## Key Concepts
 
 - **ScheduleDayClient.tsx** (87 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **ScheduleWorkerDnD.tsx** (14 connections) — `components/hr/ScheduleWorkerDnD.tsx`
+- **ScheduleAbsencesPanel.tsx** (10 connections) — `components/hr/ScheduleAbsencesPanel.tsx`
 - **extractSubTeamsFromMembers()** (4 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **ScheduleWorkerDraggableCard()** (4 connections) — `components/hr/ScheduleWorkerDnD.tsx`
 - **ScheduleFlatTeamDropSurface()** (4 connections) — `components/hr/ScheduleWorkerDnD.tsx`
@@ -18,6 +19,7 @@
 - **scheduleSearchInputProps()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **nextSubTeamLabel()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **HrScheduleDayPage()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **ScheduleAbsencesPanel()** (2 connections) — `components/hr/ScheduleAbsencesPanel.tsx`
 - **scheduleWorkerDragId()** (2 connections) — `components/hr/ScheduleWorkerDnD.tsx`
 - **parseScheduleWorkerDragId()** (2 connections) — `components/hr/ScheduleWorkerDnD.tsx`
 - **parseScheduleTeamDropId()** (2 connections) — `components/hr/ScheduleWorkerDnD.tsx`
@@ -27,33 +29,31 @@
 - **createPendingGuestDriverRowKey()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **ScheduleDriverLogRecord** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **EmpOpt** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **JobOpt** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **EmployeeProfile** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- *... and 22 more nodes in this community*
+- *... and 27 more nodes in this community*
 
 ## Relationships
 
-- [[Components, Reports, and HR]] (13 shared connections)
-- [[Components Ui, Sidebar Nav Menu, and Workspace]] (9 shared connections)
+- [[Components, HR, and Reports]] (11 shared connections)
+- [[Components Ui, Sidebar Nav Menu, and Auth]] (11 shared connections)
+- [[Components HR and Ui]] (10 shared connections)
+- [[Stock, Components, and HR]] (9 shared connections)
 - [[Lib, HR, and Schedule Search API]] (9 shared connections)
-- [[Components HR and Ui]] (8 shared connections)
-- [[Stock, HR, and Customers]] (3 shared connections)
-- [[Stock Goods Receipt and Dispatch]] (3 shared connections)
 - [[Lib Utils and Types]] (3 shared connections)
-- [[Lib, HR, and Employee Type Settings]] (2 shared connections)
+- [[Lib, API, and Scripts]] (2 shared connections)
 - [[Lib HR]] (2 shared connections)
 - [[Lib Utils]] (1 shared connections)
-- [[Stock, Components, and Suppliers]] (1 shared connections)
+- [[Stock Dispatch, Warehouse Transfers, and Stock Batches]] (1 shared connections)
 
 ## Source Files
 
 - `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - `app/(app)/hr/schedule/[workDate]/page.tsx`
+- `components/hr/ScheduleAbsencesPanel.tsx`
 - `components/hr/ScheduleWorkerDnD.tsx`
 
 ## Audit Trail
 
-- EXTRACTED: 172 (100%)
+- EXTRACTED: 187 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

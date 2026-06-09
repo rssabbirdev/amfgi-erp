@@ -11,9 +11,9 @@
 
 ## Relationships
 
-- [[Components, Reports, and HR]] (1 shared connections)
+- [[Components, HR, and Reports]] (1 shared connections)
 - [[Store, API, and Endpoints]] (1 shared connections)
-- [[Lib Import Export]] (1 shared connections)
+- [[Customers, Stock, and Lib]] (1 shared connections)
 
 ## Source Files
 

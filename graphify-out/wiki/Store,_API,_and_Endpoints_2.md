@@ -33,16 +33,16 @@
 
 ## Relationships
 
-- [[Jobs, Id, and Cost Engine]] (8 shared connections)
-- [[Lib Import Export]] (5 shared connections)
+- [[Jobs Id]] (8 shared connections)
+- [[Customers, Stock, and Lib]] (3 shared connections)
+- [[Stock, Components, and HR]] (3 shared connections)
 - [[Components Job Costing]] (3 shared connections)
-- [[Stock, Components, and Lib]] (2 shared connections)
+- [[Lib Import Export]] (2 shared connections)
 - [[Store API]] (2 shared connections)
-- [[Customers]] (1 shared connections)
-- [[Customers Jobs]] (1 shared connections)
-- [[Stock, Components, and Suppliers]] (1 shared connections)
+- [[Customers, Lib, and Components]] (1 shared connections)
 - [[Components, Jobs, and Consumption Costing Modal]] (1 shared connections)
-- [[Components, Reports, and HR]] (1 shared connections)
+- [[Components, HR, and Reports]] (1 shared connections)
+- [[Lib Import Export and Party List Record Payload]] (1 shared connections)
 
 ## Source Files
 

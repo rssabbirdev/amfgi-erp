@@ -20,11 +20,11 @@
 
 ## Relationships
 
-- [[Lib Import Export, Party List Record Payload, and Party Lists API]] (6 shared connections)
-- [[Stock, Components, and Lib]] (4 shared connections)
+- [[Lib Import Export and Party List Record Payload]] (6 shared connections)
+- [[Stock, Components, and HR]] (4 shared connections)
 - [[Store API]] (4 shared connections)
 - [[Lib, Components, and Suppliers]] (2 shared connections)
-- [[Components Stock]] (2 shared connections)
+- [[Lib, Stock, and Paged Select Search]] (2 shared connections)
 
 ## Source Files
 
