@@ -35,16 +35,16 @@
 
 - [[Jobs, Id, and Cost Engine]] (23 shared connections)
 - [[Store, API, and Endpoints]] (10 shared connections)
+- [[Reports, Components, and Settings]] (4 shared connections)
 - [[Lib Job Costing]] (4 shared connections)
-- [[Components, Reports, and Stock]] (3 shared connections)
-- [[Stock, Components, and Customers]] (3 shared connections)
-- [[Components HR, Transactions, and Ui]] (2 shared connections)
-- [[Components, Stock, and Lib]] (2 shared connections)
-- [[Lib Job Costing and Permissions]] (2 shared connections)
-- [[Reports, Stock, and HR]] (1 shared connections)
-- [[HR, Suppliers, and Components]] (1 shared connections)
-- [[HR, Components, and Stock]] (1 shared connections)
-- [[Customers]] (1 shared connections)
+- [[Stock, Components, and Reports]] (2 shared connections)
+- [[Stock, Components, and Customers]] (2 shared connections)
+- [[Lib, API, and Tests]] (2 shared connections)
+- [[HR, Components, and Lib]] (1 shared connections)
+- [[Components HR and Ui]] (1 shared connections)
+- [[HR, Components, and Suppliers]] (1 shared connections)
+- [[Stock, Components, and Lib]] (1 shared connections)
+- [[Stock, Components, and Admin]] (1 shared connections)
 
 ## Source Files
 

@@ -33,18 +33,18 @@
 
 ## Relationships
 
+- [[Reports, Components, and Settings]] (12 shared connections)
 - [[Lib, HR, and Schedule Search API]] (9 shared connections)
-- [[Components, Reports, and Stock]] (8 shared connections)
-- [[Components, Stock, and Lib]] (8 shared connections)
-- [[Components HR and Ui]] (7 shared connections)
-- [[Reports, Stock, and HR]] (5 shared connections)
-- [[HR, Components, and Stock]] (3 shared connections)
-- [[Components HR, Transactions, and Ui]] (3 shared connections)
+- [[Components HR and Ui]] (8 shared connections)
+- [[Stock, Components, and Reports]] (8 shared connections)
+- [[Customers, Stock, and Components]] (3 shared connections)
+- [[Stock, Components, and Lib]] (3 shared connections)
 - [[Lib Utils and Types]] (3 shared connections)
-- [[Components Ui and App Shell]] (2 shared connections)
-- [[Lib, API, and Scripts]] (2 shared connections)
-- [[Lib Import Export, HR, and Party Lists API]] (2 shared connections)
-- [[Components Stock and HR]] (1 shared connections)
+- [[Components Ui, App Shell, and Company Switcher]] (2 shared connections)
+- [[Lib HR]] (2 shared connections)
+- [[Components, Lib, and HR]] (2 shared connections)
+- [[HR, Components, and Lib]] (1 shared connections)
+- [[Lib Utils]] (1 shared connections)
 
 ## Source Files
 

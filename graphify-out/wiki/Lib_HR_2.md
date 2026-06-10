@@ -1,36 +1,40 @@
 # Lib HR
 
-> 8 nodes · cohesion 0.39
+> 16 nodes · cohesion 0.21
 
 ## Key Concepts
 
-- **route.ts** (22 connections) — `app/api/hr/attendance/monthly-report/route.ts`
-- **GET()** (10 connections) — `app/api/hr/attendance/monthly-report/route.ts`
-- **DEFAULT_ATTENDANCE_REPORT_SCHEMA** (3 connections) — `lib/hr/attendanceReportBuilder.ts`
-- **normalizeAttendanceReportBuilderSchema()** (3 connections) — `lib/hr/attendanceReportBuilder.ts`
-- **normalizeAttendanceReportColumns()** (3 connections) — `lib/hr/attendanceReportFormatting.ts`
-- **normalizeAttendanceReportFormats()** (3 connections) — `lib/hr/attendanceReportFormatting.ts`
-- **attendanceReportColumnLabel()** (3 connections) — `lib/hr/attendanceReportFormatting.ts`
-- **sanitizeSheetName()** (2 connections) — `app/api/hr/attendance/monthly-report/route.ts`
+- **attendanceReports.ts** (27 connections) — `lib/hr/attendanceReports.ts`
+- **getMonthlyAttendanceReports()** (15 connections) — `lib/hr/attendanceReports.ts`
+- **attendanceReportStatusLabel()** (4 connections) — `lib/hr/attendanceReportFormatting.ts`
+- **formatHoursFromMinutes()** (3 connections) — `lib/hr/attendanceReports.ts`
+- **exportStatusLabel()** (3 connections) — `lib/hr/attendanceReports.ts`
+- **exportWorkLocation()** (3 connections) — `lib/hr/attendanceReports.ts`
+- **monthBounds()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **diffMinutes()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **minutesOfDay()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **isoDay()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **locationLabel()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **findMonthlyAttendanceRows()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **AttendanceReportRow** (1 connections) — `lib/hr/attendanceReports.ts`
+- **AttendanceEmployeeReport** (1 connections) — `lib/hr/attendanceReports.ts`
+- **attendanceReportEmployeeSelect** (1 connections) — `lib/hr/attendanceReports.ts`
+- **attendanceReportWorkAssignmentSelect** (1 connections) — `lib/hr/attendanceReports.ts`
 
 ## Relationships
 
-- [[API HR, Settings, and Stock Exception Approvals]] (7 shared connections)
-- [[Lib and HR]] (6 shared connections)
-- [[Lib HR]] (5 shared connections)
-- [[Lib, HR, and Attendance Reports]] (4 shared connections)
-- [[API Materials, Reports, and Settings]] (3 shared connections)
-- [[API Transactions, Stock, and HR]] (2 shared connections)
+- [[Lib HR]] (12 shared connections)
+- [[Lib, HR, and API]] (7 shared connections)
+- [[API and Lib]] (2 shared connections)
 
 ## Source Files
 
-- `app/api/hr/attendance/monthly-report/route.ts`
-- `lib/hr/attendanceReportBuilder.ts`
 - `lib/hr/attendanceReportFormatting.ts`
+- `lib/hr/attendanceReports.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 49 (100%)
+- EXTRACTED: 71 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

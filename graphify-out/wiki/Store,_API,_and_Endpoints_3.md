@@ -1,47 +1,49 @@
 # Store, API, and Endpoints
 
-> 29 nodes · cohesion 0.07
+> 27 nodes · cohesion 0.07
 
 ## Key Concepts
 
-- **reports.ts** (30 connections) — `store/api/endpoints/reports.ts`
-- **Material** (1 connections) — `store/api/endpoints/reports.ts`
-- **StockValuationResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **ConsumptionData** (1 connections) — `store/api/endpoints/reports.ts`
-- **ConsumptionResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **JobConsumptionRow** (1 connections) — `store/api/endpoints/reports.ts`
-- **ProductionByJobRow** (1 connections) — `store/api/endpoints/reports.ts`
-- **InventoryByWarehouseWarehouseCol** (1 connections) — `store/api/endpoints/reports.ts`
-- **InventoryByWarehouseRow** (1 connections) — `store/api/endpoints/reports.ts`
-- **InventoryByWarehouseResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **StockIntegrityRow** (1 connections) — `store/api/endpoints/reports.ts`
-- **StockIntegrityResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **JobProfitabilityRow** (1 connections) — `store/api/endpoints/reports.ts`
-- **JobProfitabilityResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **SupplierTraceabilityPartyRef** (1 connections) — `store/api/endpoints/reports.ts`
-- **SupplierTraceabilityJobRef** (1 connections) — `store/api/endpoints/reports.ts`
-- **SupplierTraceabilityRow** (1 connections) — `store/api/endpoints/reports.ts`
-- **SupplierTraceabilityResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **StockExceptionRow** (1 connections) — `store/api/endpoints/reports.ts`
-- **StockExceptionsResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **StockExceptionApprovalRow** (1 connections) — `store/api/endpoints/reports.ts`
-- **StockExceptionApprovalsResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **StockAdjustmentRow** (1 connections) — `store/api/endpoints/reports.ts`
-- **StockAdjustmentsResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **StockCountSessionReportRow** (1 connections) — `store/api/endpoints/reports.ts`
-- *... and 4 more nodes in this community*
+- **transactions.ts** (33 connections) — `store/api/endpoints/transactions.ts`
+- **TransferLedgerItem** (2 connections) — `store/api/endpoints/transactions.ts`
+- **WarehouseTransferLedgerItem** (2 connections) — `store/api/endpoints/transactions.ts`
+- **NonStockReconcileHistoryItem** (2 connections) — `store/api/endpoints/transactions.ts`
+- **BatchConsumption** (1 connections) — `store/api/endpoints/transactions.ts`
+- **Transaction** (1 connections) — `store/api/endpoints/transactions.ts`
+- **AddTransactionPayload** (1 connections) — `store/api/endpoints/transactions.ts`
+- **TransferPayload** (1 connections) — `store/api/endpoints/transactions.ts`
+- **TransferResult** (1 connections) — `store/api/endpoints/transactions.ts`
+- **BatchTransactionPayload** (1 connections) — `store/api/endpoints/transactions.ts`
+- **extractBatchMaterialIds()** (1 connections) — `store/api/endpoints/transactions.ts`
+- **DispatchEntryResponse** (1 connections) — `store/api/endpoints/transactions.ts`
+- **DispatchRevisionLineDto** (1 connections) — `store/api/endpoints/transactions.ts`
+- **DispatchEntryRevisionRow** (1 connections) — `store/api/endpoints/transactions.ts`
+- **WarehouseTransferLinePayload** (1 connections) — `store/api/endpoints/transactions.ts`
+- **WarehouseTransferBatchPayload** (1 connections) — `store/api/endpoints/transactions.ts`
+- **WarehouseTransferSingleResult** (1 connections) — `store/api/endpoints/transactions.ts`
+- **WarehouseTransferBatchResult** (1 connections) — `store/api/endpoints/transactions.ts`
+- **WarehouseTransferResult** (1 connections) — `store/api/endpoints/transactions.ts`
+- **NonStockReconcileMaterial** (1 connections) — `store/api/endpoints/transactions.ts`
+- **NonStockReconcileJob** (1 connections) — `store/api/endpoints/transactions.ts`
+- **NonStockReconcileData** (1 connections) — `store/api/endpoints/transactions.ts`
+- **NonStockReconcilePayload** (1 connections) — `store/api/endpoints/transactions.ts`
+- **ManualStockAdjustmentLinePayload** (1 connections) — `store/api/endpoints/transactions.ts`
+- **ManualStockAdjustmentPayload** (1 connections) — `store/api/endpoints/transactions.ts`
+- *... and 2 more nodes in this community*
 
 ## Relationships
 
+- [[Stock, Components, and Admin]] (4 shared connections)
+- [[Store, Stock, and HR]] (4 shared connections)
 - [[Store API]] (2 shared connections)
 
 ## Source Files
 
-- `store/api/endpoints/reports.ts`
+- `store/api/endpoints/transactions.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 58 (100%)
+- EXTRACTED: 62 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

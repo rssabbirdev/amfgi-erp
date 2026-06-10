@@ -1,57 +1,47 @@
 # Store, API, and Endpoints
 
-> 33 nodes · cohesion 0.06
+> 29 nodes · cohesion 0.07
 
 ## Key Concepts
 
-- **jobs.ts** (48 connections) — `store/api/endpoints/jobs.ts`
-- **FormulaLibrary** (3 connections) — `store/api/endpoints/jobs.ts`
-- **FormulaLibraryVersion** (2 connections) — `store/api/endpoints/jobs.ts`
-- **JobItem** (2 connections) — `store/api/endpoints/jobs.ts`
-- **JobItemProgressEntry** (2 connections) — `store/api/endpoints/jobs.ts`
-- **JobProgressEntryListRow** (2 connections) — `store/api/endpoints/jobs.ts`
-- **JobCostEngineItem** (2 connections) — `store/api/endpoints/jobs.ts`
-- **JobCostEngineResult** (2 connections) — `store/api/endpoints/jobs.ts`
-- **JobCostingSnapshotMeta** (2 connections) — `store/api/endpoints/jobs.ts`
-- **JobStatusFilter** (1 connections) — `store/api/endpoints/jobs.ts`
-- **JobScopeFilter** (1 connections) — `store/api/endpoints/jobs.ts`
-- **JobsListParams** (1 connections) — `store/api/endpoints/jobs.ts`
-- **JobsListResponse** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogTracker** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogExistingEntry** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogItem** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogJob** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogTeam** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogAssignment** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogEligibleJob** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogResponse** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogPendingRow** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogPendingResponse** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogListRow** (1 connections) — `store/api/endpoints/jobs.ts`
-- **DailyQuantityLogPendingListParams** (1 connections) — `store/api/endpoints/jobs.ts`
-- *... and 8 more nodes in this community*
+- **reports.ts** (30 connections) — `store/api/endpoints/reports.ts`
+- **Material** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockValuationResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **ConsumptionData** (1 connections) — `store/api/endpoints/reports.ts`
+- **ConsumptionResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **JobConsumptionRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **ProductionByJobRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **InventoryByWarehouseWarehouseCol** (1 connections) — `store/api/endpoints/reports.ts`
+- **InventoryByWarehouseRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **InventoryByWarehouseResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockIntegrityRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockIntegrityResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **JobProfitabilityRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **JobProfitabilityResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **SupplierTraceabilityPartyRef** (1 connections) — `store/api/endpoints/reports.ts`
+- **SupplierTraceabilityJobRef** (1 connections) — `store/api/endpoints/reports.ts`
+- **SupplierTraceabilityRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **SupplierTraceabilityResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockExceptionRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockExceptionsResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockExceptionApprovalRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockExceptionApprovalsResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockAdjustmentRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockAdjustmentsResponse** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockCountSessionReportRow** (1 connections) — `store/api/endpoints/reports.ts`
+- *... and 4 more nodes in this community*
 
 ## Relationships
 
-- [[Jobs, Id, and Cost Engine]] (8 shared connections)
-- [[Components Job Costing]] (3 shared connections)
-- [[Customers]] (2 shared connections)
-- [[Lib Import Export and Party List Record Payload]] (2 shared connections)
-- [[Lib Import Export]] (2 shared connections)
-- [[Stock, Components, and Customers]] (2 shared connections)
 - [[Store API]] (2 shared connections)
-- [[Customers Jobs]] (1 shared connections)
-- [[Stock, Settings, and Providers]] (1 shared connections)
-- [[Components, Jobs, and Consumption Costing Modal]] (1 shared connections)
-- [[Components HR, Transactions, and Ui]] (1 shared connections)
 
 ## Source Files
 
-- `store/api/endpoints/jobs.ts`
+- `store/api/endpoints/reports.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 89 (100%)
+- EXTRACTED: 58 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
