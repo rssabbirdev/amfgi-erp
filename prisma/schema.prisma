@@ -639,6 +639,8 @@ model DeliveryNote {
   customItemsJson Json?
   /// User-authored notes for the document, without composed transaction headers.
   documentNotes   String?      @db.Text
+  /// Contact person selected for this delivery note (may differ from job primary contact).
+  contactPerson   String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)

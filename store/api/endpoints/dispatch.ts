@@ -22,6 +22,7 @@ export interface DispatchEntry {
   isDeliveryNote?: boolean;
   deliveryNoteId?: string;
   deliveryNoteNumber?: number | null;
+  deliveryNoteContactPerson?: string;
   documentNotes?: string | null;
   customItemsJson?: unknown;
   signedCopyUrl?: string;

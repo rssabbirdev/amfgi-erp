@@ -131,6 +131,7 @@ export default function PrintDeliveryNotePage() {
             number: number;
             date: string;
             documentNotes: string | null;
+            contactPerson?: string | null;
             customItemsJson: unknown;
             job: Record<string, unknown> | null;
           };
@@ -138,9 +139,11 @@ export default function PrintDeliveryNotePage() {
           let notesBody = (dn.documentNotes ?? '').trim();
           notesBody = notesBody ? `${notesBody}\n` : '';
           notesBody += `--- DELIVERY NOTE #${dn.number}\n`;
-          const contact = typeof dn.job?.contactPerson === 'string' ? dn.job.contactPerson.trim() : '';
+          const contact =
+            (typeof dn.contactPerson === 'string' ? dn.contactPerson.trim() : '') ||
+            (typeof dn.job?.contactPerson === 'string' ? dn.job.contactPerson.trim() : '');
           if (contact) {
-            notesBody += `--- DELIVERY CONTACT PERSON:${contact}\n`;
+            notesBody += `--- DELIVERY CONTACT PERSON: ${contact}\n`;
           }
           notesBody += '--- DELIVERY NOTE ITEMS (For Printing) ---\n';
           if (Array.isArray(dn.customItemsJson)) {

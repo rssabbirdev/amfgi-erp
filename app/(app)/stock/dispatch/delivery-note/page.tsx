@@ -108,6 +108,7 @@ export default function DeliveryNoteCreatePage() {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const appliedUrlJobDatePresetKey = useRef<string | null>(null);
+  const appliedDeliveryNoteLoadKeyRef = useRef<string | null>(null);
   const { data: jobs = [] } = useGetJobsQuery();
   const { data: customers = [] } = useGetCustomersQuery();
   const { data: materials = [] } = useGetMaterialsQuery();
@@ -121,7 +122,8 @@ export default function DeliveryNoteCreatePage() {
   const [editingDeliveryNoteId, setEditingDeliveryNoteId] = useState<string | null>(null);
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [selectedJob, setSelectedJob] = useState('');
-  const [selectedContactPerson, setSelectedContactPerson] = useState('');
+  const [selectedContactId, setSelectedContactId] = useState('');
+  const contactJobRef = useRef('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deliveryNoteNumber, setDeliveryNoteNumber] = useState<number | null>(null);
   const [loadedDeliveryNoteNumber, setLoadedDeliveryNoteNumber] = useState<number | null>(null);
@@ -291,15 +293,24 @@ export default function DeliveryNoteCreatePage() {
 
   useEffect(() => {
     if (!selectedJob) {
-      setSelectedContactPerson('');
+      setSelectedContactId('');
+      contactJobRef.current = '';
       return;
     }
-    if (selectedContactPerson.trim()) return;
+
     const contacts = getJobContactOptions(selectedJob);
-    if (contacts.length > 0) {
-      setSelectedContactPerson(contacts[0].name);
+    if (contactJobRef.current !== selectedJob) {
+      contactJobRef.current = selectedJob;
+      setSelectedContactId(contacts[0]?.id ?? '');
+      return;
     }
-  }, [selectedJob, selectedContactPerson, jobs]);
+
+    if (selectedContactId && contacts.some((contact) => contact.id === selectedContactId)) {
+      return;
+    }
+
+    setSelectedContactId(contacts[0]?.id ?? '');
+  }, [selectedJob, jobs, selectedContactId]);
 
   useEffect(() => {
     if (!selectedJob || jobs.length === 0) return;
@@ -381,7 +392,7 @@ export default function DeliveryNoteCreatePage() {
         details?.extraLabel?.trim() || '',
       ].filter(Boolean);
       options.push({
-        id: `${trimmed}-${options.length}`,
+        id: `contact-${options.length}`,
         name: trimmed,
         label: details?.extraLabel ? `${trimmed} (${details.extraLabel})` : trimmed,
         phone: details?.phone?.trim() || undefined,
@@ -416,9 +427,28 @@ export default function DeliveryNoteCreatePage() {
     return options;
   }
 
-  const selectedContactOption = getJobContactOptions(selectedJob).find(
-    (c) => c.name === selectedContactPerson
+  const jobContactOptions = useMemo(
+    () => getJobContactOptions(selectedJob),
+    [selectedJob, jobs]
   );
+
+  const selectedContactOption = useMemo(
+    () => jobContactOptions.find((contact) => contact.id === selectedContactId) ?? null,
+    [jobContactOptions, selectedContactId]
+  );
+
+  const selectedContactPerson = selectedContactOption?.name ?? '';
+
+  function resolveContactIdByName(options: JobContactOption[], name: string): string {
+    const trimmed = name.trim();
+    if (!trimmed) return options[0]?.id ?? '';
+    const exact = options.find((contact) => contact.name === trimmed);
+    if (exact) return exact.id;
+    const caseInsensitive = options.find(
+      (contact) => contact.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    return caseInsensitive?.id ?? options[0]?.id ?? '';
+  }
 
   // Load existing delivery note if editing or duplicating
   useEffect(() => {
@@ -426,6 +456,17 @@ export default function DeliveryNoteCreatePage() {
     const duplicateFromId = searchParams.get('duplicateFrom');
     const deliveryNoteIdParam = searchParams.get('deliveryNoteId');
     const duplicateDeliveryNoteId = searchParams.get('duplicateDeliveryNoteId');
+    const loadKey = [
+      transactionId ?? '',
+      duplicateFromId ?? '',
+      deliveryNoteIdParam ?? '',
+      duplicateDeliveryNoteId ?? '',
+    ].join('::');
+    const needsJobs = Boolean(transactionId || duplicateFromId || deliveryNoteIdParam || duplicateDeliveryNoteId);
+
+    if (needsJobs && jobs.length === 0) return;
+    if (appliedDeliveryNoteLoadKeyRef.current === loadKey) return;
+    appliedDeliveryNoteLoadKeyRef.current = loadKey;
 
     const emptyLineTemplate = (): Line[] =>
       Array.from({ length: 3 }, () => ({
@@ -456,13 +497,15 @@ export default function DeliveryNoteCreatePage() {
           documentNotes: string | null;
           customItemsJson: unknown;
           materialDispatchSkipped: boolean;
+          contactPerson?: string | null;
           job: { contactPerson?: string | null } | null;
           firstStockOutTransactionId: string | null;
         };
 
         const canonicalJobId = resolveParentJobIdForDeliveryNote(d.jobId || '', jobs);
         setSelectedJob(canonicalJobId);
-        setSelectedContactPerson(d.job?.contactPerson?.trim() || '');
+        contactJobRef.current = canonicalJobId;
+        let loadedContactName = d.contactPerson?.trim() || '';
         setDate(
           opts.duplicate ? new Date().toISOString().split('T')[0] : new Date(d.date).toISOString().split('T')[0]
         );
@@ -488,10 +531,15 @@ export default function DeliveryNoteCreatePage() {
           const txnJson = await txnRes.json();
           if (txnRes.ok && txnJson.data) {
             const txn = txnJson.data as {
+              notes?: string | null;
               material?: { id: string };
               quantity: number;
               warehouseId?: string | null;
             };
+            if (!loadedContactName) {
+              loadedContactName =
+                parseDeliveryContactPerson(txn.notes || '') || d.job?.contactPerson?.trim() || '';
+            }
             if (txn.material) {
               setLines([
                 {
@@ -515,6 +563,13 @@ export default function DeliveryNoteCreatePage() {
         } else {
           setLines(emptyLineTemplate());
         }
+
+        if (!loadedContactName) {
+          loadedContactName = d.job?.contactPerson?.trim() || '';
+        }
+        setSelectedContactId(
+          resolveContactIdByName(getJobContactOptions(canonicalJobId), loadedContactName)
+        );
 
         if (opts.duplicate) {
           setEditingTransactionId(null);
@@ -566,7 +621,11 @@ export default function DeliveryNoteCreatePage() {
             const txn = data.data;
             const canonicalJobId = resolveParentJobIdForDeliveryNote(txn.jobId || '', jobs);
             setSelectedJob(canonicalJobId);
-            setSelectedContactPerson(parseDeliveryContactPerson(txn.notes || ''));
+            const contactName = parseDeliveryContactPerson(txn.notes || '');
+            contactJobRef.current = canonicalJobId;
+            setSelectedContactId(
+              resolveContactIdByName(getJobContactOptions(canonicalJobId), contactName)
+            );
             // Duplicates default to today's date; edits keep the original date
             setDate(isDuplicating
               ? new Date().toISOString().split('T')[0]
@@ -687,7 +746,6 @@ export default function DeliveryNoteCreatePage() {
       });
     } else {
       setSelectedJob(newJobId);
-      setSelectedContactPerson('');
     }
   };
 
@@ -745,7 +803,6 @@ export default function DeliveryNoteCreatePage() {
     const { type, newValue } = changeWarningModal.pendingChange;
     if (type === 'job') setSelectedJob(newValue);
     if (type === 'date') setDate(newValue);
-    if (type === 'job') setSelectedContactPerson('');
     setCustomItems([{ id: generateId(), name: '', description: '', unit: '', qty: '' }]);
     setLines(Array.from({ length: 3 }, () => ({
       id: generateId(),
@@ -875,7 +932,8 @@ export default function DeliveryNoteCreatePage() {
           contactPerson: nextPrimary,
         },
       }).unwrap();
-      setSelectedContactPerson(name);
+      setSelectedContactId(resolveContactIdByName(getJobContactOptions(selectedJob), name));
+      contactJobRef.current = selectedJob;
       setAddContactModal({
         open: false,
         name: '',
@@ -900,8 +958,7 @@ export default function DeliveryNoteCreatePage() {
       return;
     }
 
-    const contactOptions = getJobContactOptions(selectedJob);
-    if (contactOptions.length > 0 && !selectedContactPerson.trim()) {
+    if (jobContactOptions.length > 0 && !selectedContactId) {
       toast.error('Select a contact person');
       return;
     }
@@ -1042,6 +1099,7 @@ export default function DeliveryNoteCreatePage() {
         overrideReason: overrideReason.trim() || undefined,
         date,
         isDeliveryNote: true,
+        deliveryContactPerson: selectedContactPerson.trim() || undefined,
         ...(deliveryNoteNumberOverride && deliveryNoteNumber != null
           ? { deliveryNoteNumber }
           : {}),
@@ -1059,7 +1117,8 @@ export default function DeliveryNoteCreatePage() {
         `Delivery note ${savedDeliveryNoteNumber ?? '—'} ${actionText} with ${materialsText} and ${validCustomItems.length} custom item(s)`
       );
       setSelectedJob('');
-      setSelectedContactPerson('');
+      setSelectedContactId('');
+      contactJobRef.current = '';
       setNotes('');
       setOverrideReason('');
       setSkipMaterialDispatch(false);
@@ -1398,44 +1457,39 @@ export default function DeliveryNoteCreatePage() {
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Contact Person
               </label>
-              {(() => {
-                const options = getJobContactOptions(selectedJob);
-                const selectedContactId = options.find((opt) => opt.name === selectedContactPerson)?.id || '';
-                return (
-                  <div className="space-y-2">
-                    <SearchSelect
-                      value={selectedContactId}
-                      onChange={(id) => {
-                        const picked = options.find((opt) => opt.id === id);
-                        setSelectedContactPerson(picked?.name || '');
-                      }}
-                      placeholder={
-                        selectedJob
-                          ? options.length > 0
-                            ? 'Search contact by name / phone / email / designation'
-                            : 'No contacts found on this job'
-                          : 'Select a job first'
-                      }
-                      disabled={!selectedJob || options.length === 0}
-                      items={options.map((opt) => ({
-                        id: opt.id,
-                        label: opt.label,
-                        searchText: opt.searchText,
-                      }))}
-                      renderItem={(item) => {
-                        const full = options.find((x) => x.id === item.id);
-                        return (
-                          <div className="flex flex-col">
-                            <span className="font-medium">{item.label}</span>
-                            {(full?.phone || full?.email) && (
-                              <span className="text-xs text-muted-foreground">
-                                {[full.phone, full.email].filter(Boolean).join(' · ')}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      }}
-                    />
+              <div className="space-y-2">
+                <SearchSelect
+                  key={selectedJob || 'no-job'}
+                  value={selectedContactId}
+                  onChange={setSelectedContactId}
+                  allowClearButton={false}
+                  placeholder={
+                    selectedJob
+                      ? jobContactOptions.length > 0
+                        ? 'Search contact by name / phone / email / designation'
+                        : 'No contacts found on this job'
+                      : 'Select a job first'
+                  }
+                  disabled={!selectedJob || jobContactOptions.length === 0}
+                  items={jobContactOptions.map((opt) => ({
+                    id: opt.id,
+                    label: opt.label,
+                    searchText: opt.searchText,
+                  }))}
+                  renderItem={(item) => {
+                    const full = jobContactOptions.find((x) => x.id === item.id);
+                    return (
+                      <div className="flex flex-col">
+                        <span className="font-medium">{item.label}</span>
+                        {(full?.phone || full?.email) && (
+                          <span className="text-xs text-muted-foreground">
+                            {[full.phone, full.email].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[11px] text-muted-foreground">
                         Can&apos;t find contact? Add under this job.
@@ -1460,23 +1514,21 @@ export default function DeliveryNoteCreatePage() {
                         + Add Contact
                       </button>
                     </div>
-                    {selectedContactOption && (
-                      <div className="space-y-1 rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                        <p className="text-sm font-semibold text-foreground">{selectedContactOption.name}</p>
-                        {(selectedContactOption.designation || selectedContactOption.contactLabel) && (
-                          <p className="text-muted-foreground">
-                            {selectedContactOption.designation || selectedContactOption.contactLabel}
-                          </p>
-                        )}
-                        {selectedContactOption.phone && <p>{selectedContactOption.phone}</p>}
-                        {selectedContactOption.email && (
-                          <p className="break-all text-muted-foreground">{selectedContactOption.email}</p>
-                        )}
-                      </div>
+                {selectedContactOption ? (
+                  <div className="space-y-1 rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    <p className="text-sm font-semibold text-foreground">{selectedContactOption.name}</p>
+                    {(selectedContactOption.designation || selectedContactOption.contactLabel) && (
+                      <p className="text-muted-foreground">
+                        {selectedContactOption.designation || selectedContactOption.contactLabel}
+                      </p>
                     )}
+                    {selectedContactOption.phone ? <p>{selectedContactOption.phone}</p> : null}
+                    {selectedContactOption.email ? (
+                      <p className="break-all text-muted-foreground">{selectedContactOption.email}</p>
+                    ) : null}
                   </div>
-                );
-              })()}
+                ) : null}
+              </div>
             </div>
           </div>
         </div>

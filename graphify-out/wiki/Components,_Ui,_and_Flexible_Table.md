@@ -17,7 +17,7 @@
 
 ## Relationships
 
-- [[Stock Goods Receipt]] (2 shared connections)
+- [[Stock Materials and Goods Receipt]] (2 shared connections)
 
 ## Source Files
 

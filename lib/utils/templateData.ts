@@ -2,7 +2,7 @@ import { formatDate, formatCurrency } from './formatters';
 import type { ItemType } from '@/lib/types/documentTemplate';
 import { convertGoogleDriveUrl } from '@/lib/utils/googleDriveUrl';
 import { decimalToNumber } from './decimal';
-import { resolveDeliveryNoteNumber } from '@/lib/deliveryNoteNumber';
+import { resolveDeliveryContactPerson, resolveDeliveryNoteNumber } from '@/lib/deliveryNoteNumber';
 
 export interface TemplateDataContext {
   company: {
@@ -372,13 +372,6 @@ function parseDeliveryNoteNumber(notes?: string, deliveryNote?: { number: number
   return n > 0 ? String(n) : 'N/A';
 }
 
-function parseDeliveryContactPerson(notes?: string): string | undefined {
-  if (!notes) return undefined;
-  const match = notes.match(/--- DELIVERY CONTACT PERSON:([^\n\r]+)/);
-  const value = match?.[1]?.trim();
-  return value ? value : undefined;
-}
-
 function parseCustomItems(notes?: string): Array<{
   name: string;
   description: string;
@@ -474,6 +467,7 @@ export function buildDeliveryNoteTemplateDataFromEntity(
     number: number;
     date: string | Date;
     documentNotes?: string | null;
+    contactPerson?: string | null;
     customItemsJson?: unknown;
     job?: Record<string, unknown> | null;
   },
@@ -482,7 +476,8 @@ export function buildDeliveryNoteTemplateDataFromEntity(
   const customItems = customItemsFromJson(dn.customItemsJson);
   const totalQty = customItems.reduce((sum, row) => sum + (Number.parseFloat(row.qty) || 0), 0);
   const selectedContactPerson =
-    typeof dn.job?.contactPerson === 'string' ? dn.job.contactPerson.trim() : '';
+    (typeof dn.contactPerson === 'string' ? dn.contactPerson.trim() : '') ||
+    (typeof dn.job?.contactPerson === 'string' ? dn.job.contactPerson.trim() : '');
   const jobSlice = jobTemplateSlice(dn.job);
   const enrichedJobSlice = jobSlice
     ? enrichWithPrimaryContact(
@@ -539,7 +534,7 @@ export function buildDeliveryNoteTemplateData(
   const totalCost = txs.reduce((s, t) => s + (Number(t.totalCost) || 0), 0);
   const totalQty = txs.reduce((s, t) => s + (Number(t.quantity) || 0), 0);
   const withMat = txs.find((t) => t.material);
-  const selectedContactPerson = parseDeliveryContactPerson(first.notes);
+  const selectedContactPerson = resolveDeliveryContactPerson(first.notes, first.deliveryNote);
   const jobSlice = jobTemplateSlice(first.job as Record<string, unknown> | null | undefined);
   const enrichedJobSlice = jobSlice
     ? enrichWithPrimaryContact(jobSlice, first.job?.contactsJson, selectedContactPerson)
@@ -588,7 +583,10 @@ export function buildTemplateData(
     transaction?.type === 'STOCK_OUT' ? [transaction] : [];
   const customItems = parseCustomItems(transaction.notes);
   const items = stockOutMaterialTableRows(stockOutSlice);
-  const selectedContactPerson = parseDeliveryContactPerson(transaction.notes);
+  const selectedContactPerson = resolveDeliveryContactPerson(
+    transaction.notes,
+    transaction.deliveryNote
+  );
   const jobSlice = jobTemplateSlice(transaction.job as Record<string, unknown> | null | undefined);
   const enrichedJobSlice = jobSlice
     ? enrichWithPrimaryContact(jobSlice, transaction.job?.contactsJson, selectedContactPerson)

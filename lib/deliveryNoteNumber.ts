@@ -53,6 +53,44 @@ export async function assertDeliveryNoteNumberAvailable(
   }
 }
 
+export function parseDeliveryContactPerson(notes?: string | null): string {
+  if (!notes) return '';
+  const match = notes.match(/--- DELIVERY CONTACT PERSON:([^\n\r]+)/);
+  return match?.[1]?.trim() ?? '';
+}
+
+export function resolveDeliveryContactPerson(
+  notes?: string | null,
+  deliveryNote?: { contactPerson?: string | null } | null
+): string {
+  if (deliveryNote?.contactPerson?.trim()) {
+    return deliveryNote.contactPerson.trim();
+  }
+  return parseDeliveryContactPerson(notes);
+}
+
+/** Keep transaction notes aligned with the persisted delivery-note contact. */
+export function replaceDeliveryNoteContactInNotes(
+  notes: string | undefined,
+  contactPerson?: string | null
+): string {
+  const trimmed = contactPerson?.trim() ?? '';
+  const withoutContact = (notes?.trim() ?? '').replace(
+    /--- DELIVERY CONTACT PERSON:[^\n\r]*\r?\n?/g,
+    ''
+  ).trim();
+
+  if (!trimmed) {
+    return withoutContact;
+  }
+
+  const contactLine = `--- DELIVERY CONTACT PERSON: ${trimmed}`;
+  if (/--- DELIVERY NOTE #\d+/.test(withoutContact)) {
+    return withoutContact.replace(/(--- DELIVERY NOTE #\d+)/, `$1\n${contactLine}`);
+  }
+  return withoutContact ? `${contactLine}\n${withoutContact}` : contactLine;
+}
+
 /** Keep transaction notes aligned with the persisted DeliveryNote.number. */
 export function replaceDeliveryNoteNumberInNotes(notes: string | undefined, number: number): string {
   const trimmed = notes?.trim() ?? '';

@@ -1,10 +1,15 @@
 # HR Attendance
 
-> 26 nodes · cohesion 0.10
+> 40 nodes · cohesion 0.09
 
 ## Key Concepts
 
 - **page.tsx** (46 connections) — `app/(app)/hr/attendance/create/page.tsx`
+- **attendanceDraftStatus.ts** (18 connections) — `lib/hr/attendanceDraftStatus.ts`
+- **attendanceDraftStatus.test.ts** (12 connections) — `__tests__/lib/hr/attendanceDraftStatus.test.ts`
+- **defaultUnpaidLeaveTypeId()** (9 connections) — `lib/hr/attendanceDraftStatus.ts`
+- **isDraftNonWorking()** (7 connections) — `lib/hr/attendanceDraftStatus.ts`
+- **normalizeDraftStatusFromApi()** (6 connections) — `lib/hr/attendanceDraftStatus.ts`
 - **buildDraftFromExistingRow()** (5 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **AttendanceCreatePage()** (5 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **buildDraftFromDefaults()** (4 connections) — `app/(app)/hr/attendance/create/page.tsx`
@@ -12,43 +17,41 @@
 - **diffMinutes()** (3 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **calculateWorkedMinutes()** (3 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **AttendanceGridDraftRow** (3 connections) — `components/hr/AttendanceEntryGrid.tsx`
+- **LeaveTypeOption** (3 connections) — `lib/hr/attendanceDraftStatus.ts`
+- **findUnpaidLeaveTypeId()** (3 connections) — `lib/hr/attendanceDraftStatus.ts`
+- **resolveLeaveTypeIdFromStored()** (3 connections) — `lib/hr/attendanceDraftStatus.ts`
+- **resolveApiStatusFromDraft()** (3 connections) — `lib/hr/attendanceDraftStatus.ts`
 - **todayYmd()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **formatWorkDateLabel()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
+- **applyAbsentToDraft()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **toLocalTimeInput()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **minutesFromTimeValue()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
+- **isLeaveManagedDraft()** (2 connections) — `lib/hr/attendanceDraftStatus.ts`
 - **findLeaveTypeIdByCode()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **EmployeeRow** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **AssignmentRow** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **assignmentFromScheduleRaw()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **assignmentFromAttendanceWorkAssignment()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **AttendanceDraftRow** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **EMPLOYEE_TYPE_ORDER** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **SchedulePayload** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **scheduleStatusBadgeProps()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **cloneDraftRows()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **combineDateAndTimeToIso()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **employeeDisplayName()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **employeeTypeSortValue()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- *... and 1 more nodes in this community*
+- *... and 15 more nodes in this community*
 
 ## Relationships
 
-- [[Lib HR]] (11 shared connections)
-- [[Stock, Components, and Reports]] (5 shared connections)
-- [[Components HR and Stock]] (4 shared connections)
-- [[Reports, Components, and Settings]] (4 shared connections)
-- [[HR Settings and Payroll]] (2 shared connections)
-- [[Components HR, Transactions, and Ui]] (2 shared connections)
-- [[Components, Admin, and Stock]] (1 shared connections)
+- [[Components HR and Stock]] (8 shared connections)
+- [[Lib HR]] (8 shared connections)
+- [[Stock, Components, and Reports]] (7 shared connections)
+- [[HR Payroll and Settings]] (2 shared connections)
+- [[Reports, Components, and Settings]] (2 shared connections)
+- [[Components Transactions, Ui, and Reports]] (1 shared connections)
+- [[Stock, Components, and Admin]] (1 shared connections)
+- [[Stock Materials and Goods Receipt]] (1 shared connections)
 
 ## Source Files
 
+- `__tests__/lib/hr/attendanceDraftStatus.test.ts`
 - `app/(app)/hr/attendance/create/page.tsx`
 - `components/hr/AttendanceEntryGrid.tsx`
+- `lib/hr/attendanceDraftStatus.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 95 (100%)
+- EXTRACTED: 166 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

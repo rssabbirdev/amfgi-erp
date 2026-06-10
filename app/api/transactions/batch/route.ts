@@ -38,6 +38,7 @@ import {
   assertDeliveryNoteNumberAvailable,
   formatDeliveryNoteDriveLabel,
   getNextDeliveryNoteNumber,
+  replaceDeliveryNoteContactInNotes,
   replaceDeliveryNoteNumberInNotes,
   resolveDeliveryNoteNumber,
 } from '@/lib/deliveryNoteNumber';
@@ -62,11 +63,15 @@ async function applyDeliveryNoteStructuredFields(
     materialDispatchSkipped: boolean;
     baseNotes?: string | null;
     deliveryNoteCustomItems?: DeliveryNoteCustomItemPayload[] | null;
+    deliveryContactPerson?: string | null;
   }
 ) {
   const data: Prisma.DeliveryNoteUpdateInput = {
     materialDispatchSkipped: params.materialDispatchSkipped,
   };
+  if (params.deliveryContactPerson !== undefined) {
+    data.contactPerson = params.deliveryContactPerson?.trim() ? params.deliveryContactPerson.trim() : null;
+  }
   if (params.baseNotes !== undefined) {
     data.documentNotes = params.baseNotes?.trim() ? params.baseNotes.trim() : null;
   }
@@ -199,6 +204,7 @@ const BatchSchema = z.object({
   date:          z.string().optional(),
   isDeliveryNote: z.boolean().optional(),
   deliveryNoteNumber: z.number().int().positive().optional(),
+  deliveryContactPerson: z.string().max(200).optional(),
   existingTransactionIds: z.array(z.string()).optional(),
   existingDeliveryNoteId: z.string().min(1).optional(),
   billAmount:    z.number().finite().optional(),
@@ -254,6 +260,7 @@ export async function POST(req: Request) {
     date,
     isDeliveryNote,
     deliveryNoteNumber: requestedDeliveryNoteNumber,
+    deliveryContactPerson,
     existingTransactionIds,
     existingDeliveryNoteId,
     billAmount,
@@ -547,6 +554,9 @@ export async function POST(req: Request) {
       if (type === 'STOCK_OUT' && isDeliveryNote && reportedDeliveryNoteNumber != null) {
         deliveryNoteNotes = replaceDeliveryNoteNumberInNotes(deliveryNoteNotes, reportedDeliveryNoteNumber);
       }
+      if (type === 'STOCK_OUT' && isDeliveryNote && deliveryContactPerson !== undefined) {
+        deliveryNoteNotes = replaceDeliveryNoteContactInNotes(deliveryNoteNotes, deliveryContactPerson);
+      }
 
       // If no lines (custom items only delivery note), skip transaction creation and return early
       if (lines.length === 0) {
@@ -555,6 +565,7 @@ export async function POST(req: Request) {
             materialDispatchSkipped: true,
             baseNotes,
             deliveryNoteCustomItems,
+            deliveryContactPerson,
           });
         }
         return {
@@ -1012,6 +1023,7 @@ export async function POST(req: Request) {
           materialDispatchSkipped: false,
           baseNotes,
           deliveryNoteCustomItems,
+          deliveryContactPerson,
         });
       }
 

@@ -44,6 +44,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       jobId: dn.jobId,
       date: dn.date,
       documentNotes: dn.documentNotes ?? null,
+      contactPerson: dn.contactPerson ?? null,
       customItemsJson: dn.customItemsJson ?? null,
       materialDispatchSkipped: dn.materialDispatchSkipped,
       job: serializedJob,

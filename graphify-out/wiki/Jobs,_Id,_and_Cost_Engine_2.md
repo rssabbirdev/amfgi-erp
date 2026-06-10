@@ -1,17 +1,24 @@
 # Jobs, Id, and Cost Engine
 
-> 4 nodes · cohesion 0.50
+> 10 nodes · cohesion 0.24
 
 ## Key Concepts
 
-- **numericField()** (4 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **parseInputValue()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **isEmptyBudgetValue()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **BudgetInput()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **JobCostEnginePage()** (9 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **formatQty()** (4 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **normalizeNumber()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **formatMoney()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **formatDays()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **progressStatusLabel()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **JobExecutionScheduleEditor()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **mapJobStatusToProgressStatus()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **pricingModeLabel()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **scheduleStatusLabel()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
 
 ## Relationships
 
-- [[Jobs Id]] (4 shared connections)
+- [[Jobs, Id, and Cost Engine]] (10 shared connections)
+- [[Stock, Components, and Reports]] (2 shared connections)
 
 ## Source Files
 
@@ -19,7 +26,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 10 (100%)
+- EXTRACTED: 34 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

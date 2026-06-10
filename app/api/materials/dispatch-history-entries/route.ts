@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma';
 import { serializeJobWithContacts } from '@/lib/jobs/jobContacts';
 import { parseListLimit, parseListOffset } from '@/lib/pagination/serverList';
 import { errorResponse, successResponse } from '@/lib/utils/apiResponse';
+import { parseDeliveryContactPerson } from '@/lib/deliveryNoteNumber';
 import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 function mapCustomItemsFromJson(json: unknown): Array<{ name: string; description: string; unit: string; qty: string }> {
@@ -77,7 +78,7 @@ export async function GET(req: Request) {
       signedCopyUrl: true,
       deliveryNoteId: true,
       deliveryNote: {
-        select: { id: true, number: true, documentNotes: true, customItemsJson: true },
+        select: { id: true, number: true, documentNotes: true, customItemsJson: true, contactPerson: true },
       },
       warehouse: {
         select: { id: true, name: true },
@@ -205,6 +206,10 @@ export async function GET(req: Request) {
           const m = firstTxn.notes?.match(/--- DELIVERY NOTE #(\d+)/);
           return m?.[1] ? parseInt(m[1], 10) : null;
         })();
+      const deliveryNoteContactPerson =
+        firstTxn.deliveryNote?.contactPerson?.trim() ||
+        parseDeliveryContactPerson(firstTxn.notes) ||
+        undefined;
 
       const ledgerCreatedAt = new Date(
         Math.max(...groupedTxns.map((t) => new Date(t.createdAt).getTime()))
@@ -231,6 +236,7 @@ export async function GET(req: Request) {
         isDeliveryNote: firstTxn.isDeliveryNote ?? false,
         deliveryNoteId: firstTxn.deliveryNoteId ?? undefined,
         deliveryNoteNumber: deliveryNoteNumber ?? undefined,
+        deliveryNoteContactPerson,
         documentNotes: firstTxn.deliveryNote?.documentNotes ?? undefined,
         customItemsJson: firstTxn.deliveryNote?.customItemsJson ?? undefined,
         signedCopyUrl: firstTxn.signedCopyUrl ?? undefined,
@@ -267,6 +273,7 @@ export async function GET(req: Request) {
       createdAt: true,
       documentNotes: true,
       customItemsJson: true,
+      contactPerson: true,
       job: {
         select: {
           id: true,
@@ -306,6 +313,7 @@ export async function GET(req: Request) {
       isDeliveryNote: true,
       deliveryNoteId: dn.id,
       deliveryNoteNumber: dn.number,
+      deliveryNoteContactPerson: dn.contactPerson?.trim() || undefined,
       documentNotes: dn.documentNotes ?? undefined,
       customItemsJson: dn.customItemsJson ?? undefined,
     } as unknown as (typeof enrichedEntries)[number]);

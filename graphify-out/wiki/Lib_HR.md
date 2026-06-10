@@ -1,63 +1,54 @@
 # Lib HR
 
-> 40 nodes · cohesion 0.12
+> 19 nodes · cohesion 0.21
 
 ## Key Concepts
 
-- **PayTypeEditorTable.tsx** (40 connections) — `components/hr/PayTypeEditorTable.tsx`
-- **page.tsx** (25 connections) — `app/(app)/hr/settings/pay-types/page.tsx`
-- **payTypeConfigHelpers.ts** (16 connections) — `lib/hr/payroll/payTypeConfigHelpers.ts`
-- **payTypeFormulas.ts** (15 connections) — `lib/hr/payroll/payTypeFormulas.ts`
-- **payTypeForm.ts** (13 connections) — `lib/hr/payroll/payTypeForm.ts`
-- **PayTypeConfig** (13 connections) — `lib/hr/payroll/types.ts`
-- **PayTypeModeGuide.tsx** (10 connections) — `components/hr/PayTypeModeGuide.tsx`
-- **PayCalculationMode** (9 connections) — `lib/hr/payroll/types.ts`
-- **payTypeConfigFields()** (8 connections) — `lib/hr/payroll/payTypeForm.ts`
-- **substituteConfigInFormulaLines()** (8 connections) — `lib/hr/payroll/payTypeFormulas.ts`
-- **formulaModeScripts.ts** (7 connections) — `lib/hr/payroll/formulaModeScripts.ts`
-- **formulaDefinitionForMode()** (7 connections) — `lib/hr/payroll/payTypeFormulas.ts`
-- **describePayTypeRow()** (7 connections) — `lib/hr/payroll/payTypeFormulas.ts`
-- **payTypeTemplates.ts** (7 connections) — `lib/hr/payroll/payTypeTemplates.ts`
-- **payTypeFormulas.test.ts** (6 connections) — `__tests__/lib/hr/payroll/payTypeFormulas.test.ts`
-- **formulaScriptForMode()** (5 connections) — `lib/hr/payroll/formulaModeScripts.ts`
-- **buildPayTypeConfigFromFields()** (4 connections) — `lib/hr/payroll/payTypeForm.ts`
-- **DEFAULT_PAY_TYPE_TEMPLATES** (4 connections) — `lib/hr/payroll/payTypeTemplates.ts`
-- **PayTypeRecord** (3 connections) — `components/hr/PayTypeEditorTable.tsx`
-- **PayTypeModeGuide()** (3 connections) — `components/hr/PayTypeModeGuide.tsx`
-- **labelForCompensationInput()** (3 connections) — `lib/hr/payroll/formulaLabels.ts`
-- **formatExcludedWeekdaysLabel()** (3 connections) — `lib/hr/payroll/payTypeConfigHelpers.ts`
-- **PAY_CALCULATION_MODE_OPTIONS** (3 connections) — `lib/hr/payroll/payTypeForm.ts`
-- **slugifyPayTypeCode()** (3 connections) — `lib/hr/payroll/payTypeForm.ts`
-- **PAY_MODE_FORMULA_DEFINITIONS** (3 connections) — `lib/hr/payroll/payTypeFormulas.ts`
-- *... and 15 more nodes in this community*
+- **buildFormulaPreviewContext.ts** (28 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
+- **route.ts** (19 connections) — `app/api/hr/payroll/formula-preview/route.ts`
+- **parsePayTypeConfig()** (15 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
+- **resolveExcludedWeekdays()** (15 connections) — `lib/hr/payroll/payTypeConfigHelpers.ts`
+- **parsePayTypeConfig.ts** (14 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
+- **CompensationInput** (11 connections) — `lib/hr/payroll/types.ts`
+- **employeeFormulaPreviewContext()** (10 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
+- **POST()** (9 connections) — `app/api/hr/payroll/formula-preview/route.ts`
+- **formulaPreviewSamples.ts** (8 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
+- **dummyFormulaPreviewContext()** (4 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
+- **getFormulaPreviewScenario()** (3 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
+- **parsePayTypeConfig.test.ts** (3 connections) — `__tests__/lib/hr/payroll/parsePayTypeConfig.test.ts`
+- **normalizeExcludedWeekdays()** (2 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
+- **BodySchema** (1 connections) — `app/api/hr/payroll/formula-preview/route.ts`
+- **FormulaPreviewContext** (1 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
+- **attendanceSelect** (1 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
+- **FormulaPreviewScenario** (1 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
+- **MODES** (1 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
+- **config** (1 connections) — `__tests__/lib/hr/payroll/parsePayTypeConfig.test.ts`
 
 ## Relationships
 
-- [[Lib HR]] (39 shared connections)
-- [[HR Settings and Payroll]] (13 shared connections)
-- [[Components HR, Transactions, and Ui]] (4 shared connections)
-- [[Reports, Components, and Settings]] (4 shared connections)
-- [[Scripts Seed]] (2 shared connections)
-- [[Stock, Components, and Reports]] (1 shared connections)
+- [[Lib HR]] (44 shared connections)
+- [[API HR, Settings, and Stock Exception Approvals]] (13 shared connections)
+- [[Lib, HR, and Components]] (8 shared connections)
+- [[API Materials, Me, and Transactions]] (3 shared connections)
+- [[Lib and Tests]] (3 shared connections)
+- [[API Reports, Transactions, and Materials]] (2 shared connections)
+- [[Lib and API]] (1 shared connections)
+- [[API Me, Media, and HR]] (1 shared connections)
 
 ## Source Files
 
-- `__tests__/lib/hr/payroll/payTypeFormulas.test.ts`
-- `app/(app)/hr/settings/pay-types/page.tsx`
-- `components/hr/PayTypeEditorTable.tsx`
-- `components/hr/PayTypeModeGuide.tsx`
-- `lib/hr/payroll/formulaLabels.ts`
-- `lib/hr/payroll/formulaModeScripts.ts`
+- `__tests__/lib/hr/payroll/parsePayTypeConfig.test.ts`
+- `app/api/hr/payroll/formula-preview/route.ts`
+- `lib/hr/payroll/buildFormulaPreviewContext.ts`
+- `lib/hr/payroll/formulaPreviewSamples.ts`
+- `lib/hr/payroll/parsePayTypeConfig.ts`
 - `lib/hr/payroll/payTypeConfigHelpers.ts`
-- `lib/hr/payroll/payTypeForm.ts`
-- `lib/hr/payroll/payTypeFormulas.ts`
-- `lib/hr/payroll/payTypeTemplates.ts`
 - `lib/hr/payroll/types.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 245 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 146 (99%)
+- INFERRED: 1 (1%)
 - AMBIGUOUS: 0 (0%)
 
 ---

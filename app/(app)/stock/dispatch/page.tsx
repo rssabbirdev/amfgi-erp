@@ -593,8 +593,21 @@ export default function DispatchPage() {
         const dnNumber = isDeliveryNote ? getDeliveryNoteNumber(entry.notes, entry.deliveryNoteNumber) : null;
         const customItems = isDeliveryNote ? parseCustomItemsFromEntry(entry) : [];
         const parsedContacts = parseJobContacts(entry.jobContactsJson);
-        const primaryContact = entry.jobContactPerson?.trim() || parsedContacts[0]?.name || '';
-        const primaryContactRow = parsedContacts.find((c) => c.name === primaryContact) ?? parsedContacts[0];
+        const deliveryContactFromNotes = (() => {
+          if (!entry.notes) return '';
+          const match = entry.notes.match(/--- DELIVERY CONTACT PERSON:([^\n\r]+)/);
+          return match?.[1]?.trim() ?? '';
+        })();
+        const primaryContact = isDeliveryNote
+          ? entry.deliveryNoteContactPerson?.trim() ||
+            deliveryContactFromNotes ||
+            entry.jobContactPerson?.trim() ||
+            parsedContacts[0]?.name ||
+            ''
+          : entry.jobContactPerson?.trim() || parsedContacts[0]?.name || '';
+        const primaryContactRow =
+          parsedContacts.find((c) => c.name.toLowerCase() === primaryContact.toLowerCase()) ??
+          parsedContacts[0];
         const baseNotes = getBaseNotesForEntry(entry);
         const customerName = entry.jobDescription || '';
         const dateStr = typeof entry.dispatchDate === 'string'

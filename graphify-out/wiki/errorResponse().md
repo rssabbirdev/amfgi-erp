@@ -1,8 +1,8 @@
 # errorResponse()
 
-> God node · 385 connections · `lib/utils/apiResponse.ts`
+> God node · 387 connections · `lib/utils/apiResponse.ts`
 
-**Community:** [[API HR, Me, and Stock]]
+**Community:** [[API Materials, Me, and Transactions]]
 
 ## Connections by Relation
 
