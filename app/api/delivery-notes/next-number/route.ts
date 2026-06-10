@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
+import { getNextDeliveryNoteNumber } from '@/lib/deliveryNoteNumber';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
 export async function GET(_req: Request) {
@@ -13,11 +14,7 @@ export async function GET(_req: Request) {
 
   try {
     const companyId = session.user.activeCompanyId;
-    const agg = await prisma.deliveryNote.aggregate({
-      where: { companyId },
-      _max: { number: true },
-    });
-    const nextNumber = (agg._max.number ?? 0) + 1;
+    const nextNumber = await getNextDeliveryNoteNumber(prisma, companyId);
 
     return successResponse({ nextNumber });
   } catch (err: unknown) {

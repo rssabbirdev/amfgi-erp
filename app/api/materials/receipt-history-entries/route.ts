@@ -8,6 +8,10 @@ import {
   parseReceiptCancellationMetadata,
   stripReceiptCancellationMarkers,
 } from '@/lib/utils/receiptCancellation';
+import {
+  parseReceiptHeaderMetadata,
+  resolveReceiptBillAmount,
+} from '@/lib/utils/receiptHeaderMetadata';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -114,12 +118,16 @@ export async function GET(req: Request) {
       const firstLine = lines[0];
       const cancellationMetadata = parseReceiptCancellationMetadata(firstLine?.notes);
       const adjustmentMetadata = parseReceiptAdjustmentMetadata(firstLine?.notes);
+      const headerMetadata = parseReceiptHeaderMetadata(firstLine?.meta);
+      const billAmount = resolveReceiptBillAmount(headerMetadata, totalValue);
 
       return {
         id: receiptNumber,
         receiptNumber,
         receivedDate: firstLine!.receivedDate,
         supplier: firstLine!.supplier || undefined,
+        lpoNumber: headerMetadata.lpoNumber || undefined,
+        supplierInvoiceNumber: headerMetadata.supplierInvoiceNumber || undefined,
         notes: stripReceiptCancellationMarkers(firstLine!.notes) || undefined,
         status: cancellationMetadata.isCancelled ? 'cancelled' : 'active',
         cancelledAt: cancellationMetadata.cancelledAt,
@@ -128,13 +136,22 @@ export async function GET(req: Request) {
         adjustmentReason: adjustmentMetadata.adjustmentReason,
         itemsCount: lines.length,
         totalValue,
+        billAmount,
+        includeTax: headerMetadata.includeTax ?? undefined,
+        taxAmount: headerMetadata.taxAmount ?? undefined,
         materials,
       };
     });
 
     const filteredEntries = search
       ? enrichedEntries.filter((entry) => {
-          const haystack = [entry.receiptNumber, entry.supplier, entry.notes]
+          const haystack = [
+            entry.receiptNumber,
+            entry.supplier,
+            entry.lpoNumber,
+            entry.supplierInvoiceNumber,
+            entry.notes,
+          ]
             .filter(Boolean)
             .join(' ')
             .toLowerCase();

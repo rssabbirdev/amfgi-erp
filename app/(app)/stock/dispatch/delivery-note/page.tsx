@@ -7,6 +7,9 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/shadcn/button';
 import { Badge } from '@/components/ui/shadcn/badge';
 import SearchSelect from '@/components/ui/SearchSelect';
+import DeliveryNoteCustomItemsGrid, {
+  type DeliveryNoteCustomItem,
+} from '@/components/stock/DeliveryNoteCustomItemsGrid';
 import DispatchLineGrid from '@/components/stock/DispatchLineGrid';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -26,19 +29,24 @@ import {
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+async function fetchNextDeliveryNoteNumber(): Promise<number | null> {
+  try {
+    const res = await fetch('/api/delivery-notes/next-number');
+    const data = await res.json();
+    if (res.ok && data.data?.nextNumber) {
+      return data.data.nextNumber as number;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 function qtyInBase(uoms: MaterialUomDto[] | undefined, quantityUomId: string, qty: number): number {
   if (!uoms?.length || !quantityUomId?.trim()) return qty;
   const u = uoms.find((x) => x.id === quantityUomId);
   if (!u) return qty;
   return qty * u.factorToBase;
-}
-
-interface CustomItem {
-  id: string;
-  name: string;
-  description: string;
-  unit: string;
-  qty: string;
 }
 
 interface Line {
@@ -116,10 +124,12 @@ export default function DeliveryNoteCreatePage() {
   const [selectedContactPerson, setSelectedContactPerson] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deliveryNoteNumber, setDeliveryNoteNumber] = useState<number | null>(null);
+  const [loadedDeliveryNoteNumber, setLoadedDeliveryNoteNumber] = useState<number | null>(null);
+  const [deliveryNoteNumberOverride, setDeliveryNoteNumberOverride] = useState(false);
   const [notes, setNotes] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
   const [skipMaterialDispatch, setSkipMaterialDispatch] = useState(false);
-  const [customItems, setCustomItems] = useState<CustomItem[]>([
+  const [customItems, setCustomItems] = useState<DeliveryNoteCustomItem[]>([
     { id: generateId(), name: '', description: '', unit: '', qty: '' },
   ]);
   const [lines, setLines] = useState<Line[]>(() => [
@@ -308,7 +318,7 @@ export default function DeliveryNoteCreatePage() {
   };
 
   // Parse custom items from notes
-  const parseCustomItems = (notesText: string): CustomItem[] => {
+  const parseCustomItems = (notesText: string): DeliveryNoteCustomItem[] => {
     const match = notesText.match(/--- DELIVERY NOTE ITEMS \(For Printing\) ---\n([\s\S]*?)(?=\n--- |$)/);
     if (!match) return [{ id: generateId(), name: '', description: '', unit: '', qty: '' }];
 
@@ -509,19 +519,18 @@ export default function DeliveryNoteCreatePage() {
         if (opts.duplicate) {
           setEditingTransactionId(null);
           setEditingDeliveryNoteId(null);
-          try {
-            const numRes = await fetch('/api/delivery-notes/next-number');
-            const numData = await numRes.json();
-            if (numRes.ok && numData.data) {
-              setDeliveryNoteNumber(numData.data.nextNumber);
-            }
-          } catch {
-            console.error('Failed to fetch next delivery note number');
+          const nextNumber = await fetchNextDeliveryNoteNumber();
+          if (nextNumber != null) {
+            setDeliveryNoteNumber(nextNumber);
           }
+          setLoadedDeliveryNoteNumber(null);
+          setDeliveryNoteNumberOverride(false);
         } else {
           setEditingDeliveryNoteId(d.id);
           setEditingTransactionId(d.firstStockOutTransactionId);
           setDeliveryNoteNumber(d.number);
+          setLoadedDeliveryNoteNumber(d.number);
+          setDeliveryNoteNumberOverride(false);
         }
       } catch (err) {
         console.error('Failed to load delivery note:', err);
@@ -597,22 +606,19 @@ export default function DeliveryNoteCreatePage() {
             }
 
             if (isDuplicating) {
-              // For duplicates: fetch a fresh delivery note number
-              try {
-                const numRes = await fetch('/api/delivery-notes/next-number');
-                const numData = await numRes.json();
-                if (numRes.ok && numData.data) {
-                  setDeliveryNoteNumber(numData.data.nextNumber);
-                }
-              } catch (err) {
-                console.error('Failed to fetch next delivery note number');
+              const nextNumber = await fetchNextDeliveryNoteNumber();
+              if (nextNumber != null) {
+                setDeliveryNoteNumber(nextNumber);
               }
+              setLoadedDeliveryNoteNumber(null);
+              setDeliveryNoteNumberOverride(false);
             } else {
-              // For edits: keep the original delivery note number
               const dnNumber = parseDeliveryNoteNumber(txn.notes || '');
               if (dnNumber) {
                 setDeliveryNoteNumber(dnNumber);
+                setLoadedDeliveryNoteNumber(dnNumber);
               }
+              setDeliveryNoteNumberOverride(false);
             }
           } else {
             toast.error(data.error || 'Failed to load delivery note');
@@ -633,18 +639,13 @@ export default function DeliveryNoteCreatePage() {
       void loadFromDeliveryNoteRecord(deliveryNoteIdParam, { duplicate: false });
     } else {
       // Create mode: load next delivery note number
-      const fetchNextNumber = async () => {
-        try {
-          const res = await fetch('/api/delivery-notes/next-number');
-          const data = await res.json();
-          if (res.ok && data.data) {
-            setDeliveryNoteNumber(data.data.nextNumber);
-          }
-        } catch (err) {
-          console.error('Failed to fetch delivery note number');
+      void fetchNextDeliveryNoteNumber().then((nextNumber) => {
+        if (nextNumber != null) {
+          setDeliveryNoteNumber(nextNumber);
         }
-      };
-      fetchNextNumber();
+      });
+      setLoadedDeliveryNoteNumber(null);
+      setDeliveryNoteNumberOverride(false);
     }
   }, [searchParams, router, jobs]);
 
@@ -780,7 +781,11 @@ export default function DeliveryNoteCreatePage() {
     });
   };
 
-  const updateCustomItem = (id: string, field: string, value: string) => {
+  const updateCustomItem = (
+    id: string,
+    field: keyof Omit<DeliveryNoteCustomItem, 'id'>,
+    value: string
+  ) => {
     setCustomItems(customItems.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ));
@@ -983,6 +988,13 @@ export default function DeliveryNoteCreatePage() {
       return;
     }
 
+    if (deliveryNoteNumberOverride) {
+      if (deliveryNoteNumber == null || !Number.isInteger(deliveryNoteNumber) || deliveryNoteNumber < 1) {
+        toast.error('Enter a valid delivery note number');
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       // Build notes with delivery note header and custom items
@@ -1016,7 +1028,7 @@ export default function DeliveryNoteCreatePage() {
         warehouseId: l.warehouseId || undefined,
       }));
 
-      await addBatchTransaction({
+      const batchResult = await addBatchTransaction({
         type: 'STOCK_OUT',
         jobId: selectedJob,
         notes: finalNotes || undefined,
@@ -1030,15 +1042,22 @@ export default function DeliveryNoteCreatePage() {
         overrideReason: overrideReason.trim() || undefined,
         date,
         isDeliveryNote: true,
+        ...(deliveryNoteNumberOverride && deliveryNoteNumber != null
+          ? { deliveryNoteNumber }
+          : {}),
         existingTransactionIds: editingTransactionId ? [editingTransactionId] : undefined,
         existingDeliveryNoteId: editingDeliveryNoteId ?? undefined,
         lines: linesToSubmit,
       }).unwrap();
 
+      const savedDeliveryNoteNumber = batchResult.deliveryNoteNumber ?? deliveryNoteNumber;
+
       const wasEditing = Boolean(editingTransactionId || editingDeliveryNoteId);
       const actionText = wasEditing ? 'updated' : 'created';
       const materialsText = skipMaterialDispatch ? '0 material(s) (custom items only)' : `${validLines.length} material(s)`;
-      toast.success(`Delivery Note #${deliveryNoteNumber} ${actionText} with ${materialsText} and ${validCustomItems.length} custom item(s)`);
+      toast.success(
+        `Delivery note ${savedDeliveryNoteNumber ?? '—'} ${actionText} with ${materialsText} and ${validCustomItems.length} custom item(s)`
+      );
       setSelectedJob('');
       setSelectedContactPerson('');
       setNotes('');
@@ -1060,12 +1079,13 @@ export default function DeliveryNoteCreatePage() {
 
       // Refetch next number for create mode
       if (!wasEditing) {
-        const res = await fetch('/api/delivery-notes/next-number');
-        const data = await res.json();
-        if (res.ok && data.data) {
-          setDeliveryNoteNumber(data.data.nextNumber);
+        const nextNumber = await fetchNextDeliveryNoteNumber();
+        if (nextNumber != null) {
+          setDeliveryNoteNumber(nextNumber);
         }
       }
+      setDeliveryNoteNumberOverride(false);
+      setLoadedDeliveryNoteNumber(null);
 
       router.push('/stock/dispatch');
     } catch (err: any) {
@@ -1139,15 +1159,12 @@ export default function DeliveryNoteCreatePage() {
     setDeliveryNoteNumber(null);
 
     // Fetch a fresh delivery note number for the new entry
-    try {
-      const res = await fetch('/api/delivery-notes/next-number');
-      const data = await res.json();
-      if (res.ok && data.data) {
-        setDeliveryNoteNumber(data.data.nextNumber);
-      }
-    } catch (err) {
-      console.error('Failed to fetch next delivery note number');
+    const nextNumber = await fetchNextDeliveryNoteNumber();
+    if (nextNumber != null) {
+      setDeliveryNoteNumber(nextNumber);
     }
+    setLoadedDeliveryNoteNumber(null);
+    setDeliveryNoteNumberOverride(false);
 
     // Replace URL without transactionId param (so URL matches the new create mode)
     window.history.replaceState(null, '', '/stock/dispatch/delivery-note');
@@ -1329,13 +1346,53 @@ export default function DeliveryNoteCreatePage() {
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Delivery Note #
+                Delivery note number
               </label>
-                <div className="flex items-center rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-foreground">
-                  <span className="font-semibold text-primary">
-                  {deliveryNoteNumber ? `DN #${deliveryNoteNumber}` : 'Loading...'}
-                </span>
-              </div>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={deliveryNoteNumber ?? ''}
+                readOnly={!deliveryNoteNumberOverride}
+                onChange={(e) => {
+                  const parsed = Number.parseInt(e.target.value, 10);
+                  setDeliveryNoteNumber(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                }}
+                placeholder={deliveryNoteNumber == null ? 'Loading…' : undefined}
+                className={cn(
+                  'w-full rounded-md border border-border px-3 py-2.5 font-mono text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring',
+                  deliveryNoteNumberOverride ? 'bg-background' : 'cursor-default bg-muted/40'
+                )}
+              />
+              <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={deliveryNoteNumberOverride}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    setDeliveryNoteNumberOverride(enabled);
+                    if (!enabled) {
+                      if (loadedDeliveryNoteNumber != null) {
+                        setDeliveryNoteNumber(loadedDeliveryNoteNumber);
+                      } else {
+                        void fetchNextDeliveryNoteNumber().then((nextNumber) => {
+                          if (nextNumber != null) {
+                            setDeliveryNoteNumber(nextNumber);
+                          }
+                        });
+                      }
+                    }
+                  }}
+                  className="rounded border-border"
+                />
+                Override auto number
+              </label>
+              {!deliveryNoteNumberOverride ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Auto-assigned from last delivery note + 1 on save
+                </p>
+              ) : null}
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -1487,118 +1544,37 @@ export default function DeliveryNoteCreatePage() {
         )}
 
         {/* Custom Items Section */}
-        <div className="border-b border-border">
-          <div className="border-b border-border bg-muted/40 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.3A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z" />
-                </svg>
-                Custom Items (For Printing)
-              </h3>
-              {deliveryNoteNumber && (
-                <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                  Delivery Note #{deliveryNoteNumber}
+        <div className="border-b border-border bg-primary/5">
+          <div className="border-b border-border bg-primary/10 px-4 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Custom items (for printing)</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Lines appear on the printed delivery note only — no stock movement.
+                </p>
+              </div>
+              {deliveryNoteNumber != null ? (
+                <span className="rounded-full border border-primary/30 bg-background/80 px-3 py-1 font-mono text-xs font-semibold text-primary">
+                  {deliveryNoteNumber}
                 </span>
-              )}
+              ) : null}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Add custom items to appear on the printed delivery note. This section does not affect inventory.</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="w-8 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">#</th>
-                  <th className="min-w-[200px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Item Name *</th>
-                  <th className="min-w-[200px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</th>
-                  <th className="w-20 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Unit</th>
-                  <th className="w-24 px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Qty</th>
-                  <th className="w-20 px-2 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {customItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                      No custom items yet. Click "+ Add Item" to start.
-                    </td>
-                  </tr>
-                ) : (
-                  customItems.map((item, idx) => (
-                    <tr key={item.id} className="border-b border-border hover:bg-muted/40">
-                      <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{idx + 1}</td>
-                      <td className="px-4 py-2">
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) => updateCustomItem(item.id, 'name', e.target.value)}
-                          placeholder="e.g., Steel Pipe"
-                          className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          type="text"
-                          value={item.description}
-                          onChange={(e) => updateCustomItem(item.id, 'description', e.target.value)}
-                          placeholder="Optional description"
-                          className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          value={item.unit}
-                          onChange={(e) => updateCustomItem(item.id, 'unit', e.target.value)}
-                          placeholder="Unit"
-                          className="w-full rounded border border-border bg-background px-3 py-2 text-center text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          value={item.qty}
-                          onChange={(e) => updateCustomItem(item.id, 'qty', e.target.value)}
-                          placeholder="Qty"
-                          className="w-full rounded border border-border bg-background px-3 py-2 text-right text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                      </td>
-                      <td className="px-2 py-2">
-                        <button
-                          type="button"
-                          onClick={() => duplicateCustomItem(item.id)}
-                          className="p-1 text-muted-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-30"
-                          title="Duplicate item row"
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2M8 7V5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2h-2M8 7h10a2 2 0 012 2v10" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeCustomItem(item.id)}
-                          disabled={customItems.length === 1}
-                          className="p-1 text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div className="border-b border-border bg-primary/5 px-0">
+            <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Excel view</div>
+            </div>
+            <DeliveryNoteCustomItemsGrid
+              items={customItems}
+              onUpdateItem={updateCustomItem}
+              onDuplicateItem={duplicateCustomItem}
+              onRemoveItem={removeCustomItem}
+            />
           </div>
-          <div className="border-t border-border bg-card p-4">
-            <button
-              type="button"
-              onClick={addCustomItem}
-              className="rounded-md border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
-            >
-              + Add Item
-            </button>
+          <div className="flex justify-end border-t border-border bg-primary/5 px-4 py-3">
+            <Button type="button" variant="outline" size="sm" onClick={addCustomItem}>
+              + Add row
+            </Button>
           </div>
         </div>
 

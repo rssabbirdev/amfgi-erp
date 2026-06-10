@@ -7,6 +7,10 @@ import {
   parseReceiptCancellationMetadata,
   stripReceiptCancellationMarkers,
 } from '@/lib/utils/receiptCancellation';
+import {
+  parseReceiptHeaderMetadata,
+  resolveReceiptBillAmount,
+} from '@/lib/utils/receiptHeaderMetadata';
 import { parseReceiptLineMetadata } from '@/lib/utils/receiptLineMetadata';
 import { reverseReceiptPriceLogUpdates } from '@/lib/utils/receiptPriceLogs';
 import { applyMaterialWarehouseDelta } from '@/lib/warehouses/stockWarehouses';
@@ -52,6 +56,7 @@ export async function GET(
     const firstBatch = batches[0];
     const cancellationMetadata = parseReceiptCancellationMetadata(firstBatch?.notes);
     const adjustmentMetadata = parseReceiptAdjustmentMetadata(firstBatch?.notes);
+    const headerMetadata = parseReceiptHeaderMetadata(firstBatch?.meta);
 
     const grouped = new Map<string, {
       materialId: string;
@@ -100,13 +105,19 @@ export async function GET(
     const materials = Array.from(grouped.values());
 
     const totalValue = batches.reduce((sum, b) => sum + decimalToNumberOrZero(b.totalCost), 0);
+    const billAmount = resolveReceiptBillAmount(headerMetadata, totalValue);
 
     return successResponse({
       _id: receiptNumber,
       receiptNumber,
       receivedDate: firstBatch.receivedDate,
       supplier: firstBatch.supplier || undefined,
+      lpoNumber: headerMetadata.lpoNumber || undefined,
+      supplierInvoiceNumber: headerMetadata.supplierInvoiceNumber || undefined,
       notes: stripReceiptCancellationMarkers(firstBatch.notes) || undefined,
+      billAmount,
+      includeTax: headerMetadata.includeTax ?? undefined,
+      taxAmount: headerMetadata.taxAmount ?? undefined,
       status: cancellationMetadata.isCancelled ? 'cancelled' : 'active',
       cancelledAt: cancellationMetadata.cancelledAt,
       cancellationReason: cancellationMetadata.cancellationReason,

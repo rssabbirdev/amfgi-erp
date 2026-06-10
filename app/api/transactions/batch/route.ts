@@ -17,6 +17,10 @@ import {
 } from '@/lib/utils/transactionBatchLinks';
 import { resolveQuantityToBase, resolveFactorToBase } from '@/lib/utils/materialUomDb';
 import { buildReceiptPriceLogNote } from '@/lib/utils/receiptPriceLogs';
+import {
+  buildStockBatchReceiptHeaderMeta,
+  mergeStockBatchReceiptMeta,
+} from '@/lib/utils/receiptHeaderMetadata';
 import { buildStockBatchReceiptLineMeta } from '@/lib/utils/receiptLineMetadata';
 import { applyMaterialWarehouseDelta, resolveEffectiveWarehouse } from '@/lib/warehouses/stockWarehouses';
 import { publishLiveUpdate } from '@/lib/live-updates/server';
@@ -30,7 +34,13 @@ import {
 import { extractGoogleDriveFileId } from '@/lib/utils/googleDriveUrl';
 import { upsertStockExceptionApproval } from '@/lib/utils/stockExceptionApproval';
 import { getEffectiveGoogleDriveRootFolderId } from '@/lib/utils/globalSettings';
-import { formatDeliveryNoteDriveLabel, resolveDeliveryNoteNumber } from '@/lib/deliveryNoteNumber';
+import {
+  assertDeliveryNoteNumberAvailable,
+  formatDeliveryNoteDriveLabel,
+  getNextDeliveryNoteNumber,
+  replaceDeliveryNoteNumberInNotes,
+  resolveDeliveryNoteNumber,
+} from '@/lib/deliveryNoteNumber';
 import {
   buildDispatchRevisionLinesFromStockOutIds,
   postingDateKeyFromRequest,
@@ -166,6 +176,8 @@ const BatchSchema = z.object({
   type:          z.enum(['STOCK_IN', 'STOCK_OUT']),
   lines:         z.array(LineSchema),
   receiptNumber: z.string().max(50).optional().transform((val) => val && val.trim().length > 0 ? val.trim() : undefined),
+  lpoNumber: z.string().max(100).optional().transform((val) => val && val.trim().length > 0 ? val.trim() : undefined),
+  supplierInvoiceNumber: z.string().max(100).optional().transform((val) => val && val.trim().length > 0 ? val.trim() : undefined),
   jobId:         z.string().optional(),
   supplier:      z.string().max(100).optional(),
   supplierId:    z.string().min(1).optional(),
@@ -186,6 +198,7 @@ const BatchSchema = z.object({
     .optional(),
   date:          z.string().optional(),
   isDeliveryNote: z.boolean().optional(),
+  deliveryNoteNumber: z.number().int().positive().optional(),
   existingTransactionIds: z.array(z.string()).optional(),
   existingDeliveryNoteId: z.string().min(1).optional(),
   billAmount:    z.number().finite().optional(),
@@ -229,6 +242,8 @@ export async function POST(req: Request) {
     type,
     lines,
     receiptNumber,
+    lpoNumber,
+    supplierInvoiceNumber,
     jobId,
     supplier,
     supplierId,
@@ -238,6 +253,7 @@ export async function POST(req: Request) {
     deliveryNoteCustomItems,
     date,
     isDeliveryNote,
+    deliveryNoteNumber: requestedDeliveryNoteNumber,
     existingTransactionIds,
     existingDeliveryNoteId,
     billAmount,
@@ -296,6 +312,7 @@ export async function POST(req: Request) {
 
       let activeDeliveryNoteId: string | null = null;
       let reportedDeliveryNoteNumber: number | null = null;
+      let deliveryNoteNotes = notes;
 
       if (type === 'STOCK_OUT' && isDeliveryNote && existingTransactionIds && existingTransactionIds.length > 0) {
         const firstExisting = await tx.transaction.findFirst({
@@ -488,16 +505,36 @@ export async function POST(req: Request) {
         }
       }
 
-      if (type === 'STOCK_OUT' && isDeliveryNote && !activeDeliveryNoteId) {
-        const agg = await tx.deliveryNote.aggregate({
-          where: { companyId },
-          _max: { number: true },
+      if (
+        type === 'STOCK_OUT' &&
+        isDeliveryNote &&
+        activeDeliveryNoteId &&
+        requestedDeliveryNoteNumber != null &&
+        requestedDeliveryNoteNumber !== reportedDeliveryNoteNumber
+      ) {
+        await assertDeliveryNoteNumberAvailable(
+          tx,
+          companyId,
+          requestedDeliveryNoteNumber,
+          activeDeliveryNoteId
+        );
+        await tx.deliveryNote.update({
+          where: { id: activeDeliveryNoteId },
+          data: { number: requestedDeliveryNoteNumber },
         });
-        const nextNum = (agg._max.number ?? 0) + 1;
+        reportedDeliveryNoteNumber = requestedDeliveryNoteNumber;
+      }
+
+      if (type === 'STOCK_OUT' && isDeliveryNote && !activeDeliveryNoteId) {
+        const assignedNumber =
+          requestedDeliveryNoteNumber != null
+            ? requestedDeliveryNoteNumber
+            : await getNextDeliveryNoteNumber(tx, companyId);
+        await assertDeliveryNoteNumberAvailable(tx, companyId, assignedNumber);
         const dnRow = await tx.deliveryNote.create({
           data: {
             companyId,
-            number: nextNum,
+            number: assignedNumber,
             jobId: jobId?.trim() || null,
             date: txDate,
             materialDispatchSkipped: lines.length === 0,
@@ -505,6 +542,10 @@ export async function POST(req: Request) {
         });
         activeDeliveryNoteId = dnRow.id;
         reportedDeliveryNoteNumber = dnRow.number;
+      }
+
+      if (type === 'STOCK_OUT' && isDeliveryNote && reportedDeliveryNoteNumber != null) {
+        deliveryNoteNotes = replaceDeliveryNoteNumberInNotes(deliveryNoteNotes, reportedDeliveryNoteNumber);
       }
 
       // If no lines (custom items only delivery note), skip transaction creation and return early
@@ -713,7 +754,7 @@ export async function POST(req: Request) {
               jobId: jobId || null,
               totalCost,
               averageCost,
-              notes: buildStockOutOverrideNote(notes, overrideReason),
+              notes: buildStockOutOverrideNote(deliveryNoteNotes, overrideReason),
               isDeliveryNote: isDeliveryNote || false,
               ...(isDeliveryNote && activeDeliveryNoteId
                 ? { deliveryNoteId: activeDeliveryNoteId }
@@ -780,7 +821,7 @@ export async function POST(req: Request) {
                 ...(isDeliveryNote && activeDeliveryNoteId
                   ? { deliveryNoteId: activeDeliveryNoteId }
                   : {}),
-                notes: notes ? `Return: ${notes}` : 'Return',
+                notes: deliveryNoteNotes ? `Return: ${deliveryNoteNotes}` : 'Return',
                 date: txDate,
                 ...actorFields,
               },
@@ -839,11 +880,20 @@ export async function POST(req: Request) {
             receiptNumber,
             receivedDate: txDate,
             notes: notes?.trim() || undefined,
-            meta: buildStockBatchReceiptLineMeta({
-              quantityUomId: line.quantityUomId,
-              displayQuantity: line.quantity,
-              displayUnitCost: line.unitCost ?? null,
-            }),
+            meta: mergeStockBatchReceiptMeta(
+              buildStockBatchReceiptLineMeta({
+                quantityUomId: line.quantityUomId,
+                displayQuantity: line.quantity,
+                displayUnitCost: line.unitCost ?? null,
+              }),
+              buildStockBatchReceiptHeaderMeta({
+                lpoNumber,
+                supplierInvoiceNumber,
+                billAmount,
+                includeTax,
+                taxAmount,
+              })
+            ),
           });
 
           // Create StockBatch record

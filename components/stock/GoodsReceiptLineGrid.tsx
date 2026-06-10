@@ -1,10 +1,20 @@
 'use client';
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type InputHTMLAttributes,
+} from 'react';
 import { useSession } from 'next-auth/react';
 import ScheduleSearchSelect from '@/components/hr/ScheduleSearchSelect';
 import SearchSelect from '@/components/ui/SearchSelect';
 import LineGridColumnSettings, { type LineGridColumnConfig } from '@/components/stock/LineGridColumnSettings';
+import { mergeLineGridInputProps, useLineGridKeyboardNav } from '@/lib/stock/lineGridKeyboardNav';
 import { toMaterialSelectItem, type MaterialSelectItem } from '@/lib/stock/pagedSelectSearch';
 import { cn } from '@/lib/utils';
 import type { Material } from '@/store/hooks';
@@ -34,6 +44,14 @@ type ReceiptGridColumnKey =
   | 'warehouse'
   | 'unitCost'
   | 'total';
+
+const RECEIPT_NAVIGABLE_COLUMN_KEYS: ReceiptGridColumnKey[] = [
+  'material',
+  'uom',
+  'qty',
+  'warehouse',
+  'unitCost',
+];
 
 const DEFAULT_GRID_COLUMNS: LineGridColumnConfig[] = [
   { key: 'line', label: '#', visible: true, width: 48, minWidth: 40, maxWidth: 72 },
@@ -126,6 +144,7 @@ const ReceiptMaterialSelectCell = memo(function ReceiptMaterialSelectCell({
   onUpdateLine,
   onMaterialResolved,
   isDuplicateRow,
+  materialNavInputProps,
 }: {
   lineId: string;
   materialId: string;
@@ -135,6 +154,7 @@ const ReceiptMaterialSelectCell = memo(function ReceiptMaterialSelectCell({
   onUpdateLine: (id: string, field: keyof GoodsReceiptLineGridRow, value: string) => void;
   onMaterialResolved: (lineId: string, material: Material) => void;
   isDuplicateRow: boolean;
+  materialNavInputProps?: InputHTMLAttributes<HTMLInputElement>;
 }) {
   const knownItem = useMemo(
     () => (material ? toMaterialSelectItem(material) : null),
@@ -162,10 +182,11 @@ const ReceiptMaterialSelectCell = memo(function ReceiptMaterialSelectCell({
         dropdownInPortal
         allowClearButton={false}
         clearOnEmptyInput
-        inputProps={{
+        passThroughArrowKeys
+        inputProps={mergeLineGridInputProps(materialNavInputProps ?? {}, {
           className:
             '!rounded-none !border-0 !bg-transparent !px-2 !py-1.5 !text-sm focus:!ring-0 min-w-0',
-        }}
+        })}
         renderItem={(item) => (
           <div className="flex w-full min-w-0 items-center justify-between gap-3">
             <div className="truncate font-medium text-foreground">{item.label}</div>
@@ -315,6 +336,26 @@ export default function GoodsReceiptLineGrid({
   const gridTemplateColumns = useMemo(
     () => visibleGridColumns.map((column) => `${column.width}px`).join(' '),
     [visibleGridColumns]
+  );
+  const navigableColumns = useMemo(
+    () =>
+      visibleGridColumns
+        .map((column) => column.key as ReceiptGridColumnKey)
+        .filter((key) => RECEIPT_NAVIGABLE_COLUMN_KEYS.includes(key)),
+    [visibleGridColumns]
+  );
+  const { getNavInputProps } = useLineGridKeyboardNav(lines.length, navigableColumns.length);
+  const navColIndex = useCallback(
+    (key: ReceiptGridColumnKey) => navigableColumns.indexOf(key),
+    [navigableColumns]
+  );
+  const cellNavInputProps = useCallback(
+    (rowIndex: number, key: ReceiptGridColumnKey, existing?: InputHTMLAttributes<HTMLInputElement>) => {
+      const col = navColIndex(key);
+      if (col < 0) return existing;
+      return mergeLineGridInputProps(getNavInputProps(rowIndex, col), existing);
+    },
+    [getNavInputProps, navColIndex]
   );
 
   useLayoutEffect(() => {
@@ -542,6 +583,7 @@ export default function GoodsReceiptLineGrid({
                               onUpdateLine={onUpdateLine}
                               onMaterialResolved={onMaterialResolved}
                               isDuplicateRow={isDuplicateRow}
+                              materialNavInputProps={cellNavInputProps(idx, 'material')}
                             />
                           </div>
                         );
@@ -560,12 +602,11 @@ export default function GoodsReceiptLineGrid({
                                 dropdownInPortal
                                 allowClearButton={false}
                                 clearOnEmptyInput
-                                openOnFocus
-                                clearInputOnFocus
-                                inputProps={{
+                                passThroughArrowKeys
+                                inputProps={cellNavInputProps(idx, 'uom', {
                                   className:
                                     '!rounded-none !border-0 !bg-transparent !px-2 !py-1.5 !text-xs focus:!ring-0 min-w-0',
-                                }}
+                                })}
                               />
                             ) : (
                               <div className="px-2 py-1.5 text-xs text-muted-foreground">UOM</div>
@@ -609,7 +650,9 @@ export default function GoodsReceiptLineGrid({
                               value={line.quantity}
                               onChange={(event) => onUpdateLine(line.id, 'quantity', event.target.value)}
                               placeholder="0.000"
-                              className="h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              {...cellNavInputProps(idx, 'qty', {
+                                className: 'h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                              })}
                             />
                           </div>
                         );
@@ -622,6 +665,7 @@ export default function GoodsReceiptLineGrid({
                               placeholder="Warehouse"
                               disabled={!mat}
                               dropdownInPortal
+                              passThroughArrowKeys
                               items={warehouses.map((warehouse) => {
                                 const warehouseStock = formatWarehouseStock(mat, warehouse.id, line.quantityUomId);
                                 return {
@@ -632,11 +676,10 @@ export default function GoodsReceiptLineGrid({
                               })}
                               allowClearButton={false}
                               clearOnEmptyInput
-                              openOnFocus
-                              inputProps={{
+                              inputProps={cellNavInputProps(idx, 'warehouse', {
                                 className:
                                   '!rounded-none !border-0 !bg-transparent !px-2 !py-1.5 !text-sm focus:!ring-0 min-w-0',
-                              }}
+                              })}
                               renderItem={(item) => (
                                 <div className="flex w-full min-w-0 items-center justify-between gap-3">
                                   <div className="min-w-0">
@@ -669,7 +712,9 @@ export default function GoodsReceiptLineGrid({
                               onChange={(event) => onUpdateLine(line.id, 'unitCost', event.target.value)}
                               placeholder="0.00"
                               disabled={!mat}
-                              className="h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              {...cellNavInputProps(idx, 'unitCost', {
+                                className: 'h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                              })}
                             />
                           </div>
                         );

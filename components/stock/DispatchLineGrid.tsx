@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type InputHTMLAttributes } from 'react';
 import { useSession } from 'next-auth/react';
 import SearchSelect from '@/components/ui/SearchSelect';
 import LineGridColumnSettings, { type LineGridColumnConfig } from '@/components/stock/LineGridColumnSettings';
+import { mergeLineGridInputProps, useLineGridKeyboardNav } from '@/lib/stock/lineGridKeyboardNav';
 import { cn } from '@/lib/utils';
 import type { Material } from '@/store/hooks';
 
@@ -59,6 +60,14 @@ type DispatchGridColumnKey =
   | 'dispatchQty'
   | 'returnQty'
   | 'warehouse';
+
+const DISPATCH_NAVIGABLE_COLUMN_KEYS: DispatchGridColumnKey[] = [
+  'material',
+  'uom',
+  'dispatchQty',
+  'returnQty',
+  'warehouse',
+];
 
 const DEFAULT_GRID_COLUMNS: LineGridColumnConfig[] = [
   { key: 'line', label: '#', visible: true, width: 48, minWidth: 40, maxWidth: 72 },
@@ -261,6 +270,26 @@ export default function DispatchLineGrid({
   const gridTemplateColumns = useMemo(
     () => visibleGridColumns.map((column) => `${column.width}px`).join(' '),
     [visibleGridColumns]
+  );
+  const navigableColumns = useMemo(
+    () =>
+      visibleGridColumns
+        .map((column) => column.key as DispatchGridColumnKey)
+        .filter((key) => DISPATCH_NAVIGABLE_COLUMN_KEYS.includes(key)),
+    [visibleGridColumns]
+  );
+  const { getNavInputProps } = useLineGridKeyboardNav(lines.length, navigableColumns.length);
+  const navColIndex = useCallback(
+    (key: DispatchGridColumnKey) => navigableColumns.indexOf(key),
+    [navigableColumns]
+  );
+  const cellNavInputProps = useCallback(
+    (rowIndex: number, key: DispatchGridColumnKey, existing?: InputHTMLAttributes<HTMLInputElement>) => {
+      const col = navColIndex(key);
+      if (col < 0) return existing;
+      return mergeLineGridInputProps(getNavInputProps(rowIndex, col), existing);
+    },
+    [getNavInputProps, navColIndex]
   );
 
   /** Apply last-known columns from localStorage before paint (avoids default-width flash while session/network load). */
@@ -494,10 +523,10 @@ export default function DispatchLineGrid({
                               dropdownInPortal
                               allowClearButton={false}
                               clearOnEmptyInput
-                              openOnFocus
-                              inputProps={{
+                              passThroughArrowKeys
+                              inputProps={cellNavInputProps(idx, 'material', {
                                 className: '!rounded-none !border-0 !bg-transparent !px-2 !py-1.5 !text-sm focus:!ring-0 min-w-0',
-                              }}
+                              })}
                               renderItem={(item) => (
                                 <div className="flex w-full min-w-0 items-center justify-between gap-3">
                                   <div className="truncate font-medium text-foreground">{item.label}</div>
@@ -523,11 +552,10 @@ export default function DispatchLineGrid({
                                 dropdownInPortal
                                 allowClearButton={false}
                                 clearOnEmptyInput
-                                openOnFocus
-                                clearInputOnFocus
-                                inputProps={{
+                                passThroughArrowKeys
+                                inputProps={cellNavInputProps(idx, 'uom', {
                                   className: '!rounded-none !border-0 !bg-transparent !px-2 !py-1.5 !text-xs focus:!ring-0 min-w-0',
-                                }}
+                                })}
                               />
                             ) : (
                               <div className="px-2 py-1.5 text-xs text-muted-foreground">UOM</div>
@@ -592,7 +620,9 @@ export default function DispatchLineGrid({
                                     : ''
                               }
                               placeholder="0.00"
-                              className="h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              {...cellNavInputProps(idx, 'dispatchQty', {
+                                className: 'h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                              })}
                             />
                           </div>
                         );
@@ -607,7 +637,9 @@ export default function DispatchLineGrid({
                               onChange={(event) => onUpdateLine(line.id, 'returnQty', event.target.value)}
                               placeholder="0.00"
                               disabled={!inputsEnabled}
-                              className="h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              {...cellNavInputProps(idx, 'returnQty', {
+                                className: 'h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                              })}
                             />
                           </div>
                         );
@@ -620,6 +652,7 @@ export default function DispatchLineGrid({
                               placeholder="Warehouse"
                               disabled={!inputsEnabled || !mat}
                               dropdownInPortal
+                              passThroughArrowKeys
                               items={warehouses.map((warehouse) => {
                                 const warehouseStock = formatWarehouseStock(mat, warehouse.id, line.quantityUomId);
                                 return {
@@ -630,10 +663,9 @@ export default function DispatchLineGrid({
                               })}
                               allowClearButton={false}
                               clearOnEmptyInput
-                              openOnFocus
-                              inputProps={{
+                              inputProps={cellNavInputProps(idx, 'warehouse', {
                                 className: '!rounded-none !border-0 !bg-transparent !px-2 !py-1.5 !text-sm focus:!ring-0 min-w-0',
-                              }}
+                              })}
                               renderItem={(item) => (
                                 <div className="flex w-full min-w-0 items-center justify-between gap-3">
                                   <div className="min-w-0">

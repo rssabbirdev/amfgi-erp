@@ -28,6 +28,8 @@ interface SearchSelectProps<T extends { id: string; label: string; searchText?: 
   /** When true, `items` are already filtered (e.g. server search); skip client fuzzy match. */
   serverFiltered?: boolean;
   loading?: boolean;
+  /** When true, arrow keys move grid focus instead of opening the suggestion list. */
+  passThroughArrowKeys?: boolean;
 }
 
 export default function SearchSelect<T extends { id: string; label: string; searchText?: string }>(
@@ -55,6 +57,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     clearOnEmptyInput = false,
     serverFiltered = false,
     loading = false,
+    passThroughArrowKeys = false,
   } = props;
 
   const [input, setInput] = useState('');
@@ -68,6 +71,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const ignoreBlurRef = useRef(false);
   const listboxId = useId();
   const mergedInputClassName = ['w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-white', inputProps?.className]
     .filter(Boolean)
@@ -141,7 +145,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!isOpen && filteredItems.length > 0) {
+    if (!passThroughArrowKeys && !isOpen && filteredItems.length > 0) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         setIsOpen(true);
@@ -225,7 +229,11 @@ export default function SearchSelect<T extends { id: string; label: string; sear
         <button
           key={item.id}
           type="button"
-          onClick={() => handleSelect(item.id)}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            ignoreBlurRef.current = true;
+            handleSelect(item.id);
+          }}
           onMouseEnter={() => setHighlightedIdx(idx)}
           className={`w-full text-left px-3 py-2 text-sm transition-colors ${
             idx === highlightedIdx
@@ -274,14 +282,30 @@ export default function SearchSelect<T extends { id: string; label: string; sear
             }
           }}
           onFocus={(e) => {
-            setInput(clearInputOnFocus ? '' : (selectedItem?.label ?? input));
+            const nextInput = clearInputOnFocus ? '' : (selectedItem?.label ?? input);
+            setInput(nextInput);
             if (openOnFocus) {
               setIsOpen(true);
               setHighlightedIdx(0);
             }
+            const cursorPos = nextInput.length;
+            requestAnimationFrame(() => {
+              inputRef.current?.setSelectionRange(cursorPos, cursorPos);
+            });
             inputProps?.onFocus?.(e);
           }}
           onBlur={(e) => {
+            if (ignoreBlurRef.current) {
+              ignoreBlurRef.current = false;
+              inputProps?.onBlur?.(e);
+              return;
+            }
+            setIsOpen(false);
+            if (selectedItem) {
+              setInput(selectedItem.label);
+            } else if (!value) {
+              setInput('');
+            }
             onBlurInputValue?.(input);
             inputProps?.onBlur?.(e);
           }}

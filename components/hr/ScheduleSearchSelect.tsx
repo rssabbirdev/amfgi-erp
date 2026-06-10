@@ -20,6 +20,7 @@ type ScheduleSearchSelectProps<T extends { id: string; label: string; searchText
   dropdownInPortal?: boolean;
   allowClearButton?: boolean;
   clearOnEmptyInput?: boolean;
+  passThroughArrowKeys?: boolean;
 };
 
 export default function ScheduleSearchSelect<T extends { id: string; label: string; searchText?: string }>({
@@ -38,6 +39,7 @@ export default function ScheduleSearchSelect<T extends { id: string; label: stri
   dropdownInPortal = true,
   allowClearButton,
   clearOnEmptyInput,
+  passThroughArrowKeys,
 }: ScheduleSearchSelectProps<T>) {
   const [items, setItems] = useState<T[]>(() => (knownItem ? [knownItem] : []));
   const [loading, setLoading] = useState(false);
@@ -143,6 +145,7 @@ export default function ScheduleSearchSelect<T extends { id: string; label: stri
       dropdownInPortal={dropdownInPortal}
       allowClearButton={allowClearButton}
       clearOnEmptyInput={clearOnEmptyInput}
+      passThroughArrowKeys={passThroughArrowKeys}
     />
   );
 }

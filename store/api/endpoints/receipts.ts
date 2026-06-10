@@ -27,6 +27,11 @@ export interface ReceiptEntry {
   receiptNumber: string;
   receivedDate: Date;
   supplier?: string;
+  lpoNumber?: string;
+  supplierInvoiceNumber?: string;
+  billAmount?: number;
+  includeTax?: boolean;
+  taxAmount?: number;
   notes?: string;
   status: 'active' | 'cancelled';
   cancelledAt?: string | null;

@@ -60,6 +60,10 @@ function formatReceiptStatus(status: ReceiptEntry['status']) {
   return status === 'cancelled' ? 'Cancelled' : 'Active';
 }
 
+function receiptBillAmount(entry: ReceiptEntry) {
+  return entry.billAmount ?? entry.totalValue;
+}
+
 function transactionBadgeVariant(type: string) {
   if (type === 'STOCK_OUT') return 'orange';
   if (type === 'RETURN' || type === 'TRANSFER_IN') return 'blue';
@@ -230,7 +234,7 @@ export default function GoodsReceiptPage() {
     useLazyGetReceiptAdjustmentImpactQuery();
 
   const receiptValue = useMemo(
-    () => entries.reduce((sum, entry) => sum + entry.totalValue, 0),
+    () => entries.reduce((sum, entry) => sum + receiptBillAmount(entry), 0),
     [entries]
   );
   const totalLineItems = useMemo(
@@ -427,67 +431,110 @@ export default function GoodsReceiptPage() {
     }
   };
 
-  const columns: Column<ReceiptEntry>[] = [
-    {
-      key: 'receiptNumber',
-      header: 'Receipt',
-      sortable: true,
-      render: (entry) => (
-        <div className="min-w-[180px]">
-          <div className="flex items-center gap-2">
-            <div className="font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-              {entry.receiptNumber}
+  const columns: Column<ReceiptEntry>[] = useMemo(
+    () => [
+      {
+        key: 'receiptNumber',
+        header: 'Receipt',
+        sortable: true,
+        render: (entry) => (
+          <div className="min-w-[180px]">
+            <div className="flex items-center gap-2">
+              <div className="font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                {entry.receiptNumber}
+              </div>
+              <Badge
+                label={formatReceiptStatus(entry.status)}
+                variant={entry.status === 'cancelled' ? 'yellow' : 'green'}
+              />
             </div>
-            <Badge
-              label={formatReceiptStatus(entry.status)}
-              variant={entry.status === 'cancelled' ? 'yellow' : 'green'}
-            />
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+              {formatDate(entry.receivedDate)}
+            </div>
           </div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">
-            {formatDate(entry.receivedDate)}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'supplier',
-      header: 'Supplier',
-      sortable: true,
-      render: (entry) => (
-        <div className="min-w-[180px]">
-          <div className="font-medium text-slate-900 dark:text-white">{entry.supplier || '-'}</div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">
-            {entry.itemsCount} line{entry.itemsCount === 1 ? '' : 's'}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'itemsCount',
-      header: 'Lines',
-      render: (entry) => <Badge label={String(entry.itemsCount)} variant="blue" />,
-    },
-    {
-      key: 'totalValue',
-      header: 'Value',
-      sortable: true,
-      render: (entry) => (
-        <span className="font-medium text-slate-900 dark:text-white">{formatMoney(entry.totalValue, currencyCode)}</span>
-      ),
-    },
-    {
-      key: 'notes',
-      header: 'Notes',
-      render: (entry) =>
-        entry.notes ? (
-          <span className="text-sm text-slate-500 dark:text-slate-400">
-            {entry.notes.length > 54 ? `${entry.notes.slice(0, 54)}...` : entry.notes}
-          </span>
-        ) : (
-          <span className="text-slate-400 dark:text-slate-500">No notes</span>
         ),
-    },
-  ];
+      },
+      {
+        key: 'supplier',
+        header: 'Supplier',
+        sortable: true,
+        render: (entry) => (
+          <div className="min-w-[180px]">
+            <div className="font-medium text-slate-900 dark:text-white">{entry.supplier || '-'}</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+              {entry.itemsCount} line{entry.itemsCount === 1 ? '' : 's'}
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: 'lpoNumber',
+        header: 'LPO number',
+        sortable: true,
+        render: (entry) => (
+          <span className="font-mono text-sm text-slate-900 dark:text-white">{entry.lpoNumber || '-'}</span>
+        ),
+      },
+      {
+        key: 'supplierInvoiceNumber',
+        header: 'Invoice number',
+        sortable: true,
+        render: (entry) => (
+          <span className="font-mono text-sm text-slate-900 dark:text-white">
+            {entry.supplierInvoiceNumber || '-'}
+          </span>
+        ),
+      },
+      {
+        key: 'itemsCount',
+        header: 'Lines',
+        hiddenByDefault: true,
+        render: (entry) => <Badge label={String(entry.itemsCount)} variant="blue" />,
+      },
+      {
+        key: 'totalValue',
+        header: 'Subtotal',
+        sortable: true,
+        hiddenByDefault: true,
+        render: (entry) => (
+          <span className="font-medium text-slate-900 dark:text-white">
+            {formatMoney(entry.totalValue, currencyCode)}
+          </span>
+        ),
+      },
+      {
+        key: 'billAmount',
+        header: 'Value (incl. tax)',
+        sortable: true,
+        render: (entry) => (
+          <div className="min-w-[120px]">
+            <span className="font-medium text-slate-900 dark:text-white">
+              {formatMoney(receiptBillAmount(entry), currencyCode)}
+            </span>
+            {entry.includeTax && entry.taxAmount != null && entry.taxAmount > 0 ? (
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                VAT {formatMoney(entry.taxAmount, currencyCode)}
+              </div>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        key: 'notes',
+        header: 'Notes',
+        hiddenByDefault: true,
+        render: (entry) =>
+          entry.notes ? (
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {entry.notes.length > 54 ? `${entry.notes.slice(0, 54)}...` : entry.notes}
+            </span>
+          ) : (
+            <span className="text-slate-400 dark:text-slate-500">No notes</span>
+          ),
+      },
+    ],
+    [currencyCode]
+  );
 
   if (!canView) {
     return (
@@ -532,7 +579,7 @@ export default function GoodsReceiptPage() {
           {
             label: 'Receipt value',
             value: formatMoney(receiptValue, currencyCode),
-            note: 'Combined value of visible receipts',
+            note: 'Bill amount incl. tax for visible receipts',
           },
           {
             label: 'Received lines',
@@ -557,7 +604,7 @@ export default function GoodsReceiptPage() {
 
       <SectionShell
         title="Receipt ledger"
-        description="Pick a period, then choose the month or day that defines the range. Use the table search for receipt number, supplier, or notes."
+        description="Pick a period, then choose the month or day that defines the range. Search by receipt number, supplier, LPO, invoice number, or notes."
       >
         <div className="mb-4 flex flex-col gap-4 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-3">
@@ -621,7 +668,7 @@ export default function GoodsReceiptPage() {
             className="mt-1.5"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Receipt number, supplier, notes…"
+            placeholder="Receipt, supplier, LPO, invoice, notes…"
           />
         </div>
 
@@ -630,6 +677,8 @@ export default function GoodsReceiptPage() {
           data={entries}
           loading={isFetching && entries.length === 0}
           emptyText="No receipts found."
+          enableColumnDisplayOptions
+          preferenceKey="stock-goods-receipt-table"
           onRowContextMenu={handleContextMenu}
           onRowDoubleClick={(entry) => setViewEntry(entry)}
           onRowClick={(entry) => setViewEntry(entry)}
@@ -662,6 +711,10 @@ export default function GoodsReceiptPage() {
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   {viewEntry.supplier || 'No supplier linked'} · {formatDate(viewEntry.receivedDate)}
                 </p>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                  <span>LPO: {viewEntry.lpoNumber || '-'}</span>
+                  <span>Invoice: {viewEntry.supplierInvoiceNumber || '-'}</span>
+                </div>
                 {viewEntry.status === 'cancelled' ? (
                   <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
                     Cancelled{viewEntry.cancelledAt ? ` on ${formatDate(viewEntry.cancelledAt)}` : ''}.
@@ -677,10 +730,16 @@ export default function GoodsReceiptPage() {
 
               <div className="grid grid-cols-2 gap-3 text-sm md:min-w-[18rem]">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-950/70">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">Value</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">Value (incl. tax)</p>
                   <p className="mt-1 font-semibold text-emerald-700 dark:text-emerald-300">
-                    {formatMoney(viewEntry.totalValue, currencyCode)}
+                    {formatMoney(receiptBillAmount(viewEntry), currencyCode)}
                   </p>
+                  {viewEntry.includeTax && viewEntry.taxAmount != null && viewEntry.taxAmount > 0 ? (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                      Subtotal {formatMoney(viewEntry.totalValue, currencyCode)} · VAT{' '}
+                      {formatMoney(viewEntry.taxAmount, currencyCode)}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-950/70">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-500">Lines</p>

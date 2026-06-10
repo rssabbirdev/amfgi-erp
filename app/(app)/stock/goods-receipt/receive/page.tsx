@@ -46,13 +46,12 @@ function uid() {
 }
 
 function buildDraftReceiptNumber() {
-  // const now = new Date();
-  // const yyyy = now.getFullYear();
-  // const mm = String(now.getMonth() + 1).padStart(2, '0');
-  // const dd = String(now.getDate()).padStart(2, '0');
-  // const rand = Math.floor(Math.random() * 900 + 100);
-  // return `GRN-${yyyy}${mm}${dd}-${rand}`;
-  return ""
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const rand = Math.floor(Math.random() * 900 + 100);
+  return `GRN-${yyyy}${mm}${dd}-${rand}`;
 }
 
 function emptyLine(): LineItem {
@@ -91,6 +90,8 @@ function sectionHeadingClassName() {
 function ReceiptEditor({
   initialReceiptNumber,
   initialSupplierName,
+  initialLpoNumber,
+  initialSupplierInvoiceNumber,
   initialDate,
   initialNotes,
   initialLines,
@@ -99,6 +100,8 @@ function ReceiptEditor({
 }: {
   initialReceiptNumber: string;
   initialSupplierName: string;
+  initialLpoNumber: string;
+  initialSupplierInvoiceNumber: string;
   initialDate: string;
   initialNotes: string;
   initialLines: LineItem[];
@@ -117,9 +120,11 @@ function ReceiptEditor({
   const [lines, setLines] = useState<LineItem[]>(() =>
     normalizeLines(initialLines.length > 0 ? initialLines : [emptyLine()])
   );
-  const [receiptNumber, setReceiptNumber] = useState(initialReceiptNumber);
+  const [receiptNumber] = useState(initialReceiptNumber);
   const [supplierId, setSupplierId] = useState('');
   const [supplierKnownItem, setSupplierKnownItem] = useState<SupplierSelectItem | null>(null);
+  const [lpoNumber, setLpoNumber] = useState(initialLpoNumber);
+  const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState(initialSupplierInvoiceNumber);
   const [date, setDate] = useState(initialDate);
   const [notes, setNotes] = useState(initialNotes);
   const [includeTax, setIncludeTax] = useState(true);
@@ -293,6 +298,21 @@ function ReceiptEditor({
       return;
     }
 
+    const normalizedSupplierInvoiceNumber = supplierInvoiceNumber.trim();
+    const hasSupplier = Boolean(supplierId.trim());
+    if (!hasSupplier && !normalizedSupplierInvoiceNumber) {
+      toast.error('Supplier and supplier invoice number are required before posting.');
+      return;
+    }
+    if (!hasSupplier) {
+      toast.error('Supplier is required. Search and select a supplier before posting.');
+      return;
+    }
+    if (!normalizedSupplierInvoiceNumber) {
+      toast.error('Supplier invoice number is required. Enter the vendor invoice reference.');
+      return;
+    }
+
     if (duplicateMaterials.length > 0) {
       toast.error('Duplicate materials found. Merge them into one row.');
       return;
@@ -314,6 +334,8 @@ function ReceiptEditor({
         receiptNumber: normalizedReceiptNumber,
         supplier: getSupplierName() || undefined,
         supplierId: supplierId || undefined,
+        lpoNumber: lpoNumber.trim() || undefined,
+        supplierInvoiceNumber: normalizedSupplierInvoiceNumber,
         notes: notes || undefined,
         date,
         billAmount,
@@ -392,10 +414,10 @@ function ReceiptEditor({
         className="flex flex-col gap-0 overflow-x-auto rounded-lg border border-border bg-card pb-8 shadow-sm sm:pb-10"
       >
         <div className="border-b border-border p-4 sm:p-5">
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.2fr)_220px_220px]">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <div>
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Supplier / vendor
+                Supplier / vendor <span className="text-destructive">*</span>
               </label>
               <ScheduleSearchSelect<SupplierSelectItem>
                 value={supplierId}
@@ -412,6 +434,31 @@ function ReceiptEditor({
                 placeholder="Type to search supplier…"
                 minCharactersToSearch={1}
                 dropdownInPortal
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                LPO number
+              </label>
+              <input
+                value={lpoNumber}
+                onChange={(e) => setLpoNumber(e.target.value)}
+                placeholder="Purchase order reference"
+                className="w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Supplier invoice number <span className="text-destructive">*</span>
+              </label>
+              <input
+                value={supplierInvoiceNumber}
+                onChange={(e) => setSupplierInvoiceNumber(e.target.value)}
+                required
+                placeholder="Vendor invoice reference"
+                className="w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
 
@@ -434,14 +481,13 @@ function ReceiptEditor({
               </label>
               <input
                 value={receiptNumber}
-                onChange={(e) => setReceiptNumber(e.target.value)}
-                required
-                disabled={isEditMode}
-                className="w-full rounded-md border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
+                readOnly
+                disabled
+                className="w-full rounded-md border border-border bg-muted/40 px-3 py-2.5 font-mono text-sm text-foreground shadow-sm disabled:cursor-not-allowed disabled:opacity-100"
               />
             </div>
 
-            <div className="xl:col-span-3">
+            <div className="sm:col-span-2 xl:col-span-3">
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Notes / remarks
               </label>
@@ -593,6 +639,8 @@ export default function ReceiveStockPage() {
       key={editReceiptNumber ?? 'new'}
       initialReceiptNumber={receiptEntry?.receiptNumber || buildDraftReceiptNumber()}
       initialSupplierName={receiptEntry?.supplier ?? ''}
+      initialLpoNumber={receiptEntry?.lpoNumber ?? ''}
+      initialSupplierInvoiceNumber={receiptEntry?.supplierInvoiceNumber ?? ''}
       initialDate={receiptEntry ? new Date(receiptEntry.receivedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
       initialNotes={receiptEntry?.notes || ''}
       initialLines={initialLines}

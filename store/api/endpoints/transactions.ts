@@ -336,7 +336,12 @@ export const transactionsApi = appApi.injectEndpoints({
     }),
 
     addBatchTransaction: builder.mutation<
-      { created: number; ids: string[] },
+      {
+        created: number;
+        ids: string[];
+        deliveryNoteNumber?: number | null;
+        deliveryNoteId?: string | null;
+      },
       BatchTransactionPayload
     >({
       query: (body) => ({
@@ -344,7 +349,14 @@ export const transactionsApi = appApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      transformResponse: (r: { data: { created: number; ids: string[] } }) => r.data,
+      transformResponse: (r: {
+        data: {
+          created: number;
+          ids: string[];
+          deliveryNoteNumber?: number | null;
+          deliveryNoteId?: string | null;
+        };
+      }) => r.data,
       invalidatesTags: (result, error, arg) => {
         const materialIds = extractBatchMaterialIds(arg);
         return [
