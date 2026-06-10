@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 import { DocumentRenderer } from '@/components/print-builder/DocumentRenderer';
+import { readCompanyDocumentTemplates } from '@/lib/utils/companyPrintTemplates';
 import { buildDataContext } from '@/lib/utils/templateData';
 import { DEFAULT_DELIVERY_NOTE } from '@/lib/utils/documentDefaults';
 import type { DocumentTemplate } from '@/lib/types/documentTemplate';
@@ -166,12 +167,21 @@ export default function PrintDeliveryNotePage() {
     };
   }, [transactionId, deliveryNoteId, router, session?.user?.activeCompanyId]);
 
-  // Auto-print after data loads
+  // Auto-print after data loads (double rAF so layout/print height settle first)
   useEffect(() => {
     if (!loading && transaction && company) {
-      // Small delay to let the renderer paint
-      const timer = setTimeout(() => window.print(), 400);
-      return () => clearTimeout(timer);
+      let cancelled = false;
+      const timer = setTimeout(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (!cancelled) window.print();
+          });
+        });
+      }, 500);
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
+      };
     }
   }, [loading, transaction, company]);
 
@@ -203,19 +213,20 @@ export default function PrintDeliveryNotePage() {
     );
   }
 
-  // Resolve template
+  // Resolve template (supports array or { templates: [...] } company storage)
+  const companyTemplates = readCompanyDocumentTemplates(company.printTemplates);
   let template: DocumentTemplate = DEFAULT_DELIVERY_NOTE;
-  if (company.printTemplates && Array.isArray(company.printTemplates)) {
+  if (companyTemplates.length > 0) {
     if (templateId) {
-      const found = company.printTemplates.find((t: any) => t.id === templateId);
+      const found = companyTemplates.find((t) => t.id === templateId);
       if (found) template = found;
     } else {
-      const defaultDN = company.printTemplates.find(
-        (t: any) => t.itemType === 'delivery-note' && t.isDefault
+      const defaultDN = companyTemplates.find(
+        (t) => t.itemType === 'delivery-note' && t.isDefault
       );
       if (defaultDN) template = defaultDN;
       else {
-        const firstDN = company.printTemplates.find((t: any) => t.itemType === 'delivery-note');
+        const firstDN = companyTemplates.find((t) => t.itemType === 'delivery-note');
         if (firstDN) template = firstDN;
       }
     }
@@ -230,7 +241,7 @@ export default function PrintDeliveryNotePage() {
   const data = buildDataContext('delivery-note', transaction as any, company as any, creatorOrFallbackUser);
 
   return (
-    <>
+    <div className="delivery-note-print-root">
       {/* Print-specific CSS */}
       <style>{`
         /* Reset everything for print */
@@ -238,12 +249,19 @@ export default function PrintDeliveryNotePage() {
           box-sizing: border-box;
         }
 
-        html, body {
-          margin: 0;
-          padding: 0;
-          background: white;
+        html, body,
+        .delivery-note-print-root,
+        .delivery-note-print-root * {
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
+        }
+
+        html, body, .delivery-note-print-root {
+          margin: 0;
+          padding: 0;
+          background: #ffffff;
+          color: #0f172a;
+          color-scheme: light;
         }
 
         @page {
@@ -252,6 +270,12 @@ export default function PrintDeliveryNotePage() {
         }
 
         @media print {
+          html, body, .delivery-note-print-root {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            color-scheme: light !important;
+          }
+
           /* Hide screen-only controls */
           .screen-only {
             display: none !important;
@@ -272,6 +296,12 @@ export default function PrintDeliveryNotePage() {
           .document-renderer > div:last-child {
             page-break-inside: avoid;
             break-inside: avoid;
+          }
+
+          /* Avoid phantom blank pages from fixed outer min-height */
+          .document-renderer-root {
+            min-height: auto !important;
+            height: auto !important;
           }
         }
 
@@ -377,6 +407,6 @@ export default function PrintDeliveryNotePage() {
         </div>
         <DocumentRenderer template={template} data={data} mode="print" />
       </div>
-    </>
+    </div>
   );
 }

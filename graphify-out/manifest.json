@@ -1270,9 +1270,9 @@
     "semantic_hash": "d00bac5a038b02b65ba63c24a057c376"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\print\\delivery-note\\page.tsx": {
-    "mtime": 1779264232.0,
-    "ast_hash": "aacaea98c9f18b36fbb90c523b6f7575",
-    "semantic_hash": "aacaea98c9f18b36fbb90c523b6f7575"
+    "mtime": 1781086571.9328258,
+    "ast_hash": "9db5f6a589eab62736dfc02d5a79869e",
+    "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\privacy-policy\\page.tsx": {
     "mtime": 1776691894.0,
@@ -1470,9 +1470,9 @@
     "semantic_hash": "67603dc81085e29bebb5e3c7b9c32577"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\print-builder\\DocumentRenderer.tsx": {
-    "mtime": 1779264232.0,
-    "ast_hash": "3de98b38052be347c758b37ca62371fb",
-    "semantic_hash": "3de98b38052be347c758b37ca62371fb"
+    "mtime": 1781086590.894053,
+    "ast_hash": "8da6265b6b74c42e78234d2bd4fd1e04",
+    "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\print-builder\\PageChromeEditor.tsx": {
     "mtime": 1779264232.0,
@@ -2425,7 +2425,7 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\next-env.d.ts": {
-    "mtime": 1781070715.1425185,
+    "mtime": 1781080736.362077,
     "ast_hash": "d0f8375ae1199dc7acd3977fc33b78b8",
     "semantic_hash": ""
   },
@@ -3900,8 +3900,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock\\lineGridKeyboardNav.ts": {
-    "mtime": 1781077039.503565,
-    "ast_hash": "f58e4dc75a36545acb9e763f3ed843a2",
+    "mtime": 1781080487.908436,
+    "ast_hash": "09de2a23a86f2f61e866123b5cb0ff32",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\stock\\DeliveryNoteCustomItemsGrid.tsx": {
@@ -3910,8 +3910,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\deliveryNoteNumber.test.ts": {
-    "mtime": 1781078592.3680649,
-    "ast_hash": "348011d675ff7a9076ad647107fd4a65",
+    "mtime": 1781078643.9016418,
+    "ast_hash": "7bb3f170f5002bc300e554e3c012befc",
     "semantic_hash": ""
   }
 }

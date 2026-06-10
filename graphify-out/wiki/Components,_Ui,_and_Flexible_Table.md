@@ -17,7 +17,7 @@
 
 ## Relationships
 
-- [[Stock, Components, and Lib]] (2 shared connections)
+- [[Components, Stock, and Lib]] (2 shared connections)
 
 ## Source Files
 

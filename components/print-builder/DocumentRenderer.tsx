@@ -419,7 +419,7 @@ export function DocumentRenderer({ template, data, mode, scale = 1 }: DocumentRe
                 group.length === 1 &&
                 !canSharePrintRow(group[0].section, group[0].idx)
               ) {
-                return renderSectionByIndex(group[0].section, group[0].idx);
+                return renderSectionByIndex(group[0].section, group[0].idx, true);
               }
 
               const positioned = group
@@ -453,7 +453,6 @@ export function DocumentRenderer({ template, data, mode, scale = 1 }: DocumentRe
                     position: 'relative',
                     width: u(cw),
                     minHeight: u(rowHeight),
-                    height: u(rowHeight),
                     boxSizing: 'border-box',
                     overflow: 'visible',
                   }}
@@ -518,7 +517,9 @@ export function DocumentRenderer({ template, data, mode, scale = 1 }: DocumentRe
 
   React.useLayoutEffect(() => {
     if (!isPrint) return;
-    if (fitSinglePage) {
+    if (fitSinglePage || !bgUrl) {
+      // Without a repeating page background, let the browser paginate content naturally.
+      // Forcing a multi-page min-height on the root often produces blank trailing pages.
       setPrintMinHeightMm(pageDims.heightMm);
       return;
     }
@@ -535,6 +536,7 @@ export function DocumentRenderer({ template, data, mode, scale = 1 }: DocumentRe
     const nextMm = pages * pageDims.heightMm;
     setPrintMinHeightMm((prev) => (prev !== nextMm ? nextMm : prev));
   }, [
+    bgUrl,
     fitSinglePage,
     isPrint,
     template.sections,
@@ -713,25 +715,22 @@ export function DocumentRenderer({ template, data, mode, scale = 1 }: DocumentRe
           ))}
         {fitSinglePage ? (
           <div
-            style={{
-              height: fitScaledHeightPx != null ? `${fitScaledHeightPx}px` : undefined,
-              overflow: 'hidden',
-            }}
+            style={
+              isPrint
+                ? { overflow: 'visible' }
+                : {
+                    height: fitScaledHeightPx != null ? `${fitScaledHeightPx}px` : undefined,
+                    overflow: 'hidden',
+                  }
+            }
           >
             <div
               ref={fitMeasureRef}
-              style={
-                isPrint
-                  ? (({
-                      zoom: fitScaleFactor < 0.999 ? fitScaleFactor : 1,
-                      width: fitScaleFactor < 0.999 ? `${fitWidthPercent}%` : '100%',
-                    }) as React.CSSProperties)
-                  : {
-                      transform: fitScaleFactor < 0.999 ? `scale(${fitScaleFactor})` : undefined,
-                      transformOrigin: 'top left',
-                      width: fitScaleFactor < 0.999 ? `${fitWidthPercent}%` : '100%',
-                    }
-              }
+              style={{
+                transform: fitScaleFactor < 0.999 ? `scale(${fitScaleFactor})` : undefined,
+                transformOrigin: 'top left',
+                width: fitScaleFactor < 0.999 ? `${fitWidthPercent}%` : '100%',
+              }}
             >
               {renderMainSections()}
             </div>

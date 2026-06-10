@@ -2,7 +2,7 @@
 
 > God node · 385 connections · `lib/utils/apiResponse.ts`
 
-**Community:** [[API Materials, Settings, and Media]]
+**Community:** [[API HR, Me, and Stock]]
 
 ## Connections by Relation
 
@@ -18,6 +18,7 @@
 - [[POST()]] `EXTRACTED`
 - [[GET()]] `EXTRACTED`
 - [[POST()]] `EXTRACTED`
+- [[GET()]] `EXTRACTED`
 - [[POST()]] `EXTRACTED`
 - [[POST()]] `EXTRACTED`
 - [[POST()]] `EXTRACTED`
@@ -26,14 +27,13 @@
 - [[GET()]] `EXTRACTED`
 - [[prepareIntegrationRequest()]] `EXTRACTED`
 - [[GET()]] `EXTRACTED`
-- [[POST()]] `EXTRACTED`
 
 ### contains
 - [[apiResponse.ts]] `EXTRACTED`
 
 ### imports
-- [[requireCompanySession.ts]] `EXTRACTED`
 - [[route.ts]] `EXTRACTED`
+- [[requireCompanySession.ts]] `EXTRACTED`
 - [[route.ts]] `EXTRACTED`
 - [[route.ts]] `EXTRACTED`
 - [[route.ts]] `EXTRACTED`

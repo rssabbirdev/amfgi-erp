@@ -4,6 +4,12 @@ import { useCallback, type InputHTMLAttributes, type KeyboardEvent } from 'react
 
 export const LINE_GRID_NAV_ATTR = 'data-line-grid-nav';
 
+type LineGridNavInputProps = InputHTMLAttributes<HTMLInputElement> & {
+  'data-line-grid-nav'?: 'true';
+  'data-nav-row'?: string;
+  'data-nav-col'?: string;
+};
+
 function queryNavCell(row: number, col: number): HTMLElement | null {
   return document.querySelector<HTMLElement>(
     `[${LINE_GRID_NAV_ATTR}="true"][data-nav-row="${row}"][data-nav-col="${col}"]`
@@ -72,8 +78,8 @@ export function useLineGridKeyboardNav(rowCount: number, navigableColCount: numb
   );
 
   const getNavInputProps = useCallback(
-    (row: number, col: number): InputHTMLAttributes<HTMLInputElement> => ({
-      [LINE_GRID_NAV_ATTR]: 'true',
+    (row: number, col: number): LineGridNavInputProps => ({
+      'data-line-grid-nav': 'true',
       'data-nav-row': String(row),
       'data-nav-col': String(col),
       onKeyDown: onGridKeyDown,
@@ -85,9 +91,9 @@ export function useLineGridKeyboardNav(rowCount: number, navigableColCount: numb
 }
 
 export function mergeLineGridInputProps(
-  navProps: InputHTMLAttributes<HTMLInputElement>,
+  navProps: LineGridNavInputProps,
   existing?: InputHTMLAttributes<HTMLInputElement>
-): InputHTMLAttributes<HTMLInputElement> {
+): LineGridNavInputProps {
   const navOnKeyDown = navProps.onKeyDown;
   return {
     ...existing,

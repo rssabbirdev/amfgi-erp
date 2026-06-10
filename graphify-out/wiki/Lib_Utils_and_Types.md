@@ -34,15 +34,15 @@
 ## Relationships
 
 - [[Components Print Builder]] (10 shared connections)
-- [[Lib Utils]] (8 shared connections)
+- [[Lib Utils]] (7 shared connections)
 - [[Lib Types and Utils]] (5 shared connections)
-- [[Lib, Print, and Scripts]] (5 shared connections)
-- [[Reports, Components, and Settings]] (5 shared connections)
-- [[API Job Costing, Companies, and Units]] (3 shared connections)
+- [[Stock, Customers, and Settings]] (5 shared connections)
+- [[API, Lib, and Tests]] (5 shared connections)
+- [[API Stock Count Sessions, Transactions, and Warehouses]] (4 shared connections)
 - [[HR Schedule]] (3 shared connections)
 - [[Components HR and Ui]] (1 shared connections)
 - [[Components and Lib]] (1 shared connections)
-- [[API HR, Users, and Stock Exception Approvals]] (1 shared connections)
+- [[Scripts, Lib, and API]] (1 shared connections)
 
 ## Source Files
 

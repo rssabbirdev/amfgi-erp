@@ -1,64 +1,64 @@
 # Lib HR
 
-> 31 nodes · cohesion 0.15
+> 40 nodes · cohesion 0.12
 
 ## Key Concepts
 
-- **route.ts** (30 connections) — `app/api/hr/attendance/bulk-upsert/route.ts`
-- **employeeTypeSettings.ts** (25 connections) — `lib/hr/employeeTypeSettings.ts`
-- **readEmployeeTypeSettingsFromCompanyData()** (19 connections) — `lib/hr/employeeTypeSettings.ts`
-- **POST()** (16 connections) — `app/api/hr/attendance/bulk-upsert/route.ts`
-- **basicHoursForProfileExtension()** (15 connections) — `lib/hr/employeeTypeSettings.ts`
-- **generateAttendanceFromSchedule.ts** (13 connections) — `lib/hr/generateAttendanceFromSchedule.ts`
-- **attendanceBasicHours.ts** (12 connections) — `lib/hr/attendanceBasicHours.ts`
-- **regenerateAttendanceBoilerplate()** (10 connections) — `lib/hr/generateAttendanceFromSchedule.ts`
-- **resolveBasicHoursForEmployee()** (9 connections) — `lib/hr/attendanceBasicHours.ts`
-- **employeeTypeFromProfileExtension()** (8 connections) — `lib/hr/employeeTypeSettings.ts`
-- **calculateOvertimeMinutes()** (6 connections) — `lib/hr/attendanceBasicHours.ts`
-- **backfill-attendance-basic-hours.ts** (6 connections) — `scripts/backfill-attendance-basic-hours.ts`
-- **resolveBasicHoursFromCompany()** (5 connections) — `lib/hr/attendanceBasicHours.ts`
-- **dubaiWallTimeToUtc()** (5 connections) — `lib/hr/dubaiShift.ts`
-- **normalizeEmployeeTypeSettings()** (5 connections) — `lib/hr/employeeTypeSettings.ts`
-- **dubaiShift.ts** (4 connections) — `lib/hr/dubaiShift.ts`
-- **parseTimeCell()** (4 connections) — `lib/hr/dubaiShift.ts`
-- **writeEmployeeTypeSettingsIntoCompanyField()** (4 connections) — `lib/hr/employeeTypeSettings.ts`
-- **parseBreakWindow()** (4 connections) — `lib/hr/generateAttendanceFromSchedule.ts`
-- **serializeAttendanceRow()** (3 connections) — `app/api/hr/attendance/route.ts`
-- **EmployeeTypeSettingsMap** (3 connections) — `lib/hr/employeeTypeSettings.ts`
-- **parseDt()** (2 connections) — `app/api/hr/attendance/bulk-upsert/route.ts`
-- **diffMinutes()** (2 connections) — `app/api/hr/attendance/bulk-upsert/route.ts`
-- **basicHoursToMinutes()** (2 connections) — `lib/hr/attendanceBasicHours.ts`
-- **atDubaiStartOfDayUtc()** (2 connections) — `lib/hr/dubaiShift.ts`
-- *... and 6 more nodes in this community*
+- **PayTypeEditorTable.tsx** (40 connections) — `components/hr/PayTypeEditorTable.tsx`
+- **page.tsx** (25 connections) — `app/(app)/hr/settings/pay-types/page.tsx`
+- **payTypeConfigHelpers.ts** (16 connections) — `lib/hr/payroll/payTypeConfigHelpers.ts`
+- **payTypeFormulas.ts** (15 connections) — `lib/hr/payroll/payTypeFormulas.ts`
+- **payTypeForm.ts** (13 connections) — `lib/hr/payroll/payTypeForm.ts`
+- **PayTypeConfig** (13 connections) — `lib/hr/payroll/types.ts`
+- **PayTypeModeGuide.tsx** (10 connections) — `components/hr/PayTypeModeGuide.tsx`
+- **PayCalculationMode** (9 connections) — `lib/hr/payroll/types.ts`
+- **payTypeConfigFields()** (8 connections) — `lib/hr/payroll/payTypeForm.ts`
+- **substituteConfigInFormulaLines()** (8 connections) — `lib/hr/payroll/payTypeFormulas.ts`
+- **formulaModeScripts.ts** (7 connections) — `lib/hr/payroll/formulaModeScripts.ts`
+- **formulaDefinitionForMode()** (7 connections) — `lib/hr/payroll/payTypeFormulas.ts`
+- **describePayTypeRow()** (7 connections) — `lib/hr/payroll/payTypeFormulas.ts`
+- **payTypeTemplates.ts** (7 connections) — `lib/hr/payroll/payTypeTemplates.ts`
+- **payTypeFormulas.test.ts** (6 connections) — `__tests__/lib/hr/payroll/payTypeFormulas.test.ts`
+- **formulaScriptForMode()** (5 connections) — `lib/hr/payroll/formulaModeScripts.ts`
+- **buildPayTypeConfigFromFields()** (4 connections) — `lib/hr/payroll/payTypeForm.ts`
+- **DEFAULT_PAY_TYPE_TEMPLATES** (4 connections) — `lib/hr/payroll/payTypeTemplates.ts`
+- **PayTypeRecord** (3 connections) — `components/hr/PayTypeEditorTable.tsx`
+- **PayTypeModeGuide()** (3 connections) — `components/hr/PayTypeModeGuide.tsx`
+- **labelForCompensationInput()** (3 connections) — `lib/hr/payroll/formulaLabels.ts`
+- **formatExcludedWeekdaysLabel()** (3 connections) — `lib/hr/payroll/payTypeConfigHelpers.ts`
+- **PAY_CALCULATION_MODE_OPTIONS** (3 connections) — `lib/hr/payroll/payTypeForm.ts`
+- **slugifyPayTypeCode()** (3 connections) — `lib/hr/payroll/payTypeForm.ts`
+- **PAY_MODE_FORMULA_DEFINITIONS** (3 connections) — `lib/hr/payroll/payTypeFormulas.ts`
+- *... and 15 more nodes in this community*
 
 ## Relationships
 
-- [[API HR, Users, and Stock Exception Approvals]] (33 shared connections)
-- [[Lib HR]] (16 shared connections)
-- [[API HR, Stock, and Me]] (13 shared connections)
-- [[Components, Lib, and HR]] (6 shared connections)
-- [[API and Lib]] (4 shared connections)
-- [[API Materials, Settings, and Media]] (3 shared connections)
-- [[HR Schedule]] (2 shared connections)
-- [[Lib, Scripts, and API]] (2 shared connections)
-- [[Reports, Components, and Settings]] (1 shared connections)
-- [[Scripts Seed]] (1 shared connections)
-- [[API Transactions, Stock, and Reports]] (1 shared connections)
+- [[Lib HR]] (31 shared connections)
+- [[Lib and Components]] (10 shared connections)
+- [[HR, Lib, and Components]] (7 shared connections)
+- [[HR, Components, and Admin]] (6 shared connections)
+- [[Reports, Components, and HR]] (6 shared connections)
+- [[API, Lib, and Scripts]] (2 shared connections)
+- [[Components Transactions, HR, and Ui]] (1 shared connections)
 
 ## Source Files
 
-- `app/api/hr/attendance/bulk-upsert/route.ts`
-- `app/api/hr/attendance/route.ts`
-- `lib/hr/attendanceBasicHours.ts`
-- `lib/hr/dubaiShift.ts`
-- `lib/hr/employeeTypeSettings.ts`
-- `lib/hr/generateAttendanceFromSchedule.ts`
-- `scripts/backfill-attendance-basic-hours.ts`
+- `__tests__/lib/hr/payroll/payTypeFormulas.test.ts`
+- `app/(app)/hr/settings/pay-types/page.tsx`
+- `components/hr/PayTypeEditorTable.tsx`
+- `components/hr/PayTypeModeGuide.tsx`
+- `lib/hr/payroll/formulaLabels.ts`
+- `lib/hr/payroll/formulaModeScripts.ts`
+- `lib/hr/payroll/payTypeConfigHelpers.ts`
+- `lib/hr/payroll/payTypeForm.ts`
+- `lib/hr/payroll/payTypeFormulas.ts`
+- `lib/hr/payroll/payTypeTemplates.ts`
+- `lib/hr/payroll/types.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 219 (98%)
-- INFERRED: 5 (2%)
+- EXTRACTED: 245 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

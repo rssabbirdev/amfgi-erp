@@ -1,13 +1,16 @@
 # Components Job Costing
 
-> 44 nodes · cohesion 0.07
+> 47 nodes · cohesion 0.07
 
 ## Key Concepts
 
 - **shared.ts** (66 connections) — `components/job-costing/formula-builder/shared.ts`
 - **sections.tsx** (43 connections) — `components/job-costing/formula-builder/sections.tsx`
+- **buildAreaFormulaValueTokens()** (5 connections) — `components/job-costing/formula-builder/shared.ts`
 - **reorderItemsById()** (4 connections) — `components/job-costing/formula-builder/shared.ts`
+- **buildFormulaTokens()** (4 connections) — `components/job-costing/formula-builder/shared.ts`
 - **FormulaPlayground()** (3 connections) — `components/job-costing/formula-builder/sections.tsx`
+- **RuleRows()** (3 connections) — `components/job-costing/formula-builder/sections.tsx`
 - **FieldType** (3 connections) — `components/job-costing/formula-builder/shared.ts`
 - **DynamicField** (3 connections) — `components/job-costing/formula-builder/shared.ts`
 - **FormulaConstantField** (3 connections) — `components/job-costing/formula-builder/shared.ts`
@@ -26,19 +29,16 @@
 - **describeMaterialRule()** (2 connections) — `components/job-costing/formula-builder/shared.ts`
 - **describeLaborRule()** (2 connections) — `components/job-costing/formula-builder/shared.ts`
 - **normalizeSlugInput()** (2 connections) — `components/job-costing/formula-builder/shared.ts`
-- **escapeRegex()** (2 connections) — `components/job-costing/formula-builder/shared.ts`
-- **replaceExpressionToken()** (2 connections) — `components/job-costing/formula-builder/shared.ts`
-- **renameFormulaReferences()** (2 connections) — `components/job-costing/formula-builder/shared.ts`
-- *... and 19 more nodes in this community*
+- *... and 22 more nodes in this community*
 
 ## Relationships
 
-- [[Components Job Costing]] (52 shared connections)
-- [[Store, API, and Endpoints]] (4 shared connections)
+- [[Components Job Costing]] (50 shared connections)
+- [[Store API]] (4 shared connections)
 - [[Lib, Job Costing, and Expression Evaluator]] (3 shared connections)
-- [[HR, Components, and Lib]] (1 shared connections)
-- [[Reports, Components, and Settings]] (1 shared connections)
-- [[Stock, Components, and Lib]] (1 shared connections)
+- [[HR, Components, and Admin]] (1 shared connections)
+- [[Reports, Components, and HR]] (1 shared connections)
+- [[Components, Stock, and Lib]] (1 shared connections)
 - [[Lib Job Costing]] (1 shared connections)
 
 ## Source Files
@@ -48,7 +48,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 193 (100%)
+- EXTRACTED: 205 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

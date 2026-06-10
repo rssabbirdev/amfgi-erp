@@ -23,9 +23,10 @@
 
 ## Relationships
 
-- [[Lib HR]] (12 shared connections)
 - [[Lib, HR, and API]] (7 shared connections)
-- [[API and Lib]] (2 shared connections)
+- [[Lib, API, and Scripts]] (7 shared connections)
+- [[Lib HR]] (5 shared connections)
+- [[API HR, Materials, and Me]] (2 shared connections)
 
 ## Source Files
 

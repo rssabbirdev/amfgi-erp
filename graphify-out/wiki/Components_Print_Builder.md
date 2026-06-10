@@ -34,13 +34,15 @@
 ## Relationships
 
 - [[Lib Types and Utils]] (14 shared connections)
-- [[Components and Lib]] (14 shared connections)
-- [[Components Print Builder]] (11 shared connections)
+- [[Lib Utils]] (13 shared connections)
+- [[Components and Lib]] (12 shared connections)
+- [[Components Print Builder]] (10 shared connections)
 - [[Lib Utils and Types]] (8 shared connections)
-- [[Lib Utils]] (7 shared connections)
-- [[Lib, Print, and Scripts]] (7 shared connections)
 - [[Providers Theme Provider, App Providers, and Double Click Selection Guard]] (3 shared connections)
 - [[Components HR and Ui]] (2 shared connections)
+- [[Stock, Customers, and Settings]] (2 shared connections)
+- [[API, Lib, and Tests]] (1 shared connections)
+- [[Scripts, Lib, and API]] (1 shared connections)
 
 ## Source Files
 

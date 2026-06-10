@@ -1,54 +1,54 @@
 # Components HR
 
-> 31 nodes · cohesion 0.07
+> 22 nodes · cohesion 0.12
 
 ## Key Concepts
 
-- **AttendanceEntryGrid.tsx** (44 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **diffMinutes()** (3 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **calculateWorkedMinutes()** (3 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **TimeEntryInput()** (3 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **LeaveTypeOption** (3 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **AttendanceGridEmployee** (2 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **EmployeeTypeTag()** (2 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **formatTimeForDisplay()** (2 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **minutesFromTimeValue()** (2 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **draftBasicMinutes()** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **AssignmentOption** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **AttendanceGridAssignmentMeta** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **AttendanceEntryGridProps** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **STATUS_OPTIONS** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **AttendanceGridColumnKey** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **DEFAULT_GRID_COLUMNS** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **EMPLOYEE_TYPE_ROW_TONE** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **EmployeeTypeKey** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **EMPLOYEE_TYPE_TAG** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **LineGridPreferencePayload** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **mergeStoredGridColumns()** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **gridColumnsToPreferencePayload()** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **getAttendanceGridLocalStorageKey()** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **readAttendanceGridLocalPref()** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **writeAttendanceGridLocalPref()** (1 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- *... and 6 more nodes in this community*
+- **EmployeeProfileView.tsx** (35 connections) — `components/hr/EmployeeProfileView.tsx`
+- **EmployeeProfileView()** (7 connections) — `components/hr/EmployeeProfileView.tsx`
+- **page.tsx** (3 connections) — `app/(app)/hr/employees/[id]/page.tsx`
+- **toInputDate()** (3 connections) — `components/hr/EmployeeProfileView.tsx`
+- **buildOverviewEmployeeSignature()** (3 connections) — `components/hr/EmployeeProfileView.tsx`
+- **employeeMeta.ts** (3 connections) — `lib/hr/employeeMeta.ts`
+- **NATIONALITY_OPTIONS** (3 connections) — `lib/hr/employeeMeta.ts`
+- **initials()** (2 connections) — `components/hr/EmployeeProfileView.tsx`
+- **tenureLabel()** (2 connections) — `components/hr/EmployeeProfileView.tsx`
+- **EmployeeProfilePage()** (1 connections) — `app/(app)/hr/employees/[id]/page.tsx`
+- **Tab** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **CatalogDocType** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **UserLink** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **VisaRow** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **DocRow** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **EmployeeRecord** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **readApiJson()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **driveFileWebViewUrl()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **daysUntil()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **validityLabel()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **buildOverviewDraftSignature()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
+- **VisaStatusPill()** (1 connections) — `components/hr/EmployeeProfileView.tsx`
 
 ## Relationships
 
-- [[HR Attendance]] (9 shared connections)
-- [[Reports, Components, and Settings]] (3 shared connections)
-- [[Stock, Components, and Reports]] (3 shared connections)
-- [[Components, Stock, and Line Grid Column Settings]] (2 shared connections)
-- [[Stock, Components, and Lib]] (1 shared connections)
-- [[Lib HR]] (1 shared connections)
-- [[HR, Components, and Lib]] (1 shared connections)
+- [[Lib, HR, and Workforce Profile]] (5 shared connections)
+- [[Reports, Components, and HR]] (4 shared connections)
+- [[Stock, Customers, and Settings]] (3 shared connections)
+- [[Stock, Components, and Customers]] (2 shared connections)
+- [[Components HR and Ui]] (1 shared connections)
+- [[HR, Components, and Admin]] (1 shared connections)
+- [[Components Transactions, HR, and Ui]] (1 shared connections)
+- [[Components, Ui, and Multi Select Dropdown]] (1 shared connections)
+- [[Customers Jobs]] (1 shared connections)
+- [[Components Me]] (1 shared connections)
 
 ## Source Files
 
-- `components/hr/AttendanceEntryGrid.tsx`
-- `lib/hr/attendanceDraftStatus.ts`
+- `app/(app)/hr/employees/[id]/page.tsx`
+- `components/hr/EmployeeProfileView.tsx`
+- `lib/hr/employeeMeta.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 86 (100%)
+- EXTRACTED: 74 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

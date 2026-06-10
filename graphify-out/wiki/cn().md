@@ -1,6 +1,6 @@
 # cn()
 
-> God node · 172 connections · `lib/utils.ts`
+> God node · 173 connections · `lib/utils.ts`
 
 **Community:** [[Stock, Components, and Reports]]
 
@@ -12,10 +12,10 @@
 - [[Skeleton()]] `EXTRACTED`
 - [[JobCostEnginePage()]] `EXTRACTED`
 - [[FormulaBuilderEditor()]] `EXTRACTED`
+- [[GoodsReceiptPage()]] `EXTRACTED`
 - [[ReceiptEditor()]] `EXTRACTED`
 - [[SidebarMenuButton()]] `EXTRACTED`
 - [[CustomerJobLedgerPage()]] `EXTRACTED`
-- [[GoodsReceiptPage()]] `EXTRACTED`
 - [[StockBatchesPage()]] `EXTRACTED`
 - [[HrAttendancePage()]] `EXTRACTED`
 - [[DispatchPage()]] `EXTRACTED`
@@ -48,10 +48,10 @@
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
+- [[GoodsReceiptLineGrid.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
-- [[Modal.tsx]] `EXTRACTED`
 
 ---
 
