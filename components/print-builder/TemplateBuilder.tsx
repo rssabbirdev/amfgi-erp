@@ -23,6 +23,7 @@ import { DataFieldsExplorer } from './DataFieldsExplorer';
 import { PageChromeEditor } from './PageChromeEditor';
 import {
   buildDeliveryNoteTemplateData,
+  buildDeliveryNoteTemplateDataFromEntity,
   getMockData,
   type AnyTemplateDataContext,
   type TemplateDataContext,
@@ -170,10 +171,13 @@ function loadLayoutVersions(templateId: string): LayoutVersionEntry[] {
 
 type DispatchPreviewEntry = {
   entryId: string;
+  deliveryNoteId: string;
+  deliveryNoteNumber?: number;
   jobNumber: string;
   dispatchDate: string;
   transactionIds: string[];
   materialsCount: number;
+  isPrintOnly?: boolean;
 };
 
 type SchedulePreviewOption = {
@@ -595,18 +599,17 @@ export function TemplateBuilder({
     let cancelled = false;
     setDnEntriesLoading(true);
     setDnEntriesError(null);
-    fetch('/api/materials/dispatch-history-entries?filterType=all')
+    fetch('/api/delivery-notes?limit=100')
       .then((res) => res.json())
       .then((json) => {
         if (cancelled) return;
         if (!json.success) {
-          setDnEntriesError(json.error || 'Could not load entries');
+          setDnEntriesError(json.error || 'Could not load delivery notes');
           setDnEntries([]);
           return;
         }
         const raw = json.data?.entries ?? [];
         const filtered: DispatchPreviewEntry[] = raw
-          .filter((e: { isDeliveryNote?: boolean }) => e.isDeliveryNote)
           .map((e: Record<string, unknown>) => {
             const dd = e.dispatchDate as string | Date | undefined;
             const dispatchDate =
@@ -615,16 +618,21 @@ export function TemplateBuilder({
                 : dd instanceof Date
                   ? dd.toISOString()
                   : '';
+            const deliveryNoteId = String(e.deliveryNoteId ?? e.entryId ?? e.id ?? '');
             const ids = (e.transactionIds as string[] | undefined) ?? [];
             return {
-              entryId: String(e.entryId ?? e.id ?? ''),
-              jobNumber: String(e.jobNumber ?? '-'),
+              entryId: deliveryNoteId,
+              deliveryNoteId,
+              deliveryNoteNumber:
+                e.deliveryNoteNumber != null ? Number(e.deliveryNoteNumber) : undefined,
+              jobNumber: String(e.jobNumber ?? '—'),
               dispatchDate,
               transactionIds: ids,
-              materialsCount: Number(e.materialsCount ?? 0),
+              materialsCount: Number(e.materialsCount ?? ids.length),
+              isPrintOnly: Boolean(e.isPrintOnly),
             };
           })
-          .filter((e: DispatchPreviewEntry) => e.transactionIds.length > 0);
+          .filter((e: DispatchPreviewEntry) => Boolean(e.deliveryNoteId));
         setDnEntries(filtered);
       })
       .catch(() => {
@@ -728,33 +736,65 @@ export function TemplateBuilder({
       return;
     }
     const entry = dnEntries.find((e) => e.entryId === dnSelectedEntryId);
-    if (!entry?.transactionIds.length) {
+    if (!entry?.deliveryNoteId) {
       setLivePreviewBase(null);
       return;
     }
     let cancelled = false;
     setLiveTxnLoading(true);
-    Promise.all(
-      entry.transactionIds.map((id) => fetch(`/api/transactions/${id}`).then((r) => r.json()))
-    )
-      .then((jsons) => {
+
+    const load = async () => {
+      try {
+        if (entry.transactionIds.length === 0) {
+          const dnRes = await fetch(
+            `/api/delivery-notes/${encodeURIComponent(entry.deliveryNoteId)}`
+          );
+          const dnJson = await dnRes.json();
+          if (!dnRes.ok || !dnJson.data) {
+            if (!cancelled) setLivePreviewBase(null);
+            return;
+          }
+          if (!cancelled) {
+            setLivePreviewBase(
+              buildDeliveryNoteTemplateDataFromEntity(dnJson.data, companySnapshot ?? {})
+            );
+          }
+          return;
+        }
+
+        const jsons = await Promise.all(
+          entry.transactionIds.map((id) => fetch(`/api/transactions/${id}`).then((r) => r.json()))
+        );
         if (cancelled) return;
         const txns = jsons.filter((j) => j.success && j.data).map((j) => j.data);
         const stockOuts = txns.filter((t: { type?: string }) => t.type === 'STOCK_OUT');
         if (!stockOuts.length) {
-          setLivePreviewBase(null);
+          const dnRes = await fetch(
+            `/api/delivery-notes/${encodeURIComponent(entry.deliveryNoteId)}`
+          );
+          const dnJson = await dnRes.json();
+          if (!cancelled && dnRes.ok && dnJson.data) {
+            setLivePreviewBase(
+              buildDeliveryNoteTemplateDataFromEntity(dnJson.data, companySnapshot ?? {})
+            );
+          } else if (!cancelled) {
+            setLivePreviewBase(null);
+          }
           return;
         }
-        setLivePreviewBase(
-          buildDeliveryNoteTemplateData(stockOuts, companySnapshot ?? {})
-        );
-      })
-      .catch(() => {
+        if (!cancelled) {
+          setLivePreviewBase(
+            buildDeliveryNoteTemplateData(stockOuts, companySnapshot ?? {})
+          );
+        }
+      } catch {
         if (!cancelled) setLivePreviewBase(null);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLiveTxnLoading(false);
-      });
+      }
+    };
+
+    void load();
     return () => {
       cancelled = true;
     };
@@ -1712,8 +1752,9 @@ export function TemplateBuilder({
 										Preview data
 									</p>
 									<p className='text-[11px] leading-relaxed text-slate-600 dark:text-slate-400'>
-										Pick a real delivery note to preview
-										fields in the document.
+										Choose a saved delivery note (with or
+										without stock dispatch) to preview real
+										job, customer, and line data.
 									</p>
 									{!companyId && (
 										<p className='text-[10px] text-amber-500/90'>
@@ -1725,7 +1766,7 @@ export function TemplateBuilder({
 										companyId && (
 											<>
 												<label className='block text-[10px] font-medium text-slate-600 dark:text-slate-400'>
-													Delivery entry
+													Delivery note
 												</label>
 												<select
 													value={dnSelectedEntryId}
@@ -1746,7 +1787,22 @@ export function TemplateBuilder({
 																? formatDate(
 																		ent.dispatchDate,
 																	)
-																: '-';
+																: '—';
+														const dnLabel =
+															ent.deliveryNoteNumber !=
+															null
+																? `DN #${ent.deliveryNoteNumber}`
+																: 'DN';
+														const linesLabel =
+															ent.isPrintOnly
+																? 'print only'
+																: ent.materialsCount >
+																	  1
+																	? `${ent.materialsCount} lines`
+																	: ent.materialsCount ===
+																		  1
+																		? '1 line'
+																		: '';
 														return (
 															<option
 																key={
@@ -1756,11 +1812,11 @@ export function TemplateBuilder({
 																	ent.entryId
 																}
 															>
+																{dnLabel} |{' '}
 																{ent.jobNumber}{' '}
 																| {d}
-																{ent.materialsCount >
-																1
-																	? ` (${ent.materialsCount} lines)`
+																{linesLabel
+																	? ` (${linesLabel})`
 																	: ''}
 															</option>
 														);
@@ -1800,6 +1856,27 @@ export function TemplateBuilder({
 															delivery note.
 														</p>
 													)}
+												{livePreviewBase && (
+													<div className='rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'>
+														<p>
+															DN #
+															{livePreviewBase.dn
+																?.number ?? '—'}{' '}
+															|{' '}
+															{livePreviewBase.job
+																?.jobNumber ??
+																'—'}{' '}
+															|{' '}
+															{livePreviewBase
+																.customItems
+																?.length ?? 0}{' '}
+															custom lines |{' '}
+															{livePreviewBase.items
+																?.length ?? 0}{' '}
+															stock lines
+														</p>
+													</div>
+												)}
 											</>
 										)}
 									{template.itemType === 'work-schedule' && (

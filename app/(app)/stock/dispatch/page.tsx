@@ -33,6 +33,7 @@ import {
 } from '@/store/hooks';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
 import type { DocumentTemplate } from '@/lib/types/documentTemplate';
+import { openDeliveryNotePrint } from '@/lib/print/openDeliveryNotePrint';
 
 interface Material {
   materialId: string;
@@ -939,15 +940,16 @@ export default function DispatchPage() {
                 onClick={() => {
                   const tid = printModalEntry.transactionIds[0];
                   const dnid = printModalEntry.deliveryNoteId;
-                  const q = selectedPrintTplId
-                    ? `&templateId=${encodeURIComponent(selectedPrintTplId)}`
-                    : '';
+                  const templateId = selectedPrintTplId || undefined;
                   if (tid) {
-                    window.open(`/print/delivery-note?id=${encodeURIComponent(tid)}${q}`, '_blank');
+                    openDeliveryNotePrint(
+                      { transactionId: tid, templateId },
+                      { onError: (msg) => toast.error(msg) }
+                    );
                   } else if (dnid) {
-                    window.open(
-                      `/print/delivery-note?deliveryNoteId=${encodeURIComponent(dnid)}${q}`,
-                      '_blank'
+                    openDeliveryNotePrint(
+                      { deliveryNoteId: dnid, templateId },
+                      { onError: (msg) => toast.error(msg) }
                     );
                   } else {
                     toast.error('Nothing to print for this entry.');

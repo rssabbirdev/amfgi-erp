@@ -67,6 +67,8 @@ export interface TemplateDataContext {
     phone?: string;
     email?: string;
     address?: string;
+    /** Customer tax registration (TRN) number */
+    trnNumber?: string;
   } | null;
   customItems: Array<{
     name: string;
@@ -315,6 +317,22 @@ function finiteNumber(v: unknown): number | undefined {
   return decimalToNumber(v);
 }
 
+/** Maps API/Prisma customer (partial) to print template `customer` slice */
+export function customerTemplateSlice(
+  customer: Record<string, unknown> | null | undefined
+): TemplateDataContext['customer'] {
+  if (!customer) return null;
+  return {
+    name: String(customer.name ?? ''),
+    contactPerson:
+      customer.contactPerson != null ? String(customer.contactPerson) : undefined,
+    phone: customer.phone != null ? String(customer.phone) : undefined,
+    email: customer.email != null ? String(customer.email) : undefined,
+    address: customer.address != null ? String(customer.address) : undefined,
+    trnNumber: customer.trnNumber != null ? String(customer.trnNumber) : undefined,
+  };
+}
+
 /** Maps API/Prisma job (partial) to print template `job` slice */
 export function jobTemplateSlice(job: Record<string, unknown> | null | undefined): TemplateDataContext['job'] {
   if (!job) return null;
@@ -431,6 +449,79 @@ function deliveryNoteTableRowsFromNotesAndTransactions(
   return [...parseCustomItems(notes), ...stockOutMaterialTableRows(stockOutTransactions)];
 }
 
+function customItemsFromJson(json: unknown): TemplateDataContext['customItems'] {
+  if (!Array.isArray(json)) return [];
+  const items: TemplateDataContext['customItems'] = [];
+  for (const row of json) {
+    if (!row || typeof row !== 'object') continue;
+    const o = row as Record<string, unknown>;
+    items.push({
+      name: String(o.name ?? ''),
+      description: typeof o.description === 'string' ? o.description : '',
+      qty: String(o.qty ?? ''),
+      unit: String(o.unit ?? ''),
+    });
+  }
+  return items;
+}
+
+/**
+ * Build preview/print context from a `DeliveryNote` row (incl. print-only notes with no stock lines).
+ */
+export function buildDeliveryNoteTemplateDataFromEntity(
+  dn: {
+    id: string;
+    number: number;
+    date: string | Date;
+    documentNotes?: string | null;
+    customItemsJson?: unknown;
+    job?: Record<string, unknown> | null;
+  },
+  company: any
+): TemplateDataContext {
+  const customItems = customItemsFromJson(dn.customItemsJson);
+  const totalQty = customItems.reduce((sum, row) => sum + (Number.parseFloat(row.qty) || 0), 0);
+  const selectedContactPerson =
+    typeof dn.job?.contactPerson === 'string' ? dn.job.contactPerson.trim() : '';
+  const jobSlice = jobTemplateSlice(dn.job);
+  const enrichedJobSlice = jobSlice
+    ? enrichWithPrimaryContact(
+        jobSlice,
+        (dn.job as { contactsJson?: unknown } | null | undefined)?.contactsJson,
+        selectedContactPerson
+      )
+    : null;
+  const customerSlice = customerTemplateSlice(
+    dn.job?.customer as Record<string, unknown> | null | undefined
+  );
+
+  return {
+    company: {
+      name: company?.name ?? '',
+      address: company?.address ?? '',
+      phone: company?.phone ?? '',
+      email: company?.email ?? '',
+      letterheadUrl: company?.letterheadUrl ?? '',
+      slug: company?.slug,
+      description: company?.description,
+    },
+    dn: {
+      number: String(dn.number),
+      date: formatDate(typeof dn.date === 'string' ? dn.date : dn.date.toISOString()),
+      notes: (dn.documentNotes ?? '').trim(),
+      totalCost: 0,
+      quantity: totalQty,
+      signedCopyUrl: '',
+    },
+    material: null,
+    job: enrichedJobSlice,
+    customer: customerSlice,
+    customItems,
+    items: [],
+    today: formatDate(new Date().toISOString()),
+  };
+}
+
 /**
  * Build preview/print context for a full delivery note (one or more STOCK_OUT lines sharing the same note block).
  */
@@ -480,15 +571,9 @@ export function buildDeliveryNoteTemplateData(
         }
       : null,
     job: enrichedJobSlice,
-    customer: first.job?.customer
-      ? {
-          name: first.job.customer.name ?? '',
-          contactPerson: first.job.customer.contactPerson ?? undefined,
-          phone: first.job.customer.phone ?? undefined,
-          email: first.job.customer.email ?? undefined,
-          address: first.job.customer.address ?? undefined,
-        }
-      : null,
+    customer: customerTemplateSlice(
+      first.job?.customer as Record<string, unknown> | null | undefined
+    ),
     customItems,
     items,
     today: formatDate(new Date().toISOString()),
@@ -535,15 +620,9 @@ export function buildTemplateData(
         }
       : null,
     job: enrichedJobSlice,
-    customer: transaction.job?.customer
-      ? {
-          name: transaction.job.customer.name ?? '',
-          contactPerson: transaction.job.customer.contactPerson ?? undefined,
-          phone: transaction.job.customer.phone ?? undefined,
-          email: transaction.job.customer.email ?? undefined,
-          address: transaction.job.customer.address ?? undefined,
-        }
-      : null,
+    customer: customerTemplateSlice(
+      transaction.job?.customer as Record<string, unknown> | null | undefined
+    ),
     customItems,
     items,
     today: formatDate(new Date().toISOString()),
@@ -556,6 +635,9 @@ export function resolveField(
 ): string {
   if (field === 'page.number') return '__PAGE_NUMBER__';
   if (field === 'page.total') return '__PAGE_TOTAL__';
+  if (field === 'customer.trxNumber' || field === 'customer.trxnumber') {
+    return resolveField('customer.trnNumber', data);
+  }
   const parts = field.split('.');
   let current: unknown = data;
 
@@ -654,6 +736,7 @@ export const MOCK_PREVIEW_DATA: TemplateDataContext = {
     phone: '+971 50 111 2233',
     email: 'procurement@acme.ae',
     address: 'Business Bay, Dubai',
+    trnNumber: '100123456700003',
   },
   customItems: [
     {

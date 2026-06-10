@@ -1,14 +1,18 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { serializeJobWithContacts } from '@/lib/jobs/jobContacts';
+import { jobForPrintSelect } from '@/lib/jobs/jobPrintSelect';
 import { errorResponse, successResponse } from '@/lib/utils/apiResponse';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_out')) {
-    return errorResponse('Forbidden', 403);
-  }
+  const perms = (session.user.permissions ?? []) as string[];
+  const canRead =
+    session.user.isSuperAdmin ||
+    perms.includes('transaction.stock_out') ||
+    perms.includes('settings.manage');
+  if (!canRead) return errorResponse('Forbidden', 403);
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { id } = await params;
@@ -20,25 +24,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const dn = await prisma.deliveryNote.findFirst({
       where: { id: id.trim(), companyId },
       include: {
-        job: {
-          select: {
-            id: true,
-            jobNumber: true,
-            description: true,
-            contactPerson: true,
-            contacts: { orderBy: { sortOrder: 'asc' } },
-            customerId: true,
-            customer: {
-              select: {
-                name: true,
-                contactPerson: true,
-                phone: true,
-                email: true,
-                address: true,
-              },
-            },
-          },
-        },
+        job: { select: jobForPrintSelect },
         transactions: {
           where: { type: 'STOCK_OUT' },
           select: { id: true },

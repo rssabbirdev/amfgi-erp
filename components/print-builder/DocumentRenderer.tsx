@@ -40,6 +40,8 @@ export function DocumentRenderer({ template, data, mode, scale = 1 }: DocumentRe
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const contentRef = React.useRef<HTMLDivElement | null>(null);
   const fitMeasureRef = React.useRef<HTMLDivElement | null>(null);
+  const mainFlowEndRef = React.useRef<HTMLDivElement | null>(null);
+  const [printBottomSpacerMm, setPrintBottomSpacerMm] = React.useState(0);
   const m = template.pageMargins;
   const ps = template.pageStyle;
   const pageDims = getPageDimensionsMm(ps);
@@ -264,6 +266,66 @@ export function DocumentRenderer({ template, data, mode, scale = 1 }: DocumentRe
     );
   };
 
+  const renderPrintBottomAnchorsOnce = () => {
+    if (!isPrint || anchoredBottomSections.length === 0) return null;
+
+    const zoneTopMm = anchoredBottomSections.reduce((minY, { idx }) => {
+      const r = rects?.[idx];
+      if (!r) return minY;
+      return Math.min(minY, Math.max(0, Math.min(ch, r.yMm)));
+    }, ch);
+    const zoneHeightMm = Math.max(0, ch - zoneTopMm);
+
+    return (
+      <>
+        <div
+          aria-hidden
+          style={{ height: u(printBottomSpacerMm), breakInside: 'avoid', pageBreakInside: 'avoid' }}
+        />
+        <div
+          style={{
+            position: 'relative',
+            width: u(cw),
+            minHeight: u(zoneHeightMm),
+            pageBreakInside: 'avoid',
+            breakInside: 'avoid',
+          }}
+        >
+          {anchoredBottomSections.map(({ section, idx }) => {
+            const r = rects?.[idx];
+            if (!r) {
+              return (
+                <div key={`print-bottom-anchor-${idx}`}>
+                  {renderSectionByIndex(section, idx, true)}
+                </div>
+              );
+            }
+            const x = Math.max(0, Math.min(cw, r.xMm));
+            const w = Math.max(0, Math.min(cw - x, r.widthMm));
+            const h = Math.max(0, Math.min(ch, r.heightMm));
+            const bottomInset = Math.max(0, ch - (r.yMm + r.heightMm));
+            return (
+              <div
+                key={`print-bottom-anchor-${idx}`}
+                style={{
+                  position: 'absolute',
+                  left: u(x),
+                  bottom: u(bottomInset),
+                  width: u(w),
+                  minHeight: u(h),
+                  boxSizing: 'border-box',
+                  zIndex: (r.zIndex ?? idx) + 50,
+                }}
+              >
+                {renderSectionByIndex(section, idx, true)}
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+  };
+
   const renderMainSections = () => (
     <>
       {hasCanvas ? (
@@ -479,7 +541,12 @@ export function DocumentRenderer({ template, data, mode, scale = 1 }: DocumentRe
               );
             });
           })()}
-          {anchoredBottomSections.map(({ section, idx }) => renderSectionByIndex(section, idx, true))}
+          <div ref={mainFlowEndRef} aria-hidden style={{ height: 0, width: '100%' }} />
+          {!isPrint &&
+            anchoredBottomSections.map(({ section, idx }) =>
+              renderSectionByIndex(section, idx, true)
+            )}
+          {renderPrintBottomAnchorsOnce()}
         </>
       )}
     </>
@@ -514,6 +581,56 @@ export function DocumentRenderer({ template, data, mode, scale = 1 }: DocumentRe
       </div>
     );
   };
+
+  React.useLayoutEffect(() => {
+    if (!isPrint || anchoredBottomSections.length === 0) {
+      setPrintBottomSpacerMm((prev) => (prev !== 0 ? 0 : prev));
+      return;
+    }
+    const root = rootRef.current;
+    const marker = mainFlowEndRef.current;
+    const content = contentRef.current;
+    if (!root || !marker || !content) return;
+
+    const widthPx = root.getBoundingClientRect().width;
+    if (!widthPx) return;
+    const pxPerMm = widthPx / pageDims.widthMm;
+    const pageContentPx = ch * pxPerMm;
+
+    const zoneTopMm = anchoredBottomSections.reduce((minY, { idx }) => {
+      const r = rects?.[idx];
+      if (!r) return minY;
+      return Math.min(minY, Math.max(0, Math.min(ch, r.yMm)));
+    }, ch);
+    const footerZonePx = Math.max(0, ch - zoneTopMm) * pxPerMm;
+
+    const contentTop = content.getBoundingClientRect().top;
+    const markerBottom = marker.getBoundingClientRect().bottom;
+    const mainFlowPx = Math.max(0, markerBottom - contentTop);
+
+    const remainderPx = mainFlowPx % pageContentPx;
+    let spacerPx: number;
+    if (remainderPx === 0) {
+      spacerPx = Math.max(0, pageContentPx - footerZonePx);
+    } else {
+      const spaceLeftPx = pageContentPx - remainderPx;
+      spacerPx =
+        spaceLeftPx >= footerZonePx
+          ? spaceLeftPx - footerZonePx
+          : spaceLeftPx + Math.max(0, pageContentPx - footerZonePx);
+    }
+
+    const nextMm = spacerPx / pxPerMm;
+    setPrintBottomSpacerMm((prev) => (Math.abs(prev - nextMm) > 0.5 ? nextMm : prev));
+  }, [
+    anchoredBottomSections,
+    ch,
+    data,
+    isPrint,
+    pageDims.widthMm,
+    template.canvasRects,
+    template.sections,
+  ]);
 
   React.useLayoutEffect(() => {
     if (!isPrint) return;
@@ -1044,6 +1161,36 @@ function FieldRowRenderer({
     section.gridColumns ??
     (Math.min(4, Math.max(1, section.cells.length)) as 1 | 2 | 3 | 4);
 
+  const borderW = section.borderWidthPx ?? 1;
+  const borderColor = section.borderColor?.trim() || '#000000';
+  const borderRadius = section.borderRadiusPx ?? 0;
+
+  const resolveLabelFontSizePt = (cell: (typeof section.cells)[number]) =>
+    cell.labelFontSizePt ??
+    section.labelFontSizePt ??
+    cell.fontSize ??
+    section.valueFontSizePt ??
+    pack?.fontSizePt ??
+    10;
+
+  const resolveValueFontSizePt = (cell: (typeof section.cells)[number]) =>
+    cell.valueFontSizePt ??
+    section.valueFontSizePt ??
+    cell.fontSize ??
+    section.labelFontSizePt ??
+    pack?.fontSizePt ??
+    10;
+
+  const resolveLabelColor = (cell: (typeof section.cells)[number]) =>
+    cell.labelColor ?? section.labelColor ?? '#000000';
+
+  const resolveValueColor = (cell: (typeof section.cells)[number]) => {
+    if (cell.valueColor?.trim()) return cell.valueColor;
+    if (section.valueColor?.trim()) return section.valueColor;
+    if (cell.color != null && String(cell.color).trim() !== '') return cell.color;
+    return '#000000';
+  };
+
   return (
     <div
       style={{
@@ -1051,8 +1198,10 @@ function FieldRowRenderer({
         gridTemplateColumns: useGrid ? `repeat(${gridCols}, minmax(0, 1fr))` : undefined,
         gap: u(2),
         minHeight: section.minHeight ? u(section.minHeight) : undefined,
-        border: section.bordered ? '1px solid #000' : undefined,
+        border: section.bordered ? `${borderW}px solid ${borderColor}` : undefined,
+        borderRadius: section.bordered && borderRadius > 0 ? `${borderRadius}px` : undefined,
         padding: section.bordered ? u(2) : undefined,
+        boxSizing: 'border-box',
         fontFamily: pack?.fontFamily,
         fontStyle: pack?.fontStyle,
         textDecoration: pack?.textDecoration,
@@ -1066,15 +1215,11 @@ function FieldRowRenderer({
             : cell.field
               ? resolveField(cell.field, data)
               : resolveInlineTemplate(cell.text ?? '', data);
-        const fontSize =
-          cell.fontSize != null
-            ? pt(cell.fontSize)
-            : pack?.fontSizePt != null
-              ? pt(pack.fontSizePt)
-              : pt(10);
+        const labelFontSizePt = resolveLabelFontSizePt(cell);
+        const valueFontSizePt = resolveValueFontSizePt(cell);
+        const labelColor = resolveLabelColor(cell);
+        const valueColor = resolveValueColor(cell);
         const fontWeight = cell.bold ? 'bold' : packWeight ?? 'normal';
-        const explicitCellColor =
-          cell.color != null && String(cell.color).trim() !== '';
 
         return (
           <div
@@ -1084,15 +1229,28 @@ function FieldRowRenderer({
               flex: !useGrid && cell.width ? undefined : 1,
               minWidth: 0,
               textAlign: (cell.align ?? 'left') as React.CSSProperties['textAlign'],
-              fontSize,
-              fontWeight,
-              ...(explicitCellColor ? { color: cell.color } : {}),
             }}
           >
             {cell.label && (
-              <span style={{ fontWeight: 'bold' }}>{renderDynamicText(resolveInlineTemplate(cell.label, data))} </span>
+              <span
+                style={{
+                  fontWeight: 'bold',
+                  fontSize: pt(labelFontSizePt),
+                  color: labelColor,
+                }}
+              >
+                {renderDynamicText(resolveInlineTemplate(cell.label, data))}{' '}
+              </span>
             )}
-            {renderDynamicText(value)}
+            <span
+              style={{
+                fontWeight,
+                fontSize: pt(valueFontSizePt),
+                color: valueColor,
+              }}
+            >
+              {renderDynamicText(value)}
+            </span>
           </div>
         );
       })}
@@ -1114,25 +1272,49 @@ function InfoGridRenderer({
   pt: (v: number) => string;
 }) {
   const cols = section.columns;
+  const borderW = section.borderWidthPx ?? 1;
+  const borderColor = section.borderColor?.trim() || '#000000';
+  const borderRadius = section.borderRadiusPx ?? 0;
+
   return (
     <div
       style={{
         display: 'grid',
         gridTemplateColumns: `repeat(${cols}, 1fr)`,
         gap: `${u(1)} ${u(4)}`,
-        border: section.bordered ? '1px solid #000' : undefined,
+        border: section.bordered ? `${borderW}px solid ${borderColor}` : undefined,
+        borderRadius: section.bordered && borderRadius > 0 ? `${borderRadius}px` : undefined,
         padding: section.bordered ? u(2) : undefined,
-        fontSize: pt(10),
+        boxSizing: 'border-box',
       }}
     >
       {section.items.map((item, i) => {
         const value = resolveField(item.field, data);
+        const labelFontSizePt = item.labelFontSizePt ?? section.labelFontSizePt ?? 10;
+        const valueFontSizePt = item.valueFontSizePt ?? section.valueFontSizePt ?? 10;
+        const labelColor = item.labelColor ?? section.labelColor ?? '#000000';
+        const valueColor = item.valueColor ?? section.valueColor ?? '#000000';
         return (
           <div key={i} style={{ lineHeight: 1.5 }}>
-            <span style={{ fontWeight: 'bold', marginRight: u(1) }}>
+            <span
+              style={{
+                fontWeight: 'bold',
+                marginRight: u(1),
+                fontSize: pt(labelFontSizePt),
+                color: labelColor,
+              }}
+            >
               {renderDynamicText(resolveInlineTemplate(item.label, data))}:
             </span>
-            <span style={{ fontWeight: item.bold ? 'bold' : 'normal' }}>{renderDynamicText(value)}</span>
+            <span
+              style={{
+                fontWeight: item.bold ? 'bold' : 'normal',
+                fontSize: pt(valueFontSizePt),
+                color: valueColor,
+              }}
+            >
+              {renderDynamicText(value)}
+            </span>
           </div>
         );
       })}
@@ -1237,8 +1419,27 @@ function TableRenderer({
     displayItems.push(null); // null = empty row placeholder
   }
 
-  const borderStyle = section.showBorders ? '1px solid #000' : 'none';
+  const borderW = section.borderWidthPx ?? 1;
+  const borderColor = section.borderColor?.trim() || '#000000';
+  const borderRadius = section.borderRadiusPx ?? 0;
+  const borderStyle = section.showBorders ? `${borderW}px solid ${borderColor}` : 'none';
   const cellPadding = u(section.rowPadding);
+
+  const wrapTableWithRadius = (table: React.ReactNode, key?: string) => {
+    if (!section.showBorders || borderRadius <= 0) return table;
+    return (
+      <div
+        key={key}
+        style={{
+          width: '100%',
+          borderRadius: `${borderRadius}px`,
+          overflow: 'hidden',
+        }}
+      >
+        {table}
+      </div>
+    );
+  };
   const rowMinHeight = section.rowMinHeightMm && section.rowMinHeightMm > 0 ? u(section.rowMinHeightMm) : undefined;
   const globalHeaderFontWeight = section.headerFontWeight ?? 'bold';
   const globalHeaderFontStyle = section.headerFontStyle ?? 'normal';
@@ -1283,6 +1484,7 @@ function TableRenderer({
         : undefined;
     return (
       <div style={{ overflowX: fitMatrixForPrint ? 'hidden' : 'auto' }}>
+        {wrapTableWithRadius(
         <table
           style={{
             width: '100%',
@@ -1584,27 +1786,44 @@ function TableRenderer({
             })}
           </tbody>
         </table>
+        )}
       </div>
     );
   }
 
-  return (
+  const maxRowsPerPage =
+    section.maxRowsPerPage && section.maxRowsPerPage > 0
+      ? Math.floor(section.maxRowsPerPage)
+      : 0;
+
+  const rowChunks: Array<Array<Record<string, unknown> | null>> = [];
+  if (maxRowsPerPage > 0) {
+    for (let i = 0; i < displayItems.length; i += maxRowsPerPage) {
+      rowChunks.push(displayItems.slice(i, i + maxRowsPerPage));
+    }
+  } else {
+    rowChunks.push(displayItems);
+  }
+
+  const renderStandardTable = (
+    chunk: Array<Record<string, unknown> | null>,
+    chunkIdx: number,
+    rowOffset: number
+  ) => (
     <table
+      key={`table-chunk-${chunkIdx}`}
       style={{
         width: '100%',
         borderCollapse: 'collapse',
         fontSize: pt(section.fontSize),
         pageBreakInside: 'auto',
+        ...(chunkIdx > 0 && isPrint
+          ? { breakBefore: 'page', pageBreakBefore: 'always' as const }
+          : {}),
       }}
     >
       <thead>
-        <tr
-          style={{
-            backgroundColor: section.headerBg,
-            color: section.headerColor,
-            // If repeatHeaderOnNewPage, the browser will repeat <thead> on each printed page
-          }}
-        >
+        <tr style={{ backgroundColor: section.headerBg, color: section.headerColor }}>
           {section.columns.map((col, ci) => (
             <th
               key={ci}
@@ -1640,46 +1859,46 @@ function TableRenderer({
         </tr>
       </thead>
       <tbody>
-        {displayItems.map((item, rowIdx) => (
-          <tr
-            key={rowIdx}
-            style={{
-              // Prevent a row from being split across pages
-              pageBreakInside: 'avoid',
-              breakInside: 'avoid',
-            }}
-          >
-            {section.columns.map((col, ci) => {
+        {chunk.map((item, rowIdx) => {
+          const globalRowIdx = rowOffset + rowIdx;
+          return (
+            <tr
+              key={`${chunkIdx}-${rowIdx}`}
+              style={{
+                pageBreakInside: 'avoid',
+                breakInside: 'avoid',
+              }}
+            >
+              {section.columns.map((col, ci) => {
                 let cellValue: unknown = '';
                 if (item !== null) {
                   if (col.field === 'slno') {
-                    cellValue = String(rowIdx + 1);
+                    cellValue = String(globalRowIdx + 1);
                   } else {
                     cellValue = item[col.field] ?? '';
+                  }
                 }
-              }
-              const locationTone =
-                col.field === 'locationDisplay'
-                  ? getScheduleLocationCellTone(item, col.cellBg, col.cellColor)
-                  : null;
-              return (
-                <td
-                  key={ci}
-                  style={{
-                    border: borderStyle,
-                    padding: `${cellPadding} ${u(2)}`,
-                    textAlign: col.align,
-                    verticalAlign: col.verticalAlign ?? 'top',
-                    backgroundColor: locationTone?.backgroundColor ?? col.cellBg,
-                    color: locationTone?.color ?? col.cellColor,
-                    fontWeight: locationTone?.fontWeight ?? col.fontWeight ?? 'normal',
-                    fontStyle: col.fontStyle ?? 'normal',
-                    // Let cell height grow with content
-                    wordBreak: 'break-word',
-                    whiteSpace: 'pre-wrap',
-                    minHeight: getColumnMinHeight(col),
-                    height: getColumnMinHeight(col),
-                  }}
+                const locationTone =
+                  col.field === 'locationDisplay'
+                    ? getScheduleLocationCellTone(item, col.cellBg, col.cellColor)
+                    : null;
+                return (
+                  <td
+                    key={ci}
+                    style={{
+                      border: borderStyle,
+                      padding: `${cellPadding} ${u(2)}`,
+                      textAlign: col.align,
+                      verticalAlign: col.verticalAlign ?? 'top',
+                      backgroundColor: locationTone?.backgroundColor ?? col.cellBg,
+                      color: locationTone?.color ?? col.cellColor,
+                      fontWeight: locationTone?.fontWeight ?? col.fontWeight ?? 'normal',
+                      fontStyle: col.fontStyle ?? 'normal',
+                      wordBreak: 'break-word',
+                      whiteSpace: 'pre-wrap',
+                      minHeight: getColumnMinHeight(col),
+                      height: getColumnMinHeight(col),
+                    }}
                   >
                     {col.field === 'workerBlocks'
                       ? renderScheduleWorkerBlocks(cellValue, u)
@@ -1687,10 +1906,26 @@ function TableRenderer({
                   </td>
                 );
               })}
-          </tr>
-        ))}
+            </tr>
+          );
+        })}
       </tbody>
     </table>
+  );
+
+  if (rowChunks.length === 1) {
+    return wrapTableWithRadius(renderStandardTable(rowChunks[0], 0, 0));
+  }
+
+  return (
+    <>
+      {rowChunks.map((chunk, chunkIdx) =>
+        wrapTableWithRadius(
+          renderStandardTable(chunk, chunkIdx, chunkIdx * maxRowsPerPage),
+          `table-wrap-${chunkIdx}`,
+        )
+      )}
+    </>
   );
 }
 

@@ -1,39 +1,48 @@
 # Store API
 
-> 13 nodes · cohesion 0.18
+> 18 nodes · cohesion 0.14
 
 ## Key Concepts
 
-- **customers.ts** (16 connections) — `store/api/endpoints/customers.ts`
-- **suppliers.ts** (16 connections) — `store/api/endpoints/suppliers.ts`
-- **PartyRecordSource** (2 connections) — `store/api/endpoints/customers.ts`
-- **PartyListSyncResult** (2 connections) — `store/api/endpoints/customers.ts`
-- **suppliersApi** (2 connections) — `store/api/endpoints/suppliers.ts`
-- **CustomerStatusFilter** (1 connections) — `store/api/endpoints/customers.ts`
-- **CustomerFilter** (1 connections) — `store/api/endpoints/customers.ts`
-- **CustomersListParams** (1 connections) — `store/api/endpoints/customers.ts`
-- **CustomersListResponse** (1 connections) — `store/api/endpoints/customers.ts`
-- **customersApi** (1 connections) — `store/api/endpoints/customers.ts`
-- **SupplierSourceFilter** (1 connections) — `store/api/endpoints/suppliers.ts`
-- **SuppliersListParams** (1 connections) — `store/api/endpoints/suppliers.ts`
-- **SuppliersListResponse** (1 connections) — `store/api/endpoints/suppliers.ts`
+- **users.ts** (11 connections) — `store/api/adminEndpoints/users.ts`
+- **adminApi.ts** (7 connections) — `store/api/adminApi.ts`
+- **adminApi** (7 connections) — `store/api/adminApi.ts`
+- **companies.ts** (5 connections) — `store/api/adminEndpoints/companies.ts`
+- **profiles.ts** (4 connections) — `store/api/adminEndpoints/profiles.ts`
+- **roles.ts** (4 connections) — `store/api/adminEndpoints/roles.ts`
+- **Company** (2 connections) — `store/api/adminEndpoints/companies.ts`
+- **User** (2 connections) — `store/api/adminEndpoints/users.ts`
+- **companiesApi** (1 connections) — `store/api/adminEndpoints/companies.ts`
+- **CompanyProfile** (1 connections) — `store/api/adminEndpoints/profiles.ts`
+- **profilesApi** (1 connections) — `store/api/adminEndpoints/profiles.ts`
+- **Role** (1 connections) — `store/api/adminEndpoints/roles.ts`
+- **rolesApi** (1 connections) — `store/api/adminEndpoints/roles.ts`
+- **UsersListParams** (1 connections) — `store/api/adminEndpoints/users.ts`
+- **UsersListResponse** (1 connections) — `store/api/adminEndpoints/users.ts`
+- **UserCompanyAccessItem** (1 connections) — `store/api/adminEndpoints/users.ts`
+- **applyUserDraftPatch()** (1 connections) — `store/api/adminEndpoints/users.ts`
+- **usersApi** (1 connections) — `store/api/adminEndpoints/users.ts`
 
 ## Relationships
 
-- [[Store API]] (6 shared connections)
-- [[Lib Import Export]] (4 shared connections)
-- [[Stock Daily Quantity Log, Job Budget, and Integrity]] (4 shared connections)
-- [[Lib, Components, and Suppliers]] (2 shared connections)
-- [[Lib Import Export and Party List Record Payload]] (2 shared connections)
+- [[Providers, Auth, and Components]] (2 shared connections)
+- [[Store Slices]] (2 shared connections)
+- [[Stock, Components, and Reports]] (2 shared connections)
+- [[Components, Admin, and Stock]] (2 shared connections)
+- [[API Transactions, Materials, and Stock]] (1 shared connections)
+- [[Customers, Stock, and Components]] (1 shared connections)
 
 ## Source Files
 
-- `store/api/endpoints/customers.ts`
-- `store/api/endpoints/suppliers.ts`
+- `store/api/adminApi.ts`
+- `store/api/adminEndpoints/companies.ts`
+- `store/api/adminEndpoints/profiles.ts`
+- `store/api/adminEndpoints/roles.ts`
+- `store/api/adminEndpoints/users.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 46 (100%)
+- EXTRACTED: 52 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

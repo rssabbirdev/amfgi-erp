@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
@@ -9,6 +9,10 @@ import { readCompanyDocumentTemplates } from '@/lib/utils/companyPrintTemplates'
 import { buildDataContext } from '@/lib/utils/templateData';
 import { DEFAULT_DELIVERY_NOTE } from '@/lib/utils/documentDefaults';
 import type { DocumentTemplate } from '@/lib/types/documentTemplate';
+import {
+  DELIVERY_NOTE_PRINT_DONE,
+  DELIVERY_NOTE_PRINT_ERROR,
+} from '@/lib/print/openDeliveryNotePrint';
 
 interface Transaction {
   id: string;
@@ -47,6 +51,15 @@ export default function PrintDeliveryNotePage() {
   const transactionId = searchParams.get('id');
   const deliveryNoteId = searchParams.get('deliveryNoteId');
   const templateId = searchParams.get('templateId');
+  const embed = searchParams.get('embed') === '1';
+
+  const notifyParent = useCallback(
+    (type: string, message?: string) => {
+      if (!embed || window.parent === window) return;
+      window.parent.postMessage({ type, message }, window.location.origin);
+    },
+    [embed]
+  );
 
   const [transaction, setTransaction] = useState<Transaction | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
@@ -56,8 +69,13 @@ export default function PrintDeliveryNotePage() {
   useEffect(() => {
     if (!transactionId && !deliveryNoteId) {
       setLoading(false);
-      toast.error('No delivery note or transaction reference provided');
-      router.back();
+      const msg = 'No delivery note or transaction reference provided';
+      if (embed) {
+        notifyParent(DELIVERY_NOTE_PRINT_ERROR, msg);
+      } else {
+        toast.error(msg);
+        router.back();
+      }
       return;
     }
 
@@ -73,8 +91,12 @@ export default function PrintDeliveryNotePage() {
           const txnRes = await fetch(`/api/transactions/${transactionId}`);
 
           if (!txnRes.ok) {
-            toast.error('Transaction not found');
-            router.back();
+            const msg = 'Transaction not found';
+            if (embed) notifyParent(DELIVERY_NOTE_PRINT_ERROR, msg);
+            else {
+              toast.error(msg);
+              router.back();
+            }
             return;
           }
 
@@ -95,8 +117,12 @@ export default function PrintDeliveryNotePage() {
           const dnRes = await fetch(`/api/delivery-notes/${encodeURIComponent(deliveryNoteId)}`);
           const dnJson = await dnRes.json();
           if (!dnRes.ok || !dnJson.data) {
-            toast.error(dnJson.error || 'Delivery note not found');
-            router.back();
+            const msg = dnJson.error || 'Delivery note not found';
+            if (embed) notifyParent(DELIVERY_NOTE_PRINT_ERROR, msg);
+            else {
+              toast.error(msg);
+              router.back();
+            }
             return;
           }
 
@@ -153,7 +179,9 @@ export default function PrintDeliveryNotePage() {
         }
       } catch (err) {
         console.error('Failed to load data:', err);
-        toast.error('Failed to load delivery note');
+        const msg = 'Failed to load delivery note';
+        if (embed) notifyParent(DELIVERY_NOTE_PRINT_ERROR, msg);
+        else toast.error(msg);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -165,7 +193,7 @@ export default function PrintDeliveryNotePage() {
     return () => {
       cancelled = true;
     };
-  }, [transactionId, deliveryNoteId, router, session?.user?.activeCompanyId]);
+  }, [transactionId, deliveryNoteId, router, session?.user?.activeCompanyId, embed, notifyParent]);
 
   // Auto-print after data loads (double rAF so layout/print height settle first)
   useEffect(() => {
@@ -185,6 +213,15 @@ export default function PrintDeliveryNotePage() {
     }
   }, [loading, transaction, company]);
 
+  useEffect(() => {
+    if (!embed) return;
+    const onAfterPrint = () => {
+      notifyParent(DELIVERY_NOTE_PRINT_DONE);
+    };
+    window.addEventListener('afterprint', onAfterPrint);
+    return () => window.removeEventListener('afterprint', onAfterPrint);
+  }, [embed, notifyParent]);
+
   // Screen preview: estimate number of A4 pages and expose it to CSS.
   useEffect(() => {
     if (loading || !transaction || !company) return;
@@ -197,7 +234,15 @@ export default function PrintDeliveryNotePage() {
     setScreenPageCount(pages);
   }, [loading, transaction, company, templateId]);
 
+  useEffect(() => {
+    if (!embed || loading) return;
+    if (!transaction || !company) {
+      notifyParent(DELIVERY_NOTE_PRINT_ERROR, 'Failed to load data');
+    }
+  }, [embed, loading, transaction, company, notifyParent]);
+
   if (loading) {
+    if (embed) return null;
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <p style={{ color: '#666', fontFamily: 'Arial' }}>Loading document...</p>
@@ -206,6 +251,7 @@ export default function PrintDeliveryNotePage() {
   }
 
   if (!transaction || !company) {
+    if (embed) return null;
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <p style={{ color: '#c00', fontFamily: 'Arial' }}>Failed to load data</p>
@@ -345,7 +391,8 @@ export default function PrintDeliveryNotePage() {
         }
       `}</style>
 
-      {/* Screen-only controls */}
+      {/* Screen-only controls (hidden in embedded direct-print mode) */}
+      {!embed && (
       <div className="screen-only" style={{
         position: 'fixed', top: 0, left: 0, right: 0,
         padding: '12px 20px',
@@ -378,9 +425,10 @@ export default function PrintDeliveryNotePage() {
           {template.name} &mdash; DN #{(data as any).dn?.number ?? ''}
         </span>
       </div>
+      )}
 
       {/* Spacer for the fixed header on screen */}
-      <div className="screen-only" style={{ height: '60px' }} />
+      {!embed && <div className="screen-only" style={{ height: '60px' }} />}
 
       {/* The actual document */}
       <div

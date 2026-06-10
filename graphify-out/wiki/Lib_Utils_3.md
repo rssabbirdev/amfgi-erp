@@ -1,38 +1,51 @@
 # Lib Utils
 
-> 10 nodes · cohesion 0.24
+> 27 nodes · cohesion 0.12
 
 ## Key Concepts
 
-- **documentDefaults.ts** (13 connections) — `lib/utils/documentDefaults.ts`
-- **page.tsx** (11 connections) — `app/print/delivery-note/page.tsx`
-- **buildCanvasRectsFromSections()** (6 connections) — `lib/utils/canvasLayout.ts`
-- **createWorkScheduleTemplateDraft()** (5 connections) — `lib/utils/documentDefaults.ts`
-- **resolveCanvasRectsForSections()** (3 connections) — `lib/utils/canvasLayout.ts`
-- **DEFAULT_DELIVERY_NOTE** (2 connections) — `lib/utils/documentDefaults.ts`
-- **Transaction** (1 connections) — `app/print/delivery-note/page.tsx`
-- **Company** (1 connections) — `app/print/delivery-note/page.tsx`
-- **DEFAULT_DELIVERY_NOTE_SECTIONS** (1 connections) — `lib/utils/documentDefaults.ts`
-- **DEFAULT_TEMPLATES** (1 connections) — `lib/utils/documentDefaults.ts`
+- **receiptLineMetadata.ts** (14 connections) — `lib/utils/receiptLineMetadata.ts`
+- **receiptHeaderMetadata.ts** (12 connections) — `lib/utils/receiptHeaderMetadata.ts`
+- **receiptHeaderMetadata.test.ts** (10 connections) — `__tests__/unit/receiptHeaderMetadata.test.ts`
+- **receiptLineMetadata.test.ts** (10 connections) — `__tests__/unit/receiptLineMetadata.test.ts`
+- **parseReceiptHeaderMetadata()** (7 connections) — `lib/utils/receiptHeaderMetadata.ts`
+- **parseReceiptLineMetadata()** (7 connections) — `lib/utils/receiptLineMetadata.ts`
+- **buildStockBatchReceiptHeaderMeta()** (5 connections) — `lib/utils/receiptHeaderMetadata.ts`
+- **buildStockBatchReceiptLineMeta()** (4 connections) — `lib/utils/receiptLineMetadata.ts`
+- **parseReceiptLineMetadataFromNotes()** (4 connections) — `lib/utils/receiptLineMetadata.ts`
+- **normalizeOptionalString()** (3 connections) — `lib/utils/receiptHeaderMetadata.ts`
+- **normalizeOptionalNumber()** (3 connections) — `lib/utils/receiptHeaderMetadata.ts`
+- **mergeStockBatchReceiptMeta()** (3 connections) — `lib/utils/receiptHeaderMetadata.ts`
+- **parseMarkerNumber()** (3 connections) — `lib/utils/receiptLineMetadata.ts`
+- **appendReceiptLineMetadata()** (3 connections) — `lib/utils/receiptLineMetadata.ts`
+- **readReceiptLineFromMeta()** (2 connections) — `lib/utils/receiptLineMetadata.ts`
+- **ReceiptHeaderMetadata** (1 connections) — `lib/utils/receiptHeaderMetadata.ts`
+- **EMPTY_HEADER** (1 connections) — `lib/utils/receiptHeaderMetadata.ts`
+- **ReceiptLineDisplayMetadata** (1 connections) — `lib/utils/receiptLineMetadata.ts`
+- **StockBatchReceiptLineMetaInput** (1 connections) — `lib/utils/receiptLineMetadata.ts`
+- **EMPTY_METADATA** (1 connections) — `lib/utils/receiptLineMetadata.ts`
+- **headerMeta** (1 connections) — `__tests__/unit/receiptHeaderMetadata.test.ts`
+- **parsed** (1 connections) — `__tests__/unit/receiptHeaderMetadata.test.ts`
+- **merged** (1 connections) — `__tests__/unit/receiptHeaderMetadata.test.ts`
+- **meta** (1 connections) — `__tests__/unit/receiptLineMetadata.test.ts`
+- **parsed** (1 connections) — `__tests__/unit/receiptLineMetadata.test.ts`
+- *... and 2 more nodes in this community*
 
 ## Relationships
 
-- [[Components Print Builder]] (7 shared connections)
-- [[Lib Utils and Types]] (4 shared connections)
-- [[Lib Utils]] (3 shared connections)
-- [[Lib Types and Utils]] (3 shared connections)
-- [[Scripts, Lib, and API]] (3 shared connections)
-- [[Stock, Customers, and Settings]] (2 shared connections)
+- [[API Reports, Materials, and Jobs]] (12 shared connections)
+- [[Lib Dispatch Entry Revision, Db, and Delivery Note Number]] (6 shared connections)
 
 ## Source Files
 
-- `app/print/delivery-note/page.tsx`
-- `lib/utils/canvasLayout.ts`
-- `lib/utils/documentDefaults.ts`
+- `__tests__/unit/receiptHeaderMetadata.test.ts`
+- `__tests__/unit/receiptLineMetadata.test.ts`
+- `lib/utils/receiptHeaderMetadata.ts`
+- `lib/utils/receiptLineMetadata.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 44 (100%)
+- EXTRACTED: 102 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

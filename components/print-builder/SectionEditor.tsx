@@ -613,6 +613,36 @@ export function SectionEditor({
   const it = String(itemType);
   const [draggingTableColumnIndex, setDraggingTableColumnIndex] = useState<number | null>(null);
   const [collapsedTableColumns, setCollapsedTableColumns] = useState<Record<number, boolean>>({});
+  const [draggingInfoGridItemIndex, setDraggingInfoGridItemIndex] = useState<number | null>(null);
+  const [collapsedInfoGridItems, setCollapsedInfoGridItems] = useState<Record<number, boolean>>({});
+  const [draggingFieldRowCellIndex, setDraggingFieldRowCellIndex] = useState<number | null>(null);
+  const [collapsedFieldRowCells, setCollapsedFieldRowCells] = useState<Record<number, boolean>>({});
+
+  const isInfoGridItemCollapsed = (index: number) => collapsedInfoGridItems[index] !== false;
+
+  const isFieldRowCellCollapsed = (index: number) => collapsedFieldRowCells[index] !== false;
+
+  const setFieldRowCellCollapsed = (index: number, collapsed: boolean) => {
+    setCollapsedFieldRowCells((current) => {
+      if (collapsed) {
+        const next = { ...current };
+        delete next[index];
+        return next;
+      }
+      return { ...current, [index]: false };
+    });
+  };
+
+  const setInfoGridItemCollapsed = (index: number, collapsed: boolean) => {
+    setCollapsedInfoGridItems((current) => {
+      if (collapsed) {
+        const next = { ...current };
+        delete next[index];
+        return next;
+      }
+      return { ...current, [index]: false };
+    });
+  };
 
   const setTableColumnCollapsed = (index: number, collapsed: boolean) => {
     setCollapsedTableColumns((current) => {
@@ -818,84 +848,312 @@ export function SectionEditor({
             </div>
           )}
           <EditorCheckBox label="Bordered" checked={section.bordered} onChange={(v) => onChange({ ...section, bordered: v })} />
+          {section.bordered && (
+            <div className="grid grid-cols-1 gap-2 rounded border border-slate-700 bg-slate-800/40 p-2 xl:grid-cols-3">
+              <EditorInput
+                label="Border color"
+                type="color"
+                value={section.borderColor ?? '#000000'}
+                onChange={(v) => onChange({ ...section, borderColor: String(v) })}
+              />
+              <EditorInput
+                label="Border thickness (px)"
+                type="number"
+                value={section.borderWidthPx ?? 1}
+                onChange={(v) => onChange({ ...section, borderWidthPx: Math.max(0, Number(v)) })}
+                min={0}
+                max={8}
+              />
+              <EditorInput
+                label="Border radius (px)"
+                type="number"
+                value={section.borderRadiusPx ?? 0}
+                onChange={(v) => onChange({ ...section, borderRadiusPx: Math.max(0, Number(v)) })}
+                min={0}
+                max={24}
+              />
+            </div>
+          )}
           <EditorInput label="Min Height (mm)" type="number" value={section.minHeight ?? 0} onChange={(v) => onChange({ ...section, minHeight: v || undefined })} min={0} />
+          <div className="space-y-2 rounded border border-slate-700 bg-slate-800/40 p-2">
+            <p className="text-xs font-bold uppercase text-slate-300">Default typography</p>
+            <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+              <EditorInput
+                label="Label font size (pt)"
+                type="number"
+                value={section.labelFontSizePt ?? 10}
+                onChange={(v) => onChange({ ...section, labelFontSizePt: Number(v) })}
+                min={6}
+                max={24}
+              />
+              <EditorInput
+                label="Label color"
+                type="color"
+                value={section.labelColor ?? '#000000'}
+                onChange={(v) => onChange({ ...section, labelColor: String(v) })}
+              />
+              <EditorInput
+                label="Field font size (pt)"
+                type="number"
+                value={section.valueFontSizePt ?? 10}
+                onChange={(v) => onChange({ ...section, valueFontSizePt: Number(v) })}
+                min={6}
+                max={24}
+              />
+              <EditorInput
+                label="Field color"
+                type="color"
+                value={section.valueColor ?? '#000000'}
+                onChange={(v) => onChange({ ...section, valueColor: String(v) })}
+              />
+            </div>
+          </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs text-slate-400 font-bold">Cells ({section.cells.length})</label>
-              <button
-                type="button"
-                className="text-xs text-emerald-400 hover:text-emerald-300"
-                onClick={() => onChange({ ...section, cells: [...section.cells, { label: 'Label:', field: '', width: undefined, bold: false, fontSize: 10 }] })}
-              >
-                + Add Cell
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="text-xs font-bold text-slate-400">Cells ({section.cells.length})</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-700"
+                  onClick={() => setCollapsedFieldRowCells({})}
+                >
+                  Collapse all
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-700"
+                  onClick={() =>
+                    setCollapsedFieldRowCells(
+                      Object.fromEntries(section.cells.map((_, index) => [index, false]))
+                    )
+                  }
+                >
+                  Expand all
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-emerald-400 hover:text-emerald-300"
+                  onClick={() =>
+                    onChange({
+                      ...section,
+                      cells: [...section.cells, { label: 'Label:', field: '', width: undefined, bold: false }],
+                    })
+                  }
+                >
+                  + Add Cell
+                </button>
+              </div>
             </div>
             {section.cells.map((cell, ci) => (
-              <div key={ci} className="p-2 bg-slate-800/50 rounded border border-slate-700 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Cell {ci + 1}</span>
-                  {section.cells.length > 1 && (
+              <div
+                key={ci}
+                draggable
+                onDragStart={() => setDraggingFieldRowCellIndex(ci)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (draggingFieldRowCellIndex == null || draggingFieldRowCellIndex === ci) return;
+                  onChange({
+                    ...section,
+                    cells: moveArrayItem(section.cells, draggingFieldRowCellIndex, ci),
+                  });
+                  setDraggingFieldRowCellIndex(null);
+                }}
+                onDragEnd={() => setDraggingFieldRowCellIndex(null)}
+                className={`space-y-2 rounded border p-2 ${
+                  draggingFieldRowCellIndex === ci
+                    ? 'border-emerald-500 bg-emerald-950/20'
+                    : 'border-slate-700 bg-slate-800/50'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => setFieldRowCellCollapsed(ci, !isFieldRowCellCollapsed(ci))}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-600 text-[10px] text-slate-300">
+                        {isFieldRowCellCollapsed(ci) ? '+' : '−'}
+                      </span>
+                      <span className="truncate text-xs font-semibold text-slate-200">
+                        Cell {ci + 1}: {cell.label || 'Untitled'}
+                      </span>
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className="cursor-grab rounded border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-400"
+                      title="Drag to reorder"
+                    >
+                      Drag
+                    </span>
                     <button
                       type="button"
-                      className="text-xs text-red-400 hover:text-red-300"
-                      onClick={() => onChange({ ...section, cells: section.cells.filter((_, i) => i !== ci) })}
+                      className="rounded border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-700 disabled:opacity-30"
+                      disabled={ci === 0}
+                      onClick={() =>
+                        onChange({ ...section, cells: moveArrayItem(section.cells, ci, ci - 1) })
+                      }
                     >
-                      Remove
+                      Up
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      className="rounded border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-700 disabled:opacity-30"
+                      disabled={ci === section.cells.length - 1}
+                      onClick={() =>
+                        onChange({ ...section, cells: moveArrayItem(section.cells, ci, ci + 1) })
+                      }
+                    >
+                      Down
+                    </button>
+                    {section.cells.length > 1 && (
+                      <button
+                        type="button"
+                        className="text-xs text-red-400 hover:text-red-300"
+                        onClick={() => onChange({ ...section, cells: section.cells.filter((_, i) => i !== ci) })}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <TemplateInput label="Label" value={cell.label ?? ''} onChange={(v) => {
-                  const cells = [...section.cells];
-                  cells[ci] = { ...cells[ci], label: v };
-                  onChange({ ...section, cells });
-                }} itemType={it} />
-                <SearchableFieldSelect
-                  itemType={it}
-                  label="Data field"
-                  value={cell.field ?? ''}
-                  onChange={(v) => {
-                    const cells = [...section.cells];
-                    cells[ci] = { ...cells[ci], field: v };
-                    onChange({ ...section, cells });
-                  }}
-                />
-                <TemplateInput
-                  label="Inline Multi-Value Template"
-                  value={cell.valueTemplate ?? ''}
-                  onChange={(v) => {
-                    const cells = [...section.cells];
-                    cells[ci] = { ...cells[ci], valueTemplate: v };
-                    onChange({ ...section, cells });
-                  }}
-                  itemType={it}
-                  placeholder="{{job.contactPerson}} / {{job.contactPhone}} / {{job.contactEmail}}"
-                />
-                <p className="text-[10px] text-slate-500">
-                  Supports multiple dynamic fields in one line using {'{{field.path}}'}.
-                  This overrides Data field and Static Text when filled.
-                </p>
-                <TemplateInput label="Static Text (if no field)" value={cell.text ?? ''} onChange={(v) => {
-                  const cells = [...section.cells];
-                  cells[ci] = { ...cells[ci], text: v };
-                  onChange({ ...section, cells });
-                }} itemType={it} />
-                <div className="flex gap-2">
-                  <EditorInput label="Width (%)" type="number" value={cell.width ?? ''} onChange={(v) => {
-                    const cells = [...section.cells];
-                    cells[ci] = { ...cells[ci], width: v || undefined };
-                    onChange({ ...section, cells });
-                  }} min={0} max={100} />
-                  <EditorInput label="Font (pt)" type="number" value={cell.fontSize ?? 10} onChange={(v) => {
-                    const cells = [...section.cells];
-                    cells[ci] = { ...cells[ci], fontSize: v };
-                    onChange({ ...section, cells });
-                  }} min={6} max={24} />
-                </div>
-                <EditorCheckBox label="Bold" checked={cell.bold ?? false} onChange={(v) => {
-                  const cells = [...section.cells];
-                  cells[ci] = { ...cells[ci], bold: v };
-                  onChange({ ...section, cells });
-                }} />
+                {!isFieldRowCellCollapsed(ci) && (
+                  <>
+                    <TemplateInput
+                      label="Label"
+                      value={cell.label ?? ''}
+                      onChange={(v) => {
+                        const cells = [...section.cells];
+                        cells[ci] = { ...cells[ci], label: v };
+                        onChange({ ...section, cells });
+                      }}
+                      itemType={it}
+                    />
+                    <SearchableFieldSelect
+                      itemType={it}
+                      label="Data field"
+                      value={cell.field ?? ''}
+                      onChange={(v) => {
+                        const cells = [...section.cells];
+                        cells[ci] = { ...cells[ci], field: v };
+                        onChange({ ...section, cells });
+                      }}
+                    />
+                    <TemplateInput
+                      label="Inline Multi-Value Template"
+                      value={cell.valueTemplate ?? ''}
+                      onChange={(v) => {
+                        const cells = [...section.cells];
+                        cells[ci] = { ...cells[ci], valueTemplate: v };
+                        onChange({ ...section, cells });
+                      }}
+                      itemType={it}
+                      placeholder="{{job.contactPerson}} / {{job.contactPhone}} / {{job.contactEmail}}"
+                    />
+                    <p className="text-[10px] text-slate-500">
+                      Supports multiple dynamic fields in one line using {'{{field.path}}'}.
+                      This overrides Data field and Static Text when filled.
+                    </p>
+                    <TemplateInput
+                      label="Static Text (if no field)"
+                      value={cell.text ?? ''}
+                      onChange={(v) => {
+                        const cells = [...section.cells];
+                        cells[ci] = { ...cells[ci], text: v };
+                        onChange({ ...section, cells });
+                      }}
+                      itemType={it}
+                    />
+                    <div className="flex gap-2">
+                      <EditorInput
+                        label="Width (%)"
+                        type="number"
+                        value={cell.width ?? ''}
+                        onChange={(v) => {
+                          const cells = [...section.cells];
+                          cells[ci] = { ...cells[ci], width: v || undefined };
+                          onChange({ ...section, cells });
+                        }}
+                        min={0}
+                        max={100}
+                      />
+                      <div className="flex-1">
+                        <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Align</label>
+                        <EditorAlignSelect
+                          value={cell.align ?? 'left'}
+                          onAlignChange={(v) => {
+                            const cells = [...section.cells];
+                            cells[ci] = { ...cells[ci], align: v as 'left' | 'center' | 'right' };
+                            onChange({ ...section, cells });
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <EditorCheckBox
+                      label="Bold field value"
+                      checked={cell.bold ?? false}
+                      onChange={(v) => {
+                        const cells = [...section.cells];
+                        cells[ci] = { ...cells[ci], bold: v };
+                        onChange({ ...section, cells });
+                      }}
+                    />
+                    <div className="grid grid-cols-1 gap-2 rounded border border-slate-700 bg-slate-900/30 p-2 xl:grid-cols-2">
+                      <p className="col-span-full text-[10px] font-semibold uppercase text-slate-500">
+                        Cell overrides (optional)
+                      </p>
+                      <EditorInput
+                        label="Label size (pt)"
+                        type="number"
+                        value={cell.labelFontSizePt ?? ''}
+                        onChange={(v) => {
+                          const cells = [...section.cells];
+                          cells[ci] = { ...cells[ci], labelFontSizePt: v ? Number(v) : undefined };
+                          onChange({ ...section, cells });
+                        }}
+                        min={6}
+                        max={24}
+                      />
+                      <EditorInput
+                        label="Label color"
+                        type="color"
+                        value={cell.labelColor ?? section.labelColor ?? '#000000'}
+                        onChange={(v) => {
+                          const cells = [...section.cells];
+                          cells[ci] = { ...cells[ci], labelColor: String(v) };
+                          onChange({ ...section, cells });
+                        }}
+                      />
+                      <EditorInput
+                        label="Field size (pt)"
+                        type="number"
+                        value={cell.valueFontSizePt ?? cell.fontSize ?? ''}
+                        onChange={(v) => {
+                          const cells = [...section.cells];
+                          cells[ci] = {
+                            ...cells[ci],
+                            valueFontSizePt: v ? Number(v) : undefined,
+                            fontSize: undefined,
+                          };
+                          onChange({ ...section, cells });
+                        }}
+                        min={6}
+                        max={24}
+                      />
+                      <EditorInput
+                        label="Field color"
+                        type="color"
+                        value={cell.valueColor ?? cell.color ?? section.valueColor ?? '#000000'}
+                        onChange={(v) => {
+                          const cells = [...section.cells];
+                          cells[ci] = { ...cells[ci], valueColor: String(v), color: undefined };
+                          onChange({ ...section, cells });
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -940,11 +1198,50 @@ export function SectionEditor({
           )}
           <EditorInput label="Font Size (pt)" type="number" value={section.fontSize} onChange={(v) => onChange({ ...section, fontSize: v })} min={6} max={18} />
           <EditorInput label="Min Rows" type="number" value={section.minRows} onChange={(v) => onChange({ ...section, minRows: v })} min={0} max={50} />
+          <EditorInput
+            label="Max rows per page (0 = unlimited)"
+            type="number"
+            value={section.maxRowsPerPage ?? 0}
+            onChange={(v) =>
+              onChange({
+                ...section,
+                maxRowsPerPage: v > 0 ? v : undefined,
+              })
+            }
+            min={0}
+            max={100}
+          />
           <div className="grid grid-cols-2 gap-2">
             <EditorInput label="Row Padding (mm)" type="number" value={section.rowPadding} onChange={(v) => onChange({ ...section, rowPadding: v })} min={0} max={10} />
             <EditorInput label="Row Min Height (mm)" type="number" value={section.rowMinHeightMm ?? 0} onChange={(v) => onChange({ ...section, rowMinHeightMm: Number(v) })} min={0} max={40} />
           </div>
           <EditorCheckBox label="Show Borders" checked={section.showBorders} onChange={(v) => onChange({ ...section, showBorders: v })} />
+          {section.showBorders && (
+            <div className="grid grid-cols-1 gap-2 rounded border border-slate-700 bg-slate-800/40 p-2 xl:grid-cols-3">
+              <EditorInput
+                label="Border color"
+                type="color"
+                value={section.borderColor ?? '#000000'}
+                onChange={(v) => onChange({ ...section, borderColor: String(v) })}
+              />
+              <EditorInput
+                label="Border thickness (px)"
+                type="number"
+                value={section.borderWidthPx ?? 1}
+                onChange={(v) => onChange({ ...section, borderWidthPx: Math.max(0, Number(v)) })}
+                min={0}
+                max={8}
+              />
+              <EditorInput
+                label="Border radius (px)"
+                type="number"
+                value={section.borderRadiusPx ?? 0}
+                onChange={(v) => onChange({ ...section, borderRadiusPx: Math.max(0, Number(v)) })}
+                min={0}
+                max={24}
+              />
+            </div>
+          )}
           <EditorCheckBox label="Repeat Header on New Page" checked={section.repeatHeaderOnNewPage} onChange={(v) => onChange({ ...section, repeatHeaderOnNewPage: v })} />
           <div className="space-y-2 rounded border border-slate-700 bg-slate-800/40 p-2">
             <p className="text-xs font-bold text-slate-300 uppercase">Global Header Style</p>
@@ -1135,7 +1432,7 @@ export function SectionEditor({
                         onChange({ ...section, columns });
                       }}
                       extraOptions={getTableColumnFieldsForDataSource(section.dataSource)}
-                      allowEmpty={false}
+                      allowEmpty
                       placeholder="Search row keys (name, qty, slno...)..."
                     />
                     <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
@@ -1373,38 +1670,257 @@ export function SectionEditor({
             </div>
           </div>
           <EditorCheckBox label="Bordered" checked={section.bordered} onChange={(v) => onChange({ ...section, bordered: v })} />
+          {section.bordered && (
+            <div className="grid grid-cols-1 gap-2 rounded border border-slate-700 bg-slate-800/40 p-2 xl:grid-cols-3">
+              <EditorInput
+                label="Border color"
+                type="color"
+                value={section.borderColor ?? '#000000'}
+                onChange={(v) => onChange({ ...section, borderColor: String(v) })}
+              />
+              <EditorInput
+                label="Border thickness (px)"
+                type="number"
+                value={section.borderWidthPx ?? 1}
+                onChange={(v) => onChange({ ...section, borderWidthPx: Math.max(0, Number(v)) })}
+                min={0}
+                max={8}
+              />
+              <EditorInput
+                label="Border radius (px)"
+                type="number"
+                value={section.borderRadiusPx ?? 0}
+                onChange={(v) => onChange({ ...section, borderRadiusPx: Math.max(0, Number(v)) })}
+                min={0}
+                max={24}
+              />
+            </div>
+          )}
+          <div className="space-y-2 rounded border border-slate-700 bg-slate-800/40 p-2">
+            <p className="text-xs font-bold uppercase text-slate-300">Default typography</p>
+            <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+              <EditorInput
+                label="Label font size (pt)"
+                type="number"
+                value={section.labelFontSizePt ?? 10}
+                onChange={(v) => onChange({ ...section, labelFontSizePt: Number(v) })}
+                min={6}
+                max={24}
+              />
+              <EditorInput
+                label="Label color"
+                type="color"
+                value={section.labelColor ?? '#000000'}
+                onChange={(v) => onChange({ ...section, labelColor: String(v) })}
+              />
+              <EditorInput
+                label="Field font size (pt)"
+                type="number"
+                value={section.valueFontSizePt ?? 10}
+                onChange={(v) => onChange({ ...section, valueFontSizePt: Number(v) })}
+                min={6}
+                max={24}
+              />
+              <EditorInput
+                label="Field color"
+                type="color"
+                value={section.valueColor ?? '#000000'}
+                onChange={(v) => onChange({ ...section, valueColor: String(v) })}
+              />
+            </div>
+          </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs text-slate-400 font-bold">Items ({section.items.length})</label>
-              <button
-                type="button"
-                className="text-xs text-emerald-400 hover:text-emerald-300"
-                onClick={() => onChange({ ...section, items: [...section.items, { label: 'Label', field: '' }] })}
-              >
-                + Add
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="text-xs font-bold text-slate-400">Items ({section.items.length})</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-700"
+                  onClick={() => setCollapsedInfoGridItems({})}
+                >
+                  Collapse all
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-700"
+                  onClick={() =>
+                    setCollapsedInfoGridItems(
+                      Object.fromEntries(section.items.map((_, index) => [index, false]))
+                    )
+                  }
+                >
+                  Expand all
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-emerald-400 hover:text-emerald-300"
+                  onClick={() =>
+                    onChange({
+                      ...section,
+                      items: [...section.items, { label: 'Label', field: '' }],
+                    })
+                  }
+                >
+                  + Add
+                </button>
+              </div>
             </div>
             {section.items.map((item, ii) => (
-              <div key={ii} className="p-2 bg-slate-800/50 rounded border border-slate-700 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">#{ii + 1}</span>
-                  <button type="button" className="text-xs text-red-400" onClick={() => onChange({ ...section, items: section.items.filter((_, i) => i !== ii) })}>Remove</button>
+              <div
+                key={ii}
+                draggable
+                onDragStart={() => setDraggingInfoGridItemIndex(ii)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (draggingInfoGridItemIndex == null || draggingInfoGridItemIndex === ii) return;
+                  onChange({
+                    ...section,
+                    items: moveArrayItem(section.items, draggingInfoGridItemIndex, ii),
+                  });
+                  setDraggingInfoGridItemIndex(null);
+                }}
+                onDragEnd={() => setDraggingInfoGridItemIndex(null)}
+                className={`space-y-2 rounded border p-2 ${
+                  draggingInfoGridItemIndex === ii
+                    ? 'border-emerald-500 bg-emerald-950/20'
+                    : 'border-slate-700 bg-slate-800/50'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => setInfoGridItemCollapsed(ii, !isInfoGridItemCollapsed(ii))}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-600 text-[10px] text-slate-300">
+                        {isInfoGridItemCollapsed(ii) ? '+' : '−'}
+                      </span>
+                      <span className="truncate text-xs font-semibold text-slate-200">
+                        Item {ii + 1}: {item.label || 'Untitled'}
+                      </span>
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className="cursor-grab rounded border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-400"
+                      title="Drag to reorder"
+                    >
+                      Drag
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-700 disabled:opacity-30"
+                      disabled={ii === 0}
+                      onClick={() =>
+                        onChange({ ...section, items: moveArrayItem(section.items, ii, ii - 1) })
+                      }
+                    >
+                      Up
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-700 disabled:opacity-30"
+                      disabled={ii === section.items.length - 1}
+                      onClick={() =>
+                        onChange({ ...section, items: moveArrayItem(section.items, ii, ii + 1) })
+                      }
+                    >
+                      Down
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-red-400 hover:text-red-300"
+                      onClick={() =>
+                        onChange({ ...section, items: section.items.filter((_, i) => i !== ii) })
+                      }
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                <TemplateInput label="Label" value={item.label} onChange={(v) => {
-                  const items = [...section.items];
-                  items[ii] = { ...items[ii], label: v };
-                  onChange({ ...section, items });
-                }} itemType={it} />
-                <SearchableFieldSelect
-                  itemType={it}
-                  label="Field"
-                  value={item.field}
-                  onChange={(v) => {
-                    const items = [...section.items];
-                    items[ii] = { ...items[ii], field: v };
-                    onChange({ ...section, items });
-                  }}
-                />
+                {!isInfoGridItemCollapsed(ii) && (
+                  <>
+                    <TemplateInput
+                      label="Label"
+                      value={item.label}
+                      onChange={(v) => {
+                        const items = [...section.items];
+                        items[ii] = { ...items[ii], label: v };
+                        onChange({ ...section, items });
+                      }}
+                      itemType={it}
+                    />
+                    <SearchableFieldSelect
+                      itemType={it}
+                      label="Field"
+                      value={item.field}
+                      onChange={(v) => {
+                        const items = [...section.items];
+                        items[ii] = { ...items[ii], field: v };
+                        onChange({ ...section, items });
+                      }}
+                    />
+                    <EditorCheckBox
+                      label="Bold field value"
+                      checked={Boolean(item.bold)}
+                      onChange={(v) => {
+                        const items = [...section.items];
+                        items[ii] = { ...items[ii], bold: v || undefined };
+                        onChange({ ...section, items });
+                      }}
+                    />
+                    <div className="grid grid-cols-1 gap-2 rounded border border-slate-700 bg-slate-900/30 p-2 xl:grid-cols-2">
+                      <p className="col-span-full text-[10px] font-semibold uppercase text-slate-500">
+                        Item overrides (optional)
+                      </p>
+                      <EditorInput
+                        label="Label size (pt)"
+                        type="number"
+                        value={item.labelFontSizePt ?? ''}
+                        onChange={(v) => {
+                          const items = [...section.items];
+                          items[ii] = { ...items[ii], labelFontSizePt: v ? Number(v) : undefined };
+                          onChange({ ...section, items });
+                        }}
+                        min={6}
+                        max={24}
+                      />
+                      <EditorInput
+                        label="Label color"
+                        type="color"
+                        value={item.labelColor ?? section.labelColor ?? '#000000'}
+                        onChange={(v) => {
+                          const items = [...section.items];
+                          items[ii] = { ...items[ii], labelColor: String(v) };
+                          onChange({ ...section, items });
+                        }}
+                      />
+                      <EditorInput
+                        label="Field size (pt)"
+                        type="number"
+                        value={item.valueFontSizePt ?? ''}
+                        onChange={(v) => {
+                          const items = [...section.items];
+                          items[ii] = { ...items[ii], valueFontSizePt: v ? Number(v) : undefined };
+                          onChange({ ...section, items });
+                        }}
+                        min={6}
+                        max={24}
+                      />
+                      <EditorInput
+                        label="Field color"
+                        type="color"
+                        value={item.valueColor ?? section.valueColor ?? '#000000'}
+                        onChange={(v) => {
+                          const items = [...section.items];
+                          items[ii] = { ...items[ii], valueColor: String(v) };
+                          onChange({ ...section, items });
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

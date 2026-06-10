@@ -33,13 +33,12 @@
 
 ## Relationships
 
-- [[Lib HR]] (31 shared connections)
-- [[Lib and Components]] (10 shared connections)
-- [[HR, Lib, and Components]] (7 shared connections)
-- [[HR, Components, and Admin]] (6 shared connections)
-- [[Reports, Components, and HR]] (6 shared connections)
-- [[API, Lib, and Scripts]] (2 shared connections)
-- [[Components Transactions, HR, and Ui]] (1 shared connections)
+- [[Lib HR]] (39 shared connections)
+- [[HR Settings and Payroll]] (13 shared connections)
+- [[Components HR, Transactions, and Ui]] (4 shared connections)
+- [[Reports, Components, and Settings]] (4 shared connections)
+- [[Scripts Seed]] (2 shared connections)
+- [[Stock, Components, and Reports]] (1 shared connections)
 
 ## Source Files
 

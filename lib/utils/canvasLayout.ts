@@ -59,20 +59,28 @@ export function estimateSectionHeightMm(section: DocumentSection, contentWidthMm
     case 'field-row': {
       const pack = section.style;
       const lineH = pack?.lineHeight ?? 1.4;
-      let maxCellPt = 10;
+      const sectionLabelPt = section.labelFontSizePt ?? 10;
+      const sectionValuePt = section.valueFontSizePt ?? 10;
+      let maxCellPt = Math.max(sectionLabelPt, sectionValuePt);
       for (const c of section.cells) {
+        if (c.labelFontSizePt != null) maxCellPt = Math.max(maxCellPt, c.labelFontSizePt);
+        if (c.valueFontSizePt != null) maxCellPt = Math.max(maxCellPt, c.valueFontSizePt);
         if (c.fontSize != null) maxCellPt = Math.max(maxCellPt, c.fontSize);
       }
       if (pack?.fontSizePt != null) maxCellPt = Math.max(maxCellPt, pack.fontSizePt);
-      let h = ptToMm(maxCellPt) * lineH + (section.bordered ? 4 : 0);
+      const borderPad = section.bordered ? (section.borderWidthPx ?? 1) * PX_TO_MM * 2 + 4 : 0;
+      let h = ptToMm(maxCellPt) * lineH + borderPad;
       if (section.minHeight != null) h = Math.max(h, section.minHeight);
       return Math.max(10, Math.ceil(h));
     }
     case 'info-grid': {
       const cols = Math.max(1, section.columns);
       const rows = Math.max(1, Math.ceil(section.items.length / cols));
-      const rowH = ptToMm(10) * 1.5 + 1.2;
-      const h = rows * rowH + (section.bordered ? 4 : 0);
+      const labelPt = section.labelFontSizePt ?? 10;
+      const valuePt = section.valueFontSizePt ?? 10;
+      const rowH = ptToMm(Math.max(labelPt, valuePt)) * 1.5 + 1.2;
+      const borderPad = section.bordered ? (section.borderWidthPx ?? 1) * PX_TO_MM * 2 + 4 : 0;
+      const h = rows * rowH + borderPad;
       return Math.max(12, Math.ceil(h));
     }
     case 'table': {
@@ -80,8 +88,12 @@ export function estimateSectionHeightMm(section: DocumentSection, contentWidthMm
       const fs = section.fontSize ?? 10;
       const headerRow = 2 * rp + ptToMm(fs) * 1.35 + 2;
       const bodyRow = 2 * rp + ptToMm(fs) * 1.45 + 1;
-      const borderPad = section.showBorders ? 1 : 0;
-      return Math.max(20, Math.ceil(headerRow + section.minRows * bodyRow + borderPad + 2));
+      const borderPad = section.showBorders ? (section.borderWidthPx ?? 1) * PX_TO_MM * 2 + 1 : 0;
+      const visibleRows =
+        section.maxRowsPerPage && section.maxRowsPerPage > 0
+          ? Math.min(section.minRows, section.maxRowsPerPage)
+          : section.minRows;
+      return Math.max(20, Math.ceil(headerRow + visibleRows * bodyRow + borderPad + 2));
     }
     case 'text': {
       const fs = section.fontSize ?? 10;

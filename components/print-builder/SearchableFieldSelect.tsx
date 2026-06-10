@@ -43,7 +43,10 @@ export function SearchableFieldSelect({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -62,11 +65,16 @@ export function SearchableFieldSelect({
     return hit ? `${hit.label} | ${hit.path}` : value;
   }, [value, allFields]);
 
+  const closeList = () => {
+    setOpen(false);
+    setQ('');
+  };
+
   useEffect(() => {
     const el = wrapRef.current;
     if (!open || !el) return;
     const close = (e: MouseEvent) => {
-      if (!el.contains(e.target as Node)) setOpen(false);
+      if (!el.contains(e.target as Node)) closeList();
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
@@ -79,11 +87,18 @@ export function SearchableFieldSelect({
     ? 'mb-1 block text-[10px] text-slate-600 dark:text-slate-400'
     : 'mb-1 block text-xs text-slate-600 dark:text-slate-400';
 
+  const pickField = (path: string) => {
+    onChange(path);
+    closeList();
+    inputRef.current?.blur();
+  };
+
   return (
     <div ref={wrapRef} className="relative">
       {label && <label className={labelCls}>{label}</label>}
       <div className="flex gap-1">
         <input
+          ref={inputRef}
           type="text"
           role="combobox"
           aria-controls={listboxId}
@@ -95,21 +110,46 @@ export function SearchableFieldSelect({
           }}
           onFocus={() => {
             setOpen(true);
-            setQ('');
+            setQ(valueRef.current);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              closeList();
+              inputRef.current?.blur();
+            }
           }}
           placeholder={placeholder}
           className={`${inputCls} min-w-0 flex-1 font-mono`}
         />
+        {allowEmpty && value ? (
+          <button
+            type="button"
+            aria-label="Clear field"
+            title="Clear"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => pickField('')}
+            className="shrink-0 rounded border border-slate-300 bg-white px-2 text-xs text-slate-500 hover:text-red-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-red-400"
+          >
+            ×
+          </button>
+        ) : null}
         <button
           type="button"
           aria-label="Toggle field list"
-          onClick={() => setOpen((o) => !o)}
-          onMouseDown={() => {
-            if (open) setQ('');
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            if (open) {
+              closeList();
+            } else {
+              setOpen(true);
+              setQ(valueRef.current);
+              inputRef.current?.focus();
+            }
           }}
           className="shrink-0 rounded border border-slate-300 bg-white px-2 text-xs text-slate-500 hover:text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-white"
         >
-          v
+          ▾
         </button>
       </div>
       {open && (
@@ -124,13 +164,9 @@ export function SearchableFieldSelect({
                 type="button"
                 className="w-full px-2 py-1.5 text-left text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onChange('');
-                  setQ('');
-                  setOpen(false);
-                }}
+                onClick={() => pickField('')}
               >
-                - None -
+                — Clear —
               </button>
             </li>
           )}
@@ -140,11 +176,7 @@ export function SearchableFieldSelect({
                 type="button"
                 className="w-full border-b border-slate-200 px-2 py-1.5 text-left text-xs hover:bg-slate-100 last:border-0 dark:border-slate-800/80 dark:hover:bg-slate-800"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onChange(f.path);
-                  setQ('');
-                  setOpen(false);
-                }}
+                onClick={() => pickField(f.path)}
               >
                 <span className="block truncate font-medium text-slate-800 dark:text-slate-200">{f.label}</span>
                 <code className="break-all text-[10px] text-cyan-600 dark:text-cyan-400/90">{f.path}</code>
@@ -158,11 +190,7 @@ export function SearchableFieldSelect({
                 type="button"
                 className="w-full px-2 py-1.5 text-left text-xs text-amber-700 hover:bg-slate-100 dark:text-amber-400/90 dark:hover:bg-slate-800"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onChange(q.trim());
-                  setQ('');
-                  setOpen(false);
-                }}
+                onClick={() => pickField(q.trim())}
               >
                 Use custom path: <code className="text-cyan-600 dark:text-cyan-400">{q.trim()}</code>
               </button>

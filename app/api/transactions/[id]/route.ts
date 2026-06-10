@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { serializeJobWithContacts } from '@/lib/jobs/jobContacts';
+import { jobForPrintSelect } from '@/lib/jobs/jobPrintSelect';
 import { buildTransactionActorFields } from '@/lib/utils/auditActor';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { decimalToNumberOrZero } from '@/lib/utils/decimal';
@@ -37,49 +38,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
             name: true,
           },
         },
-        job: {
-          select: {
-            id: true,
-            jobNumber: true,
-            description: true,
-            site: true,
-            address: true,
-            locationName: true,
-            locationLat: true,
-            locationLng: true,
-            status: true,
-            startDate: true,
-            endDate: true,
-            lpoNumber: true,
-            lpoDate: true,
-            lpoValue: true,
-            quotationNumber: true,
-            quotationDate: true,
-            projectName: true,
-            projectDetails: true,
-            jobWorkValue: true,
-            contactPerson: true,
-            contacts: {
-              orderBy: { sortOrder: 'asc' },
-            },
-            salesPerson: true,
-            source: true,
-            externalJobId: true,
-            externalUpdatedAt: true,
-            parentJobId: true,
-            parentJob: { select: { jobNumber: true } },
-            customerId: true,
-            customer: {
-              select: {
-                name: true,
-                contactPerson: true,
-                phone: true,
-                email: true,
-                address: true,
-              },
-            },
-          },
-        },
+        job: { select: jobForPrintSelect },
         batchesUsed: true,
         deliveryNote: {
           select: { id: true, number: true },

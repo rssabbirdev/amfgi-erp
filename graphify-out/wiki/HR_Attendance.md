@@ -1,22 +1,21 @@
 # HR Attendance
 
-> 27 nodes · cohesion 0.10
+> 26 nodes · cohesion 0.10
 
 ## Key Concepts
 
 - **page.tsx** (46 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **isDraftNonWorking()** (7 connections) — `lib/hr/attendanceDraftStatus.ts`
 - **buildDraftFromExistingRow()** (5 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **AttendanceCreatePage()** (5 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **buildDraftFromDefaults()** (4 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **parseBreakWindow()** (3 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **diffMinutes()** (3 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **calculateWorkedMinutes()** (3 connections) — `app/(app)/hr/attendance/create/page.tsx`
+- **AttendanceGridDraftRow** (3 connections) — `components/hr/AttendanceEntryGrid.tsx`
 - **todayYmd()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **formatWorkDateLabel()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **toLocalTimeInput()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **minutesFromTimeValue()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **AttendanceGridEmployee** (2 connections) — `components/hr/AttendanceEntryGrid.tsx`
 - **findLeaveTypeIdByCode()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **EmployeeRow** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **AssignmentRow** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
@@ -29,28 +28,27 @@
 - **cloneDraftRows()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **combineDateAndTimeToIso()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
 - **employeeDisplayName()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- *... and 2 more nodes in this community*
+- **employeeTypeSortValue()** (1 connections) — `app/(app)/hr/attendance/create/page.tsx`
+- *... and 1 more nodes in this community*
 
 ## Relationships
 
 - [[Lib HR]] (11 shared connections)
+- [[Stock, Components, and Reports]] (5 shared connections)
 - [[Components HR and Stock]] (4 shared connections)
-- [[Stock, Components, and Reports]] (4 shared connections)
-- [[Stock, Components, and HR]] (3 shared connections)
-- [[HR, Components, and Admin]] (3 shared connections)
-- [[Reports, Components, and HR]] (2 shared connections)
-- [[Components Transactions, HR, and Ui]] (1 shared connections)
-- [[Components, Stock, and Lib]] (1 shared connections)
+- [[Reports, Components, and Settings]] (4 shared connections)
+- [[HR Settings and Payroll]] (2 shared connections)
+- [[Components HR, Transactions, and Ui]] (2 shared connections)
+- [[Components, Admin, and Stock]] (1 shared connections)
 
 ## Source Files
 
 - `app/(app)/hr/attendance/create/page.tsx`
 - `components/hr/AttendanceEntryGrid.tsx`
-- `lib/hr/attendanceDraftStatus.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 101 (100%)
+- EXTRACTED: 95 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

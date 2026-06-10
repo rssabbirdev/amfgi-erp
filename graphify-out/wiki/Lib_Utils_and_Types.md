@@ -4,12 +4,12 @@
 
 ## Key Concepts
 
-- **companyPrintTemplates.ts** (21 connections) — `lib/utils/companyPrintTemplates.ts`
+- **companyPrintTemplates.ts** (22 connections) — `lib/utils/companyPrintTemplates.ts`
 - **DocumentTemplate** (15 connections) — `lib/types/documentTemplate.ts`
 - **page.tsx** (14 connections) — `app/hr-schedule-print/page.tsx`
 - **page.tsx** (11 connections) — `app/settings/print-template/edit/page.tsx`
 - **printTemplateSession.ts** (11 connections) — `lib/utils/printTemplateSession.ts`
-- **readCompanyDocumentTemplates()** (7 connections) — `lib/utils/companyPrintTemplates.ts`
+- **readCompanyDocumentTemplates()** (9 connections) — `lib/utils/companyPrintTemplates.ts`
 - **normalizeCompanyPrintTemplateShape()** (7 connections) — `lib/utils/companyPrintTemplates.ts`
 - **WorkScheduleContext** (5 connections) — `lib/utils/templateData.ts`
 - **toObjectRoot()** (4 connections) — `lib/utils/companyPrintTemplates.ts`
@@ -34,15 +34,15 @@
 ## Relationships
 
 - [[Components Print Builder]] (10 shared connections)
-- [[Lib Utils]] (7 shared connections)
+- [[Lib, Print, and Scripts]] (8 shared connections)
 - [[Lib Types and Utils]] (5 shared connections)
-- [[Stock, Customers, and Settings]] (5 shared connections)
-- [[API, Lib, and Tests]] (5 shared connections)
-- [[API Stock Count Sessions, Transactions, and Warehouses]] (4 shared connections)
+- [[Reports, Components, and Settings]] (5 shared connections)
+- [[Lib and API]] (5 shared connections)
+- [[API Jobs, Suppliers, and Warehouses]] (4 shared connections)
+- [[Lib, Utils, and Template Data]] (3 shared connections)
 - [[HR Schedule]] (3 shared connections)
 - [[Components HR and Ui]] (1 shared connections)
-- [[Components and Lib]] (1 shared connections)
-- [[Scripts, Lib, and API]] (1 shared connections)
+- [[Lib and Components]] (1 shared connections)
 
 ## Source Files
 
@@ -55,7 +55,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 124 (98%)
+- EXTRACTED: 127 (98%)
 - INFERRED: 2 (2%)
 - AMBIGUOUS: 0 (0%)
 

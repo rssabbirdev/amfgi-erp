@@ -17,7 +17,7 @@
 
 ## Relationships
 
-- [[Components, Stock, and Lib]] (2 shared connections)
+- [[Stock Goods Receipt]] (2 shared connections)
 
 ## Source Files
 

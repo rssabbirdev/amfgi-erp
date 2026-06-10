@@ -110,6 +110,7 @@ export const ITEM_TYPE_FIELDS: Record<KnownItemType, FieldDef[]> = {
     { path: 'customer.phone', label: 'Customer Phone', category: 'Customer' },
     { path: 'customer.email', label: 'Customer Email', category: 'Customer' },
     { path: 'customer.address', label: 'Customer Address', category: 'Customer' },
+    { path: 'customer.trnNumber', label: 'Customer TRN Number', category: 'Customer' },
     { path: 'material.name', label: 'Material Name', category: 'Material' },
     { path: 'material.unit', label: 'Material Unit', category: 'Material' },
     { path: 'material.unitCost', label: 'Material Unit Cost', category: 'Material' },
@@ -146,6 +147,7 @@ export const ITEM_TYPE_FIELDS: Record<KnownItemType, FieldDef[]> = {
     { path: 'customer.phone', label: 'Customer Phone', category: 'Customer' },
     { path: 'customer.email', label: 'Customer Email', category: 'Customer' },
     { path: 'customer.address', label: 'Customer Address', category: 'Customer' },
+    { path: 'customer.trnNumber', label: 'Customer TRN Number', category: 'Customer' },
     { path: 'today', label: "Today's Date", category: 'General' },
   ],
 

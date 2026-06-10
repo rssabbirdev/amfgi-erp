@@ -1,56 +1,36 @@
 # Lib Utils
 
-> 33 nodes · cohesion 0.10
+> 14 nodes · cohesion 0.16
 
 ## Key Concepts
 
-- **templateData.ts** (53 connections) — `lib/utils/templateData.ts`
-- **buildDeliveryNoteTemplateData()** (9 connections) — `lib/utils/templateData.ts`
-- **buildTemplateData()** (9 connections) — `lib/utils/templateData.ts`
-- **jobTemplateSlice()** (6 connections) — `lib/utils/templateData.ts`
-- **buildDataContext()** (5 connections) — `lib/utils/templateData.ts`
-- **enrichWithPrimaryContact()** (4 connections) — `lib/utils/templateData.ts`
-- **parseDeliveryNoteNumber()** (4 connections) — `lib/utils/templateData.ts`
-- **parseCustomItems()** (4 connections) — `lib/utils/templateData.ts`
-- **stockOutMaterialTableRows()** (4 connections) — `lib/utils/templateData.ts`
-- **finiteNumber()** (3 connections) — `lib/utils/templateData.ts`
-- **parseDeliveryContactPerson()** (3 connections) — `lib/utils/templateData.ts`
-- **deliveryNoteTableRowsFromNotesAndTransactions()** (3 connections) — `lib/utils/templateData.ts`
-- **formatValue()** (3 connections) — `lib/utils/templateData.ts`
-- **userSliceFromSession()** (3 connections) — `lib/utils/templateData.ts`
-- **PrintDeliveryNotePage()** (2 connections) — `app/print/delivery-note/page.tsx`
-- **TemplateDataContext** (2 connections) — `lib/utils/templateData.ts`
-- **toIsoDateString()** (2 connections) — `lib/utils/templateData.ts`
-- **contactsJsonToString()** (2 connections) — `lib/utils/templateData.ts`
-- **parseJobContacts()** (2 connections) — `lib/utils/templateData.ts`
-- **getMockData()** (2 connections) — `lib/utils/templateData.ts`
-- **GoodsReceiptContext** (1 connections) — `lib/utils/templateData.ts`
-- **PackingSlipContext** (1 connections) — `lib/utils/templateData.ts`
-- **MaterialLabelContext** (1 connections) — `lib/utils/templateData.ts`
-- **UserPrintSlice** (1 connections) — `lib/utils/templateData.ts`
-- **AVAILABLE_FIELDS** (1 connections) — `lib/utils/templateData.ts`
-- *... and 8 more nodes in this community*
+- **manualStockAdjustmentImport.ts** (12 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **manual-stock-adjustment-import.test.ts** (5 connections) — `__tests__/integration/manual-stock-adjustment-import.test.ts`
+- **parseManualStockAdjustmentText()** (3 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **mapManualStockAdjustmentImportRows()** (3 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **ManualAdjustmentImportDraftLine** (2 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **ManualAdjustmentImportError** (2 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **ManualAdjustmentImportReference** (1 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **HEADER_ALIASES** (1 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **normalizeHeader()** (1 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **normalizeName()** (1 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **parseNumber()** (1 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **splitDelimitedLine()** (1 connections) — `lib/utils/manualStockAdjustmentImport.ts`
+- **parsed** (1 connections) — `__tests__/integration/manual-stock-adjustment-import.test.ts`
+- **mapped** (1 connections) — `__tests__/integration/manual-stock-adjustment-import.test.ts`
 
 ## Relationships
 
-- [[Components Print Builder]] (10 shared connections)
-- [[API, Lib, and Tests]] (6 shared connections)
-- [[Components HR and Ui]] (4 shared connections)
-- [[Lib Utils]] (3 shared connections)
-- [[Lib Utils and Types]] (3 shared connections)
-- [[Lib and API]] (3 shared connections)
-- [[HR Schedule]] (1 shared connections)
-- [[Lib Types and Utils]] (1 shared connections)
-- [[Components and Lib]] (1 shared connections)
+- [[Stock, Admin, and Lib]] (5 shared connections)
 
 ## Source Files
 
-- `app/print/delivery-note/page.tsx`
-- `lib/utils/templateData.ts`
+- `__tests__/integration/manual-stock-adjustment-import.test.ts`
+- `lib/utils/manualStockAdjustmentImport.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 138 (100%)
+- EXTRACTED: 35 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

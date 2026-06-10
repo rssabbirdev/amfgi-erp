@@ -100,10 +100,19 @@ export interface FieldRowSection {
   type: 'field-row';
   cells: FieldRowCell[];
   bordered: boolean;
+  borderColor?: string;
+  borderWidthPx?: number;
+  borderRadiusPx?: number;
   minHeight?: number; // mm – optional minimum height
   /** Default `flex`. `grid` uses `gridColumns` (or cell count). */
   layout?: 'flex' | 'grid';
   gridColumns?: 1 | 2 | 3 | 4;
+  /** Default label typography (pt / CSS color); cells may override. */
+  labelFontSizePt?: number;
+  labelColor?: string;
+  /** Default value typography (pt / CSS color); cells may override. */
+  valueFontSizePt?: number;
+  valueColor?: string;
 }
 
 export interface FieldRowCell {
@@ -119,8 +128,14 @@ export interface FieldRowCell {
   width?: number;     // percentage of row width (auto if missing)
   align?: 'left' | 'center' | 'right';
   bold?: boolean;
+  /** @deprecated Use valueFontSizePt; kept for legacy templates. */
   fontSize?: number;  // pt
+  /** @deprecated Use valueColor; kept for legacy templates. */
   color?: string;
+  labelFontSizePt?: number;
+  labelColor?: string;
+  valueFontSizePt?: number;
+  valueColor?: string;
 }
 
 export interface InfoGridSection {
@@ -128,12 +143,25 @@ export interface InfoGridSection {
   columns: 1 | 2 | 3 | 4;
   items: InfoGridItem[];
   bordered: boolean;
+  borderColor?: string;
+  borderWidthPx?: number;
+  borderRadiusPx?: number;
+  /** Default label typography (pt / CSS color); items may override. */
+  labelFontSizePt?: number;
+  labelColor?: string;
+  /** Default value typography (pt / CSS color); items may override. */
+  valueFontSizePt?: number;
+  valueColor?: string;
 }
 
 export interface InfoGridItem {
   label: string;
   field: string;
   bold?: boolean;
+  labelFontSizePt?: number;
+  labelColor?: string;
+  valueFontSizePt?: number;
+  valueColor?: string;
 }
 
 export type TableDataSource =
@@ -150,12 +178,17 @@ export interface TableSection {
   columns: TableColumnDef[];
   fontSize: number;       // pt
   showBorders: boolean;
+  borderColor?: string;
+  borderWidthPx?: number;
+  borderRadiusPx?: number;
   headerBg: string;       // CSS color
   headerColor: string;    // text color
   headerFontWeight?: 'normal' | 'bold';
   headerFontStyle?: 'normal' | 'italic';
   repeatHeaderOnNewPage: boolean;
   minRows: number;        // minimum empty rows to show
+  /** When > 0, splits the table across pages with at most this many body rows per page (print). */
+  maxRowsPerPage?: number;
   rowPadding: number;     // mm vertical padding per cell
   rowMinHeightMm?: number;
 }
