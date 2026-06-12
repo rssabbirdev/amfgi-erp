@@ -2,7 +2,7 @@
 
 > God node · 79 connections · `components/ui/shadcn/button.tsx`
 
-**Community:** [[Reports, Components, and Settings]]
+**Community:** [[Reports, Components, and HR]]
 
 ## Connections by Relation
 
@@ -29,7 +29,7 @@
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[EmployeeCompensationPanel.tsx]] `EXTRACTED`
-- [[LoginClient.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
 
 ---
 

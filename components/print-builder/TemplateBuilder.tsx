@@ -8,6 +8,7 @@ import type {
   DocumentSection,
   DocumentPageStyle,
   SectionCanvasRect,
+  ItemType,
 } from '@/lib/types/documentTemplate';
 import {
   SECTION_PALETTE,
@@ -30,7 +31,11 @@ import {
   type WorkScheduleContext,
 } from '@/lib/utils/templateData';
 import { formatDate } from '@/lib/utils/formatters';
-import { getItemTypeLabel } from '@/lib/utils/itemTypeFields';
+import { getItemTypeLabel, ITEM_TYPE_LABELS } from '@/lib/utils/itemTypeFields';
+import {
+  getPrintBuilderConvertibleItemTypes,
+  isDeliveryNoteFamilyItemType,
+} from '@/lib/utils/printItemTypes';
 import { WORK_SCHEDULE_PREVIEW_SESSION_KEY } from '@/lib/utils/printTemplateSession';
 import {
   ensureCanvasRects,
@@ -174,6 +179,7 @@ type DispatchPreviewEntry = {
   deliveryNoteId: string;
   deliveryNoteNumber?: number;
   jobNumber: string;
+  deliveryType?: string;
   dispatchDate: string;
   transactionIds: string[];
   materialsCount: number;
@@ -243,6 +249,7 @@ function formatScheduleTimeForPrint(raw: string | null | undefined): string {
 
 /** Layout / editor tools â€” labels live in the top bar; body shows in the left column */
 type LeftNavTool =
+  | 'format-settings'
   | 'preview-data'
   | 'preview-workspace'
   | 'canvas'
@@ -303,6 +310,9 @@ export function TemplateBuilder({
 }: TemplateBuilderProps) {
   const { data: session } = useSession();
   const { theme, toggle } = useTheme();
+  const [templateName, setTemplateName] = useState(template.name);
+  const [templateItemType, setTemplateItemType] = useState<ItemType>(template.itemType);
+  const [templateIsDefault, setTemplateIsDefault] = useState(Boolean(template.isDefault));
   const [sections, setSections] = useState<DocumentSection[]>(() =>
     migrateLegacyDocumentSections(template.sections ?? [])
   );
@@ -591,7 +601,7 @@ export function TemplateBuilder({
   ]);
 
   useEffect(() => {
-    if (template.itemType !== 'delivery-note' || !companyId) {
+    if (!isDeliveryNoteFamilyItemType(String(templateItemType)) || !companyId) {
       setDnEntries([]);
       setDnEntriesError(null);
       return;
@@ -626,6 +636,7 @@ export function TemplateBuilder({
               deliveryNoteNumber:
                 e.deliveryNoteNumber != null ? Number(e.deliveryNoteNumber) : undefined,
               jobNumber: String(e.jobNumber ?? '—'),
+              deliveryType: typeof e.deliveryType === 'string' ? e.deliveryType : undefined,
               dispatchDate,
               transactionIds: ids,
               materialsCount: Number(e.materialsCount ?? ids.length),
@@ -647,13 +658,13 @@ export function TemplateBuilder({
     return () => {
       cancelled = true;
     };
-  }, [template.itemType, companyId, template.id]);
+  }, [templateItemType, companyId, template.id]);
 
   useEffect(() => {
-    if (template.itemType !== 'delivery-note') {
+    if (!isDeliveryNoteFamilyItemType(String(templateItemType))) {
       setLeftTool((t) => (t === 'preview-data' ? 'section-order' : t));
     }
-  }, [template.itemType]);
+  }, [templateItemType]);
 
   useEffect(() => {
     if (template.itemType !== 'work-schedule') {
@@ -731,7 +742,7 @@ export function TemplateBuilder({
   }, [selectedSchedulePreviewId, template.itemType, buildWorkSchedulePreviewFromApi]);
 
   useEffect(() => {
-    if (!dnSelectedEntryId || template.itemType !== 'delivery-note') {
+    if (!dnSelectedEntryId || !isDeliveryNoteFamilyItemType(String(templateItemType))) {
       setLivePreviewBase(null);
       return;
     }
@@ -798,11 +809,24 @@ export function TemplateBuilder({
     return () => {
       cancelled = true;
     };
-  }, [dnSelectedEntryId, template.itemType, companySnapshot, dnEntries]);
+  }, [dnSelectedEntryId, templateItemType, companySnapshot, dnEntries]);
+
+  const dnPreviewEntries = useMemo(() => {
+    if (templateItemType === 'subcontract-delivery-note') {
+      return dnEntries.filter((entry) => entry.deliveryType === 'SUBCONTRACT');
+    }
+    if (templateItemType === 'delivery-note') {
+      return dnEntries.filter((entry) => entry.deliveryType !== 'SUBCONTRACT');
+    }
+    return dnEntries;
+  }, [dnEntries, templateItemType]);
 
   useEffect(() => {
     const m = template.pageMargins ?? DEFAULT_PAGE_MARGINS;
     const secs = migrateLegacyDocumentSections(template.sections ?? []);
+    setTemplateName(template.name);
+    setTemplateItemType(template.itemType);
+    setTemplateIsDefault(Boolean(template.isDefault));
     setSections(secs);
     setMargins(m);
     setPageStyle(template.pageStyle);
@@ -832,13 +856,20 @@ export function TemplateBuilder({
     template.pageMargins,
     template.pageStyle,
     template.sections,
+    template.name,
+    template.itemType,
+    template.isDefault,
   ]);
 
   const currentLayoutKey = useMemo(
     () => layoutSnapshotKey(margins, pageStyle, CANVAS_MODE, canvasRects, sections),
     [margins, pageStyle, canvasRects, sections]
   );
-  const dirty = currentLayoutKey !== savedLayoutKey;
+  const metaDirty =
+    templateName.trim() !== template.name ||
+    String(templateItemType) !== String(template.itemType) ||
+    templateIsDefault !== Boolean(template.isDefault);
+  const dirty = currentLayoutKey !== savedLayoutKey || metaDirty;
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -1192,9 +1223,9 @@ export function TemplateBuilder({
         signatureUrl: profileForPreview?.signatureUrl ?? session?.user?.signatureUrl ?? '',
       },
     };
-    const mockData = getMockData(template.itemType);
+    const mockData = getMockData(templateItemType);
     const letter = letterheadUrl || mockData.company?.letterheadUrl || '';
-    if (template.itemType === 'delivery-note' && dnSelectedEntryId && livePreviewBase) {
+    if (isDeliveryNoteFamilyItemType(String(templateItemType)) && dnSelectedEntryId && livePreviewBase) {
       return {
         ...livePreviewBase,
         company: {
@@ -1204,7 +1235,7 @@ export function TemplateBuilder({
         ...userSlice,
       } as AnyTemplateDataContext;
     }
-    if (template.itemType === 'work-schedule' && workSchedulePreviewBase) {
+    if (templateItemType === 'work-schedule' && workSchedulePreviewBase) {
       return {
         ...workSchedulePreviewBase,
         company: {
@@ -1223,7 +1254,7 @@ export function TemplateBuilder({
       ...userSlice,
     } as AnyTemplateDataContext;
   }, [
-    template.itemType,
+    templateItemType,
     dnSelectedEntryId,
     livePreviewBase,
     workSchedulePreviewBase,
@@ -1236,6 +1267,9 @@ export function TemplateBuilder({
 
   const previewTemplate: DocumentTemplate = {
     ...template,
+    name: templateName.trim() || template.name,
+    itemType: templateItemType,
+    isDefault: templateIsDefault,
     pageMargins: margins,
     pageStyle,
     sections,
@@ -1357,6 +1391,9 @@ export function TemplateBuilder({
     try {
       await onSave({
         ...template,
+        name: templateName.trim() || template.name,
+        itemType: templateItemType,
+        isDefault: templateIsDefault,
         pageMargins: margins,
         pageStyle,
         sections,
@@ -1543,7 +1580,7 @@ export function TemplateBuilder({
 									/
 								</span>
 								<h1 className='min-w-0 truncate text-sm font-semibold text-slate-900 dark:text-white'>
-									{template.name}
+									{templateName.trim() || template.name}
 								</h1>
 								{dirty && (
 									<span className='inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'>
@@ -1652,13 +1689,20 @@ export function TemplateBuilder({
 							className='flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overflow-y-hidden rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 [scrollbar-width:thin] dark:border-slate-800 dark:bg-slate-950/60'
 							aria-label='Layout tools'
 						>
-							{(template.itemType === 'delivery-note' ||
-								template.itemType === 'work-schedule') && (
+							<NavChip
+								active={leftTool === 'format-settings'}
+								onClick={() => setLeftTool('format-settings')}
+								title='Template name, document format type, and default flag'
+							>
+								Format
+							</NavChip>
+							{(isDeliveryNoteFamilyItemType(String(templateItemType)) ||
+								templateItemType === 'work-schedule') && (
 								<NavChip
 									active={leftTool === 'preview-data'}
 									onClick={() => setLeftTool('preview-data')}
 									title={
-										template.itemType === 'delivery-note'
+										isDeliveryNoteFamilyItemType(String(templateItemType))
 											? 'Pick a real delivery note for preview data'
 											: 'Choose schedule preview data'
 									}
@@ -1706,7 +1750,7 @@ export function TemplateBuilder({
 							<SmallStat
 								label='Type'
 								value={getItemTypeLabel(
-									String(template.itemType),
+									String(templateItemType),
 								)}
 							/>
 							<SmallStat label='Blocks' value={sections.length} />
@@ -1744,9 +1788,63 @@ export function TemplateBuilder({
 			<div className='flex min-h-0 flex-1 flex-row'>
 				<div className='allow-text-select flex h-full min-h-0 w-84 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 xl:w-88'>
 					<div className='min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3'>
+						{leftTool === 'format-settings' && (
+							<div className='space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40'>
+								<p className='text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500'>
+									Format settings
+								</p>
+								<label className='block space-y-1'>
+									<span className='text-[10px] font-medium text-slate-600 dark:text-slate-400'>
+										Template name
+									</span>
+									<input
+										type='text'
+										value={templateName}
+										onChange={(e) => setTemplateName(e.target.value)}
+										className='w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+									/>
+								</label>
+								<div className='space-y-2'>
+									<span className='text-[10px] font-medium text-slate-600 dark:text-slate-400'>
+										Document format type
+									</span>
+									<div className='grid grid-cols-1 gap-2'>
+										{getPrintBuilderConvertibleItemTypes().map((type) => (
+											<button
+												key={type}
+												type='button'
+												onClick={() => setTemplateItemType(type)}
+												className={`rounded-xl border px-3 py-2 text-left text-xs font-medium transition ${
+													String(templateItemType) === type
+														? 'border-emerald-400 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200'
+														: 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+												}`}
+											>
+												{ITEM_TYPE_LABELS[type]}
+											</button>
+										))}
+									</div>
+									<p className='text-[10px] leading-relaxed text-slate-500 dark:text-slate-500'>
+										Duplicate an existing delivery note layout in Settings, open it here,
+										switch to Subcontract Delivery Note, then swap customer fields for supplier
+										and bind the table to Subcontract Material Lines.
+									</p>
+								</div>
+								<label className='flex cursor-pointer items-center gap-2 text-xs text-slate-700 dark:text-slate-300'>
+									<input
+										type='checkbox'
+										checked={templateIsDefault}
+										onChange={(e) => setTemplateIsDefault(e.target.checked)}
+										className='rounded border-slate-400 dark:border-slate-600'
+									/>
+									Default for this format type
+								</label>
+							</div>
+						)}
+
 						{leftTool === 'preview-data' &&
-							(template.itemType === 'delivery-note' ||
-								template.itemType === 'work-schedule') && (
+							(isDeliveryNoteFamilyItemType(String(templateItemType)) ||
+								templateItemType === 'work-schedule') && (
 								<div className='space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40'>
 									<p className='text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500'>
 										Preview data
@@ -1762,7 +1860,7 @@ export function TemplateBuilder({
 											entries.
 										</p>
 									)}
-									{template.itemType === 'delivery-note' &&
+									{isDeliveryNoteFamilyItemType(String(templateItemType)) &&
 										companyId && (
 											<>
 												<label className='block text-[10px] font-medium text-slate-600 dark:text-slate-400'>
@@ -1781,7 +1879,7 @@ export function TemplateBuilder({
 													<option value=''>
 														Sample / mock data
 													</option>
-													{dnEntries.map((ent) => {
+													{dnPreviewEntries.map((ent) => {
 														const d =
 															ent.dispatchDate
 																? formatDate(
@@ -1879,7 +1977,7 @@ export function TemplateBuilder({
 												)}
 											</>
 										)}
-									{template.itemType === 'work-schedule' && (
+									{templateItemType === 'work-schedule' && (
 										<div className='space-y-2'>
 											<p className='text-[10px] text-slate-600 dark:text-slate-400'>
 												Test this template with the
@@ -2136,7 +2234,7 @@ export function TemplateBuilder({
 									Page & watermark
 								</p>
 								<PageChromeEditor
-									itemType={String(template.itemType)}
+									itemType={String(templateItemType)}
 									pageStyle={pageStyle}
 									onChange={setPageStyle}
 									pageMargins={margins}
@@ -2535,8 +2633,8 @@ export function TemplateBuilder({
 						<p className='mb-2 px-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-500'>
 							Add block
 						</p>
-						{(template.itemType === 'delivery-note' ||
-							template.itemType === 'packing-slip') && (
+						{(isDeliveryNoteFamilyItemType(String(templateItemType)) ||
+							templateItemType === 'packing-slip') && (
 							<button
 								type='button'
 								onClick={addContactBlock}
@@ -2589,7 +2687,7 @@ export function TemplateBuilder({
 							<div className='flex flex-wrap items-center gap-2'>
 								<span className='rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'>
 									{getItemTypeLabel(
-										String(template.itemType),
+										String(templateItemType),
 									)}
 								</span>
 								<span className='rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'>
@@ -2786,13 +2884,13 @@ export function TemplateBuilder({
 					<div className='min-h-0 flex-1 overflow-y-auto p-3'>
 						{rightPanel === 'data' ? (
 							<DataFieldsExplorer
-								itemType={String(template.itemType)}
+								itemType={String(templateItemType)}
 								sampleData={previewData}
 							/>
 						) : selectedSection ? (
 							<SectionEditor
 								section={selectedSection}
-								itemType={template.itemType}
+								itemType={templateItemType}
 								locked={isSectionLocked(selectedSection)}
 								companyId={companyId}
 								canvasRect={

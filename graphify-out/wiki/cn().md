@@ -2,7 +2,7 @@
 
 > God node · 173 connections · `lib/utils.ts`
 
-**Community:** [[Components Ui, Sidebar Nav Menu, and Workspace]]
+**Community:** [[Components Ui, Sidebar Nav Menu, and App Shell]]
 
 ## Connections by Relation
 
@@ -39,9 +39,9 @@
 - [[input.tsx]] `EXTRACTED`
 - [[sidebar.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
 - [[AttendanceEntryGrid.tsx]] `EXTRACTED`
 - [[card.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[alert.tsx]] `EXTRACTED`
 - [[badge.tsx]] `EXTRACTED`

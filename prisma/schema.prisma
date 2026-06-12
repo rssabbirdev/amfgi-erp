@@ -96,6 +96,7 @@ model Company {
   quantityLogAdhocJobs      QuantityLogAdhocJob[]
   dispatchEntryRevisions    DispatchEntryRevision[]
   deliveryNotes             DeliveryNote[]
+  deliveryNoteMaterialLines DeliveryNoteMaterialLine[]
 }
 
 model User {
@@ -470,6 +471,7 @@ model Material {
   usedInAssemblies         MaterialAssemblyComponent[] @relation("ComponentMaterial")
   finishedGoodTrackableLinks JobItemTrackableMaterialLink[] @relation("TrackableFinishedGoodMaterial")
   productionStockPostings  ProductionStockPosting[] @relation("ProductionPostingMaterial")
+  deliveryNoteMaterialLines  DeliveryNoteMaterialLine[]
 
   @@unique([companyId, id])
   @@unique([companyId, name])
@@ -626,11 +628,12 @@ model TransactionBatch {
   @@index([batchId])
 }
 
-/// One printed delivery note; all STOCK_OUT lines for that note share `deliveryNoteId`.
+/// One printed delivery note; dispatch STOCK_OUT or subcontract transfer lines share `deliveryNoteId`.
 model DeliveryNote {
   id           String        @id @default(cuid())
   companyId    String
   number       Int
+  deliveryType DeliveryNoteType @default(DISPATCH)
   jobId        String?
   date         DateTime
   /// True when this delivery note was saved with no material STOCK_OUT lines (custom items / document only).
@@ -641,15 +644,56 @@ model DeliveryNote {
   documentNotes   String?      @db.Text
   /// Contact person selected for this delivery note (may differ from job primary contact).
   contactPerson   String?
+  /// Subcontract: supplier receiving material for external processing.
+  supplierId          String?
+  sourceWarehouseId   String?
+  targetWarehouseId   String?
+  transitStatus       DeliveryNoteTransitStatus?
+  /// Optional planning reference; does not consume job stock for subcontract notes.
+  referenceJobId      String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   job          Job?          @relation(fields: [companyId, jobId], references: [companyId, id], onDelete: SetNull)
+  supplier     Supplier?     @relation(fields: [companyId, supplierId], references: [companyId, id], onDelete: SetNull)
+  sourceWarehouse Warehouse? @relation("DeliveryNoteSourceWarehouse", fields: [companyId, sourceWarehouseId], references: [companyId, id], onDelete: SetNull)
+  targetWarehouse Warehouse? @relation("DeliveryNoteTargetWarehouse", fields: [companyId, targetWarehouseId], references: [companyId, id], onDelete: SetNull)
+  referenceJob Job?          @relation("DeliveryNoteReferenceJob", fields: [companyId, referenceJobId], references: [companyId, id], onDelete: SetNull)
   transactions Transaction[]
+  materialLines DeliveryNoteMaterialLine[]
 
   @@unique([companyId, number])
   @@index([companyId, jobId])
   @@index([companyId, date])
+  @@index([companyId, deliveryType])
+  @@index([companyId, supplierId])
+  @@index([companyId, transitStatus])
+}
+
+/// Subcontract delivery note material lines with issued/received quantities (base UOM).
+model DeliveryNoteMaterialLine {
+  id                  String   @id @default(cuid())
+  companyId           String
+  deliveryNoteId      String
+  materialId          String
+  quantityUomId       String?
+  issuedQty           Decimal  @db.Decimal(18, 3)
+  receivedQty         Decimal  @default(0) @db.Decimal(18, 3)
+  sourceWarehouseId   String
+  targetWarehouseId   String
+  issueTransferOutId  String?
+  issueTransferInId   String?
+  sortOrder           Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  deliveryNote        DeliveryNote @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade)
+  company             Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  material            Material @relation(fields: [companyId, materialId], references: [companyId, id], onDelete: Restrict)
+  sourceWarehouse     Warehouse @relation("SubcontractLineSourceWarehouse", fields: [companyId, sourceWarehouseId], references: [companyId, id], onDelete: Restrict)
+  targetWarehouse     Warehouse @relation("SubcontractLineTargetWarehouse", fields: [companyId, targetWarehouseId], references: [companyId, id], onDelete: Restrict)
+
+  @@index([deliveryNoteId, sortOrder])
+  @@index([companyId, materialId])
 }
 
 /// Append-only audit of job dispatch worksheet / delivery-note material lines saved via batch STOCK_OUT (per job + calendar day).
@@ -734,6 +778,7 @@ model Job {
   quantityLogAdhocJobs     QuantityLogAdhocJob[]
   dispatchEntryRevisions   DispatchEntryRevision[]
   deliveryNotes            DeliveryNote[]
+  referenceDeliveryNotes   DeliveryNote[] @relation("DeliveryNoteReferenceJob")
 
   @@unique([companyId, id])
   @@unique([companyId, jobNumber])
@@ -966,6 +1011,7 @@ model Supplier {
   company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   contacts              SupplierContact[]
   stockBatches          StockBatch[]
+  deliveryNotes         DeliveryNote[]
 
   @@unique([companyId, id])
   @@unique([companyId, externalPartyId])
@@ -1041,6 +1087,10 @@ model Warehouse {
   stockCountSessions      StockCountSession[]
   finishedGoodTrackableLinks JobItemTrackableMaterialLink[] @relation("TrackableFinishedGoodWarehouse")
   productionStockPostings ProductionStockPosting[] @relation("ProductionPostingWarehouse")
+  deliveryNoteSources      DeliveryNote[] @relation("DeliveryNoteSourceWarehouse")
+  deliveryNoteTargets      DeliveryNote[] @relation("DeliveryNoteTargetWarehouse")
+  subcontractLineSources   DeliveryNoteMaterialLine[] @relation("SubcontractLineSourceWarehouse")
+  subcontractLineTargets   DeliveryNoteMaterialLine[] @relation("SubcontractLineTargetWarehouse")
 
   @@unique([companyId, id])
   @@unique([companyId, name])
@@ -1929,6 +1979,17 @@ model EmployeeMobileAccessToken {
   @@unique([companyId, tokenPrefix])
   @@index([companyId, employeeId])
   @@index([userId, revokedAt])
+}
+
+enum DeliveryNoteType {
+  DISPATCH
+  SUBCONTRACT
+}
+
+enum DeliveryNoteTransitStatus {
+  ON_TRANSIT
+  PARTIALLY_RECEIVED
+  RECEIVED
 }
 
 enum TransactionType {

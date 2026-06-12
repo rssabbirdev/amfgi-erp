@@ -14,7 +14,11 @@ import { useSession } from 'next-auth/react';
 import ScheduleSearchSelect from '@/components/hr/ScheduleSearchSelect';
 import SearchSelect from '@/components/ui/SearchSelect';
 import LineGridColumnSettings, { type LineGridColumnConfig } from '@/components/stock/LineGridColumnSettings';
-import { mergeLineGridInputProps, useLineGridKeyboardNav } from '@/lib/stock/lineGridKeyboardNav';
+import {
+  mergeLineGridInputProps,
+  useLineGridKeyboardNav,
+  type MergeLineGridInputPropsOptions,
+} from '@/lib/stock/lineGridKeyboardNav';
 import { toMaterialSelectItem, type MaterialSelectItem } from '@/lib/stock/pagedSelectSearch';
 import { cn } from '@/lib/utils';
 import type { Material } from '@/store/hooks';
@@ -350,10 +354,15 @@ export default function GoodsReceiptLineGrid({
     [navigableColumns]
   );
   const cellNavInputProps = useCallback(
-    (rowIndex: number, key: ReceiptGridColumnKey, existing?: InputHTMLAttributes<HTMLInputElement>) => {
+    (
+      rowIndex: number,
+      key: ReceiptGridColumnKey,
+      existing?: InputHTMLAttributes<HTMLInputElement>,
+      options?: MergeLineGridInputPropsOptions
+    ) => {
       const col = navColIndex(key);
       if (col < 0) return existing;
-      return mergeLineGridInputProps(getNavInputProps(rowIndex, col), existing);
+      return mergeLineGridInputProps(getNavInputProps(rowIndex, col), existing, options);
     },
     [getNavInputProps, navColIndex]
   );
@@ -652,7 +661,7 @@ export default function GoodsReceiptLineGrid({
                               placeholder="0.000"
                               {...cellNavInputProps(idx, 'qty', {
                                 className: 'h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
-                              })}
+                              }, { blockWheel: true })}
                             />
                           </div>
                         );
@@ -714,7 +723,7 @@ export default function GoodsReceiptLineGrid({
                               disabled={!mat}
                               {...cellNavInputProps(idx, 'unitCost', {
                                 className: 'h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
-                              })}
+                              }, { blockWheel: true })}
                             />
                           </div>
                         );

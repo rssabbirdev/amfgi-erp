@@ -1,16 +1,16 @@
-# Graph Report - AMFGI  (2026-06-10)
+# Graph Report - AMFGI  (2026-06-12)
 
 ## Corpus Check
-- 778 files · ~490,705 words
+- 800 files · ~502,642 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4557 nodes · 11839 edges · 223 communities (202 shown, 21 thin omitted)
+- 4646 nodes · 12113 edges · 228 communities (206 shown, 22 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 77 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e67e79bc`
+- Built from commit: `ad99a0de`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -212,19 +212,24 @@
 - [[_COMMUNITY_Community 217|Community 217]]
 - [[_COMMUNITY_Community 218|Community 218]]
 - [[_COMMUNITY_Community 220|Community 220]]
+- [[_COMMUNITY_Community 221|Community 221]]
+- [[_COMMUNITY_Community 222|Community 222]]
+- [[_COMMUNITY_Community 223|Community 223]]
+- [[_COMMUNITY_Community 224|Community 224]]
 - [[_COMMUNITY_Community 225|Community 225]]
-- [[_COMMUNITY_Community 236|Community 236]]
+- [[_COMMUNITY_Community 226|Community 226]]
+- [[_COMMUNITY_Community 227|Community 227]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `errorResponse()` - 387 edges
-2. `successResponse()` - 374 edges
-3. `prisma` - 195 edges
+1. `errorResponse()` - 389 edges
+2. `successResponse()` - 376 edges
+3. `prisma` - 196 edges
 4. `cn()` - 173 edges
 5. `requireCompanySession()` - 114 edges
 6. `requirePerm()` - 109 edges
-7. `decimalToNumberOrZero()` - 94 edges
-8. `publishLiveUpdate()` - 86 edges
-9. `Button` - 79 edges
+7. `decimalToNumberOrZero()` - 106 edges
+8. `publishLiveUpdate()` - 91 edges
+9. `Button` - 80 edges
 10. `P` - 69 edges
 
 ## Surprising Connections (you probably didn't know these)
@@ -232,126 +237,126 @@
   lib/utils.ts → package.json
 - `StockPage()` --calls--> `buildHubLinks()`  [INFERRED]
   app/(app)/stock/page.tsx → components/workspace/buildHubLinks.ts
-- `AdminUsersPage()` --calls--> `cn()`  [EXTRACTED]
-  app/(app)/admin/users/page.tsx → lib/utils.ts
 - `AttendanceStatusBadge()` --calls--> `cn()`  [EXTRACTED]
   app/(app)/hr/attendance/page.tsx → lib/utils.ts
 - `scheduleSearchInputProps()` --calls--> `cn()`  [EXTRACTED]
   app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx → lib/utils.ts
+- `HrScheduleDayPage()` --calls--> `cn()`  [EXTRACTED]
+  app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx → lib/utils.ts
 
-## Communities (223 total, 21 thin omitted)
+## Communities (228 total, 22 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.19
-Nodes (20): canManageDrive(), GET(), readCompanyGoogleDriveFolderRegistry(), writeCompanyGoogleDriveFolderRegistry(), buildCompanyDriveFolderName(), createGoogleDriveAuthorizationUrl(), createOAuthClient(), DriveUploadFolderTarget (+12 more)
+Cohesion: 0.17
+Nodes (14): FormulaConfigSchema, FormulaConstantSchema, FormulaLibrarySchema, FormulaLibraryUpdateSchema, FormulaMaterialRuleSchema, formulaSnapshotData(), FormulaSnapshotRow, RestoreFormulaVersionSchema (+6 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.10
-Nodes (17): buildDraftReceiptNumber(), emptyLine(), inputClassName(), LineItem, ReceiptEditor(), ReceiveStockPage(), sectionHeadingClassName(), shellClassName() (+9 more)
+Cohesion: 0.09
+Nodes (20): AbsenceRow, LeaveOnDate, Props, ScheduleAbsencesPanel(), ScheduleSearchSelectProps, buildDraftReceiptNumber(), emptyLine(), inputClassName() (+12 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.19
-Nodes (17): JobItemCommonSchema, JobItemCreateSchema, JobItemUpdateSchema, normalizeJobItemCreatePayload(), normalizeJobItemUpdatePayload(), TrackingItemSchema, getBudgetMaterialIdsFromJobItem(), getSelectedMaterialIdsFromSpecifications() (+9 more)
+Cohesion: 0.15
+Nodes (13): fetchActiveEmployeesForSchedule(), fetchEmployeesByIds(), fetchJobById(), fetchJobsByIds(), jobToSearchItem(), readApiItems(), ScheduleEmployeeRow, ScheduleJobRow (+5 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.08
-Nodes (28): Props, SectionAdvancedStyleEditor(), SectionEditor(), BoxShape, createDefaultSection(), DividerSection, FieldRowCell, FieldRowSection (+20 more)
+Nodes (34): config, getPrisma(), { handlers, signIn, signOut, auth }, resolvePermissions(), Session, User, CreateCredentialSchema, GET() (+26 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.04
-Nodes (88): config, proxy(), ROUTE_PERMISSIONS, RootPage(), isEmployeeSelfServiceAccount(), isEmployeeSelfServiceUser(), SelfServiceCandidate, useIsMobile() (+80 more)
+Cohesion: 0.09
+Nodes (24): useIsMobile(), Separator, Sidebar(), SidebarContent(), SidebarContext, SidebarContextProps, SidebarFooter(), SidebarGroup() (+16 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.05
-Nodes (57): BulkSchema, MaterialRowSchema, CreateSchema, GET(), normalizeCompanySlug(), POST(), removeSyncedLeaveAttendance(), CategoryUpdateSchema (+49 more)
+Cohesion: 0.10
+Nodes (20): prismaAdapter, REQUIRED_PRISMA_DELEGATES, TransactionArg, TransactionOptionsArg, SessionLineSchema, UpdateSessionSchema, ManualStockAdjustmentLineSchema, ManualStockAdjustmentSchema (+12 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.10
-Nodes (35): createPasswordResetForUser(), generateResetToken(), hashResetToken(), resetPasswordWithToken(), appBaseUrl(), buildPasswordResetUrl(), isPasswordResetMailConfigured(), sendPasswordResetEmail() (+27 more)
+Cohesion: 0.16
+Nodes (25): canManageSettings(), GET(), PATCH(), EmailProvider, EmailSettingsRecord, envFallbackEmailSettings(), isRecord(), loadStoredEmailSettings() (+17 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.08
-Nodes (19): empty, PageChromeEditor(), PageChromeEditorProps, SearchableFieldSelect(), SearchableFieldSelectProps, SectionEditorProps, TemplateInput(), TemplateTextarea() (+11 more)
+Cohesion: 0.07
+Nodes (24): empty, PageChromeEditor(), PageChromeEditorProps, SearchableFieldSelect(), SearchableFieldSelectProps, SectionEditor(), SectionEditorProps, TemplateInput() (+16 more)
 
 ### Community 8 - "Community 8"
 Cohesion: 0.14
 Nodes (19): DispatchBudgetWarningSchema, getTransactionCost(), isRecord(), mergeDefaultMaterialSelections(), POST(), getFactorToBase(), MaterialWithPricing, resolvePricingSnapshot() (+11 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.29
-Nodes (10): ALLOWED_IDENTIFIERS, canonicalizeExpressionOperators(), escapeRegex(), evaluateFormulaExpression(), FormulaValue, FormulaVariableMap, normalizeFormulaResult(), replaceFormulaTokens() (+2 more)
+Cohesion: 0.23
+Nodes (13): deleteDeliveryNoteWithStockTransactions(), Tx, deleteWarehouseTransferReceipt(), isWarehouseTransferReceiptNumber(), Tx, reverseAndDeleteStockTransaction(), sortTransactionsForDeletion(), Tx (+5 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.05
-Nodes (33): AttendanceStatusBadge(), formatDateLabel(), formatMonthLabel(), HrAttendancePage(), monthFromSearchParams(), toDateYmd(), todayYmd(), AllowanceRow (+25 more)
+Cohesion: 0.19
+Nodes (8): compactNumber(), customerContactsForDisplay(), CustomerFormMode, CustomerReadOnlyDetails(), CustomersPage(), FILTER_OPTIONS, formatDate(), emptyCustomerPartyFormState()
 
 ### Community 11 - "Community 11"
 Cohesion: 0.06
-Nodes (24): BUDGET_TAB_ITEMS, BudgetArea, BudgetAreaInstance, BudgetField, BudgetFormulaValue, BudgetItemForm, BudgetMode, BudgetPageTab (+16 more)
+Nodes (23): BUDGET_TAB_ITEMS, BudgetArea, BudgetAreaInstance, BudgetField, BudgetFormulaValue, BudgetItemForm, BudgetMode, BudgetPageTab (+15 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.09
-Nodes (38): BodySchema, DELETE(), POST(), PATCH(), PatchSchema, CreateSchema, POST(), AttendanceEntryRow (+30 more)
+Cohesion: 0.08
+Nodes (44): BodySchema, DELETE(), POST(), PATCH(), POST(), AttendanceEntryRow, DELETE(), GET() (+36 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.23
-Nodes (15): canEditJobBudget(), canTransferWarehouse(), canViewFormulaMaterialsApi(), canViewJobBudget(), canViewJobsListApi(), canViewProductionLog(), canViewStockCountSession(), canViewStockCountSessionApi() (+7 more)
+Cohesion: 0.22
+Nodes (13): createPasswordResetForUser(), generateResetToken(), hashResetToken(), passwordMeetsPolicy(), resetPasswordWithToken(), appBaseUrl(), buildPasswordResetUrl(), isPasswordResetMailConfigured() (+5 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.09
-Nodes (40): CanvasPreview(), CanvasPreviewProps, Interaction, SectionBounds, DataFieldsExplorer(), DataFieldsExplorerProps, DocumentRenderer(), cloneEditorSnapshot() (+32 more)
+Cohesion: 0.08
+Nodes (42): CanvasPreview(), CanvasPreviewProps, Interaction, SectionBounds, DataFieldsExplorer(), DataFieldsExplorerProps, DocumentRenderer(), cloneEditorSnapshot() (+34 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.12
-Nodes (10): AuthShell(), AuthView, labelClass(), LoginClient(), SignInMode, LOGIN_ERROR_MESSAGES, LoginErrorMessage, resolveLoginErrorMessage() (+2 more)
+Cohesion: 0.13
+Nodes (9): AuthShell(), AuthView, labelClass(), LoginClient(), SignInMode, LOGIN_ERROR_MESSAGES, LoginErrorMessage, resolveLoginErrorMessage() (+1 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.13
-Nodes (19): calculatePayLine(), dailyWagePay(), workedHoursFromMinutes(), applySalaryComponentsToGross(), attendanceSalaryComponentNet(), buildSalaryComponentTotals(), countPresentDays(), fixedSalaryComponentNet() (+11 more)
+Cohesion: 0.14
+Nodes (14): attendanceSalaryComponentNet(), buildSalaryComponentTotals(), countPresentDays(), netSalaryComponentTotal(), SalaryComponentApplication, SalaryComponentItem, SalaryComponentKind, SalaryComponentTotals (+6 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.13
-Nodes (9): assignmentMetrics(), AssignmentViewFilter, collectAssignmentDrafts(), DailyQuantityLogEntryPage(), formatQty(), itemProgress(), ItemRow(), remainingForTracker() (+1 more)
+Cohesion: 0.06
+Nodes (34): AttendanceStatusBadge(), formatDateLabel(), formatMonthLabel(), HrAttendancePage(), monthFromSearchParams(), toDateYmd(), todayYmd(), hrApi (+26 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.06
-Nodes (32): HrEmployeesPage(), formatDate(), formatMoney(), GoodsReceiptPage(), periodFilterLabel(), receiptBillAmount(), ContextMenuState, compactNumber() (+24 more)
+Cohesion: 0.05
+Nodes (37): EmployeeStatus, HrEmployeesPage(), STATUS_OPTIONS, statusBadgeClasses, ContextMenuState, formatCount(), formatNumber(), StockJobBudgetPage() (+29 more)
 
 ### Community 19 - "Community 19"
-Cohesion: 0.10
-Nodes (34): ItemType, formatCurrency(), AVAILABLE_FIELDS, buildDeliveryNoteTemplateData(), buildDeliveryNoteTemplateDataFromEntity(), buildTemplateData(), contactsJsonToString(), customerTemplateSlice() (+26 more)
+Cohesion: 0.08
+Nodes (44): assertDeliveryNoteNumberAvailable(), getNextDeliveryNoteNumber(), parseDeliveryContactPerson(), replaceDeliveryNoteContactInNotes(), replaceDeliveryNoteNumberInNotes(), resolveDeliveryContactPerson(), ctx, ctx (+36 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.06
-Nodes (59): GET(), resolveTransactionUnitCost(), GET(), GET(), GET(), GET(), GET(), CreateSchema (+51 more)
+Cohesion: 0.05
+Nodes (53): POST(), GET(), PUT(), UpdateAssemblySchema, POST(), CategorySchema, GET(), POST() (+45 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.09
-Nodes (21): BoxRenderer(), boxShapeRadiusAndClip(), DocumentRendererProps, HeadingRenderer(), ImageSectionRenderer(), renderDynamicText(), resolveImageSectionSrc(), resolveInlineTemplate() (+13 more)
+Cohesion: 0.05
+Nodes (43): BoxRenderer(), boxShapeRadiusAndClip(), DocumentRendererProps, HeadingRenderer(), ImageSectionRenderer(), renderDynamicText(), resolveImageSectionSrc(), resolveInlineTemplate() (+35 more)
 
 ### Community 22 - "Community 22"
 Cohesion: 0.11
 Nodes (20): WORKFORCE_VISA_HOLDING_OPTIONS, AttendanceRow, currentMonthValue(), diffMinutes(), displayName(), DocRow, EmployeeRecord, formatDate() (+12 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.11
-Nodes (15): buildBreadcrumbs(), CLICKABLE_HR_ROUTES, HrPageChrome(), labelForSegment(), prettifyDateSegment(), HrPayrollPayslipPrintPage(), PayRunLine, PayRunPayload (+7 more)
+Cohesion: 0.05
+Nodes (27): Customer, CustomerJobLedgerPage(), formatDate(), formatQty(), JobContact, JobCostEnginePage, LEDGER_TABS, LedgerTabId (+19 more)
 
 ### Community 24 - "Community 24"
 Cohesion: 0.05
-Nodes (32): AbsenceRow, LeaveOnDate, Props, ScheduleAbsencesPanel(), DropZoneProps, FlatDropProps, parseScheduleTeamDropId(), parseScheduleWorkerDragId() (+24 more)
+Nodes (28): DropZoneProps, FlatDropProps, parseScheduleTeamDropId(), parseScheduleWorkerDragId(), ScheduleFlatTeamDropSurface(), scheduleTeamDropId(), ScheduleTeamDropZone(), ScheduleWorkerDnDEmployee (+20 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.18
-Nodes (20): Customer, Supplier, contactExportColumns(), customerImportRowToPayload(), customerToExportRow(), mapCustomerImportRow(), exportCustomersToXlsx(), exportSuppliersToXlsx() (+12 more)
+Cohesion: 0.20
+Nodes (20): Customer, Supplier, contactExportColumns(), customerImportRowToPayload(), customerToExportRow(), mapCustomerImportRow(), contactsFromImportRow(), formatPartyDateExport() (+12 more)
 
 ### Community 26 - "Community 26"
 Cohesion: 0.08
 Nodes (16): AssignmentOption, AttendanceEntryGridProps, AttendanceGridAssignmentMeta, AttendanceGridColumnKey, calculateWorkedMinutes(), DEFAULT_GRID_COLUMNS, diffMinutes(), EMPLOYEE_TYPE_ROW_TONE (+8 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.12
-Nodes (23): compensationNeedsLabel(), EditorState, FormulaPreview(), PayTypeEditorTable(), PayTypeModeGuide(), PayTypeRow, FORMULA_MODE_SCRIPTS, formulaScriptForMode() (+15 more)
+Cohesion: 0.09
+Nodes (35): compensationNeedsLabel(), EditorState, FormulaPreview(), PayTypeEditorTable(), PayTypeRecord, PayTypeModeGuide(), PayTypeRow, FORMULA_FUNCTIONS (+27 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.10
@@ -362,16 +367,16 @@ Cohesion: 0.07
 Nodes (33): ExpressionInput(), FormulaEditorRequest, FormulaPlayground(), AreaRule, BuilderState, describeFieldType(), describeLaborRule(), describeMaterialRule() (+25 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.11
-Nodes (27): buildBaseQuery(), buildQueryString(), currentMonth(), EmployeeEntry, EmployeeSummary, formatHours(), HrAttendanceReportPage(), MonthlyReportPayload (+19 more)
+Cohesion: 0.13
+Nodes (21): buildBaseQuery(), buildQueryString(), currentMonth(), EmployeeEntry, EmployeeSummary, formatHours(), HrAttendanceReportPage(), MonthlyReportPayload (+13 more)
 
 ### Community 31 - "Community 31"
 Cohesion: 0.09
-Nodes (21): Company, PrintDeliveryNotePage(), Transaction, PrintState, DeliveryNotePrintParams, openDeliveryNotePrint(), OpenDeliveryNotePrintOptions, companySeedPrintTemplatesRaw (+13 more)
+Nodes (25): PrintState, companySeedPrintTemplatesRaw, DocumentTemplate, buildCanvasRectsFromSections(), resolveCanvasRectsForSections(), extractIndexedTemplates(), GoogleDriveFolderRegistry, GoogleDriveFolderRegistryEntry (+17 more)
 
 ### Community 32 - "Community 32"
-Cohesion: 0.09
-Nodes (15): DEFAULT_GRID_COLUMNS, DISPATCH_NAVIGABLE_COLUMN_KEYS, DispatchGridColumnKey, DispatchLineGridPersistScope, DispatchLineGridProps, DispatchLineGridRow, formatGlobalStock(), formatWarehouseStock() (+7 more)
+Cohesion: 0.10
+Nodes (16): DEFAULT_GRID_COLUMNS, DISPATCH_NAVIGABLE_COLUMN_KEYS, DispatchGridColumnKey, DispatchLineGrid(), DispatchLineGridPersistScope, DispatchLineGridProps, DispatchLineGridRow, formatGlobalStock() (+8 more)
 
 ### Community 33 - "Community 33"
 Cohesion: 0.09
@@ -394,20 +399,20 @@ Cohesion: 0.12
 Nodes (14): buildFormFromJob(), Customer, CustomerJobFormPage(), dateInputValue(), FormMode, getMode(), JobFormState, JobRecord (+6 more)
 
 ### Community 38 - "Community 38"
-Cohesion: 0.05
-Nodes (49): config, getPrisma(), { handlers, signIn, signOut, auth }, resolvePermissions(), Session, User, buildAuthCookieOptions(), resolveAuthSecret() (+41 more)
+Cohesion: 0.10
+Nodes (20): BulkSchema, CustomerImportRowSchema, EmployeeImportRowSchema, MaterialRowSchema, POST(), SupplierImportRowSchema, FIELD_LABELS, formatZodImportError() (+12 more)
 
 ### Community 39 - "Community 39"
-Cohesion: 0.10
-Nodes (14): NATIONALITY_OPTIONS, buildOverviewEmployeeSignature(), CatalogDocType, DocRow, EmployeeProfileView(), EmployeeRecord, initials(), Tab (+6 more)
+Cohesion: 0.12
+Nodes (12): NATIONALITY_OPTIONS, buildOverviewEmployeeSignature(), CatalogDocType, DocRow, EmployeeProfileView(), EmployeeRecord, initials(), Tab (+4 more)
 
 ### Community 40 - "Community 40"
-Cohesion: 0.13
-Nodes (12): mapped, parsed, AdjustmentLineDraft, createLine(), ManualStockAdjustmentsPage(), totalDelta(), HEADER_ALIASES, ManualAdjustmentImportDraftLine (+4 more)
+Cohesion: 0.09
+Nodes (22): mapped, parsed, AdjustmentLineDraft, createLine(), ManualStockAdjustmentsPage(), totalDelta(), DEFAULT_STOCK_CONTROL_SETTINGS, readStockControlSettingsFromCompanySettings() (+14 more)
 
 ### Community 41 - "Community 41"
 Cohesion: 0.06
-Nodes (47): ApiCredential, IntegrationLog, SettingsApiPage(), textareaClass, CompanySourceMode, DraftState, EmailSettingsView, MaskedSecret (+39 more)
+Nodes (39): ApiCredential, IntegrationLog, SettingsApiPage(), textareaClass, AdminCompanyProfilePage(), CompanySourceMode, Row, formatMoney() (+31 more)
 
 ### Community 42 - "Community 42"
 Cohesion: 0.08
@@ -415,11 +420,11 @@ Nodes (38): generateIntegrationApiKey(), resolveApiCredentialByKey(), sha256(), 
 
 ### Community 43 - "Community 43"
 Cohesion: 0.11
-Nodes (29): SupplierImportRowSchema, buildCustomerListWhere(), CustomerSchema, POST(), UpdateSupplierSchema, ExistingSupplier, runSupplierBulkImport(), SupplierImportRow (+21 more)
+Nodes (30): buildCustomerListWhere(), CustomerSchema, POST(), UpdateSupplierSchema, CustomerImportRow, ExistingCustomer, runCustomerBulkImport(), ExistingSupplier (+22 more)
 
 ### Community 44 - "Community 44"
-Cohesion: 0.05
-Nodes (28): AllowanceTypeRow, LEAVE_TYPE_OPTIONS, BalanceRow, LeaveRow, LeaveTypeOption, PERMISSION_GROUPS, ROLE_PRESET_LABELS, currentMonth() (+20 more)
+Cohesion: 0.09
+Nodes (21): hasImportPermission(), JobVariationImportRowSchema, ParentJobImportRowSchema, SharedJobFieldsSchema, JobVariationImportRow, ParentJobImportRow, ExistingVariation, ParentJobRef (+13 more)
 
 ### Community 45 - "Community 45"
 Cohesion: 0.12
@@ -430,40 +435,40 @@ Cohesion: 0.22
 Nodes (17): buildPartyListUrl(), fetchExternalClients(), fetchExternalSuppliers(), fetchPartyListArray(), getPartyListsApiConfig(), mapPartyToCustomerFields(), normalizePartyListsBaseUrl(), normalizePartyListsBearerToken() (+9 more)
 
 ### Community 47 - "Community 47"
-Cohesion: 0.11
-Nodes (25): DispatchPage(), Entry, formatCount(), Material, FormulaRuleCounts, AllowanceType, ChangeLine, CompensationDetailBody() (+17 more)
+Cohesion: 0.18
+Nodes (11): BatchPool, getMonthRange(), ReconcileAllocationSchema, ReconcileLineSchema, ReconcileSchema, EffectiveWarehouse, findWarehouseById(), findWarehouseByName() (+3 more)
 
 ### Community 48 - "Community 48"
-Cohesion: 0.12
-Nodes (15): BasicOption, ChangeLogValue, DraftAssemblyComponent, formatNumber(), inputClassName(), MaterialDeleteTarget, MaterialEditor(), MaterialEditorTab (+7 more)
+Cohesion: 0.10
+Nodes (29): DispatchPage(), Entry, formatCount(), Material, FormulaRuleCounts, AllowanceType, ChangeLine, CompensationDetailBody() (+21 more)
 
 ### Community 49 - "Community 49"
-Cohesion: 0.12
-Nodes (12): CompanySwitcher(), StockLiveUpdates(), SelectCompanyPage(), companySlice, CompanyState, initialState, inflightRequests, MaterialSelectItem (+4 more)
+Cohesion: 0.09
+Nodes (59): POST(), GET(), redirectToSettings(), canAccess(), POST(), POST(), formatDeliveryNoteDriveLabel(), resolveDeliveryNoteNumber() (+51 more)
 
 ### Community 50 - "Community 50"
-Cohesion: 0.15
-Nodes (29): DELETE(), loadProgressEntry(), ProgressEntryUpdateSchema, PUT(), entryId, DELETE(), GET(), JobItemUpdateSchema (+21 more)
+Cohesion: 0.10
+Nodes (35): DELETE(), loadProgressEntry(), ProgressEntryUpdateSchema, PUT(), entryId, DELETE(), GET(), JobItemUpdateSchema (+27 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.19
-Nodes (16): basicHoursToMinutes(), calculateOvertimeMinutes(), resolveBasicHoursForEmployee(), atDubaiStartOfDayUtc(), dubaiWallTimeToUtc(), parseTimeCell(), DEFAULT_EMPLOYEE_TYPE_SETTINGS, EmployeeTypeSettingsMap (+8 more)
+Cohesion: 0.15
+Nodes (21): BodySchema, diffMinutes(), parseDt(), POST(), RowSchema, BodySchema, GET(), ItemSchema (+13 more)
 
 ### Community 52 - "Community 52"
-Cohesion: 0.14
-Nodes (14): fetchActiveEmployeesForSchedule(), fetchEmployeesByIds(), fetchJobById(), fetchJobsByIds(), jobToSearchItem(), readApiItems(), ScheduleEmployeeRow, ScheduleJobRow (+6 more)
+Cohesion: 0.19
+Nodes (16): SidebarNavGroupItem(), SidebarNavLinkItem(), SidebarNavMenu(), canSeeItem(), filterSidebarNavEntries(), isSidebarGroupActive(), isSidebarPathActive(), SIDEBAR_NAV_ENTRIES (+8 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.08
-Nodes (21): companiesApi, Company, CompanyProfile, profilesApi, Role, rolesApi, User, UserCompanyAccessItem (+13 more)
+Cohesion: 0.14
+Nodes (12): companiesApi, Company, CompanyProfile, profilesApi, Role, rolesApi, User, UserCompanyAccessItem (+4 more)
 
 ### Community 54 - "Community 54"
-Cohesion: 0.07
-Nodes (46): budgetedRow, unbudgetedRow, txPromise, row, decreaseTxn, increaseTxn, deletePromise, duplicatePromise (+38 more)
+Cohesion: 0.06
+Nodes (54): GET(), budgetedRow, unbudgetedRow, txPromise, row, decreaseTxn, increaseTxn, deletePromise (+46 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.27
-Nodes (9): EmployeeApiAuthContext, generateEmployeeMobileToken(), readBearerToken(), requireEmployeeApiAuth(), sha256(), LoginSchema, POST(), POST() (+1 more)
+Cohesion: 0.08
+Nodes (38): Job, exportCustomersToXlsx(), exportJobVariationsToXlsx(), exportParentJobsToXlsx(), exportSuppliersToXlsx(), downloadJobVariationImportTemplate(), extractVariationSuffix(), JOB_VARIATION_IMPORT_FIELDS (+30 more)
 
 ### Community 56 - "Community 56"
 Cohesion: 0.17
@@ -474,12 +479,12 @@ Cohesion: 0.05
 Nodes (43): Already done (previous work), APIs, Behavior, Behavior, Behavior notes, Cause, code:mermaid (flowchart LR), code:tsx ({searchKeys.length > 0 && !serverPagination ? ( ... search +) (+35 more)
 
 ### Community 58 - "Community 58"
-Cohesion: 0.08
-Nodes (24): appApi, categoriesApi, Category, CategoryResponse, dispatchApi, DispatchEntry, MaterialLog, materialLogsApi (+16 more)
+Cohesion: 0.13
+Nodes (14): appApi, categoriesApi, Category, CategoryResponse, MaterialLog, materialLogsApi, PriceLog, Unit (+6 more)
 
 ### Community 59 - "Community 59"
-Cohesion: 0.07
-Nodes (36): hrApi, HrAttendanceOverview, HrAttendanceOverviewParams, HrDocumentType, HrEmployee, HrEmployeeExportRecord, HrEmployeesArg, HrEmployeesListParams (+28 more)
+Cohesion: 0.13
+Nodes (22): HrEmployeeExportRecord, WorkforceVisaHolding, buildEmployeeProfileExtensionFromImport(), EMPLOYEE_STATUSES, EmployeeImportRow, employeeToExportRow(), employeeTypeLabel(), formatDateExport() (+14 more)
 
 ### Community 60 - "Community 60"
 Cohesion: 0.05
@@ -490,28 +495,28 @@ Cohesion: 0.06
 Nodes (35): Add enum, Add enum, Add enum, Add fields to `Company`, Add fields to `Transaction`, Add indexes, Add partial unique index via SQL migration, Add table (+27 more)
 
 ### Community 62 - "Community 62"
-Cohesion: 0.14
-Nodes (13): EmployeeOption, PreviewContext, FORMULA_FUNCTIONS, FORMULA_VARIABLE_GROUPS, BREAKDOWN_KEY_LABELS, COMPENSATION_INPUT_LABELS, FORMULA_FUNCTION_META, FORMULA_VARIABLE_META (+5 more)
+Cohesion: 0.15
+Nodes (6): InvalidRow, MappedRow, MaterialRow, PreviewRow, Props, SYSTEM_FIELDS
 
 ### Community 63 - "Community 63"
-Cohesion: 0.11
-Nodes (18): CustomerImportRowSchema, hasImportPermission(), JobVariationImportRowSchema, ParentJobImportRowSchema, POST(), SharedJobFieldsSchema, CustomerImportRow, FIELD_LABELS (+10 more)
+Cohesion: 0.06
+Nodes (47): CreateSchema, GET(), normalizeCompanySlug(), POST(), formulaChanged(), removeSyncedLeaveAttendance(), canDeleteDeliveryNote(), CategoryUpdateSchema (+39 more)
 
 ### Community 64 - "Community 64"
 Cohesion: 0.06
 Nodes (33): Accordion, Base vs Radix, Button / trigger as non-button element (base only), code:tsx (<DialogTrigger>), code:tsx (<Select>), code:tsx (// base.), code:tsx (<Select items={items} multiple defaultValue={[]}>), code:tsx (<Select defaultValue={plans[0]} itemToStringValue={(plan) =>) (+25 more)
 
 ### Community 65 - "Community 65"
-Cohesion: 0.07
-Nodes (33): POST(), GET(), PUT(), UpdateAssemblySchema, POST(), CategorySchema, GET(), POST() (+25 more)
+Cohesion: 0.20
+Nodes (11): config, proxy(), ROUTE_PERMISSIONS, RootPage(), isEmployeeSelfServiceAccount(), isEmployeeSelfServiceUser(), SelfServiceCandidate, Header() (+3 more)
 
 ### Community 66 - "Community 66"
 Cohesion: 0.21
 Nodes (9): DocsTheme, EndpointRow(), INTEGRATION_EXAMPLES, IntegrationExampleKey, API_DOC_SECTIONS, ApiDocAuth, ApiDocSection, ApiEndpointDoc (+1 more)
 
 ### Community 67 - "Community 67"
-Cohesion: 0.17
-Nodes (15): formulaChanged(), FormulaConfigSchema, FormulaConstantSchema, FormulaLibrarySchema, FormulaLibraryUpdateSchema, FormulaMaterialRuleSchema, formulaSnapshotData(), FormulaSnapshotRow (+7 more)
+Cohesion: 0.24
+Nodes (13): isPaidLeaveTypeOption(), deductFromBalanceFromRules(), isPaidLeaveFromRules(), legacyLeaveRequestTypeFromCode(), parseLeaveTypeRules(), payPercentForLeaveDay(), resolveAttendanceFromLeaveType(), resolveAttendanceFieldsFromLeaveType() (+5 more)
 
 ### Community 68 - "Community 68"
 Cohesion: 0.06
@@ -522,28 +527,28 @@ Cohesion: 0.11
 Nodes (18): devDependencies, dotenv, eslint, eslint-config-next, jest, prisma, shadcn, tailwindcss (+10 more)
 
 ### Community 70 - "Community 70"
-Cohesion: 0.23
-Nodes (15): resolveBasicHoursFromCompany(), assertSufficientLeaveBalance(), leaveDaysForRequest(), PrismaLike, remainingLeaveDays(), countLeaveDaysInclusive(), datesInRangeInclusive(), leaveRequestTypeToAttendance() (+7 more)
+Cohesion: 0.46
+Nodes (6): resolveBasicHoursFromCompany(), datesInRangeInclusive(), leaveRequestTypeToAttendance(), PAID_LEAVE_TYPES, loadLeaveTypeForRequest(), syncApprovedLeaveToAttendance()
 
 ### Community 71 - "Community 71"
-Cohesion: 0.13
-Nodes (22): ManualStockAdjustmentLineSchema, ManualStockAdjustmentSchema, DEFAULT_STOCK_CONTROL_SETTINGS, normalizeStockControlSettings(), readStockControlSettingsFromCompanySettings(), StockControlSettings, buildManualStockAdjustmentNote(), applyManualStockAdjustmentApproval() (+14 more)
+Cohesion: 0.29
+Nodes (10): ALLOWED_IDENTIFIERS, canonicalizeExpressionOperators(), escapeRegex(), evaluateFormulaExpression(), FormulaValue, FormulaVariableMap, normalizeFormulaResult(), replaceFormulaTokens() (+2 more)
 
 ### Community 72 - "Community 72"
-Cohesion: 0.05
-Nodes (33): AdminCompaniesPage(), AdminCompanyProfilePage(), formatQty(), StockCountSessionPage(), StockFormulaLibraryPage(), formatQty(), InterCompanyTransfersPage(), formatMoney() (+25 more)
+Cohesion: 0.08
+Nodes (21): buildBreadcrumbs(), CLICKABLE_HR_ROUTES, HrPageChrome(), labelForSegment(), prettifyDateSegment(), HrPayrollPayslipPrintPage(), PayRunLine, PayRunPayload (+13 more)
 
 ### Community 73 - "Community 73"
 Cohesion: 0.32
-Nodes (9): GET(), redirectToSettings(), finalizeUserMediaUpload(), UserMediaKind, POST(), POST(), buildUserDriveFolderName(), exchangeGoogleDriveAuthorizationCode() (+1 more)
+Nodes (5): EmployeeOption, PreviewContext, FORMULA_PREVIEW_SCENARIOS, FormulaPreviewScenario, CompensationInput
 
 ### Community 74 - "Community 74"
-Cohesion: 0.23
-Nodes (7): buildHubLinks(), WorkspaceHubTone, workspaceHubToneBadgeClass, WorkspaceHubLink, WorkspaceHubLinkRow(), WorkspaceHubSectionData, WorkspaceHubSectionHeader()
+Cohesion: 0.05
+Nodes (32): AdminCompaniesPage(), DraftState, formatQty(), StockCountSessionPage(), DashboardPage(), SECTION_COPY, StockFormulaLibraryPage(), HUB_SECTIONS (+24 more)
 
 ### Community 75 - "Community 75"
-Cohesion: 0.32
-Nodes (11): parseDatabaseUrl(), poolConfigFromUrl(), resolvePoolMax(), resolvePostgresPoolConfig(), sslModeRequiresTls(), withPoolTimeouts(), isAccelerateOrPrismaProxyUrl(), normalizePostgresUrl() (+3 more)
+Cohesion: 0.16
+Nodes (18): createPostgresAdapter(), getSharedPgPool(), PostgresPrismaAdapter, parseDatabaseUrl(), poolConfigFromUrl(), resolvePoolMax(), resolvePostgresPoolConfig(), sslModeRequiresTls() (+10 more)
 
 ### Community 76 - "Community 76"
 Cohesion: 0.09
@@ -563,11 +568,11 @@ Nodes (28): ConsumptionData, ConsumptionResponse, InventoryByWarehouseResponse, 
 
 ### Community 80 - "Community 80"
 Cohesion: 0.10
-Nodes (32): Job, exportJobVariationsToXlsx(), exportParentJobsToXlsx(), downloadJobVariationImportTemplate(), extractVariationSuffix(), jobVariationImportRowToPayload(), jobVariationToExportRow(), mapJobVariationImportRow() (+24 more)
+Nodes (21): Props, Props, extractImportApiErrorMessage(), BulkImportChunkPayload, runChunkedBulkImport(), autoMapHeader(), buildInitialColumnMapping(), normalizeHeader() (+13 more)
 
 ### Community 81 - "Community 81"
-Cohesion: 0.18
-Nodes (11): CustomerFilter, customersApi, CustomersListParams, CustomersListResponse, CustomerStatusFilter, PartyListSyncResult, PartyRecordSource, suppliersApi (+3 more)
+Cohesion: 0.21
+Nodes (15): AdjustReceiptSchema, CancelReceiptSchema, GET(), parseOverrideReason(), uniqueStrings(), buildReceiptAdjustmentNotes(), buildReceiptAdjustmentTransactionNote(), buildReceiptCancellationNotes() (+7 more)
 
 ### Community 82 - "Community 82"
 Cohesion: 0.07
@@ -586,8 +591,8 @@ Cohesion: 0.07
 Nodes (26): 1. Built-in variants, 2. Tailwind classes via `className`, 3. Add a new variant, 4. Wrapper components, Adding Custom Colors, Border Radius, Changing the Theme, Checking for Updates (+18 more)
 
 ### Community 86 - "Community 86"
-Cohesion: 0.13
-Nodes (32): isPaidLeaveType(), denom, lines, result, resultAllDays, countWeekdaysInMonth(), daysInMonth(), denomDaysExcludingSundays() (+24 more)
+Cohesion: 0.14
+Nodes (31): isPaidLeaveType(), calculatePayLine(), dailyWagePay(), denom, lines, result, resultAllDays, workedHoursFromMinutes() (+23 more)
 
 ### Community 87 - "Community 87"
 Cohesion: 0.22
@@ -602,8 +607,8 @@ Cohesion: 0.29
 Nodes (11): addScopedAreaPlaygroundValues(), applyResolvedFormulaFields(), buildAreaFormulaOverrideMap(), buildGlobalFormulaOverrideMap(), buildPlaygroundBaseValues(), buildPlaygroundNumericValues(), buildPlaygroundPreview(), evaluatePlaygroundExpression() (+3 more)
 
 ### Community 90 - "Community 90"
-Cohesion: 0.06
-Nodes (29): Customer, CustomerJobLedgerPage(), formatDate(), formatMoney(), formatQty(), JobContact, JobCostEnginePage, LEDGER_TABS (+21 more)
+Cohesion: 0.18
+Nodes (11): CustomerFilter, customersApi, CustomersListParams, CustomersListResponse, CustomerStatusFilter, PartyListSyncResult, PartyRecordSource, suppliersApi (+3 more)
 
 ### Community 91 - "Community 91"
 Cohesion: 0.08
@@ -611,23 +616,23 @@ Nodes (25): dependencies, bcryptjs, class-variance-authority, clsx, @dnd-kit/cor
 
 ### Community 93 - "Community 93"
 Cohesion: 0.10
-Nodes (41): BodySchema, POST(), AllowanceSumRow, dedupeAllowancesByType(), resolveMonthlyAllowanceTotal(), sumAllowanceAmounts(), attendanceSelect, dummyFormulaPreviewContext() (+33 more)
+Nodes (39): BodySchema, AllowanceSumRow, dedupeAllowancesByType(), resolveMonthlyAllowanceTotal(), sumAllowanceAmounts(), attendanceSelect, dummyFormulaPreviewContext(), employeeFormulaPreviewContext() (+31 more)
 
 ### Community 94 - "Community 94"
-Cohesion: 0.18
-Nodes (16): GET(), buildMaterialListWhere(), MaterialSchema, POST(), serializeMaterialListRow(), canEdit(), canView(), CreateBaseSchema (+8 more)
+Cohesion: 0.05
+Nodes (73): GET(), POST(), GET(), resolveTransactionUnitCost(), GET(), GET(), GET(), GET() (+65 more)
 
 ### Community 95 - "Community 95"
-Cohesion: 0.15
-Nodes (9): LinkWithDisplay, mergeLinksIntoTrackers(), parseTrackers(), TrackableMaterialInput, Tx, DailyQuantityLogAssignmentPayload, DailyQuantityLogEligibleJob, DailyQuantityLogTeamPayload (+1 more)
+Cohesion: 0.24
+Nodes (14): canEditJobBudget(), canTransferWarehouse(), canViewFormulaMaterialsApi(), canViewJobBudget(), canViewJobsListApi(), canViewProductionLog(), canViewStockCountSession(), canViewWarehouseTransfer() (+6 more)
 
 ### Community 96 - "Community 96"
-Cohesion: 0.16
-Nodes (16): EvalHooks, evaluateExpression(), evaluateExpressionWithSumDays(), evaluateFormulaScript(), FormulaDayContext, FormulaScope, FormulaScriptResult, parseFormulaScript() (+8 more)
+Cohesion: 0.13
+Nodes (20): EvalHooks, evaluateExpression(), evaluateExpressionWithSumDays(), evaluateFormulaScript(), FormulaDayContext, FormulaScope, FormulaScriptResult, parseFormulaScript() (+12 more)
 
 ### Community 97 - "Community 97"
-Cohesion: 0.25
-Nodes (16): canAccess(), POST(), POST(), FILE_MIMES, IMAGE_MIMES, POST(), sanitizeFileName(), POST() (+8 more)
+Cohesion: 0.17
+Nodes (13): focusNavCell(), isFocusableNavTarget(), LineGridNavInputProps, mergeLineGridInputProps(), MergeLineGridInputPropsOptions, queryNavCell(), tryFocusCell(), attachBlockInputWheelChange() (+5 more)
 
 ### Community 98 - "Community 98"
 Cohesion: 0.29
@@ -646,44 +651,48 @@ Cohesion: 0.08
 Nodes (23): Built-in variants first, className for layout only, code:tsx (<div className="bg-blue-500 text-white">), code:tsx (<div className={`flex items-center ${isActive ? "bg-primary ), code:tsx (import { cn } from "@/lib/utils"), code:tsx (<div className="bg-primary text-primary-foreground">), code:tsx (<span className="text-emerald-600">+20.1%</span>), code:tsx (<Badge variant="secondary">+20.1%</Badge>) (+15 more)
 
 ### Community 102 - "Community 102"
-Cohesion: 0.50
-Nodes (4): buildPivot(), JobConsumptionTable(), Props, Row
+Cohesion: 0.04
+Nodes (54): AllowanceTypeRow, EmailSettingsView, MaskedSecret, textareaClass, cellInputClass, SettingsMap, AllowanceRow, AllowanceType (+46 more)
 
 ### Community 104 - "Community 104"
 Cohesion: 0.09
 Nodes (22): CLI, code:json (!`npx shadcn@latest info --json`), code:tsx (// Form layout: FieldGroup + Field, not div + Label.), code:bash (npx shadcn@latest docs button dialog select), code:bash (# Create a new project.), Component Docs, Examples, and Usage, Component Selection, Component Structure → [composition.md](./rules/composition.md) (+14 more)
 
 ### Community 105 - "Community 105"
-Cohesion: 0.10
-Nodes (27): BatchSchema, DeliveryNoteCustomItemPayload, LineSchema, POST(), defaultTransactionOptions, heavyTransactionOptions, PrismaTransactionOptions, assertDeliveryNoteNumberAvailable() (+19 more)
+Cohesion: 0.09
+Nodes (21): BatchSchema, DeliveryNoteCustomItemPayload, LineSchema, defaultTransactionOptions, heavyTransactionOptions, PrismaTransactionOptions, buildDispatchRevisionLinesFromStockOutIds(), computeDispatchRevisionChangeSummary() (+13 more)
 
 ### Community 106 - "Community 106"
 Cohesion: 0.10
 Nodes (8): inter, metadata, EmployeePortalLayout(), ThemeAwareToaster(), ContextMenuProvider(), Theme, ThemeContext, useTheme()
 
 ### Community 107 - "Community 107"
-Cohesion: 0.33
-Nodes (10): canManageDrive(), DELETE(), GET(), PUT(), UpdateSchema, getGlobalGoogleDriveConfig(), GlobalGoogleDriveConfig, normalizeConfig() (+2 more)
+Cohesion: 0.13
+Nodes (17): Company, PrintDeliveryNotePage(), Transaction, DeliveryNotePrintParams, openDeliveryNotePrint(), OpenDeliveryNotePrintOptions, ItemType, KNOWN_ITEM_TYPES (+9 more)
+
+### Community 108 - "Community 108"
+Cohesion: 0.20
+Nodes (11): batches, tx, calculateFIFOConsumption(), buildManualStockAdjustmentNote(), applyManualStockAdjustmentApproval(), Tx, consumeTransactionBatchQuantities(), consumeTransactionBatchQuantitiesBestEffort() (+3 more)
 
 ### Community 111 - "Community 111"
-Cohesion: 0.24
-Nodes (6): ScheduleSearchSelectProps, SearchSelect(), SearchSelectProps, fuzzyMatch(), SearchableItem, searchItems()
+Cohesion: 0.13
+Nodes (14): Sheet, SheetClose(), SheetContent, SheetContext, SheetContextValue, SheetDescription, SheetFooter(), SheetHeader() (+6 more)
 
 ### Community 112 - "Community 112"
-Cohesion: 0.27
-Nodes (9): canEditStockCountSession(), CreateSessionSchema, POST(), SessionLineSchema, POST(), buildManualAdjustmentLinesFromCount(), buildStockCountSessionSnapshot(), mapStockCountSessionLine() (+1 more)
+Cohesion: 0.20
+Nodes (9): BudgetActualRow, CostingData, formatAed(), JobConsumptionCostingSection(), JobConsumptionCostingSectionProps, MaterialConsumption, PRICING_MODE_BY_UI, UICostingMethod (+1 more)
 
 ### Community 122 - "Community 122"
-Cohesion: 0.08
-Nodes (21): DispatchLineGrid(), DEFAULT_GRID_COLUMNS, formatGlobalStock(), formatWarehouseStock(), getSelectedUom(), getWarehouseBaseStock(), GoodsReceiptLineGrid(), GoodsReceiptLineGridProps (+13 more)
+Cohesion: 0.09
+Nodes (14): DEFAULT_GRID_COLUMNS, formatGlobalStock(), formatWarehouseStock(), getSelectedUom(), getWarehouseBaseStock(), GoodsReceiptLineGridProps, GoodsReceiptLineGridRow, LineGridPreferencePayload (+6 more)
 
 ### Community 125 - "Community 125"
-Cohesion: 0.27
-Nodes (10): GET(), GET(), loadFinalizedRows(), loadPendingRows(), MergedRow, parseStatusFilter(), RowStatus, toMergedRows() (+2 more)
+Cohesion: 0.12
+Nodes (15): BasicOption, ChangeLogValue, DraftAssemblyComponent, formatNumber(), inputClassName(), MaterialDeleteTarget, MaterialEditor(), MaterialEditorTab (+7 more)
 
 ### Community 134 - "Community 134"
-Cohesion: 0.10
-Nodes (33): GET(), GET(), GET(), parseOverrideReason(), uniqueStrings(), headerMeta, merged, parsed (+25 more)
+Cohesion: 0.12
+Nodes (27): GET(), headerMeta, merged, parsed, legacyNotes, meta, notes, parsed (+19 more)
 
 ### Community 135 - "Community 135"
 Cohesion: 0.10
@@ -694,20 +703,20 @@ Cohesion: 0.11
 Nodes (18): Buttons inside inputs use InputGroup + InputGroupAddon, code:tsx (<FieldGroup>), code:tsx (// Invalid.), code:tsx (<InputGroup>), code:tsx (import { InputGroup, InputGroupInput } from "@/components/ui), code:tsx (<div className="relative">), code:tsx (import { InputGroup, InputGroupInput, InputGroupAddon } from), code:tsx (const [selected, setSelected] = useState("daily")) (+10 more)
 
 ### Community 137 - "Community 137"
-Cohesion: 0.09
-Nodes (19): CustomItem, DeliveryNoteCreatePage(), generateId(), JobContactOption, Line, PendingChange, DeliveryNoteCustomItem, DeliveryNoteCustomItemsGridProps (+11 more)
+Cohesion: 0.10
+Nodes (16): CustomItem, DeliveryNoteCreatePage(), generateId(), JobContactOption, Line, PendingChange, SubcontractMaterialLineRow, SubcontractReceivePanelProps (+8 more)
 
 ### Community 138 - "Community 138"
 Cohesion: 0.12
 Nodes (19): attendanceWorkedMinutesFromPunches(), calculateJobCostEngine(), diffMinutes(), getTransactionCost(), isRecord(), mergeDefaultMaterialSelections(), resolveCurrentUnitCostFromLogs(), dedupeActualConsumptionAcrossItems() (+11 more)
 
 ### Community 139 - "Community 139"
-Cohesion: 0.14
-Nodes (20): AdjustReceiptSchema, CancelReceiptSchema, buildReceiptAdjustmentNotes(), buildReceiptAdjustmentTransactionNote(), buildReceiptCancellationNotes(), buildReceiptCancellationTransactionNote(), sanitizeReason(), StockExceptionApprovalInput (+12 more)
+Cohesion: 0.29
+Nodes (9): GET(), GET(), loadFinalizedRows(), loadPendingRows(), MergedRow, parseStatusFilter(), RowStatus, toMergedRows() (+1 more)
 
 ### Community 140 - "Community 140"
 Cohesion: 0.24
-Nodes (10): extractIndexedTemplates(), GoogleDriveFolderRegistry, GoogleDriveFolderRegistryEntry, GoogleDriveOAuthConfig, normalizeCompanyPrintTemplateShape(), PrintTemplatesRoot, readCompanyDocumentTemplates(), readCompanyGoogleDriveOAuthConfig() (+2 more)
+Nodes (5): AllocationMap, formatNumber(), IssueReconcileForm(), QtyMap, WarehouseMap
 
 ### Community 141 - "Community 141"
 Cohesion: 0.08
@@ -718,12 +727,12 @@ Cohesion: 0.12
 Nodes (16): Allowed domains (optional per credential), Authentication, Behavior, code:json ({), code:json ({), Company mapping, Customer matching (Phase 5), Endpoint (+8 more)
 
 ### Community 143 - "Community 143"
-Cohesion: 0.20
-Nodes (14): BootstrapAdminInput, BootstrapAdminResult, bootstrapFirstAdmin(), DEFAULT_OPERATIONAL_SETTINGS, slugifyCompanySlug(), passwordMeetsPolicy(), DEFAULT_TYPES, ensureDefaultEmployeeDocumentTypes() (+6 more)
+Cohesion: 0.24
+Nodes (12): BootstrapAdminInput, BootstrapAdminResult, bootstrapFirstAdmin(), DEFAULT_OPERATIONAL_SETTINGS, slugifyCompanySlug(), ensureAllSystemRoles(), companySeedPrintTemplates, databaseUrl (+4 more)
 
 ### Community 144 - "Community 144"
-Cohesion: 0.14
-Nodes (18): isPaidLeaveTypeOption(), deductFromBalanceFromRules(), isPaidLeaveFromRules(), LeavePayTier, LeavePayTierSchema, LeaveTypeRecord, LeaveTypeRules, legacyLeaveRequestTypeFromCode() (+10 more)
+Cohesion: 0.11
+Nodes (18): DEFAULT_ANNUAL_LEAVE_RULES, DEFAULT_PAID_LEAVE_RULES, DEFAULT_UNPAID_LEAVE_RULES, LeavePayTier, LeavePayTierSchema, LeaveTypeRecord, LeaveTypeRules, LeaveTypeRulesSchema (+10 more)
 
 ### Community 145 - "Community 145"
 Cohesion: 0.25
@@ -734,16 +743,16 @@ Cohesion: 0.13
 Nodes (15): 1. List Records (with Company Scoping), 2. Create Record (with Uniqueness Check), 3. Update with Relation Check, 4. Atomic Transaction, 5. Include Relations, 6. Complex Filtering, 7. Group & Count (Client-Side), code:typescript (import { prisma } from '@/lib/db/prisma';) (+7 more)
 
 ### Community 147 - "Community 147"
-Cohesion: 0.22
-Nodes (7): createPostgresAdapter(), getSharedPgPool(), PostgresPrismaAdapter, prismaClientHasExpectedModels(), resolvePrismaClient(), databaseUrl, prisma
+Cohesion: 0.18
+Nodes (18): JobItemCommonSchema, JobItemCreateSchema, JobItemUpdateSchema, normalizeJobItemCreatePayload(), normalizeJobItemUpdatePayload(), TrackingItemSchema, getBudgetMaterialIdsFromJobItem(), getSelectedMaterialIdsFromSpecifications() (+10 more)
 
 ### Community 148 - "Community 148"
 Cohesion: 0.14
 Nodes (13): code:bash (shadcn mcp        # start the MCP server (stdio)), code:json ({), Configuring Registries, Setup, `shadcn:get_add_command_for_items`, `shadcn:get_audit_checklist`, `shadcn:get_item_examples_from_registries`, `shadcn:get_project_registries` (+5 more)
 
 ### Community 149 - "Community 149"
-Cohesion: 0.20
-Nodes (6): RuleRows(), buildAreaFormulaValueTokens(), buildFormulaConstantTokens(), buildFormulaTokens(), formatAutoSaveLabel(), FormulaBuilderEditor()
+Cohesion: 0.29
+Nodes (6): StockLiveUpdates(), SelectCompanyPage(), companySlice, CompanyState, initialState, useAppDispatch()
 
 ### Community 151 - "Community 151"
 Cohesion: 0.15
@@ -766,36 +775,36 @@ Cohesion: 0.18
 Nodes (10): code:tsx (<Button>), code:tsx (<Button>), code:tsx (<Button>), code:tsx (<Button>), code:tsx (const iconMap = {), code:tsx (// Import from the project's configured iconLibrary (e.g. lu), Icons, Icons in Button use data-icon attribute (+2 more)
 
 ### Community 156 - "Community 156"
-Cohesion: 0.49
-Nodes (8): convertLineQuantity(), convertLineUnitCost(), defaultDisplayUnitCost(), formatConvertedNumber(), getMaterialUomFactor(), unitCostFromBase(), unitCostToBase(), material
+Cohesion: 0.24
+Nodes (10): formatDays(), formatMoney(), formatQty(), JobCostEnginePage(), JobExecutionScheduleEditor(), mapJobStatusToProgressStatus(), normalizeNumber(), pricingModeLabel() (+2 more)
 
 ### Community 157 - "Community 157"
 Cohesion: 0.17
 Nodes (11): Attendance fields used by payroll (later), Backfill script, Calculator library (developers), code:bash (npx tsx scripts/backfill-attendance-basic-hours.ts), HR payroll foundation — operations guide, Leave balance, Pay runs, Pay types and compensation (+3 more)
 
 ### Community 158 - "Community 158"
-Cohesion: 0.24
-Nodes (10): formatDays(), formatMoney(), formatQty(), JobCostEnginePage(), JobExecutionScheduleEditor(), mapJobStatusToProgressStatus(), normalizeNumber(), pricingModeLabel() (+2 more)
+Cohesion: 0.20
+Nodes (6): RuleRows(), buildAreaFormulaValueTokens(), buildFormulaConstantTokens(), buildFormulaTokens(), formatAutoSaveLabel(), FormulaBuilderEditor()
 
 ### Community 159 - "Community 159"
 Cohesion: 0.22
 Nodes (9): code:bash (npm install --save-dev jest ts-jest @types/jest), code:bash (npm test), code:bash (npm test -- fifo-batch.test.ts          # FIFO stock consump), code:bash (npm test -- --watch                     # Watch mode), Install Test Dependencies (One-Time), Run All Tests, Run Specific Test Suite, Running Tests (+1 more)
 
 ### Community 160 - "Community 160"
-Cohesion: 0.21
-Nodes (12): cellInputClass, SettingsMap, buildWorkforceProfileExtension(), DEFAULT_WORKFORCE_PROFILE, normalizeExpertises(), normalizeType(), normalizeVisaHolding(), parseWorkforceProfile() (+4 more)
+Cohesion: 0.50
+Nodes (7): resolveBasicHoursForEmployee(), atDubaiStartOfDayUtc(), dubaiWallTimeToUtc(), parseTimeCell(), parseBreakWindow(), regenerateAttendanceBoilerplate(), ymd()
 
 ### Community 162 - "Community 162"
 Cohesion: 0.25
 Nodes (7): computedHash, skillPath, source, sourceType, skills, shadcn, version
 
 ### Community 163 - "Community 163"
-Cohesion: 0.27
-Nodes (9): DEFAULT_ANNUAL_LEAVE_RULES, DEFAULT_PAID_LEAVE_RULES, DEFAULT_UNPAID_LEAVE_RULES, backfillAttendanceLeaveTypeIds(), backfillLeaveRequestLeaveTypeIds(), DEFAULT_LEAVE_TYPE_TEMPLATES, ensureDefaultLeaveTypes(), ensureLeaveTypesReady() (+1 more)
+Cohesion: 0.25
+Nodes (9): buildAreaFormulaValuesFromConfig(), buildAreaInstancesFromSpecifications(), buildFormulaValuesFromConfig(), buildValuesFromSpecifications(), formulaValueToString(), isRecord(), legacyAreaInstanceId(), parseBudgetSchema() (+1 more)
 
 ### Community 164 - "Community 164"
-Cohesion: 0.07
-Nodes (39): BatchPool, getMonthRange(), ReconcileAllocationSchema, ReconcileLineSchema, ReconcileSchema, executeWarehouseTransferBatch(), Tx, WarehouseTransferBatchInput (+31 more)
+Cohesion: 0.09
+Nodes (26): executeWarehouseTransferBatch(), Tx, WarehouseTransferBatchInput, WarehouseTransferBatchResult, WarehouseTransferLineResult, WarehouseTransferLinkOptions, canEditSubcontractIssue(), computeTransitStatus() (+18 more)
 
 ### Community 165 - "Community 165"
 Cohesion: 0.29
@@ -818,8 +827,8 @@ Cohesion: 0.33
 Nodes (5): code:bash (# Inspect database schema), Migration Checklist for New Features, Prisma Commands, Prisma/MySQL Developer Guide, Useful Links
 
 ### Community 170 - "Community 170"
-Cohesion: 0.50
-Nodes (4): BudgetInput(), isEmptyBudgetValue(), numericField(), parseInputValue()
+Cohesion: 0.14
+Nodes (13): ReceiptAdjustmentImpactResponse, ReceiptAdjustmentImpactRow, ReceiptAdjustmentImpactTransaction, ReceiptEntriesListParams, ReceiptEntriesListResponse, ReceiptEntry, ReceiptMaterial, receiptsApi (+5 more)
 
 ### Community 171 - "Community 171"
 Cohesion: 0.40
@@ -850,24 +859,24 @@ Cohesion: 0.40
 Nodes (4): mcpServers, shadcn, args, command
 
 ### Community 178 - "Community 178"
-Cohesion: 0.19
-Nodes (8): compactNumber(), customerContactsForDisplay(), CustomerFormMode, CustomerReadOnlyDetails(), CustomersPage(), FILTER_OPTIONS, formatDate(), emptyCustomerPartyFormState()
+Cohesion: 0.05
+Nodes (28): DailyQuantityLogLandingPage(), FilterChip(), Row, RowStatus, Th(), todayYmd(), StockBatch, stockBatchesApi (+20 more)
 
 ### Community 179 - "Community 179"
-Cohesion: 0.27
-Nodes (10): buildImportContext(), createMaterialRow(), ImportContext, MaterialImportRow, RefResolution, resolveCategoryRef(), resolveWarehouseRef(), runMaterialBulkImport() (+2 more)
+Cohesion: 0.22
+Nodes (9): newArea(), newField(), newFormulaConstant(), newLaborRule(), newMaterialRule(), uid(), createFormulaConstantDraft(), createGlobalFieldDraft() (+1 more)
 
 ### Community 180 - "Community 180"
 Cohesion: 0.18
-Nodes (14): ensureAllSystemRoles(), ensureMissingSystemRoles(), ensureSystemRole(), RoleDb, syncSystemRolePermissionsFromPresets(), SYSTEM_ROLE_DEFINITIONS, SYSTEM_ROLE_SLUGS, SystemRoleDefinition (+6 more)
+Nodes (13): ensureMissingSystemRoles(), ensureSystemRole(), RoleDb, syncSystemRolePermissionsFromPresets(), SYSTEM_ROLE_DEFINITIONS, SYSTEM_ROLE_SLUGS, SystemRoleDefinition, SystemRolePreset (+5 more)
 
 ### Community 181 - "Community 181"
 Cohesion: 0.50
 Nodes (4): Database Connection Issues, Prisma Client Not Found, Support & Troubleshooting, Tests Failing
 
 ### Community 182 - "Community 182"
-Cohesion: 0.25
-Nodes (9): buildAreaFormulaValuesFromConfig(), buildAreaInstancesFromSpecifications(), buildFormulaValuesFromConfig(), buildValuesFromSpecifications(), formulaValueToString(), isRecord(), legacyAreaInstanceId(), parseBudgetSchema() (+1 more)
+Cohesion: 0.39
+Nodes (8): toScheduleEmployee(), buildWorkforceProfileExtension(), DEFAULT_WORKFORCE_PROFILE, normalizeExpertises(), normalizeType(), normalizeVisaHolding(), parseWorkforceProfile(), WorkforceProfile
 
 ### Community 183 - "Community 183"
 Cohesion: 0.50
@@ -878,8 +887,8 @@ Cohesion: 0.67
 Nodes (3): code:env (AUTH_SECRET=your-long-random-string-at-least-32-chars), code:bash (openssl rand -base64 32), Fix it locally (usually enough)
 
 ### Community 186 - "Community 186"
-Cohesion: 0.29
-Nodes (8): CreateCredentialSchema, GET(), hasManagePermission(), POST(), hasManagePermission(), PatchCredentialSchema, normalizeAllowedDomainsList(), parseStoredAllowedDomains()
+Cohesion: 0.18
+Nodes (16): GET(), buildMaterialListWhere(), MaterialSchema, POST(), serializeMaterialListRow(), canEdit(), canView(), CreateBaseSchema (+8 more)
 
 ### Community 187 - "Community 187"
 Cohesion: 0.67
@@ -890,88 +899,100 @@ Cohesion: 0.67
 Nodes (3): Database Setup, Key Constraints, Prisma Schema
 
 ### Community 204 - "Community 204"
-Cohesion: 0.22
-Nodes (9): newArea(), newField(), newFormulaConstant(), newLaborRule(), newMaterialRule(), uid(), createFormulaConstantDraft(), createGlobalFieldDraft() (+1 more)
+Cohesion: 0.23
+Nodes (7): buildHubLinks(), WorkspaceHubTone, workspaceHubToneBadgeClass, WorkspaceHubLink, WorkspaceHubLinkRow(), WorkspaceHubSectionData, WorkspaceHubSectionHeader()
 
 ### Community 205 - "Community 205"
+Cohesion: 0.26
+Nodes (10): collapseForNotesLine(), customItemsFromJson(), DeliveryNoteCustomItemPrint, formatDeliveryNoteCustomItemBullet(), inferCustomItemsLineNoAuto(), lineNoFromRow(), mapCustomItemsForTemplate(), parseDeliveryNoteCustomItemBullet() (+2 more)
+
+### Community 206 - "Community 206"
 Cohesion: 0.31
 Nodes (7): counted, lines, buildStockCountDraftLines(), roundQty(), StockCountDraftLine, StockCountMaterialInput, updateStockCountVariance()
 
-### Community 206 - "Community 206"
-Cohesion: 0.13
-Nodes (10): DashboardPage(), SECTION_COPY, HUB_SECTIONS, HubItem, APP_NAV_ITEMS, AppNavItem, filterVisibleNavItems(), AlertTitle (+2 more)
-
 ### Community 207 - "Community 207"
 Cohesion: 0.06
-Nodes (79): PUT(), PutSchema, CreateSchema, GET(), POST(), DELETE(), GET(), AssignmentSchema (+71 more)
+Nodes (75): PUT(), PutSchema, CreateSchema, GET(), POST(), DELETE(), PatchSchema, CreateSchema (+67 more)
 
 ### Community 208 - "Community 208"
-Cohesion: 0.38
-Nodes (5): AdjustmentLinePayload, AdjustmentPayload, GET(), toLines(), toTransactionIds()
+Cohesion: 0.33
+Nodes (10): Company, CompanySwitcher(), SidebarNavUser(), DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, SidebarMenuButton() (+2 more)
 
 ### Community 209 - "Community 209"
-Cohesion: 0.06
-Nodes (28): Props, extractImportApiErrorMessage(), BulkImportChunkPayload, runChunkedBulkImport(), autoMapHeader(), buildInitialColumnMapping(), normalizeHeader(), CUSTOMER_IMPORT_FIELDS (+20 more)
+Cohesion: 0.25
+Nodes (4): inflightRequests, MaterialSelectItem, SupplierSelectItem, toMaterialSelectItem()
 
 ### Community 210 - "Community 210"
 Cohesion: 0.25
 Nodes (7): name, prisma, binaryTargets, engineType, schema, private, version
 
 ### Community 211 - "Community 211"
-Cohesion: 0.36
-Nodes (7): recalculateAssemblyAncestorsTx(), recalculateAssemblyUnitCostTx(), roundMoney(), TxClient, buildReceiptPriceLogNote(), reverseReceiptPriceLogUpdates(), TxClient
-
-### Community 212 - "Community 212"
-Cohesion: 0.29
-Nodes (4): Transaction, StatusBadge(), formatDate(), formatDateTime()
+Cohesion: 0.49
+Nodes (8): convertLineQuantity(), convertLineUnitCost(), defaultDisplayUnitCost(), formatConvertedNumber(), getMaterialUomFactor(), unitCostFromBase(), unitCostToBase(), material
 
 ### Community 213 - "Community 213"
-Cohesion: 0.25
-Nodes (7): approvedCreatedAt, approvedDecisionAt, approvedRow, materialRow, rejectedCreatedAt, rejectedDecisionAt, warehouseRow
+Cohesion: 0.50
+Nodes (4): BudgetInput(), isEmptyBudgetValue(), numericField(), parseInputValue()
 
 ### Community 215 - "Community 215"
-Cohesion: 0.33
-Nodes (6): ensureCategoryRef(), ensureWarehouseRef(), findWarehouseRef(), RefInput, resolveWarehouseRef(), Tx
+Cohesion: 0.13
+Nodes (12): STOCK_LEDGER_INVALIDATES, dispatchApi, DispatchEntry, ApiWithUtils, LiveUpdateChannel, LiveUpdateMessage, initialState, uiSlice (+4 more)
 
 ### Community 216 - "Community 216"
 Cohesion: 0.36
 Nodes (7): buildMaterialListOrderBy(), ListSortDirection, MATERIAL_LIST_SORT_KEY_SET, MATERIAL_LIST_SORT_KEYS, MaterialListSortKey, parseListSortDirection(), parseMaterialListSortKey()
 
 ### Community 218 - "Community 218"
-Cohesion: 0.73
-Nodes (5): displayProfileImage(), displaySignature(), GET(), PATCH(), convertGoogleDriveUrl()
+Cohesion: 0.22
+Nodes (6): defaultColumnState(), FlexibleTableColumn, mergeStoredColumnState(), Props, StoredTableState, TableColumnState
 
 ### Community 220 - "Community 220"
-Cohesion: 0.50
-Nodes (3): Unit, UnitResponse, unitsApi
+Cohesion: 0.48
+Nodes (6): DEFAULT_ATTENDANCE_REPORT_SCHEMA, normalizeAttendanceReportBuilderSchema(), normalizeAttendanceReportColumns(), normalizeAttendanceReportFormats(), GET(), sanitizeSheetName()
+
+### Community 221 - "Community 221"
+Cohesion: 0.27
+Nodes (10): buildImportContext(), createMaterialRow(), ImportContext, MaterialImportRow, RefResolution, resolveCategoryRef(), resolveWarehouseRef(), runMaterialBulkImport() (+2 more)
+
+### Community 222 - "Community 222"
+Cohesion: 0.33
+Nodes (11): PostingParams, postProductionStockForProgressEntry(), productionBatchNumber(), productionNote(), reduceBatchOrThrow(), reduceMaterialStockOrThrow(), reduceWarehouseStockOrThrow(), reverseProductionStockPostingForProgressEntry() (+3 more)
+
+### Community 223 - "Community 223"
+Cohesion: 0.25
+Nodes (7): StockCountSessionDto, StockCountSessionLineDto, StockCountSessionListResponse, StockCountSessionRevisionDto, stockCountSessionsApi, StockCountSessionSubmitResponse, UpsertStockCountSessionPayload
+
+### Community 224 - "Community 224"
+Cohesion: 0.38
+Nodes (5): AdjustmentLinePayload, AdjustmentPayload, GET(), toLines(), toTransactionIds()
 
 ### Community 225 - "Community 225"
-Cohesion: 0.22
-Nodes (8): ReceiptAdjustmentImpactResponse, ReceiptAdjustmentImpactRow, ReceiptAdjustmentImpactTransaction, ReceiptEntriesListParams, ReceiptEntriesListResponse, ReceiptEntry, ReceiptMaterial, receiptsApi
+Cohesion: 0.50
+Nodes (4): buildPivot(), JobConsumptionTable(), Props, Row
 
-### Community 236 - "Community 236"
-Cohesion: 0.06
-Nodes (16): DailyQuantityLogLandingPage(), FilterChip(), Row, RowStatus, Th(), todayYmd(), formatCount(), formatNumber() (+8 more)
+### Community 226 - "Community 226"
+Cohesion: 0.40
+Nodes (3): DeliveryNoteCustomItem, DeliveryNoteCustomItemsGridProps, multilineCellClassName
 
 ## Knowledge Gaps
-- **1418 isolated node(s):** `name`, `version`, `private`, `postinstall`, `dev` (+1413 more)
+- **1442 isolated node(s):** `name`, `version`, `private`, `postinstall`, `dev` (+1437 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **21 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **22 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `cn()` connect `Community 4` to `Community 1`, `Community 137`, `Community 10`, `Community 11`, `Community 14`, `Community 15`, `Community 17`, `Community 18`, `Community 149`, `Community 24`, `Community 26`, `Community 28`, `Community 158`, `Community 160`, `Community 33`, `Community 32`, `Community 37`, `Community 41`, `Community 44`, `Community 45`, `Community 47`, `Community 48`, `Community 178`, `Community 72`, `Community 74`, `Community 206`, `Community 90`, `Community 91`, `Community 236`, `Community 122`?**
-  _High betweenness centrality (0.079) - this node is a cross-community bridge._
-- **Why does `errorResponse()` connect `Community 65` to `Community 0`, `Community 5`, `Community 6`, `Community 134`, `Community 8`, `Community 139`, `Community 12`, `Community 143`, `Community 20`, `Community 30`, `Community 164`, `Community 38`, `Community 42`, `Community 43`, `Community 50`, `Community 54`, `Community 55`, `Community 186`, `Community 63`, `Community 67`, `Community 70`, `Community 71`, `Community 73`, `Community 207`, `Community 208`, `Community 83`, `Community 218`, `Community 93`, `Community 94`, `Community 97`, `Community 105`, `Community 107`, `Community 112`, `Community 125`?**
-  _High betweenness centrality (0.047) - this node is a cross-community bridge._
-- **Why does `successResponse()` connect `Community 20` to `Community 5`, `Community 6`, `Community 134`, `Community 8`, `Community 139`, `Community 12`, `Community 143`, `Community 30`, `Community 164`, `Community 38`, `Community 42`, `Community 43`, `Community 50`, `Community 54`, `Community 55`, `Community 186`, `Community 63`, `Community 65`, `Community 67`, `Community 70`, `Community 71`, `Community 73`, `Community 207`, `Community 208`, `Community 83`, `Community 218`, `Community 93`, `Community 94`, `Community 97`, `Community 105`, `Community 107`, `Community 112`, `Community 125`?**
-  _High betweenness centrality (0.045) - this node is a cross-community bridge._
+- **Why does `cn()` connect `Community 41` to `Community 1`, `Community 4`, `Community 137`, `Community 10`, `Community 11`, `Community 140`, `Community 15`, `Community 17`, `Community 18`, `Community 23`, `Community 24`, `Community 26`, `Community 28`, `Community 156`, `Community 158`, `Community 32`, `Community 33`, `Community 37`, `Community 170`, `Community 45`, `Community 48`, `Community 178`, `Community 52`, `Community 65`, `Community 74`, `Community 204`, `Community 208`, `Community 91`, `Community 226`, `Community 102`, `Community 111`, `Community 122`, `Community 125`?**
+  _High betweenness centrality (0.069) - this node is a cross-community bridge._
+- **Why does `errorResponse()` connect `Community 94` to `Community 0`, `Community 3`, `Community 5`, `Community 134`, `Community 6`, `Community 8`, `Community 139`, `Community 12`, `Community 13`, `Community 143`, `Community 144`, `Community 20`, `Community 38`, `Community 42`, `Community 43`, `Community 44`, `Community 47`, `Community 49`, `Community 50`, `Community 51`, `Community 54`, `Community 186`, `Community 63`, `Community 207`, `Community 81`, `Community 83`, `Community 220`, `Community 93`, `Community 224`, `Community 105`?**
+  _High betweenness centrality (0.046) - this node is a cross-community bridge._
+- **Why does `Button` connect `Community 102` to `Community 1`, `Community 4`, `Community 137`, `Community 10`, `Community 11`, `Community 140`, `Community 15`, `Community 144`, `Community 17`, `Community 18`, `Community 23`, `Community 24`, `Community 27`, `Community 28`, `Community 29`, `Community 30`, `Community 33`, `Community 35`, `Community 37`, `Community 39`, `Community 40`, `Community 41`, `Community 170`, `Community 45`, `Community 48`, `Community 178`, `Community 62`, `Community 72`, `Community 73`, `Community 74`, `Community 80`, `Community 225`, `Community 100`, `Community 112`, `Community 122`, `Community 125`?**
+  _High betweenness centrality (0.044) - this node is a cross-community bridge._
 - **Are the 7 inferred relationships involving `requireCompanySession()` (e.g. with `GET()` and `PATCH()`) actually correct?**
   _`requireCompanySession()` has 7 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `name`, `version`, `private` to the rest of the system?**
-  _1418 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1442 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.10153846153846154 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.09113300492610837 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**
-  _Cohesion score 0.07661290322580645 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07908163265306123 - nodes in this community are weakly interconnected._

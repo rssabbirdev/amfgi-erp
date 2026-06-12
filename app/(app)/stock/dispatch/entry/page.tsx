@@ -44,6 +44,13 @@ interface Line {
   returnQty:   string;
   quantityUomId: string;
   warehouseId: string;
+  targetWarehouseId?: string;
+  materialLineId?: string;
+  issuedQty?: number;
+  receivedQty?: number;
+  outstandingQty?: number;
+  receiveQty?: string;
+  receiveDestWarehouseId?: string;
   sourceTransactionId?: string;
   originalDispatchQty?: number; // Track original qty for editing validation
   originalWarehouseId?: string;

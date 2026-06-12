@@ -41,7 +41,23 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         job: { select: jobForPrintSelect },
         batchesUsed: true,
         deliveryNote: {
-          select: { id: true, number: true, contactPerson: true, customItemsJson: true },
+          select: {
+            id: true,
+            number: true,
+            contactPerson: true,
+            customItemsJson: true,
+            deliveryType: true,
+            supplier: {
+              select: {
+                name: true,
+                contactPerson: true,
+                email: true,
+                phone: true,
+                address: true,
+                trnNumber: true,
+              },
+            },
+          },
         },
         performedByUser: {
           select: {

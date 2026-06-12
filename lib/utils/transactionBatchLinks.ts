@@ -4,6 +4,8 @@ import { decimalToNumberOrZero } from './decimal';
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 
+const EPSILON = 0.0005;
+
 export type TransactionBatchLinkInput = {
   batchId: string;
   batchNumber: string;
@@ -57,6 +59,45 @@ export async function consumeTransactionBatchQuantities(
   if (results.some((result) => result.count === 0)) {
     throw new Error(errorMessage);
   }
+}
+
+/**
+ * Decrement batch availability up to each link amount (or remaining stock).
+ * Used when unwinding transfers whose inbound batches were already cancelled or consumed.
+ */
+export async function consumeTransactionBatchQuantitiesBestEffort(
+  tx: Tx,
+  links: readonly TransactionBatchLinkInput[]
+): Promise<number> {
+  if (links.length === 0) return 0;
+
+  let totalConsumed = 0;
+  for (const link of links) {
+    const batch = await tx.stockBatch.findUnique({
+      where: { id: link.batchId },
+      select: { quantityAvailable: true },
+    });
+    if (!batch) continue;
+
+    const available = decimalToNumberOrZero(batch.quantityAvailable);
+    if (available <= EPSILON) continue;
+
+    const quantityToConsume = Math.min(link.quantityFromBatch, available);
+    const result = await tx.stockBatch.updateMany({
+      where: {
+        id: link.batchId,
+        quantityAvailable: { gte: quantityToConsume },
+      },
+      data: {
+        quantityAvailable: { decrement: quantityToConsume },
+      },
+    });
+    if (result.count > 0) {
+      totalConsumed += quantityToConsume;
+    }
+  }
+
+  return totalConsumed;
 }
 
 export async function createTransactionBatchRecords(

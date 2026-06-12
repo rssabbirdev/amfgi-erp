@@ -280,19 +280,19 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\stock\\dispatch\\page.tsx": {
-    "mtime": 1781109864.756539,
-    "ast_hash": "671f01b2188b9d23bdff238360bcec67",
+    "mtime": 1781248535.1240017,
+    "ast_hash": "8130268c03328da6f37166302c29b40c",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\stock\\dispatch\\delivery-note\\page.tsx": {
-    "mtime": 1781110229.9300725,
-    "ast_hash": "73ab5563866c9714dd3057a770ae96e3",
+    "mtime": 1781248107.739195,
+    "ast_hash": "6b93f1c6ba05e597ab4517343103cd44",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\stock\\dispatch\\entry\\page.tsx": {
-    "mtime": 1779264232.0,
-    "ast_hash": "bd5407a01efbe274fd28a4de4ff7a967",
-    "semantic_hash": "bd5407a01efbe274fd28a4de4ff7a967"
+    "mtime": 1781248364.934276,
+    "ast_hash": "3ca051c68704212abb9817b523a6b8f6",
+    "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\stock\\goods-receipt\\page.tsx": {
     "mtime": 1781074650.744233,
@@ -405,8 +405,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\stock\\warehouse-transfers\\new\\page.tsx": {
-    "mtime": 1780500788.5729103,
-    "ast_hash": "be985fac8d1d8fa985385fa7f44ab74a",
+    "mtime": 1781248366.969722,
+    "ast_hash": "dee6eb77976564d601130015976923a6",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\suppliers\\page.tsx": {
@@ -520,8 +520,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\delivery-notes\\[id]\\route.ts": {
-    "mtime": 1781106181.4579608,
-    "ast_hash": "1245da57e70727e3c2a8d66fefdb3484",
+    "mtime": 1781248107.7586937,
+    "ast_hash": "fad4c8398e8adfe2a49137dd40f0be91",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\hr\\attendance\\route.ts": {
@@ -805,8 +805,8 @@
     "semantic_hash": "b49d2789201d0df5ceaafca8e6a74451"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\materials\\dispatch-history-entries\\route.ts": {
-    "mtime": 1781107062.8685203,
-    "ast_hash": "8d8f5b6936f31c9f2157a082a8593fc6",
+    "mtime": 1781248107.7552521,
+    "ast_hash": "e4a84f4661b251a526b4b6d037cbd1a5",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\materials\\logs\\route.ts": {
@@ -825,8 +825,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\materials\\receipt-history-entries\\[receiptNumber]\\route.ts": {
-    "mtime": 1781074582.8332584,
-    "ast_hash": "79b88c65fa2f5f2a9896129d605c90a0",
+    "mtime": 1781248107.813402,
+    "ast_hash": "28bd08cc2626fb791fb5c30bca76b5e1",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\materials\\receipt-history-entries\\[receiptNumber]\\adjust\\route.ts": {
@@ -1140,8 +1140,8 @@
     "semantic_hash": "39432209eedba60562a15ac7988ac367"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\transactions\\batch\\route.ts": {
-    "mtime": 1781109851.361671,
-    "ast_hash": "c1868e8a5eabedc9bc73447a365d7661",
+    "mtime": 1781248763.3575938,
+    "ast_hash": "9e835d82c42a10fe2d8e760fd1bfd987",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\transactions\\dispatch-entry\\route.ts": {
@@ -1185,8 +1185,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\transactions\\[id]\\route.ts": {
-    "mtime": 1781109727.9123914,
-    "ast_hash": "a656830be12ddfe82a56f25351469ece",
+    "mtime": 1781248107.723855,
+    "ast_hash": "a3d54c5be0d739ba53d73ddf2cef0c57",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\units\\route.ts": {
@@ -1270,8 +1270,8 @@
     "semantic_hash": "d00bac5a038b02b65ba63c24a057c376"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\print\\delivery-note\\page.tsx": {
-    "mtime": 1781109728.1352248,
-    "ast_hash": "4838cf639098aa90612e2f1a113363a1",
+    "mtime": 1781248937.8345912,
+    "ast_hash": "2b3833e1c48b3dd8c238e4ee2d112d8a",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\privacy-policy\\page.tsx": {
@@ -1470,8 +1470,8 @@
     "semantic_hash": "67603dc81085e29bebb5e3c7b9c32577"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\print-builder\\DocumentRenderer.tsx": {
-    "mtime": 1781109838.7322464,
-    "ast_hash": "e3b8253d40cba07d9bd07e23d87e2d46",
+    "mtime": 1781249318.1064782,
+    "ast_hash": "163c23018dd166471fe0741e78ba04c9",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\print-builder\\PageChromeEditor.tsx": {
@@ -1490,8 +1490,8 @@
     "semantic_hash": "e1aee0e47ce0a80db129c9e135e3c64a"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\print-builder\\SectionEditor.tsx": {
-    "mtime": 1781103541.11001,
-    "ast_hash": "e7bf86c74f9a0924c6c6e1d73f26ef5d",
+    "mtime": 1781248107.821531,
+    "ast_hash": "0032daaab66d467354f6a12a75330a98",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\print-builder\\sectionStyleWrap.tsx": {
@@ -1500,8 +1500,8 @@
     "semantic_hash": "1a4fe50de30325195db3f5755f910d2b"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\print-builder\\TemplateBuilder.tsx": {
-    "mtime": 1781089643.447366,
-    "ast_hash": "e2f73632f0f3bdfaf68fb346a24ffa00",
+    "mtime": 1781248107.8084009,
+    "ast_hash": "f11e3227660a7deae9e2bd9b2ad9aec1",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\reports\\JobConsumptionTable.tsx": {
@@ -1515,8 +1515,8 @@
     "semantic_hash": "7a1b8d1e0952534ef9c5da745acb0f30"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\stock\\DispatchLineGrid.tsx": {
-    "mtime": 1781077090.2557087,
-    "ast_hash": "9d8d975b59ad75289422d433703d7d40",
+    "mtime": 1781248107.723855,
+    "ast_hash": "d84718326e13998c2037e3cea704a43e",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\stock\\IssueReconcileForm.tsx": {
@@ -1595,8 +1595,8 @@
     "semantic_hash": "50caafecfc971b6778e13686ac4f23e7"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\ui\\SearchSelect.tsx": {
-    "mtime": 1781077041.7986662,
-    "ast_hash": "49de795dbb84dd7e1d5f9fc2282562d7",
+    "mtime": 1781248107.7278519,
+    "ast_hash": "c7e99ff7c20b91887f54b56dfad0fddd",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\ui\\Spinner.tsx": {
@@ -2185,14 +2185,14 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock\\executeWarehouseTransfer.ts": {
-    "mtime": 1779264232.0,
-    "ast_hash": "008b0178df20855df11bc331521e2b4e",
-    "semantic_hash": "008b0178df20855df11bc331521e2b4e"
+    "mtime": 1781248107.723855,
+    "ast_hash": "9157fbff171a68d5709821f81a203864",
+    "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock\\warehouseTransferConstants.ts": {
-    "mtime": 1779264232.0,
-    "ast_hash": "1203f3f795c961797323fd0431014e64",
-    "semantic_hash": "1203f3f795c961797323fd0431014e64"
+    "mtime": 1781248107.7532403,
+    "ast_hash": "638c322c4df6548f068fdb7a3298c31d",
+    "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock-control\\settings.ts": {
     "mtime": 1777531924.0,
@@ -2200,8 +2200,8 @@
     "semantic_hash": "e558f6e40f4c694ffd860cef46e2e8a8"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\types\\documentTemplate.ts": {
-    "mtime": 1781103537.472226,
-    "ast_hash": "7ea26faeed4b356fe21388718dda8915",
+    "mtime": 1781248107.7278519,
+    "ast_hash": "09c78433edc59b2521732f05ad6fcf6c",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\utils\\apiResponse.ts": {
@@ -2270,8 +2270,8 @@
     "semantic_hash": "9c613d8652e5df84c1ab5f58dac95623"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\utils\\itemTypeFields.ts": {
-    "mtime": 1781090667.9515462,
-    "ast_hash": "4dd91dc58eaf158253feb912cd917b60",
+    "mtime": 1781248107.723855,
+    "ast_hash": "91043b0ddf710aa13e0ee3b3672160da",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\utils\\manualStockAdjustment.ts": {
@@ -2355,13 +2355,13 @@
     "semantic_hash": "4b6722b61a7b5c6f22b9cbdfffff8a18"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\utils\\templateData.ts": {
-    "mtime": 1781109836.0932474,
-    "ast_hash": "56492a2630a4b1c3334741ec714b3209",
+    "mtime": 1781250028.352548,
+    "ast_hash": "bd85b9f8bd08cf4a414a6bce6ed65564",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\utils\\transactionBatchLinks.ts": {
-    "mtime": 1781002631.79164,
-    "ast_hash": "17d640f131acd6aa2859ad5d1e6c741f",
+    "mtime": 1781248107.739195,
+    "ast_hash": "abe6b7ec93951efae6acd82c29d2b394",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\utils\\unitConversion.ts": {
@@ -2425,8 +2425,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\next-env.d.ts": {
-    "mtime": 1781106689.3453836,
-    "ast_hash": "d0f8375ae1199dc7acd3977fc33b78b8",
+    "mtime": 1781247855.9104881,
+    "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\next.config.ts": {
@@ -2435,8 +2435,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\package.json": {
-    "mtime": 1781024921.6322322,
-    "ast_hash": "0a82aba4f28f809d99e65c7d1c950607",
+    "mtime": 1781248107.7586937,
+    "ast_hash": "a441bb01efc2a588496c429b726cf075",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\postcss.config.mjs": {
@@ -2760,8 +2760,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\providers\\StockLiveUpdates.tsx": {
-    "mtime": 1780500788.5757968,
-    "ast_hash": "d0f5f72386249be2367423420f1dd2b4",
+    "mtime": 1781248107.7586937,
+    "ast_hash": "bba700131c1ad97a56a2eaa3ff53c2a0",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\providers\\ThemeProvider.tsx": {
@@ -2795,8 +2795,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\store\\hooks.ts": {
-    "mtime": 1780500788.510741,
-    "ast_hash": "3cf18e835bca0ca95e32c55affc6605a",
+    "mtime": 1781248107.7586937,
+    "ast_hash": "103335d77e9baf6d02467603e323bab5",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\store\\store.ts": {
@@ -2845,8 +2845,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\store\\api\\endpoints\\dispatch.ts": {
-    "mtime": 1781107077.8405354,
-    "ast_hash": "839aa0a7a49979174b56bdfb04605f38",
+    "mtime": 1781248107.739195,
+    "ast_hash": "afc6da91c5ab476025e9a093205b2670",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\store\\api\\endpoints\\hr.ts": {
@@ -3200,8 +3200,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\stock\\GoodsReceiptLineGrid.tsx": {
-    "mtime": 1781077134.505742,
-    "ast_hash": "a1de75ed9fcdd2219a4407ad6b5e7f07",
+    "mtime": 1781248107.7248518,
+    "ast_hash": "4d814ac618efe3e8d3dab40b5374a2f1",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock\\pagedSelectSearch.ts": {
@@ -3900,8 +3900,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock\\lineGridKeyboardNav.ts": {
-    "mtime": 1781080487.908436,
-    "ast_hash": "09de2a23a86f2f61e866123b5cb0ff32",
+    "mtime": 1781249858.5644174,
+    "ast_hash": "b32ca215c1904813666db456cb4374fa",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\stock\\DeliveryNoteCustomItemsGrid.tsx": {
@@ -3915,8 +3915,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\delivery-notes\\route.ts": {
-    "mtime": 1781089603.3826709,
-    "ast_hash": "7b10b166c61a7d58bf7f3e875747fb01",
+    "mtime": 1781248107.7586937,
+    "ast_hash": "1c63a71c00aebc837cf5ded2c815c3f0",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\jobs\\jobPrintSelect.ts": {
@@ -3937,6 +3937,116 @@
   "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\deliveryNoteCustomItems.test.ts": {
     "mtime": 1781110229.9311845,
     "ast_hash": "96683e9e25f680f995b2b69dff98c08d",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\delivery-notes\\[id]\\receive\\route.ts": {
+    "mtime": 1781248107.7312238,
+    "ast_hash": "c14178fcdcae90770879e9c3f563e6ad",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\components\\stock\\SubcontractReceivePanel.tsx": {
+    "mtime": 1781248107.7278519,
+    "ast_hash": "e950e8d904d94534eafe8b4b21c9a8ea",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock\\subcontractDeliveryNote.ts": {
+    "mtime": 1781248107.7258537,
+    "ast_hash": "7620a568b9ba0c3f7c45af9e82dcdc84",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\prisma\\migrations-postgres\\20260610120000_delivery_note_subcontract\\migration.sql": {
+    "mtime": 1781248107.723855,
+    "ast_hash": "e9658166fa1ccc4dcca29b7a1f9c7710",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\deliveryNoteTemplateSubcontract.test.ts": {
+    "mtime": 1781248107.739195,
+    "ast_hash": "c86f29820bd4107b3e078a9d22db8d39",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\subcontractDeliveryNote.test.ts": {
+    "mtime": 1781248107.7586937,
+    "ast_hash": "0b6047adb005f00f26e5295f0d6e663a",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\prisma\\migrations-postgres\\20260611120000_delivery_note_contact_person\\migration.sql": {
+    "mtime": 1781248107.7586937,
+    "ast_hash": "b5356a4308dfda7c50d7b1590c034fe5",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock\\deleteDeliveryNote.ts": {
+    "mtime": 1781248107.7586937,
+    "ast_hash": "4ec3f1057eb30f43b2aff3b7f688875f",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock\\reverseAndDeleteTransaction.ts": {
+    "mtime": 1781248107.739195,
+    "ast_hash": "398d81c2f16abfa21912f6d60a57ba38",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\deleteDeliveryNote.test.ts": {
+    "mtime": 1781248107.7586937,
+    "ast_hash": "3e1745a4dd8b784ff328ba5c8b5ae5c1",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock\\deleteWarehouseTransferReceipt.ts": {
+    "mtime": 1781248107.7278519,
+    "ast_hash": "b26ca7faf0255b360b0426b00db304e7",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\integration\\warehouse-transfer-receipt-delete.test.ts": {
+    "mtime": 1781248107.7312238,
+    "ast_hash": "3390d12e23f6c01ff804f23c0bb28a81",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\utils\\printItemTypes.ts": {
+    "mtime": 1781249139.5286994,
+    "ast_hash": "c65b3c235580120ba1f26aa97609ce27",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\printItemTypes.test.ts": {
+    "mtime": 1781248107.723855,
+    "ast_hash": "1bb8c21228436f1379f158b0f006282b",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\utils\\supplierContactOptions.ts": {
+    "mtime": 1781248107.7586937,
+    "ast_hash": "d0a4129431fa6c579e8e5732fb26c1f3",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\supplierContactOptions.test.ts": {
+    "mtime": 1781248107.7720404,
+    "ast_hash": "08e433c17c5330db349b527660f3dd2d",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\utils\\blockInputWheelChange.ts": {
+    "mtime": 1781249856.0738077,
+    "ast_hash": "5bfda0c81fbe962ef8bf8807da30f693",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\stock\\transactionFifoUnitCost.ts": {
+    "mtime": 1781248107.7322252,
+    "ast_hash": "3f1555b171ed9cef1e9089d31f849217",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\store\\api\\stockInvalidation.ts": {
+    "mtime": 1781248107.7278519,
+    "ast_hash": "bb5dc4810f4d6ea3c5b81631c1b2515d",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\deliveryNotePrintContext.test.ts": {
+    "mtime": 1781248107.723855,
+    "ast_hash": "8fcf1fadfedd61931034ed834b598815",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\transactionBatchLinks.test.ts": {
+    "mtime": 1781248107.7312238,
+    "ast_hash": "def51940059f17f5206d0d03206b2052",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\transactionFifoUnitCost.test.ts": {
+    "mtime": 1781248107.7586937,
+    "ast_hash": "52023a27e058f6633fb59c6d83bf717b",
     "semantic_hash": ""
   }
 }

@@ -1410,6 +1410,9 @@ function TableRenderer({
   if (ds === 'customItems' && Array.isArray(dataBag.customItems)) items = dataBag.customItems as Array<Record<string, unknown>>;
   else if (ds === 'batches' && Array.isArray(dataBag.batches)) items = dataBag.batches as Array<Record<string, unknown>>;
   else if (ds === 'items' && Array.isArray(dataBag.items)) items = dataBag.items as Array<Record<string, unknown>>;
+  else if (ds === 'materialLines' && Array.isArray(dataBag.materialLines)) {
+    items = dataBag.materialLines as Array<Record<string, unknown>>;
+  }
   else if (ds === 'scheduleGroups' && Array.isArray(dataBag.scheduleGroups)) items = dataBag.scheduleGroups as Array<Record<string, unknown>>;
   else if (ds === 'driverTrips' && Array.isArray(dataBag.driverTrips)) items = dataBag.driverTrips as Array<Record<string, unknown>>;
 
@@ -1756,9 +1759,7 @@ function TableRenderer({
                               const explicit = item.slno ?? item.lineNo;
                               return explicit != null && String(explicit).trim() !== ''
                                 ? String(explicit)
-                                : ds === 'customItems'
-                                  ? ''
-                                  : String(itemIdx + 1);
+                                : String(itemIdx + 1);
                             })()
                           : item[col.field];
                     return (

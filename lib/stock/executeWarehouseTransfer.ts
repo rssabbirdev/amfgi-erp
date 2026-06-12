@@ -14,6 +14,13 @@ export interface WarehouseTransferLineInput {
   quantityUomId?: string;
 }
 
+export interface WarehouseTransferLinkOptions {
+  deliveryNoteId?: string;
+  deliveryNoteLineId?: string;
+  referenceType?: string;
+  isDeliveryNote?: boolean;
+}
+
 export interface WarehouseTransferBatchInput {
   sourceWarehouseId: string;
   destinationWarehouseId: string;
@@ -21,6 +28,9 @@ export interface WarehouseTransferBatchInput {
   notes?: string;
   date?: Date;
   transferGroupId?: string;
+  link?: WarehouseTransferLinkOptions;
+  /** Per-line link overrides (same order as `lines`). */
+  lineLinks?: WarehouseTransferLinkOptions[];
 }
 
 export interface WarehouseTransferLineResult {
@@ -65,7 +75,9 @@ export async function executeWarehouseTransferBatch(
 
   const lineResults: WarehouseTransferLineResult[] = [];
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex]!;
+    const lineLink = input.lineLinks?.[lineIndex] ?? input.link;
     const material = await tx.material.findUnique({ where: { id: line.materialId } });
     if (!material) throw new Error('Material not found');
     if (material.companyId !== companyId) throw new Error('Material does not belong to active company');
@@ -131,13 +143,15 @@ export async function executeWarehouseTransferBatch(
     const totalCost = fifoResult.totalCost + shortfallQuantity * fallbackUnitCost;
     const averageCost = qtyBase > 0 ? totalCost / qtyBase : 0;
 
+    const referenceType = lineLink?.referenceType ?? WAREHOUSE_TRANSFER_REFERENCE_TYPE;
     const transferMeta = {
-      kind: 'warehouse_transfer',
+      kind: referenceType === WAREHOUSE_TRANSFER_REFERENCE_TYPE ? 'warehouse_transfer' : referenceType,
       transferGroupId,
       sourceWarehouseId: sourceWarehouse.warehouseId,
       sourceWarehouseName: sourceWarehouse.warehouseName,
       destinationWarehouseId: destinationWarehouse.warehouseId,
       destinationWarehouseName: destinationWarehouse.warehouseName,
+      ...(lineLink?.deliveryNoteLineId ? { deliveryNoteLineId: lineLink.deliveryNoteLineId } : {}),
     };
 
     const transferOutTxn = await tx.transaction.create({
@@ -150,7 +164,10 @@ export async function executeWarehouseTransferBatch(
         counterpartCompany: destinationWarehouse.warehouseName,
         notes: notes || null,
         date: txDate,
-        referenceType: WAREHOUSE_TRANSFER_REFERENCE_TYPE,
+        referenceType,
+        referenceId: lineLink?.deliveryNoteLineId ?? null,
+        deliveryNoteId: lineLink?.deliveryNoteId ?? null,
+        isDeliveryNote: lineLink?.isDeliveryNote ?? false,
         ...actorFields,
         totalCost,
         averageCost,
@@ -197,7 +214,10 @@ export async function executeWarehouseTransferBatch(
         notes: notes || null,
         date: txDate,
         parentTransactionId: transferOutTxn.id,
-        referenceType: WAREHOUSE_TRANSFER_REFERENCE_TYPE,
+        referenceType,
+        referenceId: lineLink?.deliveryNoteLineId ?? null,
+        deliveryNoteId: lineLink?.deliveryNoteId ?? null,
+        isDeliveryNote: lineLink?.isDeliveryNote ?? false,
         ...actorFields,
         totalCost,
         averageCost,

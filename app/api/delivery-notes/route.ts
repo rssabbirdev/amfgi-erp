@@ -26,8 +26,10 @@ export async function GET(req: Request) {
       id: true,
       number: true,
       date: true,
+      deliveryType: true,
       materialDispatchSkipped: true,
       job: { select: { jobNumber: true } },
+      materialLines: { select: { id: true } },
       transactions: {
         where: { type: 'STOCK_OUT' },
         select: { id: true },
@@ -42,9 +44,11 @@ export async function GET(req: Request) {
       entryId: dn.id,
       deliveryNoteNumber: dn.number,
       jobNumber: dn.job?.jobNumber ?? '—',
+      deliveryType: dn.deliveryType,
       dispatchDate: dn.date,
       transactionIds: dn.transactions.map((t) => t.id),
-      materialsCount: dn.transactions.length,
+      materialsCount:
+        dn.deliveryType === 'SUBCONTRACT' ? dn.materialLines.length : dn.transactions.length,
       isPrintOnly: dn.materialDispatchSkipped,
       isDeliveryNote: true,
     })),

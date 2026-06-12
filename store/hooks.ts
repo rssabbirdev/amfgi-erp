@@ -237,6 +237,7 @@ export {
   useGetDispatchEntriesPageQuery,
   DISPATCH_ENTRY_PAGE_SIZE_OPTIONS,
   useDeleteDeliveryNoteMutation,
+  useReceiveDeliveryNoteMutation,
   type DispatchEntry,
 } from './api/endpoints/dispatch';
 

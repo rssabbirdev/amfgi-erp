@@ -4,7 +4,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useSession } from 'next-auth/react';
 import SearchSelect from '@/components/ui/SearchSelect';
 import LineGridColumnSettings, { type LineGridColumnConfig } from '@/components/stock/LineGridColumnSettings';
-import { mergeLineGridInputProps, useLineGridKeyboardNav } from '@/lib/stock/lineGridKeyboardNav';
+import {
+  mergeLineGridInputProps,
+  useLineGridKeyboardNav,
+  type MergeLineGridInputPropsOptions,
+} from '@/lib/stock/lineGridKeyboardNav';
+import { withBlockInputWheelChange } from '@/lib/utils/blockInputWheelChange';
 import { cn } from '@/lib/utils';
 import type { Material } from '@/store/hooks';
 
@@ -13,13 +18,20 @@ interface WarehouseOption {
   name: string;
 }
 
-interface DispatchLineGridRow {
+export interface DispatchLineGridRow {
   id: string;
   materialId: string;
   dispatchQty: string;
   returnQty: string;
   quantityUomId: string;
   warehouseId: string;
+  targetWarehouseId?: string;
+  materialLineId?: string;
+  issuedQty?: number;
+  receivedQty?: number;
+  outstandingQty?: number;
+  receiveQty?: string;
+  receiveDestWarehouseId?: string;
 }
 
 export type DispatchLineGridPersistScope = 'dispatch-entry' | 'delivery-note' | 'warehouse-transfer';
@@ -48,7 +60,11 @@ interface DispatchLineGridProps {
   /** When set, row inputs use this instead of `Boolean(selectedJob)`. */
   gridEnabled?: boolean;
   /** Warehouse transfer worksheet: hide return/warehouse columns; relabel dispatch qty. */
-  variant?: 'dispatch' | 'warehouse-transfer';
+  variant?: 'dispatch' | 'warehouse-transfer' | 'subcontract';
+  /** Subcontract DN edit: show issued/received/outstanding + receive inputs on the same grid. */
+  showSubcontractReceive?: boolean;
+  /** Lock issue columns when partial receive has started. */
+  subcontractIssueReadOnly?: boolean;
 }
 
 type DispatchGridColumnKey =
@@ -59,7 +75,13 @@ type DispatchGridColumnKey =
   | 'globalStock'
   | 'dispatchQty'
   | 'returnQty'
-  | 'warehouse';
+  | 'warehouse'
+  | 'targetWarehouse'
+  | 'issuedQty'
+  | 'receivedQty'
+  | 'outstandingQty'
+  | 'receiveQty'
+  | 'receiveDestWarehouse';
 
 const DISPATCH_NAVIGABLE_COLUMN_KEYS: DispatchGridColumnKey[] = [
   'material',
@@ -227,8 +249,11 @@ export default function DispatchLineGrid({
   budgetWarningMaterialIds,
   gridEnabled,
   variant = 'dispatch',
+  showSubcontractReceive = false,
+  subcontractIssueReadOnly = false,
 }: DispatchLineGridProps) {
   const isWarehouseTransfer = variant === 'warehouse-transfer';
+  const isSubcontract = variant === 'subcontract';
   const inputsEnabled = gridEnabled ?? Boolean(selectedJob);
   const effectiveShowWarehouseColumn = showWarehouseColumn && !isWarehouseTransfer;
   const preferenceKey = PREFERENCE_KEY_BY_SCOPE[persistScope];
@@ -244,17 +269,57 @@ export default function DispatchLineGrid({
   );
 
   const defaultColumnsForScope = useMemo(() => {
-    if (!isWarehouseTransfer) return DEFAULT_GRID_COLUMNS;
-    return DEFAULT_GRID_COLUMNS.map((column) =>
-      column.key === 'dispatchQty'
-        ? { ...column, label: 'Transfer Qty' }
-        : column.key === 'returnQty'
-          ? { ...column, visible: false }
-          : column.key === 'warehouse'
+    if (isWarehouseTransfer) {
+      return DEFAULT_GRID_COLUMNS.map((column) =>
+        column.key === 'dispatchQty'
+          ? { ...column, label: 'Transfer Qty' }
+          : column.key === 'returnQty'
             ? { ...column, visible: false }
-            : column,
-    );
-  }, [isWarehouseTransfer]);
+            : column.key === 'warehouse'
+              ? { ...column, visible: false }
+              : column,
+      );
+    }
+    if (isSubcontract) {
+      const base = DEFAULT_GRID_COLUMNS.map((column) =>
+        column.key === 'dispatchQty'
+          ? { ...column, label: 'Issue Qty' }
+          : column.key === 'returnQty'
+            ? { ...column, visible: false }
+            : column.key === 'warehouse'
+              ? { ...column, label: 'Source warehouse' }
+              : column,
+      );
+      const withTarget = [
+        ...base,
+        {
+          key: 'targetWarehouse',
+          label: 'Transit warehouse',
+          visible: true,
+          width: 220,
+          minWidth: 180,
+          maxWidth: 320,
+        },
+      ];
+      if (!showSubcontractReceive) return withTarget;
+      return [
+        ...withTarget,
+        { key: 'issuedQty', label: 'Issued', visible: true, width: 100, minWidth: 80, maxWidth: 140 },
+        { key: 'receivedQty', label: 'Received', visible: true, width: 100, minWidth: 80, maxWidth: 140 },
+        { key: 'outstandingQty', label: 'Outstanding', visible: true, width: 110, minWidth: 90, maxWidth: 150 },
+        { key: 'receiveQty', label: 'Receive qty', visible: true, width: 110, minWidth: 90, maxWidth: 150 },
+        {
+          key: 'receiveDestWarehouse',
+          label: 'Receive to',
+          visible: true,
+          width: 200,
+          minWidth: 160,
+          maxWidth: 300,
+        },
+      ];
+    }
+    return DEFAULT_GRID_COLUMNS;
+  }, [isWarehouseTransfer, isSubcontract, showSubcontractReceive]);
 
   const [gridColumns, setGridColumns] = useState<LineGridColumnConfig[]>(defaultColumnsForScope);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
@@ -263,10 +328,11 @@ export default function DispatchLineGrid({
     return gridColumns.filter((column) => {
       if (!column.visible) return false;
       if (!effectiveShowWarehouseColumn && column.key === 'warehouse') return false;
-      if (isWarehouseTransfer && column.key === 'returnQty') return false;
+      if ((isWarehouseTransfer || isSubcontract) && column.key === 'returnQty') return false;
+      if (isSubcontract && column.key === 'warehouse') return true;
       return true;
     });
-  }, [gridColumns, effectiveShowWarehouseColumn, isWarehouseTransfer]);
+  }, [gridColumns, effectiveShowWarehouseColumn, isWarehouseTransfer, isSubcontract]);
   const gridTemplateColumns = useMemo(
     () => visibleGridColumns.map((column) => `${column.width}px`).join(' '),
     [visibleGridColumns]
@@ -284,10 +350,17 @@ export default function DispatchLineGrid({
     [navigableColumns]
   );
   const cellNavInputProps = useCallback(
-    (rowIndex: number, key: DispatchGridColumnKey, existing?: InputHTMLAttributes<HTMLInputElement>) => {
+    (
+      rowIndex: number,
+      key: DispatchGridColumnKey,
+      existing?: InputHTMLAttributes<HTMLInputElement>,
+      options?: MergeLineGridInputPropsOptions
+    ) => {
       const col = navColIndex(key);
-      if (col < 0) return existing;
-      return mergeLineGridInputProps(getNavInputProps(rowIndex, col), existing);
+      if (col < 0) {
+        return options?.blockWheel ? withBlockInputWheelChange(existing) : existing;
+      }
+      return mergeLineGridInputProps(getNavInputProps(rowIndex, col), existing, options);
     },
     [getNavInputProps, navColIndex]
   );
@@ -444,7 +517,7 @@ export default function DispatchLineGrid({
         <LineGridColumnSettings
           columns={gridColumns.filter((column) => {
             if (!effectiveShowWarehouseColumn && column.key === 'warehouse') return false;
-            if (isWarehouseTransfer && column.key === 'returnQty') return false;
+            if ((isWarehouseTransfer || isSubcontract) && column.key === 'returnQty') return false;
             return true;
           })}
           onToggle={setGridColumnVisibility}
@@ -608,21 +681,29 @@ export default function DispatchLineGrid({
                               min="0.001"
                               step="any"
                               disabled={
-                                !inputsEnabled || !mat || (!isWarehouseTransfer && !line.warehouseId)
+                                subcontractIssueReadOnly ||
+                                !inputsEnabled ||
+                                !mat ||
+                                (!isWarehouseTransfer &&
+                                  !isSubcontract &&
+                                  !line.warehouseId) ||
+                                (isSubcontract && (!line.warehouseId || !line.targetWarehouseId))
                               }
                               value={line.dispatchQty}
                               onChange={(event) => onUpdateLine(line.id, 'dispatchQty', event.target.value)}
                               title={
                                 !mat
                                   ? ''
-                                  : !isWarehouseTransfer && !line.warehouseId
-                                    ? 'Select warehouse first'
-                                    : ''
+                                  : isSubcontract && (!line.warehouseId || !line.targetWarehouseId)
+                                    ? 'Select source and transit warehouse first'
+                                    : !isWarehouseTransfer && !line.warehouseId
+                                      ? 'Select warehouse first'
+                                      : ''
                               }
                               placeholder="0.00"
                               {...cellNavInputProps(idx, 'dispatchQty', {
                                 className: 'h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
-                              })}
+                              }, { blockWheel: true })}
                             />
                           </div>
                         );
@@ -639,7 +720,83 @@ export default function DispatchLineGrid({
                               disabled={!inputsEnabled}
                               {...cellNavInputProps(idx, 'returnQty', {
                                 className: 'h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                              }, { blockWheel: true })}
+                            />
+                          </div>
+                        );
+                      case 'targetWarehouse':
+                        return (
+                          <div key={column.key} className={cellClassName}>
+                            <SearchSelect
+                              value={line.targetWarehouseId ?? ''}
+                              onChange={(id) => onUpdateLine(line.id, 'targetWarehouseId', id)}
+                              placeholder="Transit warehouse"
+                              disabled={subcontractIssueReadOnly || !inputsEnabled || !mat}
+                              dropdownInPortal
+                              passThroughArrowKeys
+                              items={warehouses.map((warehouse) => ({
+                                id: warehouse.id,
+                                label: warehouse.name,
+                              }))}
+                              allowClearButton={false}
+                              clearOnEmptyInput
+                              inputProps={{
+                                className: '!rounded-none !border-0 !bg-transparent !px-2 !py-1.5 !text-sm focus:!ring-0 min-w-0',
+                              }}
+                            />
+                          </div>
+                        );
+                      case 'issuedQty':
+                        return (
+                          <div key={column.key} className={`${cellClassName} px-2 py-1.5 text-right font-mono text-xs`}>
+                            {line.issuedQty != null ? line.issuedQty.toFixed(3) : '—'}
+                          </div>
+                        );
+                      case 'receivedQty':
+                        return (
+                          <div key={column.key} className={`${cellClassName} px-2 py-1.5 text-right font-mono text-xs`}>
+                            {line.receivedQty != null ? line.receivedQty.toFixed(3) : '—'}
+                          </div>
+                        );
+                      case 'outstandingQty':
+                        return (
+                          <div key={column.key} className={`${cellClassName} px-2 py-1.5 text-right font-mono text-xs text-amber-700 dark:text-amber-300`}>
+                            {line.outstandingQty != null ? line.outstandingQty.toFixed(3) : '—'}
+                          </div>
+                        );
+                      case 'receiveQty':
+                        return (
+                          <div key={column.key} className={cellClassName}>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={line.receiveQty ?? ''}
+                              onChange={(event) => onUpdateLine(line.id, 'receiveQty', event.target.value)}
+                              placeholder="0"
+                              disabled={!line.materialLineId || (line.outstandingQty ?? 0) <= 0.0005}
+                              {...withBlockInputWheelChange({
+                                className: 'h-full w-full [appearance:textfield] border-0 bg-transparent px-2 py-1.5 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
                               })}
+                            />
+                          </div>
+                        );
+                      case 'receiveDestWarehouse':
+                        return (
+                          <div key={column.key} className={cellClassName}>
+                            <SearchSelect
+                              value={line.receiveDestWarehouseId || line.warehouseId || ''}
+                              onChange={(id) => onUpdateLine(line.id, 'receiveDestWarehouseId', id)}
+                              placeholder="Destination"
+                              disabled={!line.materialLineId || (line.outstandingQty ?? 0) <= 0.0005}
+                              dropdownInPortal
+                              items={warehouses.map((warehouse) => ({
+                                id: warehouse.id,
+                                label: warehouse.name,
+                              }))}
+                              inputProps={{
+                                className: '!rounded-none !border-0 !bg-transparent !px-2 !py-1.5 !text-sm focus:!ring-0 min-w-0',
+                              }}
                             />
                           </div>
                         );
@@ -649,8 +806,8 @@ export default function DispatchLineGrid({
                             <SearchSelect
                               value={line.warehouseId}
                               onChange={(id) => onUpdateLine(line.id, 'warehouseId', id)}
-                              placeholder="Warehouse"
-                              disabled={!inputsEnabled || !mat}
+                              placeholder={isSubcontract ? 'Source warehouse' : 'Warehouse'}
+                              disabled={subcontractIssueReadOnly || !inputsEnabled || !mat}
                               dropdownInPortal
                               passThroughArrowKeys
                               items={warehouses.map((warehouse) => {

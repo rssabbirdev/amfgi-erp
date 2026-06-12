@@ -4,6 +4,10 @@ import { serializeJobWithContacts } from '@/lib/jobs/jobContacts';
 import { parseListLimit, parseListOffset } from '@/lib/pagination/serverList';
 import { errorResponse, successResponse } from '@/lib/utils/apiResponse';
 import { parseDeliveryContactPerson } from '@/lib/deliveryNoteNumber';
+import {
+  resolveTransactionFifoUnitCost,
+  resolveTransactionNetLineCost,
+} from '@/lib/stock/transactionFifoUnitCost';
 import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 
 function mapCustomItemsFromJson(json: unknown): Array<{ name: string; description: string; unit: string; qty: string }> {
@@ -75,10 +79,21 @@ export async function GET(req: Request) {
       date: true,
       createdAt: true,
       totalCost: true,
+      averageCost: true,
       signedCopyUrl: true,
       deliveryNoteId: true,
       deliveryNote: {
-        select: { id: true, number: true, documentNotes: true, customItemsJson: true, contactPerson: true },
+        select: {
+          id: true,
+          number: true,
+          documentNotes: true,
+          customItemsJson: true,
+          contactPerson: true,
+          deliveryType: true,
+          transitStatus: true,
+          supplierId: true,
+          supplier: { select: { id: true, name: true } },
+        },
       },
       warehouse: {
         select: { id: true, name: true },
@@ -158,6 +173,7 @@ export async function GET(req: Request) {
           warehouseName: string | null;
           quantity: number;
           unitCost: number;
+          costTotal: number;
           transactionIds: string[];
         }
       >();
@@ -167,15 +183,20 @@ export async function GET(req: Request) {
       for (const txn of groupedTxns) {
         const returnQuantity = returnQuantityByParentId.get(txn.id) ?? 0;
         const netQuantity = decimalToNumberOrZero(txn.quantity) - returnQuantity;
+        if (netQuantity <= 0) continue;
+
         totalNetQuantity += netQuantity;
 
         const key = txn.materialId;
-        const unitCost = decimalToNumberOrZero(txn.material?.unitCost);
-        totalValuation += netQuantity * unitCost;
+        const unitCost = resolveTransactionFifoUnitCost(txn);
+        const lineCost = resolveTransactionNetLineCost(txn, netQuantity);
+        totalValuation += lineCost;
 
         if (materialsMap.has(key)) {
           const existing = materialsMap.get(key)!;
           existing.quantity += netQuantity;
+          existing.costTotal += lineCost;
+          existing.unitCost = existing.quantity > 0 ? existing.costTotal / existing.quantity : unitCost;
           existing.transactionIds.push(txn.id);
         } else {
           materialsMap.set(key, {
@@ -186,6 +207,7 @@ export async function GET(req: Request) {
             warehouseName: txn.warehouse?.name ?? null,
             quantity: netQuantity,
             unitCost,
+            costTotal: lineCost,
             transactionIds: [txn.id],
           });
         }
@@ -229,7 +251,7 @@ export async function GET(req: Request) {
         totalQuantity: totalNetQuantity,
         totalValuation,
         materialsCount: materialsMap.size,
-        materials: Array.from(materialsMap.values()),
+        materials: Array.from(materialsMap.values()).map(({ costTotal: _costTotal, ...material }) => material),
         transactionIds: groupedTxns.map((t) => t.id),
         transactionCount: groupedTxns.length,
         notes: firstTxn.notes ?? undefined,
@@ -252,6 +274,10 @@ export async function GET(req: Request) {
         createdBySignatureUrl:
           (firstTxn.performedByUserId ? creatorsById.get(firstTxn.performedByUserId)?.signatureUrl : undefined) ??
           undefined,
+        deliveryType: firstTxn.deliveryNote?.deliveryType ?? 'DISPATCH',
+        transitStatus: firstTxn.deliveryNote?.transitStatus ?? undefined,
+        supplierId: firstTxn.deliveryNote?.supplierId ?? undefined,
+        supplierName: firstTxn.deliveryNote?.supplier?.name ?? undefined,
       };
   });
 
@@ -263,7 +289,7 @@ export async function GET(req: Request) {
     where: {
       companyId,
       date: { gte: startDate, lte: endDate },
-      materialDispatchSkipped: true,
+      OR: [{ materialDispatchSkipped: true }, { deliveryType: 'SUBCONTRACT' }],
     },
     select: {
       id: true,
@@ -274,6 +300,10 @@ export async function GET(req: Request) {
       documentNotes: true,
       customItemsJson: true,
       contactPerson: true,
+      deliveryType: true,
+      transitStatus: true,
+      supplierId: true,
+      supplier: { select: { id: true, name: true } },
       job: {
         select: {
           id: true,
@@ -285,13 +315,77 @@ export async function GET(req: Request) {
           },
         },
       },
+      materialLines: {
+        orderBy: { sortOrder: 'asc' },
+        select: {
+          materialId: true,
+          issuedQty: true,
+          receivedQty: true,
+          sourceWarehouseId: true,
+          issueTransferOutId: true,
+          material: { select: { id: true, name: true, unit: true, unitCost: true } },
+          sourceWarehouse: { select: { id: true, name: true } },
+        },
+      },
     },
   });
+
+  const subcontractTransferOutIds = Array.from(
+    new Set(
+      standaloneCandidates.flatMap((dn) =>
+        dn.materialLines
+          .map((line) => line.issueTransferOutId)
+          .filter((id): id is string => Boolean(id))
+      )
+    )
+  );
+  const subcontractTransferOutTxns =
+    subcontractTransferOutIds.length > 0
+      ? await prisma.transaction.findMany({
+          where: { companyId, id: { in: subcontractTransferOutIds } },
+          select: {
+            id: true,
+            averageCost: true,
+            totalCost: true,
+            quantity: true,
+            material: { select: { unitCost: true } },
+          },
+        })
+      : [];
+  const subcontractFifoUnitCostByTransferId = new Map(
+    subcontractTransferOutTxns.map((txn) => [txn.id, resolveTransactionFifoUnitCost(txn)])
+  );
 
   for (const dn of standaloneCandidates) {
     if (seenDeliveryNoteIds.has(dn.id)) continue;
 
     const serializedJob = dn.job ? serializeJobWithContacts(dn.job) : null;
+
+    const subcontractMaterials =
+      dn.deliveryType === 'SUBCONTRACT'
+        ? dn.materialLines.map((line) => {
+            const issued = decimalToNumberOrZero(line.issuedQty);
+            const received = decimalToNumberOrZero(line.receivedQty);
+            const net = Math.max(0, issued - received);
+            const unitCost =
+              (line.issueTransferOutId
+                ? subcontractFifoUnitCostByTransferId.get(line.issueTransferOutId)
+                : undefined) ?? decimalToNumberOrZero(line.material.unitCost);
+            return {
+              materialId: line.materialId,
+              materialName: line.material.name,
+              materialUnit: line.material.unit,
+              warehouseId: line.sourceWarehouseId,
+              warehouseName: line.sourceWarehouse.name,
+              quantity: net,
+              unitCost,
+              transactionIds: line.issueTransferOutId ? [line.issueTransferOutId] : [],
+            };
+          })
+        : [];
+
+    const totalSubQty = subcontractMaterials.reduce((sum, row) => sum + row.quantity, 0);
+    const totalSubVal = subcontractMaterials.reduce((sum, row) => sum + row.quantity * row.unitCost, 0);
 
     enrichedEntries.push({
       id: `dn-${dn.id}`,
@@ -304,10 +398,10 @@ export async function GET(req: Request) {
       jobContactsJson: serializedJob?.contactsJson ?? undefined,
       dispatchDate: dn.date,
       ledgerCreatedAt: dn.createdAt,
-      totalQuantity: 0,
-      totalValuation: 0,
-      materialsCount: 0,
-      materials: [],
+      totalQuantity: totalSubQty,
+      totalValuation: totalSubVal,
+      materialsCount: subcontractMaterials.length,
+      materials: subcontractMaterials,
       transactionIds: [],
       transactionCount: 0,
       isDeliveryNote: true,
@@ -316,6 +410,10 @@ export async function GET(req: Request) {
       deliveryNoteContactPerson: dn.contactPerson?.trim() || undefined,
       documentNotes: dn.documentNotes ?? undefined,
       customItemsJson: dn.customItemsJson ?? undefined,
+      deliveryType: dn.deliveryType,
+      transitStatus: dn.transitStatus ?? undefined,
+      supplierId: dn.supplierId ?? undefined,
+      supplierName: dn.supplier?.name ?? undefined,
     } as unknown as (typeof enrichedEntries)[number]);
   }
 

@@ -48,6 +48,10 @@ import {
   recordDispatchEntryRevision,
   type DispatchRevisionLine,
 } from '@/lib/dispatchEntryRevision';
+import {
+  issueSubcontractDeliveryNote,
+  reverseSubcontractIssue,
+} from '@/lib/stock/subcontractDeliveryNote';
 
 type DeliveryNoteCustomItemPayload = {
   lineNo?: string;
@@ -65,11 +69,23 @@ async function applyDeliveryNoteStructuredFields(
     baseNotes?: string | null;
     deliveryNoteCustomItems?: DeliveryNoteCustomItemPayload[] | null;
     deliveryContactPerson?: string | null;
+    deliveryType?: 'DISPATCH' | 'SUBCONTRACT';
+    supplierId?: string | null;
+    sourceWarehouseId?: string | null;
+    targetWarehouseId?: string | null;
+    referenceJobId?: string | null;
+    transitStatus?: 'ON_TRANSIT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | null;
   }
 ) {
-  const data: Prisma.DeliveryNoteUpdateInput = {
+  const data: Prisma.DeliveryNoteUncheckedUpdateInput = {
     materialDispatchSkipped: params.materialDispatchSkipped,
   };
+  if (params.deliveryType !== undefined) data.deliveryType = params.deliveryType;
+  if (params.supplierId !== undefined) data.supplierId = params.supplierId?.trim() || null;
+  if (params.sourceWarehouseId !== undefined) data.sourceWarehouseId = params.sourceWarehouseId?.trim() || null;
+  if (params.targetWarehouseId !== undefined) data.targetWarehouseId = params.targetWarehouseId?.trim() || null;
+  if (params.referenceJobId !== undefined) data.referenceJobId = params.referenceJobId?.trim() || null;
+  if (params.transitStatus !== undefined) data.transitStatus = params.transitStatus;
   if (params.deliveryContactPerson !== undefined) {
     data.contactPerson = params.deliveryContactPerson?.trim() ? params.deliveryContactPerson.trim() : null;
   }
@@ -170,13 +186,26 @@ function buildReturnBatchLinks(
   return { returnLinks, syntheticBatch };
 }
 
+/** Optional id/name fields: treat blank strings as omitted (client often sends ""). */
+function optionalNonEmptyString() {
+  return z.preprocess(
+    (value) => {
+      if (value == null) return undefined;
+      if (typeof value === 'string' && value.trim() === '') return undefined;
+      return typeof value === 'string' ? value.trim() : value;
+    },
+    z.string().min(1).optional()
+  );
+}
+
 const LineSchema = z.object({
   materialId:     z.string().min(1),
   quantity:       z.number().finite().min(0.001),
   quantityUomId:  z.string().optional(),
   unitCost:       z.number().finite().min(0).optional(),
   returnQty:      z.number().finite().min(0).optional(),
-  warehouseId:    z.string().min(1).optional(),
+  warehouseId:    optionalNonEmptyString(),
+  targetWarehouseId: optionalNonEmptyString(),
 });
 
 const BatchSchema = z.object({
@@ -187,7 +216,7 @@ const BatchSchema = z.object({
   supplierInvoiceNumber: z.string().max(100).optional().transform((val) => val && val.trim().length > 0 ? val.trim() : undefined),
   jobId:         z.string().optional(),
   supplier:      z.string().max(100).optional(),
-  supplierId:    z.string().min(1).optional(),
+  supplierId:    optionalNonEmptyString(),
   overrideReason: z.string().max(500).optional(),
   notes:         z.string().max(20000).optional(),
   /// User notes for the delivery note document (not composed with headers). Optional for legacy clients.
@@ -208,12 +237,16 @@ const BatchSchema = z.object({
   isDeliveryNote: z.boolean().optional(),
   deliveryNoteNumber: z.number().int().positive().optional(),
   deliveryContactPerson: z.string().max(200).optional(),
+  deliveryType: z.enum(['DISPATCH', 'SUBCONTRACT']).optional().default('DISPATCH'),
+  sourceWarehouseId: optionalNonEmptyString(),
+  targetWarehouseId: optionalNonEmptyString(),
+  referenceJobId: optionalNonEmptyString(),
   existingTransactionIds: z.array(z.string()).optional(),
-  existingDeliveryNoteId: z.string().min(1).optional(),
+  existingDeliveryNoteId: optionalNonEmptyString(),
   billAmount:    z.number().finite().optional(),
   includeTax:    z.boolean().optional(),
   taxAmount:     z.number().finite().optional(),
-  warehouseId:   z.string().min(1).optional(),
+  warehouseId:   optionalNonEmptyString(),
   materialUpdates: z.array(z.object({
     materialId: z.string(),
     unitCost: z.number().finite(),
@@ -229,10 +262,36 @@ const BatchSchema = z.object({
     { message: 'Receipt number is required for goods receipt', path: ['receiptNumber'] }
   )
   .refine(
-    (data) =>
-      (data.type !== 'STOCK_IN' && data.type !== 'STOCK_OUT') ||
-      data.lines.every((line) => Boolean(line.warehouseId?.trim())),
+    (data) => {
+      if (data.type !== 'STOCK_OUT') return true;
+      if (data.isDeliveryNote && data.deliveryType === 'SUBCONTRACT') return true;
+      return data.lines.every((line) => Boolean(line.warehouseId?.trim()));
+    },
     { message: 'Warehouse is required for every stock line', path: ['lines'] }
+  )
+  .refine(
+    (data) => {
+      if (!data.isDeliveryNote || data.deliveryType !== 'SUBCONTRACT' || data.lines.length === 0) return true;
+      if (!data.supplierId?.trim()) return false;
+      return data.lines.every((line) => {
+        const src = line.warehouseId?.trim() || data.sourceWarehouseId?.trim();
+        const tgt = line.targetWarehouseId?.trim() || data.targetWarehouseId?.trim();
+        return Boolean(src && tgt && src !== tgt);
+      });
+    },
+    {
+      message:
+        'Supplier and per-line source/transit warehouses are required for subcontract delivery notes',
+      path: ['lines'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isDeliveryNote || data.deliveryType !== 'DISPATCH') return true;
+      if (data.lines.length === 0) return true;
+      return Boolean(data.jobId?.trim());
+    },
+    { message: 'Job is required for dispatch delivery notes with materials', path: ['jobId'] }
   );
 
 export const maxDuration = 120;
@@ -264,6 +323,10 @@ export async function POST(req: Request) {
     isDeliveryNote,
     deliveryNoteNumber: requestedDeliveryNoteNumber,
     deliveryContactPerson,
+    deliveryType,
+    sourceWarehouseId,
+    targetWarehouseId,
+    referenceJobId,
     existingTransactionIds,
     existingDeliveryNoteId,
     billAmount,
@@ -357,7 +420,15 @@ export async function POST(req: Request) {
           reportedDeliveryNoteNumber = dnRow.number;
           await tx.deliveryNote.update({
             where: { id: dnRow.id },
-            data: { jobId: jobId?.trim() || null, date: txDate },
+            data: {
+              deliveryType: deliveryType ?? 'DISPATCH',
+              jobId: deliveryType === 'SUBCONTRACT' ? null : jobId?.trim() || null,
+              date: txDate,
+              supplierId: deliveryType === 'SUBCONTRACT' ? supplierId?.trim() || null : null,
+              sourceWarehouseId: deliveryType === 'SUBCONTRACT' ? sourceWarehouseId?.trim() || null : null,
+              targetWarehouseId: deliveryType === 'SUBCONTRACT' ? targetWarehouseId?.trim() || null : null,
+              referenceJobId: deliveryType === 'SUBCONTRACT' ? referenceJobId?.trim() || null : null,
+            },
           });
         }
       }
@@ -545,9 +616,15 @@ export async function POST(req: Request) {
           data: {
             companyId,
             number: assignedNumber,
-            jobId: jobId?.trim() || null,
+            deliveryType: deliveryType ?? 'DISPATCH',
+            jobId: deliveryType === 'SUBCONTRACT' ? null : jobId?.trim() || null,
             date: txDate,
             materialDispatchSkipped: lines.length === 0,
+            supplierId: deliveryType === 'SUBCONTRACT' ? supplierId?.trim() || null : null,
+            sourceWarehouseId: deliveryType === 'SUBCONTRACT' ? sourceWarehouseId?.trim() || null : null,
+            targetWarehouseId: deliveryType === 'SUBCONTRACT' ? targetWarehouseId?.trim() || null : null,
+            referenceJobId: deliveryType === 'SUBCONTRACT' ? referenceJobId?.trim() || null : null,
+            transitStatus: null,
           },
         });
         activeDeliveryNoteId = dnRow.id;
@@ -569,6 +646,12 @@ export async function POST(req: Request) {
             baseNotes,
             deliveryNoteCustomItems,
             deliveryContactPerson,
+            deliveryType,
+            supplierId: deliveryType === 'SUBCONTRACT' ? supplierId ?? null : null,
+            sourceWarehouseId: deliveryType === 'SUBCONTRACT' ? sourceWarehouseId ?? null : null,
+            targetWarehouseId: deliveryType === 'SUBCONTRACT' ? targetWarehouseId ?? null : null,
+            referenceJobId: deliveryType === 'SUBCONTRACT' ? referenceJobId ?? null : null,
+            transitStatus: null,
           });
         }
         return {
@@ -577,6 +660,67 @@ export async function POST(req: Request) {
           billAmount,
           includeTax,
           taxAmount,
+          deliveryNoteNumber: reportedDeliveryNoteNumber,
+          deliveryNoteId: activeDeliveryNoteId,
+        };
+      }
+
+      if (type === 'STOCK_OUT' && isDeliveryNote && deliveryType === 'SUBCONTRACT' && activeDeliveryNoteId) {
+        const existingMaterialLineCount = await tx.deliveryNoteMaterialLine.count({
+          where: { deliveryNoteId: activeDeliveryNoteId },
+        });
+        if (existingMaterialLineCount > 0) {
+          await reverseSubcontractIssue(tx, {
+            companyId,
+            deliveryNoteId: activeDeliveryNoteId,
+            sessionUser: session.user,
+            date: txDate,
+          });
+        }
+
+        await applyDeliveryNoteStructuredFields(tx, activeDeliveryNoteId, {
+          materialDispatchSkipped: false,
+          baseNotes,
+          deliveryNoteCustomItems,
+          deliveryContactPerson,
+          deliveryType: 'SUBCONTRACT',
+          supplierId: supplierId ?? null,
+          sourceWarehouseId: sourceWarehouseId ?? null,
+          targetWarehouseId: targetWarehouseId ?? null,
+          referenceJobId: referenceJobId ?? null,
+        });
+
+        const defaultSource =
+          sourceWarehouseId?.trim() || lines.find((line) => line.warehouseId?.trim())?.warehouseId?.trim() || '';
+        const defaultTarget =
+          targetWarehouseId?.trim() ||
+          lines.find((line) => line.targetWarehouseId?.trim())?.targetWarehouseId?.trim() ||
+          '';
+
+        await issueSubcontractDeliveryNote(tx, {
+          companyId,
+          deliveryNoteId: activeDeliveryNoteId,
+          sourceWarehouseId: defaultSource,
+          targetWarehouseId: defaultTarget,
+          lines: lines.map((line) => ({
+            materialId: line.materialId,
+            quantity: line.quantity,
+            quantityUomId: line.quantityUomId,
+            sourceWarehouseId: line.warehouseId?.trim() || defaultSource,
+            targetWarehouseId: line.targetWarehouseId?.trim() || defaultTarget,
+          })),
+          notes: deliveryNoteNotes,
+          date: txDate,
+          sessionUser: session.user,
+        });
+
+        return {
+          created: 0,
+          ids: [],
+          billAmount,
+          includeTax,
+          taxAmount,
+          signedCopyUrl: preservedSignedCopy?.signedCopyUrl ?? null,
           deliveryNoteNumber: reportedDeliveryNoteNumber,
           deliveryNoteId: activeDeliveryNoteId,
         };
@@ -1027,6 +1171,12 @@ export async function POST(req: Request) {
           baseNotes,
           deliveryNoteCustomItems,
           deliveryContactPerson,
+          deliveryType: 'DISPATCH',
+          supplierId: null,
+          sourceWarehouseId: null,
+          targetWarehouseId: null,
+          referenceJobId: null,
+          transitStatus: null,
         });
       }
 
@@ -1042,7 +1192,7 @@ export async function POST(req: Request) {
       };
     }, heavyTransactionOptions);
 
-    if (type === 'STOCK_OUT' && jobId?.trim()) {
+    if (type === 'STOCK_OUT' && jobId?.trim() && deliveryType === 'DISPATCH') {
       try {
         const postingDateKey = postingDateKeyFromRequest(date, txDate);
         const linesAfter = await buildDispatchRevisionLinesFromStockOutIds(prisma, companyId, result.ids);

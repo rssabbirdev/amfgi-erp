@@ -1,8 +1,20 @@
 'use client';
 
-import { useState, useRef, useEffect, useId, type InputHTMLAttributes } from 'react';
+import {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useId,
+  type InputHTMLAttributes,
+  type CSSProperties,
+} from 'react';
 import { createPortal } from 'react-dom';
+import { attachBlockInputWheelChange, detachBlockInputWheelChange } from '@/lib/utils/blockInputWheelChange';
 import { searchItems } from '@/lib/utils/fuzzyMatch';
+
+const DROPDOWN_Z_CLASS = 'z-[200]';
 
 interface SearchSelectProps<T extends { id: string; label: string; searchText?: string }> {
   items: T[];
@@ -51,7 +63,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     openOnFocus = false,
     clearInputOnFocus = false,
     inputProps,
-    dropdownInPortal = false,
+    dropdownInPortal = true,
     dropdownClassName,
     allowClearButton = true,
     clearOnEmptyInput = false,
@@ -67,7 +79,9 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     left: number;
     top: number;
     width: number;
+    placement: 'above' | 'below';
   } | null>(null);
+  const [portalMounted, setPortalMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -98,28 +112,43 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     }
   }, [isOpen]);
 
+  const updateDropdownPosition = useCallback(() => {
+    if (!inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    const maxHeight = 256;
+    const gap = 4;
+    const spaceBelow = window.innerHeight - rect.bottom - gap;
+    const spaceAbove = rect.top - gap;
+    const openAbove = spaceBelow < maxHeight && spaceAbove > spaceBelow;
+    setDropdownStyle({
+      left: rect.left,
+      top: openAbove ? rect.top - gap : rect.bottom + gap,
+      width: rect.width,
+      placement: openAbove ? 'above' : 'below',
+    });
+  }, []);
+
   useEffect(() => {
+    setPortalMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el || !isOpen) return;
+    attachBlockInputWheelChange(el);
+    return () => detachBlockInputWheelChange(el);
+  }, [isOpen]);
+
+  useLayoutEffect(() => {
     if (!dropdownInPortal || !isOpen) return;
-
-    const updatePosition = () => {
-      if (!inputRef.current) return;
-      const rect = inputRef.current.getBoundingClientRect();
-      setDropdownStyle({
-        left: rect.left,
-        top: rect.bottom + 4,
-        width: rect.width,
-      });
-    };
-
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-
+    updateDropdownPosition();
+    window.addEventListener('resize', updateDropdownPosition);
+    window.addEventListener('scroll', updateDropdownPosition, true);
     return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updateDropdownPosition);
+      window.removeEventListener('scroll', updateDropdownPosition, true);
     };
-  }, [dropdownInPortal, isOpen]);
+  }, [dropdownInPortal, isOpen, updateDropdownPosition]);
 
   const displayedValue = isOpen ? input : selectedItem?.label ?? (value ? input : '');
 
@@ -197,64 +226,43 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const resultsDropdown = (
-    <div
-      ref={dropdownRef}
-      id={listboxId}
-      role="listbox"
-      className={[
-        'z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900',
-        dropdownInPortal ? 'z-200' : '',
-        dropdownClassName,
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      style={
-        dropdownInPortal && dropdownStyle
-          ? {
-              position: 'fixed',
-              left: dropdownStyle.left,
-              top: dropdownStyle.top,
-              width: dropdownStyle.width,
-            }
-          : undefined
-      }
-    >
-      {loading ? (
-        <div className="border-b border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-          Searching…
-        </div>
-      ) : null}
-      {filteredItems.map((item, idx) => (
-        <button
-          key={item.id}
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            ignoreBlurRef.current = true;
-            handleSelect(item.id);
-          }}
-          onMouseEnter={() => setHighlightedIdx(idx)}
-          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-            idx === highlightedIdx
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-400'
-              : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800'
-          }`}
-        >
-          {renderItem ? (
-            renderItem(item, idx === highlightedIdx)
-          ) : (
-            <div>
-              <div className="font-medium">{item.label}</div>
-              {item.searchText && (
-                <div className="text-xs text-slate-500 dark:text-slate-400">{item.searchText}</div>
-              )}
-            </div>
-          )}
-        </button>
-      ))}
-    </div>
-  );
+  const portalDropdownStyle: CSSProperties | undefined =
+    dropdownInPortal && dropdownStyle
+      ? {
+          position: 'fixed',
+          left: dropdownStyle.left,
+          top: dropdownStyle.top,
+          width: dropdownStyle.width,
+          transform: dropdownStyle.placement === 'above' ? 'translateY(-100%)' : undefined,
+        }
+      : undefined;
+
+  const dropdownSurfaceClass = [
+    'max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900',
+    dropdownInPortal ? DROPDOWN_Z_CLASS : 'z-[200]',
+    dropdownClassName,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const renderFloatingPanel = (content: React.ReactNode, attachListbox = false) => {
+    const panel = (
+      <div
+        ref={dropdownRef}
+        id={attachListbox ? listboxId : undefined}
+        role={attachListbox ? 'listbox' : undefined}
+        className={dropdownSurfaceClass}
+        style={portalDropdownStyle}
+        onWheel={(event) => event.stopPropagation()}
+      >
+        {content}
+      </div>
+    );
+    if (dropdownInPortal && portalMounted && typeof document !== 'undefined') {
+      return createPortal(panel, document.body);
+    }
+    return <div className="absolute left-0 right-0 top-full z-[200] mt-1">{panel}</div>;
+  };
 
   return (
     <div ref={containerRef} className="relative">
@@ -335,30 +343,67 @@ export default function SearchSelect<T extends { id: string; label: string; sear
       </div>
 
       {isOpen && filteredItems.length > 0
-        ? dropdownInPortal && dropdownStyle
-          ? createPortal(resultsDropdown, document.body)
-          : <div className="absolute left-0 right-0 top-full">{resultsDropdown}</div>
+        ? renderFloatingPanel(
+            <>
+              {loading ? (
+                <div className="border-b border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  Searching…
+                </div>
+              ) : null}
+              {filteredItems.map((item, idx) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    ignoreBlurRef.current = true;
+                    handleSelect(item.id);
+                  }}
+                  onMouseEnter={() => setHighlightedIdx(idx)}
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                    idx === highlightedIdx
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-400'
+                      : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {renderItem ? (
+                    renderItem(item, idx === highlightedIdx)
+                  ) : (
+                    <div>
+                      <div className="font-medium">{item.label}</div>
+                      {item.searchText && (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">{item.searchText}</div>
+                      )}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </>,
+            true
+          )
         : null}
 
-      {isOpen && !hasEnoughInput && minCharactersToSearch > 0 && showMinCharactersHint && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Type at least {minCharactersToSearch} character{minCharactersToSearch === 1 ? '' : 's'} to search
-          </p>
-        </div>
-      )}
+      {isOpen && !hasEnoughInput && minCharactersToSearch > 0 && showMinCharactersHint
+        ? renderFloatingPanel(
+            <p className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+              Type at least {minCharactersToSearch} character{minCharactersToSearch === 1 ? '' : 's'} to search
+            </p>
+          )
+        : null}
 
-      {isOpen && loading && filteredItems.length === 0 && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Searching…</p>
-        </div>
-      )}
+      {isOpen && loading && filteredItems.length === 0
+        ? renderFloatingPanel(
+            <p className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">Searching…</p>
+          )
+        : null}
 
-      {isOpen && hasEnoughInput && !loading && input && filteredItems.length === 0 && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-          <p className="text-xs text-slate-500 dark:text-slate-400">No matches found for &quot;{input}&quot;</p>
-        </div>
-      )}
+      {isOpen && hasEnoughInput && !loading && input && filteredItems.length === 0
+        ? renderFloatingPanel(
+            <p className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+              No matches found for &quot;{input}&quot;
+            </p>
+          )
+        : null}
     </div>
   );
 }

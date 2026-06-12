@@ -18,8 +18,8 @@
 ## Relationships
 
 - [[Jobs Id]] (10 shared connections)
-- [[Components Ui, Sidebar Nav Menu, and Workspace]] (1 shared connections)
-- [[Stock, Customers, and HR]] (1 shared connections)
+- [[Components Ui, Sidebar Nav Menu, and App Shell]] (1 shared connections)
+- [[Stock, Components, and Settings]] (1 shared connections)
 
 ## Source Files
 

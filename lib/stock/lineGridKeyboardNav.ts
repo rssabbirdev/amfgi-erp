@@ -1,10 +1,14 @@
 'use client';
 
-import { useCallback, type InputHTMLAttributes, type KeyboardEvent } from 'react';
+import { useCallback, type KeyboardEvent } from 'react';
+import {
+  createBlockInputWheelRef,
+  type InputPropsWithRef,
+} from '@/lib/utils/blockInputWheelChange';
 
 export const LINE_GRID_NAV_ATTR = 'data-line-grid-nav';
 
-type LineGridNavInputProps = InputHTMLAttributes<HTMLInputElement> & {
+type LineGridNavInputProps = InputPropsWithRef & {
   'data-line-grid-nav'?: 'true';
   'data-nav-row'?: string;
   'data-nav-col'?: string;
@@ -90,11 +94,19 @@ export function useLineGridKeyboardNav(rowCount: number, navigableColCount: numb
   return { getNavInputProps, onGridKeyDown, focusCell };
 }
 
+export type MergeLineGridInputPropsOptions = {
+  /** Block mouse wheel from changing number input values while focused. */
+  blockWheel?: boolean;
+};
+
 export function mergeLineGridInputProps(
   navProps: LineGridNavInputProps,
-  existing?: InputHTMLAttributes<HTMLInputElement>
+  existing?: LineGridNavInputProps,
+  options?: MergeLineGridInputPropsOptions
 ): LineGridNavInputProps {
   const navOnKeyDown = navProps.onKeyDown;
+  const blockWheel = options?.blockWheel ?? existing?.type === 'number';
+
   return {
     ...existing,
     ...navProps,
@@ -104,5 +116,6 @@ export function mergeLineGridInputProps(
         existing?.onKeyDown?.(event);
       }
     },
+    ref: blockWheel ? createBlockInputWheelRef(existing?.ref) : existing?.ref,
   };
 }

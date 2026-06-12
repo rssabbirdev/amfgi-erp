@@ -12,6 +12,7 @@ import DeliveryNoteCustomItemsGrid, {
 } from '@/components/stock/DeliveryNoteCustomItemsGrid';
 import DispatchLineGrid from '@/components/stock/DispatchLineGrid';
 import { cn } from '@/lib/utils';
+import { withBlockInputWheelChange } from '@/lib/utils/blockInputWheelChange';
 import {
   formatDeliveryNoteCustomItemBullet,
   inferCustomItemsLineNoAuto,
@@ -22,16 +23,26 @@ import toast from 'react-hot-toast';
 import {
   useGetJobsQuery,
   useGetCustomersQuery,
+  useGetSuppliersQuery,
   useGetDispatchBudgetWarningMutation,
   useGetMaterialsQuery,
   useGetWarehousesQuery,
   useGetJobMaterialsQuery,
   useAddBatchTransactionMutation,
+  useDeleteDeliveryNoteMutation,
+  useDeleteTransactionMutation,
+  useReceiveDeliveryNoteMutation,
   useUpdateJobMutation,
+  useUpdateSupplierMutation,
   type DispatchBudgetWarningResult,
   type MaterialUomDto,
   type Material,
 } from '@/store/hooks';
+import {
+  getSupplierContactOptions,
+  resolveSupplierContactIdByName,
+  type SupplierContactOption,
+} from '@/lib/utils/supplierContactOptions';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -63,6 +74,13 @@ interface Line {
   returnQty: string;
   quantityUomId: string;
   warehouseId: string;
+  targetWarehouseId?: string;
+  materialLineId?: string;
+  issuedQty?: number;
+  receivedQty?: number;
+  outstandingQty?: number;
+  receiveQty?: string;
+  receiveDestWarehouseId?: string;
   originalDispatchQty?: number;
   originalWarehouseId?: string;
 }
@@ -117,19 +135,26 @@ export default function DeliveryNoteCreatePage() {
   const appliedDeliveryNoteLoadKeyRef = useRef<string | null>(null);
   const { data: jobs = [] } = useGetJobsQuery();
   const { data: customers = [] } = useGetCustomersQuery();
+  const { data: suppliers = [] } = useGetSuppliersQuery();
   const { data: materials = [] } = useGetMaterialsQuery();
   const { data: warehouses = [] } = useGetWarehousesQuery();
   const [addBatchTransaction] = useAddBatchTransactionMutation();
+  const [deleteDeliveryNote] = useDeleteDeliveryNoteMutation();
+  const [deleteTransaction] = useDeleteTransactionMutation();
+  const [receiveDeliveryNote] = useReceiveDeliveryNoteMutation();
   const [getDispatchBudgetWarning, { isLoading: budgetWarningLoading }] = useGetDispatchBudgetWarningMutation();
   const [updateJob] = useUpdateJobMutation();
+  const [updateSupplier] = useUpdateSupplierMutation();
   const showWarehouseColumn = true;
 
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [editingTransactionIds, setEditingTransactionIds] = useState<string[]>([]);
   const [editingDeliveryNoteId, setEditingDeliveryNoteId] = useState<string | null>(null);
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [selectedJob, setSelectedJob] = useState('');
   const [selectedContactId, setSelectedContactId] = useState('');
   const contactJobRef = useRef('');
+  const contactSupplierRef = useRef('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deliveryNoteNumber, setDeliveryNoteNumber] = useState<number | null>(null);
   const [loadedDeliveryNoteNumber, setLoadedDeliveryNoteNumber] = useState<number | null>(null);
@@ -141,6 +166,20 @@ export default function DeliveryNoteCreatePage() {
     { id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' },
   ]);
   const [customItemsLineNoAuto, setCustomItemsLineNoAuto] = useState(true);
+  const [deliveryType, setDeliveryType] = useState<'DISPATCH' | 'SUBCONTRACT'>('DISPATCH');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [supplierId, setSupplierId] = useState('');
+  const [sourceWarehouseId, setSourceWarehouseId] = useState('');
+  const [targetWarehouseId, setTargetWarehouseId] = useState('');
+  const [referenceJobId, setReferenceJobId] = useState('');
+  const [transitStatus, setTransitStatus] = useState<string | null>(null);
+  const [receivingSubcontract, setReceivingSubcontract] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    step: 1 | 2;
+    confirmText: string;
+    loading: boolean;
+  }>({ open: false, step: 1, confirmText: '', loading: false });
   const [lines, setLines] = useState<Line[]>(() => [
     {
       id: generateId(),
@@ -200,15 +239,43 @@ export default function DeliveryNoteCreatePage() {
   const isSA = session?.user?.isSuperAdmin ?? false;
   const perms = (session?.user?.permissions ?? []) as string[];
   const canCreate = isSA || perms.includes('job.create');
+  const canDelete = isSA || perms.includes('transaction.stock_out');
 
   const { data: jobMaterials = [] } = useGetJobMaterialsQuery(selectedJob, { skip: !selectedJob });
+  const isSubcontract = deliveryType === 'SUBCONTRACT';
+  const subcontractHasReceived = lines.some((line) => (line.receivedQty ?? 0) > 0.0005);
+  const subcontractMaterialsReadOnly =
+    isSubcontract &&
+    Boolean(editingDeliveryNoteId && subcontractHasReceived);
+  const subcontractLocked = subcontractMaterialsReadOnly;
+  const subcontractGridEnabled = Boolean(supplierId) && !subcontractMaterialsReadOnly;
+  const showSubcontractReceive =
+    isSubcontract && Boolean(editingDeliveryNoteId && lines.some((line) => line.materialLineId));
+
+  useEffect(() => {
+    if (!isSubcontract) return;
+    setLines((prev) =>
+      prev.map((line) => ({
+        ...line,
+        ...(sourceWarehouseId && !line.warehouseId ? { warehouseId: sourceWarehouseId } : {}),
+        ...(targetWarehouseId && !line.targetWarehouseId ? { targetWarehouseId } : {}),
+        ...(line.warehouseId && !line.receiveDestWarehouseId
+          ? { receiveDestWarehouseId: line.warehouseId }
+          : {}),
+      }))
+    );
+  }, [sourceWarehouseId, targetWarehouseId, isSubcontract]);
+
   const selectableJobs = useMemo(
     () =>
       jobs.filter(
         (job) =>
-          !job.parentJobId && job.status !== 'COMPLETED' && job.status !== 'CANCELLED',
+          !job.parentJobId &&
+          job.status !== 'COMPLETED' &&
+          job.status !== 'CANCELLED' &&
+          (!selectedCustomerId || job.customerId === selectedCustomerId),
       ),
-    [jobs],
+    [jobs, selectedCustomerId],
   );
   const budgetWarningLines = useMemo(
     () =>
@@ -288,6 +355,7 @@ export default function DeliveryNoteCreatePage() {
   );
 
   useEffect(() => {
+    if (isSubcontract) return;
     if (!selectedJob) {
       setSelectedContactId('');
       contactJobRef.current = '';
@@ -306,7 +374,38 @@ export default function DeliveryNoteCreatePage() {
     }
 
     setSelectedContactId(contacts[0]?.id ?? '');
-  }, [selectedJob, jobs, selectedContactId]);
+  }, [isSubcontract, selectedJob, jobs, selectedContactId]);
+
+  const supplierContactOptions = useMemo(
+    () => getSupplierContactOptions(suppliers.find((supplier) => supplier.id === supplierId)),
+    [supplierId, suppliers]
+  );
+
+  const selectedSupplierContactOption = useMemo(
+    () => supplierContactOptions.find((contact) => contact.id === selectedContactId) ?? null,
+    [supplierContactOptions, selectedContactId]
+  );
+
+  useEffect(() => {
+    if (!isSubcontract) return;
+    if (!supplierId) {
+      setSelectedContactId('');
+      contactSupplierRef.current = '';
+      return;
+    }
+
+    if (contactSupplierRef.current !== supplierId) {
+      contactSupplierRef.current = supplierId;
+      setSelectedContactId(supplierContactOptions[0]?.id ?? '');
+      return;
+    }
+
+    if (selectedContactId && supplierContactOptions.some((contact) => contact.id === selectedContactId)) {
+      return;
+    }
+
+    setSelectedContactId(supplierContactOptions[0]?.id ?? '');
+  }, [isSubcontract, supplierId, supplierContactOptions, selectedContactId]);
 
   useEffect(() => {
     if (!selectedJob || jobs.length === 0) return;
@@ -409,7 +508,9 @@ export default function DeliveryNoteCreatePage() {
     [jobContactOptions, selectedContactId]
   );
 
-  const selectedContactPerson = selectedContactOption?.name ?? '';
+  const selectedContactPerson = isSubcontract
+    ? (selectedSupplierContactOption?.name ?? '')
+    : (selectedContactOption?.name ?? '');
 
   function resolveContactIdByName(options: JobContactOption[], name: string): string {
     const trimmed = name.trim();
@@ -464,18 +565,51 @@ export default function DeliveryNoteCreatePage() {
         const d = json.data as {
           id: string;
           number: number;
+          deliveryType?: 'DISPATCH' | 'SUBCONTRACT';
           jobId: string | null;
           date: string;
           documentNotes: string | null;
           customItemsJson: unknown;
           materialDispatchSkipped: boolean;
           contactPerson?: string | null;
-          job: { contactPerson?: string | null } | null;
+          supplierId?: string | null;
+          supplier?: {
+            contactPerson?: string | null;
+            phone?: string | null;
+            email?: string | null;
+            contactsJson?: unknown;
+          } | null;
+          sourceWarehouseId?: string | null;
+          targetWarehouseId?: string | null;
+          referenceJobId?: string | null;
+          transitStatus?: string | null;
+          materialLines?: Array<{
+            id: string;
+            materialId: string;
+            materialName: string;
+            materialUnit: string;
+            issuedQty: number;
+            receivedQty: number;
+            outstandingQty: number;
+            sourceWarehouseId: string;
+            sourceWarehouseName: string;
+            targetWarehouseId?: string | null;
+            quantityUomId?: string | null;
+          }>;
+          job: { contactPerson?: string | null; customerId?: string } | null;
           firstStockOutTransactionId: string | null;
+          transactionIds?: string[];
         };
 
+        setDeliveryType(d.deliveryType ?? 'DISPATCH');
+        setTransitStatus(d.transitStatus ?? null);
+        setSupplierId(d.supplierId ?? '');
+        setSourceWarehouseId(d.sourceWarehouseId ?? '');
+        setTargetWarehouseId(d.targetWarehouseId ?? '');
+        setReferenceJobId(d.referenceJobId ?? '');
         const canonicalJobId = resolveParentJobIdForDeliveryNote(d.jobId || '', jobs);
         setSelectedJob(canonicalJobId);
+        if (d.job?.customerId) setSelectedCustomerId(d.job.customerId);
         contactJobRef.current = canonicalJobId;
         let loadedContactName = d.contactPerson?.trim() || '';
         setDate(
@@ -511,37 +645,60 @@ export default function DeliveryNoteCreatePage() {
 
         setSkipMaterialDispatch(Boolean(d.materialDispatchSkipped));
 
-        if (!d.materialDispatchSkipped && d.firstStockOutTransactionId) {
-          const txnRes = await fetch(`/api/transactions/${d.firstStockOutTransactionId}`);
-          const txnJson = await txnRes.json();
-          if (txnRes.ok && txnJson.data) {
-            const txn = txnJson.data as {
-              notes?: string | null;
-              material?: { id: string };
-              quantity: number;
-              warehouseId?: string | null;
-            };
-            if (!loadedContactName) {
-              loadedContactName =
-                parseDeliveryContactPerson(txn.notes || '') || d.job?.contactPerson?.trim() || '';
-            }
-            if (txn.material) {
-              setLines([
-                {
+        if (d.deliveryType === 'SUBCONTRACT' && d.materialLines && d.materialLines.length > 0) {
+          setLines(
+            d.materialLines.map((line) => ({
+              id: generateId(),
+              jobId: '',
+              materialId: line.materialId,
+              dispatchQty: String(line.issuedQty),
+              returnQty: '',
+              quantityUomId: line.quantityUomId ?? '',
+              warehouseId: line.sourceWarehouseId,
+              targetWarehouseId: line.targetWarehouseId ?? d.targetWarehouseId ?? '',
+              materialLineId: line.id,
+              issuedQty: line.issuedQty,
+              receivedQty: line.receivedQty,
+              outstandingQty: line.outstandingQty,
+              receiveQty: '',
+              receiveDestWarehouseId: line.sourceWarehouseId,
+            }))
+          );
+        } else if (!d.materialDispatchSkipped && d.transactionIds && d.transactionIds.length > 0) {
+          const txnResults = await Promise.all(
+            d.transactionIds.map(async (txnId) => {
+              const txnRes = await fetch(`/api/transactions/${txnId}`);
+              const txnJson = await txnRes.json();
+              return txnRes.ok ? txnJson.data : null;
+            })
+          );
+          const validTxns = txnResults.filter(Boolean) as Array<{
+            notes?: string | null;
+            material?: { id: string };
+            quantity: number;
+            warehouseId?: string | null;
+            quantityUomId?: string | null;
+          }>;
+          if (validTxns[0] && !loadedContactName) {
+            loadedContactName =
+              parseDeliveryContactPerson(validTxns[0].notes || '') || d.job?.contactPerson?.trim() || '';
+          }
+          if (validTxns.length > 0) {
+            setLines(
+              validTxns
+                .filter((txn) => txn.material)
+                .map((txn) => ({
                   id: generateId(),
                   jobId: canonicalJobId,
-                  materialId: txn.material.id,
+                  materialId: txn.material!.id,
                   dispatchQty: String(txn.quantity),
                   returnQty: '',
-                  quantityUomId: '',
+                  quantityUomId: txn.quantityUomId ?? '',
                   warehouseId: txn.warehouseId ?? '',
                   originalDispatchQty: txn.quantity,
                   originalWarehouseId: txn.warehouseId ?? '',
-                },
-              ]);
-            } else {
-              setLines(emptyLineTemplate());
-            }
+                }))
+            );
           } else {
             setLines(emptyLineTemplate());
           }
@@ -549,15 +706,32 @@ export default function DeliveryNoteCreatePage() {
           setLines(emptyLineTemplate());
         }
 
-        if (!loadedContactName) {
-          loadedContactName = d.job?.contactPerson?.trim() || '';
+        if (d.deliveryType === 'SUBCONTRACT') {
+          if (!loadedContactName) {
+            loadedContactName = d.contactPerson?.trim() || '';
+          }
+          contactSupplierRef.current = d.supplierId ?? '';
+          const supplierSource =
+            (d.supplier as { contactPerson?: string; phone?: string; email?: string; contactsJson?: unknown } | null) ??
+            suppliers.find((supplier) => supplier.id === d.supplierId);
+          setSelectedContactId(
+            resolveSupplierContactIdByName(
+              getSupplierContactOptions(supplierSource ?? undefined),
+              loadedContactName
+            )
+          );
+        } else {
+          if (!loadedContactName) {
+            loadedContactName = d.job?.contactPerson?.trim() || '';
+          }
+          setSelectedContactId(
+            resolveContactIdByName(getJobContactOptions(canonicalJobId), loadedContactName)
+          );
         }
-        setSelectedContactId(
-          resolveContactIdByName(getJobContactOptions(canonicalJobId), loadedContactName)
-        );
 
         if (opts.duplicate) {
           setEditingTransactionId(null);
+          setEditingTransactionIds([]);
           setEditingDeliveryNoteId(null);
           const nextNumber = await fetchNextDeliveryNoteNumber();
           if (nextNumber != null) {
@@ -567,6 +741,7 @@ export default function DeliveryNoteCreatePage() {
           setDeliveryNoteNumberOverride(false);
         } else {
           setEditingDeliveryNoteId(d.id);
+          setEditingTransactionIds(d.transactionIds ?? []);
           setEditingTransactionId(d.firstStockOutTransactionId);
           setDeliveryNoteNumber(d.number);
           setLoadedDeliveryNoteNumber(d.number);
@@ -848,15 +1023,106 @@ export default function DeliveryNoteCreatePage() {
   };
 
   const addLine = () => {
-    setLines((prev) => [...prev, {
-      id: generateId(),
-      jobId: selectedJob,
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-      warehouseId: '',
-    }]);
+    setLines((prev) => [
+      ...prev,
+      {
+        id: generateId(),
+        jobId: selectedJob,
+        materialId: '',
+        dispatchQty: '',
+        returnQty: '',
+        quantityUomId: '',
+        warehouseId: isSubcontract ? sourceWarehouseId : '',
+        targetWarehouseId: isSubcontract ? targetWarehouseId : undefined,
+        receiveDestWarehouseId: isSubcontract ? sourceWarehouseId : undefined,
+      },
+    ]);
+  };
+
+  const reloadSubcontractLines = async () => {
+    if (!editingDeliveryNoteId) return;
+    const res = await fetch(`/api/delivery-notes/${encodeURIComponent(editingDeliveryNoteId)}`);
+    const json = await res.json();
+    if (!res.ok || !json.data) {
+      toast.error(json.error || 'Failed to refresh delivery note');
+      return;
+    }
+    const d = json.data as {
+      transitStatus?: string | null;
+      materialLines?: Array<{
+        id: string;
+        materialId: string;
+        issuedQty: number;
+        receivedQty: number;
+        outstandingQty: number;
+        sourceWarehouseId: string;
+        targetWarehouseId?: string | null;
+        quantityUomId?: string | null;
+      }>;
+    };
+    setTransitStatus(d.transitStatus ?? null);
+    if (d.materialLines?.length) {
+      setLines(
+        d.materialLines.map((line) => ({
+          id: generateId(),
+          jobId: '',
+          materialId: line.materialId,
+          dispatchQty: String(line.issuedQty),
+          returnQty: '',
+          quantityUomId: line.quantityUomId ?? '',
+          warehouseId: line.sourceWarehouseId,
+          targetWarehouseId: line.targetWarehouseId ?? '',
+          materialLineId: line.id,
+          issuedQty: line.issuedQty,
+          receivedQty: line.receivedQty,
+          outstandingQty: line.outstandingQty,
+          receiveQty: '',
+          receiveDestWarehouseId: line.sourceWarehouseId,
+        }))
+      );
+    }
+  };
+
+  const handleReceiveFromGrid = async () => {
+    if (!editingDeliveryNoteId) {
+      toast.error('Save the delivery note before receiving material');
+      return;
+    }
+    const payload = lines
+      .filter((line) => line.materialLineId && Number.parseFloat(line.receiveQty ?? '') > 0)
+      .map((line) => ({
+        lineId: line.materialLineId!,
+        receiveQty: Number.parseFloat(line.receiveQty!),
+        destinationWarehouseId: line.receiveDestWarehouseId || line.warehouseId,
+      }));
+    if (payload.length === 0) {
+      toast.error('Enter receive quantity for at least one line');
+      return;
+    }
+    setReceivingSubcontract(true);
+    try {
+      await receiveDeliveryNote({
+        id: editingDeliveryNoteId,
+        lines: payload,
+      }).unwrap();
+      toast.success('Material received');
+      await reloadSubcontractLines();
+    } catch (err: unknown) {
+      const rtkErr = err as { data?: { error?: string } };
+      toast.error(rtkErr?.data?.error ?? 'Failed to receive material');
+    } finally {
+      setReceivingSubcontract(false);
+    }
+  };
+
+  const fillAllOutstandingReceive = () => {
+    setLines((prev) =>
+      prev.map((line) =>
+        line.materialLineId && (line.outstandingQty ?? 0) > 0.0005
+          ? { ...line, receiveQty: String(line.outstandingQty) }
+          : line
+      )
+    );
   };
 
   const removeLine = (id: string) => {
@@ -876,14 +1142,22 @@ export default function DeliveryNoteCreatePage() {
               returnQty: '',
               quantityUomId: '',
               warehouseId: '',
+              targetWarehouseId: '',
             };
           }
+          const defaultWarehouse = materials.find((m) => m.id === value)?.warehouseId ?? '';
           return {
             ...l,
             materialId: value,
             quantityUomId: '',
-            warehouseId: materials.find((m) => m.id === value)?.warehouseId ?? '',
+            warehouseId: l.warehouseId || sourceWarehouseId || defaultWarehouse,
+            targetWarehouseId: l.targetWarehouseId || targetWarehouseId || '',
+            receiveDestWarehouseId:
+              l.receiveDestWarehouseId || l.warehouseId || sourceWarehouseId || defaultWarehouse,
           };
+        }
+        if (field === 'warehouseId' && isSubcontract && !l.receiveDestWarehouseId) {
+          return { ...l, [field]: value, receiveDestWarehouseId: value };
         }
         return { ...l, [field]: value };
       })
@@ -957,16 +1231,98 @@ export default function DeliveryNoteCreatePage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!selectedJob) {
-      toast.error('Select a job');
+  const handleCreateSupplierContact = async () => {
+    if (!supplierId) {
+      toast.error('Select a supplier first');
+      return;
+    }
+    const name = addContactModal.name.trim();
+    if (!name) {
+      toast.error('Contact name is required');
+      return;
+    }
+    const currentSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+    if (!currentSupplier) {
+      toast.error('Selected supplier not found');
       return;
     }
 
-    if (jobContactOptions.length > 0 && !selectedContactId) {
-      toast.error('Select a contact person');
+    const currentContacts = Array.isArray(currentSupplier.contactsJson)
+      ? [...(currentSupplier.contactsJson as Array<Record<string, unknown>>)]
+      : [];
+    if (
+      currentContacts.some((row) => {
+        const contactName =
+          (typeof row.contact_name === 'string' ? row.contact_name : '') ||
+          (typeof row.name === 'string' ? row.name : '');
+        return contactName.trim().toLowerCase() === name.toLowerCase();
+      })
+    ) {
+      toast.error('Contact with this name already exists on the selected supplier');
+      return;
+    }
+
+    const newContact: Record<string, string | number> = {
+      contact_name: name,
+      sort_order: currentContacts.length,
+    };
+    if (addContactModal.number.trim()) newContact.phone = addContactModal.number.trim();
+    if (addContactModal.email.trim()) newContact.email = addContactModal.email.trim();
+
+    const nextContacts = [...currentContacts, newContact];
+    const nextPrimary =
+      (currentSupplier.contactPerson && currentSupplier.contactPerson.trim()) || name;
+
+    try {
+      setAddContactModal((prev) => ({ ...prev, saving: true }));
+      await updateSupplier({
+        id: supplierId,
+        data: {
+          contactsJson: nextContacts,
+          contactPerson: nextPrimary,
+        },
+      }).unwrap();
+      setSelectedContactId(
+        resolveSupplierContactIdByName(getSupplierContactOptions(currentSupplier), name)
+      );
+      contactSupplierRef.current = supplierId;
+      setAddContactModal({
+        open: false,
+        name: '',
+        number: '',
+        email: '',
+        designation: '',
+        label: '',
+        saving: false,
+      });
+      toast.success('Contact person added to selected supplier');
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'data' in err
+          ? String((err as { data?: { error?: string } }).data?.error ?? 'Failed to add contact person')
+          : 'Failed to add contact person';
+      toast.error(message);
+      setAddContactModal((prev) => ({ ...prev, saving: false }));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (deliveryType === 'DISPATCH') {
+      if (!selectedJob) {
+        toast.error('Select a job');
+        return;
+      }
+      if (jobContactOptions.length > 0 && !selectedContactId) {
+        toast.error('Select a contact person');
+        return;
+      }
+    } else if (!supplierId) {
+      toast.error('Select a supplier');
+      return;
+    } else if (supplierContactOptions.length > 0 && !selectedContactId) {
+      toast.error('Select a supplier contact person');
       return;
     }
 
@@ -977,22 +1333,42 @@ export default function DeliveryNoteCreatePage() {
     const validCustomItems = customItems.filter(item => item.name.trim());
 
     // Validation: either have materials, or have custom items (if skipping materials), or both
+    if (subcontractLocked) {
+      toast.error('This subcontract delivery note cannot be edited after material has been received');
+      return;
+    }
+
     if (skipMaterialDispatch) {
-      // If skipping materials, at least need custom items
       if (validCustomItems.length === 0) {
         toast.error('Add at least one custom item');
         return;
       }
     } else {
-      // Normal mode: need at least one material
       if (validLines.length === 0) {
-        toast.error('Add at least one material or enable "Custom Items Only"');
+        toast.error(
+          deliveryType === 'SUBCONTRACT'
+            ? 'Add at least one material line or enable custom items only'
+            : 'Add at least one material or enable "Custom Items Only"'
+        );
         return;
+      }
+      if (deliveryType === 'SUBCONTRACT') {
+        for (const line of validLines) {
+          const src = line.warehouseId || sourceWarehouseId;
+          const tgt = line.targetWarehouseId || targetWarehouseId;
+          if (!src || !tgt) {
+            toast.error('Each material line needs source and transit warehouse');
+            return;
+          }
+          if (src === tgt) {
+            toast.error('Source and transit warehouse must differ on each line');
+            return;
+          }
+        }
       }
     }
 
-    // Validate material quantities (skip if skipping material dispatch)
-    if (!skipMaterialDispatch) {
+    if (!skipMaterialDispatch && deliveryType === 'DISPATCH') {
       if (validLines.some((line) => !line.warehouseId)) {
         toast.error('Select a warehouse for each delivery line');
         return;
@@ -1082,17 +1458,24 @@ export default function DeliveryNoteCreatePage() {
       }
 
       // Submit as a batch transaction
-      const linesToSubmit = skipMaterialDispatch ? [] : validLines.map((l) => ({
-        materialId: l.materialId,
-        quantity: parseFloat(l.dispatchQty),
-        quantityUomId: l.quantityUomId.trim() || undefined,
-        returnQty: l.returnQty ? parseFloat(l.returnQty) : undefined,
-        warehouseId: l.warehouseId || undefined,
-      }));
+      const linesToSubmit = skipMaterialDispatch
+        ? []
+        : validLines.map((l) => ({
+            materialId: l.materialId,
+            quantity: parseFloat(l.dispatchQty),
+            quantityUomId: l.quantityUomId.trim() || undefined,
+            returnQty: deliveryType === 'DISPATCH' && l.returnQty ? parseFloat(l.returnQty) : undefined,
+            warehouseId:
+              (l.warehouseId || (deliveryType === 'SUBCONTRACT' ? sourceWarehouseId : '')) || undefined,
+            targetWarehouseId:
+              deliveryType === 'SUBCONTRACT'
+                ? l.targetWarehouseId || targetWarehouseId || undefined
+                : undefined,
+          }));
 
       const batchResult = await addBatchTransaction({
         type: 'STOCK_OUT',
-        jobId: selectedJob,
+        jobId: deliveryType === 'DISPATCH' ? selectedJob : undefined,
         notes: finalNotes || undefined,
         baseNotes: notes?.trim() ? notes.trim() : '',
         deliveryNoteCustomItems: validCustomItems.map((item, idx) => ({
@@ -1105,11 +1488,23 @@ export default function DeliveryNoteCreatePage() {
         overrideReason: overrideReason.trim() || undefined,
         date,
         isDeliveryNote: true,
+        deliveryType,
         deliveryContactPerson: selectedContactPerson.trim() || undefined,
+        supplierId: deliveryType === 'SUBCONTRACT' ? supplierId || undefined : undefined,
+        sourceWarehouseId:
+          deliveryType === 'SUBCONTRACT' ? sourceWarehouseId.trim() || undefined : undefined,
+        targetWarehouseId:
+          deliveryType === 'SUBCONTRACT' ? targetWarehouseId.trim() || undefined : undefined,
+        referenceJobId: deliveryType === 'SUBCONTRACT' && referenceJobId ? referenceJobId : undefined,
         ...(deliveryNoteNumberOverride && deliveryNoteNumber != null
           ? { deliveryNoteNumber }
           : {}),
-        existingTransactionIds: editingTransactionId ? [editingTransactionId] : undefined,
+        existingTransactionIds:
+          deliveryType === 'DISPATCH' && editingTransactionIds.length > 0
+            ? editingTransactionIds
+            : deliveryType === 'DISPATCH' && editingTransactionId
+              ? [editingTransactionId]
+              : undefined,
         existingDeliveryNoteId: editingDeliveryNoteId ?? undefined,
         lines: linesToSubmit,
       }).unwrap();
@@ -1128,6 +1523,13 @@ export default function DeliveryNoteCreatePage() {
       setNotes('');
       setOverrideReason('');
       setSkipMaterialDispatch(false);
+      setDeliveryType('DISPATCH');
+      setSelectedCustomerId('');
+      setSupplierId('');
+      setSourceWarehouseId('');
+      setTargetWarehouseId('');
+      setReferenceJobId('');
+      setTransitStatus(null);
       setCustomItemsLineNoAuto(true);
       setCustomItems([{ id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' }]);
       setLines(Array.from({ length: 3 }, () => ({
@@ -1140,6 +1542,7 @@ export default function DeliveryNoteCreatePage() {
         warehouseId: '',
       })));
       setEditingTransactionId(null);
+      setEditingTransactionIds([]);
       setEditingDeliveryNoteId(null);
       setDeliveryNoteNumber(null);
 
@@ -1175,6 +1578,47 @@ export default function DeliveryNoteCreatePage() {
     : 'Dispatch materials and add custom items for the delivery note';
   const submitButtonText =
     editingTransactionId || editingDeliveryNoteId ? 'Update Delivery Note' : 'Create Delivery Note';
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ open: false, step: 1, confirmText: '', loading: false });
+  };
+
+  const confirmDeleteDeliveryNote = async () => {
+    if (deleteModal.step === 1) {
+      setDeleteModal((prev) => ({ ...prev, step: 2 }));
+      return;
+    }
+    if (deleteModal.confirmText.trim().toUpperCase() !== 'DELETE') {
+      toast.error('Type DELETE to confirm');
+      return;
+    }
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
+    try {
+      if (editingDeliveryNoteId) {
+        await deleteDeliveryNote(editingDeliveryNoteId).unwrap();
+      } else {
+        const txnIds =
+          editingTransactionIds.length > 0
+            ? editingTransactionIds
+            : editingTransactionId
+              ? [editingTransactionId]
+              : [];
+        for (const txnId of txnIds) {
+          await deleteTransaction(txnId).unwrap();
+        }
+      }
+      toast.success('Delivery note deleted');
+      closeDeleteModal();
+      router.push('/stock/dispatch');
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'data' in err
+          ? String((err as { data?: { error?: string } }).data?.error ?? 'Failed to delete')
+          : 'Failed to delete';
+      toast.error(message);
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
 
   const handleDuplicate = async () => {
     if (!selectedJob) {
@@ -1268,6 +1712,17 @@ export default function DeliveryNoteCreatePage() {
               Duplicate
             </Button>
           ) : null}
+          {canDelete && (editingDeliveryNoteId || editingTransactionId || editingTransactionIds.length > 0) ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-red-500/40 text-red-700 hover:bg-red-500/10 dark:text-red-300"
+              onClick={() => setDeleteModal({ open: true, step: 1, confirmText: '', loading: false })}
+            >
+              Delete
+            </Button>
+          ) : null}
           <Link href="/stock/dispatch" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}>
             Cancel
           </Link>
@@ -1328,6 +1783,41 @@ export default function DeliveryNoteCreatePage() {
           </div>
         )}
 
+        <div className="border-b border-border bg-muted/30 px-4 py-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Delivery type
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { id: 'DISPATCH', label: 'Dispatch to job' },
+                { id: 'SUBCONTRACT', label: 'Send to subcontractor' },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                disabled={Boolean(editingDeliveryNoteId || editingTransactionId)}
+                onClick={() => {
+                  if (hasData()) {
+                    toast.error('Clear the form before changing delivery type');
+                    return;
+                  }
+                  setDeliveryType(option.id);
+                }}
+                className={cn(
+                  'rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                  deliveryType === option.id
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/20 px-4 py-2.5">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-foreground">Custom items only</p>
@@ -1374,35 +1864,188 @@ export default function DeliveryNoteCreatePage() {
           </button>
         </div>
 
-        {/* Job & delivery */}
+        {/* Job / subcontract header */}
         <div className="border-b border-border p-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <div>
-              <SearchSelect
-                label="Job"
-                required
-                value={selectedJob}
-                onChange={(id) => handleJobChange(id)}
-                placeholder="Search by job number…"
-                items={selectableJobs.map((j) => ({
-                  id: j.id,
-                  label: j.jobNumber,
-                  searchText: `${j.jobNumber} ${customers.find((c) => c.id === j.customerId)?.name || 'Unknown'}`,
-                }))}
-                renderItem={(item) => {
-                  const j = selectableJobs.find((x) => x.id === item.id);
-                  const customerName = j
-                    ? customers.find((c) => c.id === j.customerId)?.name || 'Unknown'
-                    : '';
-                  return (
-                    <div>
-                      <div className="font-medium text-foreground">{item.label}</div>
-                      <div className="text-xs text-muted-foreground">{customerName}</div>
+            {!isSubcontract ? (
+              <>
+                <div>
+                  <SearchSelect
+                    label="Customer"
+                    required
+                    value={selectedCustomerId}
+                    onChange={(id) => {
+                      setSelectedCustomerId(id);
+                      if (selectedJob) {
+                        const job = jobs.find((j) => j.id === selectedJob);
+                        if (job && job.customerId !== id) {
+                          setSelectedJob('');
+                          setSelectedContactId('');
+                        }
+                      }
+                    }}
+                    placeholder="Search customer…"
+                    items={customers.map((c) => ({
+                      id: c.id,
+                      label: c.name,
+                      searchText: c.name,
+                    }))}
+                  />
+                </div>
+                <div>
+                  <SearchSelect
+                    label="Job"
+                    required
+                    value={selectedJob}
+                    onChange={(id) => handleJobChange(id)}
+                    placeholder={selectedCustomerId ? 'Search by job number…' : 'Select customer first'}
+                    items={selectableJobs.map((j) => ({
+                      id: j.id,
+                      label: j.jobNumber,
+                      searchText: `${j.jobNumber} ${customers.find((c) => c.id === j.customerId)?.name || 'Unknown'}`,
+                    }))}
+                    renderItem={(item) => {
+                      const j = selectableJobs.find((x) => x.id === item.id);
+                      const customerName = j
+                        ? customers.find((c) => c.id === j.customerId)?.name || 'Unknown'
+                        : '';
+                      return (
+                        <div>
+                          <div className="font-medium text-foreground">{item.label}</div>
+                          <div className="text-xs text-muted-foreground">{customerName}</div>
+                        </div>
+                      );
+                    }}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <SearchSelect
+                    label="Supplier"
+                    required
+                    value={supplierId}
+                    onChange={setSupplierId}
+                    placeholder="Search supplier…"
+                    items={suppliers
+                      .filter((s) => s.isActive !== false)
+                      .map((s) => ({
+                        id: s.id,
+                        label: s.name,
+                        searchText: `${s.name} ${s.contactPerson ?? ''}`,
+                      }))}
+                  />
+                </div>
+                <div>
+                  <SearchSelect
+                    label="Default source warehouse (optional)"
+                    value={sourceWarehouseId}
+                    onChange={setSourceWarehouseId}
+                    placeholder="Auto-fill empty rows…"
+                    items={warehouses.map((w) => ({ id: w.id, label: w.name, searchText: w.name }))}
+                  />
+                </div>
+                <div>
+                  <SearchSelect
+                    label="Default transit warehouse (optional)"
+                    value={targetWarehouseId}
+                    onChange={setTargetWarehouseId}
+                    placeholder="Auto-fill empty rows…"
+                    items={warehouses.map((w) => ({ id: w.id, label: w.name, searchText: w.name }))}
+                  />
+                </div>
+                <div>
+                  <SearchSelect
+                    label="Reference job (optional)"
+                    value={referenceJobId}
+                    onChange={setReferenceJobId}
+                    placeholder="Planning reference only"
+                    items={selectableJobs.map((j) => ({
+                      id: j.id,
+                      label: j.jobNumber,
+                      searchText: j.jobNumber,
+                    }))}
+                  />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-4">
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Supplier contact person
+                  </label>
+                  <div className="space-y-2">
+                    <SearchSelect
+                      key={supplierId || 'no-supplier'}
+                      value={selectedContactId}
+                      onChange={setSelectedContactId}
+                      allowClearButton={false}
+                      placeholder={
+                        supplierId
+                          ? supplierContactOptions.length > 0
+                            ? 'Search supplier contact by name / phone / email'
+                            : 'No contacts found on this supplier'
+                          : 'Select a supplier first'
+                      }
+                      disabled={!supplierId || supplierContactOptions.length === 0}
+                      items={supplierContactOptions.map((opt) => ({
+                        id: opt.id,
+                        label: opt.label,
+                        searchText: opt.searchText,
+                      }))}
+                      renderItem={(item) => {
+                        const full = supplierContactOptions.find((x) => x.id === item.id);
+                        return (
+                          <div className="flex flex-col">
+                            <span className="font-medium">{item.label}</span>
+                            {(full?.phone || full?.email) && (
+                              <span className="text-xs text-muted-foreground">
+                                {[full.phone, full.email].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }}
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] text-muted-foreground">
+                        Primary supplier contact stays on the supplier record; this selection is for this delivery note only.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAddContactModal((prev) => ({
+                            ...prev,
+                            open: true,
+                            name: '',
+                            number: '',
+                            email: '',
+                            designation: '',
+                            label: '',
+                            saving: false,
+                          }))
+                        }
+                        disabled={!supplierId}
+                        className="rounded-md border border-blue-500/40 bg-blue-500/10 px-2.5 py-1 text-xs text-blue-300 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        + Add Contact
+                      </button>
                     </div>
-                  );
-                }}
-              />
-            </div>
+                    {selectedSupplierContactOption ? (
+                      <div className="space-y-1 rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                        <p className="text-sm font-semibold text-foreground">
+                          {selectedSupplierContactOption.name}
+                        </p>
+                        {selectedSupplierContactOption.phone ? (
+                          <p>{selectedSupplierContactOption.phone}</p>
+                        ) : null}
+                        {selectedSupplierContactOption.email ? (
+                          <p className="break-all text-muted-foreground">{selectedSupplierContactOption.email}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            )}
             <div>
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Delivery Date
@@ -1431,10 +2074,12 @@ export default function DeliveryNoteCreatePage() {
                   setDeliveryNoteNumber(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                 }}
                 placeholder={deliveryNoteNumber == null ? 'Loading…' : undefined}
-                className={cn(
-                  'w-full rounded-md border border-border px-3 py-2.5 font-mono text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring',
-                  deliveryNoteNumberOverride ? 'bg-background' : 'cursor-default bg-muted/40'
-                )}
+                {...withBlockInputWheelChange({
+                  className: cn(
+                    'w-full rounded-md border border-border px-3 py-2.5 font-mono text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring',
+                    deliveryNoteNumberOverride ? 'bg-background' : 'cursor-default bg-muted/40'
+                  ),
+                })}
               />
               <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                 <input
@@ -1465,83 +2110,85 @@ export default function DeliveryNoteCreatePage() {
                 </p>
               ) : null}
             </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Contact Person
-              </label>
-              <div className="space-y-2">
-                <SearchSelect
-                  key={selectedJob || 'no-job'}
-                  value={selectedContactId}
-                  onChange={setSelectedContactId}
-                  allowClearButton={false}
-                  placeholder={
-                    selectedJob
-                      ? jobContactOptions.length > 0
-                        ? 'Search contact by name / phone / email / designation'
-                        : 'No contacts found on this job'
-                      : 'Select a job first'
-                  }
-                  disabled={!selectedJob || jobContactOptions.length === 0}
-                  items={jobContactOptions.map((opt) => ({
-                    id: opt.id,
-                    label: opt.label,
-                    searchText: opt.searchText,
-                  }))}
-                  renderItem={(item) => {
-                    const full = jobContactOptions.find((x) => x.id === item.id);
-                    return (
-                      <div className="flex flex-col">
-                        <span className="font-medium">{item.label}</span>
-                        {(full?.phone || full?.email) && (
-                          <span className="text-xs text-muted-foreground">
-                            {[full.phone, full.email].filter(Boolean).join(' · ')}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  }}
-                />
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[11px] text-muted-foreground">
-                        Can&apos;t find contact? Add under this job.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAddContactModal((prev) => ({
-                            ...prev,
-                            open: true,
-                            name: '',
-                            number: '',
-                            email: '',
-                            designation: '',
-                            label: '',
-                            saving: false,
-                          }))
-                        }
-                        disabled={!selectedJob}
-                        className="rounded-md border border-blue-500/40 bg-blue-500/10 px-2.5 py-1 text-xs text-blue-300 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        + Add Contact
-                      </button>
-                    </div>
-                {selectedContactOption ? (
-                  <div className="space-y-1 rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                    <p className="text-sm font-semibold text-foreground">{selectedContactOption.name}</p>
-                    {(selectedContactOption.designation || selectedContactOption.contactLabel) && (
-                      <p className="text-muted-foreground">
-                        {selectedContactOption.designation || selectedContactOption.contactLabel}
-                      </p>
-                    )}
-                    {selectedContactOption.phone ? <p>{selectedContactOption.phone}</p> : null}
-                    {selectedContactOption.email ? (
-                      <p className="break-all text-muted-foreground">{selectedContactOption.email}</p>
-                    ) : null}
+            {!isSubcontract ? (
+              <div>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Contact Person
+                </label>
+                <div className="space-y-2">
+                  <SearchSelect
+                    key={selectedJob || 'no-job'}
+                    value={selectedContactId}
+                    onChange={setSelectedContactId}
+                    allowClearButton={false}
+                    placeholder={
+                      selectedJob
+                        ? jobContactOptions.length > 0
+                          ? 'Search contact by name / phone / email / designation'
+                          : 'No contacts found on this job'
+                        : 'Select a job first'
+                    }
+                    disabled={!selectedJob || jobContactOptions.length === 0}
+                    items={jobContactOptions.map((opt) => ({
+                      id: opt.id,
+                      label: opt.label,
+                      searchText: opt.searchText,
+                    }))}
+                    renderItem={(item) => {
+                      const full = jobContactOptions.find((x) => x.id === item.id);
+                      return (
+                        <div className="flex flex-col">
+                          <span className="font-medium">{item.label}</span>
+                          {(full?.phone || full?.email) && (
+                            <span className="text-xs text-muted-foreground">
+                              {[full.phone, full.email].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    }}
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] text-muted-foreground">
+                      Can&apos;t find contact? Add under this job.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAddContactModal((prev) => ({
+                          ...prev,
+                          open: true,
+                          name: '',
+                          number: '',
+                          email: '',
+                          designation: '',
+                          label: '',
+                          saving: false,
+                        }))
+                      }
+                      disabled={!selectedJob}
+                      className="rounded-md border border-blue-500/40 bg-blue-500/10 px-2.5 py-1 text-xs text-blue-300 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      + Add Contact
+                    </button>
                   </div>
-                ) : null}
+                  {selectedContactOption ? (
+                    <div className="space-y-1 rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                      <p className="text-sm font-semibold text-foreground">{selectedContactOption.name}</p>
+                      {(selectedContactOption.designation || selectedContactOption.contactLabel) && (
+                        <p className="text-muted-foreground">
+                          {selectedContactOption.designation || selectedContactOption.contactLabel}
+                        </p>
+                      )}
+                      {selectedContactOption.phone ? <p>{selectedContactOption.phone}</p> : null}
+                      {selectedContactOption.email ? (
+                        <p className="break-all text-muted-foreground">{selectedContactOption.email}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
         </div>
 
@@ -1583,24 +2230,74 @@ export default function DeliveryNoteCreatePage() {
         {!skipMaterialDispatch && (
           <div className="border-b border-border">
             <div className="border-b border-border bg-muted/40 p-4">
-              <h3 className="text-sm font-semibold text-foreground">Materials for Dispatch</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground">
+                  {isSubcontract ? 'Materials to send' : 'Materials for Dispatch'}
+                </h3>
+                {isSubcontract && transitStatus ? (
+                  <Badge variant="outline" className="text-[10px] uppercase">
+                    {transitStatus.replace(/_/g, ' ')}
+                  </Badge>
+                ) : null}
+              </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Add materials to be dispatched. This section affects inventory (same Excel-style grid as dispatch entry).
+                {isSubcontract
+                  ? 'Set source and transit per line (or use header defaults). Receive qty in the same grid after issue.'
+                  : 'Add materials to be dispatched. This section affects inventory (same Excel-style grid as dispatch entry).'}
               </p>
+              {subcontractMaterialsReadOnly ? (
+                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                  Issue columns are locked after receive has started. Enter receive qty below and use Receive.
+                </p>
+              ) : null}
             </div>
             <DispatchLineGrid
               lines={lines}
               materials={materials}
               warehouses={warehouses}
-              selectedJob={selectedJob}
+              selectedJob={isSubcontract ? referenceJobId || 'subcontract' : selectedJob}
               showWarehouseColumn={showWarehouseColumn}
-              emptyMessage="No materials added yet. Click + Add row below to start."
+              variant={isSubcontract ? 'subcontract' : 'dispatch'}
+              showSubcontractReceive={showSubcontractReceive}
+              subcontractIssueReadOnly={subcontractMaterialsReadOnly}
+              gridEnabled={isSubcontract ? Boolean(supplierId) : Boolean(selectedJob)}
+              emptyMessage={
+                isSubcontract
+                  ? 'No materials added yet. Select supplier, then add rows with source/transit warehouses.'
+                  : 'No materials added yet. Click + Add row below to start.'
+              }
               onUpdateLine={updateLine}
               persistScope="delivery-note"
-              budgetWarningMaterialIds={budgetWarningMaterialIds}
+              budgetWarningMaterialIds={isSubcontract ? undefined : budgetWarningMaterialIds}
             />
-            <div className="flex justify-end border-t border-border bg-card px-4 py-3">
-              <Button type="button" variant="outline" size="sm" onClick={addLine} disabled={!selectedJob}>
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border bg-card px-4 py-3">
+              {showSubcontractReceive ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={fillAllOutstandingReceive}
+                  >
+                    Fill all outstanding
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void handleReceiveFromGrid()}
+                    disabled={receivingSubcontract}
+                  >
+                    {receivingSubcontract ? 'Receiving…' : 'Receive'}
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addLine}
+                disabled={isSubcontract ? !subcontractGridEnabled : !selectedJob}
+              >
                 + Add row
               </Button>
             </div>
@@ -1817,7 +2514,7 @@ export default function DeliveryNoteCreatePage() {
               <button
                 type="button"
                 disabled={addContactModal.saving}
-                onClick={handleCreateContactPerson}
+                onClick={() => void (isSubcontract ? handleCreateSupplierContact() : handleCreateContactPerson())}
                 className="px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-60"
               >
                 {addContactModal.saving ? 'Saving...' : 'Save Contact'}
@@ -1826,6 +2523,64 @@ export default function DeliveryNoteCreatePage() {
           </div>
         </>
       )}
+
+      {deleteModal.open ? (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={closeDeleteModal} />
+          <div className="fixed top-1/2 left-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-6 shadow-2xl">
+            <h2 className="mb-2 text-lg font-semibold text-foreground">
+              {deleteModal.step === 1 ? 'Delete this delivery note?' : 'Confirm deletion'}
+            </h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              This removes the delivery note and reverses all linked stock movements (dispatch or warehouse transfers).
+              {isSubcontract && transitStatus && transitStatus !== 'ON_TRANSIT'
+                ? ' Received material will be unwound from destination/transit warehouses.'
+                : ''}
+            </p>
+            <div className="mb-6 rounded-lg border border-red-500/30 bg-red-600/15 p-3 text-xs text-red-800 dark:text-red-300">
+              <ul className="list-inside list-disc space-y-1">
+                <li>Deletes all related stock transactions</li>
+                <li>Cannot be undone</li>
+              </ul>
+            </div>
+            {deleteModal.step === 2 ? (
+              <div className="mb-4">
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Type <span className="font-mono font-semibold text-foreground">DELETE</span> to confirm
+                </label>
+                <input
+                  type="text"
+                  value={deleteModal.confirmText}
+                  onChange={(e) => setDeleteModal((prev) => ({ ...prev, confirmText: e.target.value }))}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  autoFocus
+                />
+              </div>
+            ) : null}
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                disabled={deleteModal.loading}
+                className="rounded-lg bg-muted px-4 py-2 text-sm font-medium text-foreground hover:bg-muted/80 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteDeliveryNote()}
+                disabled={
+                  deleteModal.loading ||
+                  (deleteModal.step === 2 && deleteModal.confirmText.trim().toUpperCase() !== 'DELETE')
+                }
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50"
+              >
+                {deleteModal.loading ? 'Deleting…' : deleteModal.step === 1 ? 'Continue' : 'Delete permanently'}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {/* Change Warning Modal */}
       {changeWarningModal.open && changeWarningModal.pendingChange && (

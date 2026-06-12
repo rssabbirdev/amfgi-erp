@@ -37,6 +37,7 @@ import { openDeliveryNotePrint } from '@/lib/print/openDeliveryNotePrint';
 import {
   customItemsFromJson,
   parseDeliveryNoteCustomItemsFromNotes,
+  type DeliveryNoteCustomItemPrint,
 } from '@/lib/utils/deliveryNoteCustomItems';
 
 interface Material {
@@ -116,10 +117,18 @@ export default function DispatchPage() {
     entry: null,
   });
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; entry: Entry | null; loading: boolean }>({
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    entry: Entry | null;
+    loading: boolean;
+    step: 1 | 2;
+    confirmText: string;
+  }>({
     open: false,
     entry: null,
     loading: false,
+    step: 1,
+    confirmText: '',
   });
 
   const [printModalEntry, setPrintModalEntry] = useState<Entry | null>(null);
@@ -172,7 +181,14 @@ export default function DispatchPage() {
         const json = await res.json();
         const company = json.data as { printTemplates?: DocumentTemplate[] | null };
         const raw = Array.isArray(company.printTemplates) ? company.printTemplates : [];
-        const dn = raw.filter((t) => String(t.itemType) === 'delivery-note');
+        const preferredType =
+          printModalEntry.deliveryType === 'SUBCONTRACT'
+            ? 'subcontract-delivery-note'
+            : 'delivery-note';
+        let dn = raw.filter((t) => String(t.itemType) === preferredType);
+        if (dn.length === 0 && preferredType === 'subcontract-delivery-note') {
+          dn = raw.filter((t) => String(t.itemType) === 'delivery-note');
+        }
         if (cancelled) return;
         setPrintTemplates(dn);
         const def = dn.find((t) => t.isDefault);
@@ -207,7 +223,7 @@ export default function DispatchPage() {
       .trim();
   };
 
-  function parseCustomItemsFromEntry(entry: Entry): Array<{ name: string; description: string; unit: string; qty: string }> {
+  function parseCustomItemsFromEntry(entry: Entry): DeliveryNoteCustomItemPrint[] {
     const fromJson = customItemsFromJson(entry.customItemsJson);
     if (fromJson.length > 0) return fromJson;
     return parseDeliveryNoteCustomItemsFromNotes(entry.notes);
@@ -264,16 +280,29 @@ export default function DispatchPage() {
     router.push(`?${params.toString()}`);
   };
 
-  const handleDelete = async (entry: Entry) => {
-    setDeleteModal({ open: true, entry, loading: false });
+  const closeDeleteModal = () => {
+    setDeleteModal({ open: false, entry: null, loading: false, step: 1, confirmText: '' });
+  };
+
+  const handleDelete = (entry: Entry) => {
+    setDeleteModal({ open: true, entry, loading: false, step: 1, confirmText: '' });
   };
 
   const confirmDelete = async () => {
     if (!deleteModal.entry) return;
+    if (deleteModal.step === 1) {
+      setDeleteModal((prev) => ({ ...prev, step: 2 }));
+      return;
+    }
+    if (deleteModal.confirmText.trim().toUpperCase() !== 'DELETE') {
+      toast.error('Type DELETE to confirm');
+      return;
+    }
+
     setDeleteModal((prev) => ({ ...prev, loading: true }));
     try {
       const entry = deleteModal.entry;
-      if (entry.isDeliveryNote && entry.transactionIds.length === 0 && entry.deliveryNoteId) {
+      if (entry.isDeliveryNote && entry.deliveryNoteId) {
         await deleteDeliveryNote(entry.deliveryNoteId).unwrap();
       } else {
         for (const txnId of entry.transactionIds) {
@@ -281,9 +310,13 @@ export default function DispatchPage() {
         }
       }
       toast.success('Entry deleted successfully');
-      setDeleteModal({ open: false, entry: null, loading: false });
-    } catch (err: any) {
-      toast.error(err?.data?.error ?? 'Failed to delete entry');
+      closeDeleteModal();
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'data' in err
+          ? String((err as { data?: { error?: string } }).data?.error ?? 'Failed to delete entry')
+          : 'Failed to delete entry';
+      toast.error(message);
       setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
@@ -296,6 +329,13 @@ export default function DispatchPage() {
     setSelectedRowId(entry.id);
     setViewModal({ open: true, entry });
   }, []);
+
+  const isSubcontractEntry = (entry: Entry) => entry.deliveryType === 'SUBCONTRACT';
+
+  const transitStatusLabel = (status?: string | null) => {
+    if (!status) return null;
+    return status.replace(/_/g, ' ');
+  };
 
   const handleRowContextMenu = useCallback((entry: Entry, e: React.MouseEvent) => {
     e.preventDefault();
@@ -311,6 +351,12 @@ export default function DispatchPage() {
     ];
     if (canEdit) {
       options.push({ label: 'Edit', action: () => router.push(editPath) });
+    }
+    if (canEdit && entry.isDeliveryNote && isSubcontractEntry(entry) && entry.deliveryNoteId) {
+      options.push({
+        label: 'Receive',
+        action: () => router.push(`/stock/dispatch/delivery-note?deliveryNoteId=${entry.deliveryNoteId}`),
+      });
     }
     if (canEdit && entry.isDeliveryNote) {
       options.push({
@@ -513,9 +559,16 @@ export default function DispatchPage() {
                       <TableCell className="whitespace-nowrap text-sm text-foreground">{formatDateTime(e.dispatchDate)}</TableCell>
                       <TableCell>
                         {e.isDeliveryNote ? (
-                          <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-100">
-                            DN #{dnNumber ?? 'N/A'}
-                          </span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-100">
+                              {isSubcontractEntry(e) ? 'Subcontract' : 'Dispatch'} DN #{dnNumber ?? 'N/A'}
+                            </span>
+                            {isSubcontractEntry(e) && e.transitStatus ? (
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                                {transitStatusLabel(e.transitStatus)}
+                              </span>
+                            ) : null}
+                          </div>
                         ) : (
                           <Badge label="Dispatch" variant="gray" />
                         )}
@@ -655,13 +708,26 @@ export default function DispatchPage() {
                   <div className="bg-muted/30 rounded-lg p-3 border border-border">
                     <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Type</p>
                     {isDeliveryNote ? (
-                      <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-100">
-                        DN #{dnNumber || 'N/A'}
-                      </span>
+                      <div className="space-y-1">
+                        <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-100">
+                          {isSubcontractEntry(entry) ? 'Subcontract' : 'Dispatch'} DN #{dnNumber || 'N/A'}
+                        </span>
+                        {isSubcontractEntry(entry) && entry.transitStatus ? (
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            {transitStatusLabel(entry.transitStatus)}
+                          </p>
+                        ) : null}
+                      </div>
                     ) : (
                       <Badge label="Dispatch" variant="gray" />
                     )}
                   </div>
+                  {isDeliveryNote && isSubcontractEntry(entry) ? (
+                    <div className="bg-muted/30 rounded-lg p-3 border border-border sm:col-span-2">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Subcontractor</p>
+                      <p className="text-sm font-semibold text-foreground">{entry.supplierName || '—'}</p>
+                    </div>
+                  ) : null}
                   <div className="bg-muted/30 rounded-lg p-3 border border-border">
                     <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Contact Person</p>
                     <p className="text-sm font-semibold text-foreground">{primaryContact || '—'}</p>
@@ -842,6 +908,17 @@ export default function DispatchPage() {
                       Print
                     </button>
                   ) : null}
+                  {canEdit && isDeliveryNote && isSubcontractEntry(entry) && entry.deliveryNoteId ? (
+                    <button
+                      onClick={() => {
+                        setViewModal({ open: false, entry: null });
+                        router.push(`/stock/dispatch/delivery-note?deliveryNoteId=${entry.deliveryNoteId}`);
+                      }}
+                      className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-500 text-sm font-medium transition-colors inline-flex items-center gap-1.5"
+                    >
+                      Receive
+                    </button>
+                  ) : null}
                   {canEdit && isDeliveryNote && (
                     <button
                       onClick={() => {
@@ -959,48 +1036,94 @@ export default function DispatchPage() {
       {/* Delete Confirmation Modal */}
       {deleteModal.open && deleteModal.entry && (
         <>
-          <div
-            className="fixed inset-0 bg-black/50 z-40"
-            onClick={() => setDeleteModal({ open: false, entry: null, loading: false })}
-          />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-card border border-border rounded-xl p-6 max-w-sm shadow-2xl">
-            <h2 className="text-lg font-semibold text-foreground mb-2">Delete Dispatch Entry?</h2>
-            <p className="text-muted-foreground text-sm mb-4">
-              Delete dispatch entry for job <strong>{deleteModal.entry.jobNumber}</strong> on{' '}
-              <strong>{formatDate(deleteModal.entry.dispatchDate)}</strong>?
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={closeDeleteModal} />
+          <div className="fixed top-1/2 left-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-6 shadow-2xl">
+            <h2 className="mb-2 text-lg font-semibold text-foreground">
+              {deleteModal.step === 1 ? 'Delete this entry?' : 'Confirm deletion'}
+            </h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              {deleteModal.entry.isDeliveryNote ? (
+                <>
+                  Delivery note #{getDeliveryNoteNumber(deleteModal.entry.notes, deleteModal.entry.deliveryNoteNumber) ?? '—'}
+                  {deleteModal.entry.deliveryType === 'SUBCONTRACT' ? ' (subcontract)' : ''} · job{' '}
+                  <strong>{deleteModal.entry.jobNumber}</strong>
+                </>
+              ) : (
+                <>
+                  Dispatch entry for job <strong>{deleteModal.entry.jobNumber}</strong> on{' '}
+                  <strong>{formatDate(deleteModal.entry.dispatchDate)}</strong>
+                </>
+              )}
             </p>
 
-            <div className="bg-red-600/15 border border-red-500/30 rounded-lg p-3 mb-6">
-              <p className="text-xs font-medium text-red-800 dark:text-red-300 mb-2">This action will:</p>
-              <ul className="text-xs text-red-800 dark:text-red-300 space-y-1 list-disc list-inside">
+            <div className="mb-6 rounded-lg border border-red-500/30 bg-red-600/15 p-3">
+              <p className="mb-2 text-xs font-medium text-red-800 dark:text-red-300">This will permanently:</p>
+              <ul className="list-inside list-disc space-y-1 text-xs text-red-800 dark:text-red-300">
+                <li>Delete the {deleteModal.entry.isDeliveryNote ? 'delivery note' : 'dispatch entry'}</li>
+                <li>
+                  Reverse and remove{' '}
+                  {deleteModal.entry.isDeliveryNote && deleteModal.entry.deliveryNoteId
+                    ? 'all linked stock transactions (including subcontract receive/issue transfers)'
+                    : `${deleteModal.entry.transactionCount} stock transaction(s)`}
+                </li>
                 {deleteModal.entry.isDeliveryNote &&
-                deleteModal.entry.transactionIds.length === 0 &&
-                deleteModal.entry.deliveryNoteId ? (
-                  <li>Remove delivery note #{getDeliveryNoteNumber(deleteModal.entry.notes, deleteModal.entry.deliveryNoteNumber) ?? '—'} (custom items only)</li>
-                ) : (
-                  <>
-                    <li>Delete all {deleteModal.entry.materialsCount} material dispatch records</li>
-                    <li>Remove {deleteModal.entry.transactionCount} transaction(s)</li>
-                  </>
-                )}
+                isSubcontractEntry(deleteModal.entry) &&
+                deleteModal.entry.transitStatus &&
+                deleteModal.entry.transitStatus !== 'ON_TRANSIT' ? (
+                  <li>
+                    Unwind received material ({deleteModal.entry.transitStatus.replace(/_/g, ' ').toLowerCase()})
+                    back through warehouse transfers
+                  </li>
+                ) : null}
                 <li>Cannot be undone</li>
               </ul>
+              {!canDelete ? (
+                <p className="mt-2 text-xs text-red-800 dark:text-red-300">
+                  Your role does not have permission to delete (requires transaction.stock_out).
+                </p>
+              ) : null}
             </div>
 
-            <div className="flex gap-3 justify-end">
+            {deleteModal.step === 2 ? (
+              <div className="mb-4">
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Type <span className="font-mono font-semibold text-foreground">DELETE</span> to confirm
+                </label>
+                <input
+                  type="text"
+                  value={deleteModal.confirmText}
+                  onChange={(e) => setDeleteModal((prev) => ({ ...prev, confirmText: e.target.value }))}
+                  placeholder="DELETE"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  autoFocus
+                />
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-3">
               <button
-                onClick={() => setDeleteModal({ open: false, entry: null, loading: false })}
+                type="button"
+                onClick={closeDeleteModal}
                 disabled={deleteModal.loading}
-                className="px-4 py-2 rounded-lg bg-muted text-foreground hover:bg-muted/80 text-sm font-medium transition-colors disabled:opacity-50"
+                className="rounded-lg bg-muted px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                onClick={confirmDelete}
-                disabled={deleteModal.loading}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500 text-sm font-medium transition-colors disabled:opacity-50"
+                type="button"
+                onClick={() => void confirmDelete()}
+                disabled={
+                  deleteModal.loading ||
+                  !canDelete ||
+                  (deleteModal.step === 2 && deleteModal.confirmText.trim().toUpperCase() !== 'DELETE')
+                }
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-50"
               >
-                {deleteModal.loading ? 'Deleting...' : 'Delete Entry'}
+                {deleteModal.loading
+                  ? 'Deleting…'
+                  : deleteModal.step === 1
+                    ? 'Continue'
+                    : 'Delete permanently'}
               </button>
             </div>
           </div>

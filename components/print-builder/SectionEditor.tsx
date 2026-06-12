@@ -1168,12 +1168,13 @@ export function SectionEditor({
             <label className="block text-xs text-slate-400 mb-1">Data Source</label>
             <select
               value={section.dataSource}
-              onChange={(e) => onChange({ ...section, dataSource: e.target.value as 'customItems' | 'batches' | 'items' | 'scheduleGroups' | 'driverTrips' })}
+              onChange={(e) => onChange({ ...section, dataSource: e.target.value as 'customItems' | 'batches' | 'items' | 'materialLines' | 'scheduleGroups' | 'driverTrips' })}
               className="w-full px-2 py-1.5 text-xs bg-slate-800 border border-slate-600 rounded text-white"
             >
               <option value="customItems">Custom Items</option>
               <option value="batches">Batches</option>
               <option value="items">Items</option>
+              <option value="materialLines">Subcontract Material Lines</option>
               <option value="scheduleGroups">Schedule Groups</option>
               <option value="driverTrips">Driver Trips</option>
             </select>

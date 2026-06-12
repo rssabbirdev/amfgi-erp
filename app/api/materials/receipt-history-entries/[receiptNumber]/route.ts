@@ -13,6 +13,11 @@ import {
 } from '@/lib/utils/receiptHeaderMetadata';
 import { parseReceiptLineMetadata } from '@/lib/utils/receiptLineMetadata';
 import { reverseReceiptPriceLogUpdates } from '@/lib/utils/receiptPriceLogs';
+import {
+  deleteWarehouseTransferReceipt,
+  isWarehouseTransferReceiptNumber,
+} from '@/lib/stock/deleteWarehouseTransferReceipt';
+import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { applyMaterialWarehouseDelta } from '@/lib/warehouses/stockWarehouses';
 
 const RECEIPT_DELETE_TOLERANCE = 0.0005;
@@ -189,41 +194,29 @@ export async function DELETE(
       );
     }
 
+    if (isWarehouseTransferReceiptNumber(receiptNumber)) {
+      await prisma.$transaction(async (tx) => {
+        await deleteWarehouseTransferReceipt(tx, {
+          companyId,
+          receiptNumber,
+          batchIds: batches.map((batch) => batch.id),
+          sessionUser: session.user,
+        });
+      });
+      publishLiveUpdate({
+        companyId,
+        channel: 'stock',
+        entity: 'receipt',
+        action: 'deleted',
+      });
+      return successResponse({ deleted: true });
+    }
+
     const materialIds = Array.from(new Set(batches.map((b) => b.materialId)));
+    const batchIds = batches.map((batch) => batch.id);
 
     // Use transaction to ensure atomicity
     await prisma.$transaction(async (tx) => {
-      // Reverse stock for each batch
-      for (const batch of batches) {
-        const receivedQty = decimalToNumberOrZero(batch.quantityReceived);
-        await tx.material.update({
-          where: { id: batch.materialId },
-          data: {
-            currentStock: {
-              decrement: receivedQty,
-            },
-          },
-        });
-        if (batch.warehouseId) {
-          await applyMaterialWarehouseDelta(
-            tx,
-            companyId,
-            batch.materialId,
-            batch.warehouseId,
-            -receivedQty
-          );
-        }
-      }
-
-      // Delete all StockBatch records
-      await tx.stockBatch.deleteMany({
-        where: {
-          companyId,
-          receiptNumber: receiptNumber!,
-        },
-      });
-
-      // Prefer deleting stock-in transactions tagged with this receipt marker.
       const receiptMarker = `[RECEIPT:${receiptNumber}]`;
       const taggedDelete = await tx.transaction.deleteMany({
         where: {
@@ -248,11 +241,51 @@ export async function DELETE(
         });
       }
 
+      await tx.transactionBatch.deleteMany({
+        where: { batchId: { in: batchIds } },
+      });
+
+      // Reverse stock for each batch
+      for (const batch of batches) {
+        const receivedQty = decimalToNumberOrZero(batch.quantityReceived);
+        await tx.material.update({
+          where: { id: batch.materialId },
+          data: {
+            currentStock: {
+              decrement: receivedQty,
+            },
+          },
+        });
+        if (batch.warehouseId) {
+          await applyMaterialWarehouseDelta(
+            tx,
+            companyId,
+            batch.materialId,
+            batch.warehouseId,
+            -receivedQty
+          );
+        }
+      }
+
+      await tx.stockBatch.deleteMany({
+        where: {
+          companyId,
+          receiptNumber: receiptNumber!,
+        },
+      });
+
       await reverseReceiptPriceLogUpdates(tx, {
         companyId,
         receiptNumber: receiptNumber!,
         changedBy: session.user.name || session.user.email || session.user.id,
       });
+    });
+
+    publishLiveUpdate({
+      companyId,
+      channel: 'stock',
+      entity: 'receipt',
+      action: 'deleted',
     });
 
     return successResponse({ deleted: true });

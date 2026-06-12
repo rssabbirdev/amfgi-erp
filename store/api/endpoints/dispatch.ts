@@ -1,5 +1,6 @@
 import { LIST_PAGE_SIZE_OPTIONS } from '@/lib/pagination/serverList';
 import { appApi } from '../appApi';
+import { STOCK_LEDGER_INVALIDATES } from '../stockInvalidation';
 
 export const DISPATCH_ENTRY_PAGE_SIZE_OPTIONS = LIST_PAGE_SIZE_OPTIONS;
 
@@ -42,6 +43,10 @@ export interface DispatchEntry {
   }>;
   transactionIds: string[];
   transactionCount: number;
+  deliveryType?: 'DISPATCH' | 'SUBCONTRACT';
+  transitStatus?: 'ON_TRANSIT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | null;
+  supplierId?: string;
+  supplierName?: string;
 }
 
 export const dispatchApi = appApi.injectEndpoints({
@@ -88,16 +93,34 @@ export const dispatchApi = appApi.injectEndpoints({
       keepUnusedDataFor: 600,
     }),
 
+    receiveDeliveryNote: builder.mutation<
+      { deliveryNoteId: string; transitStatus: string | null; lines: unknown[] },
+      { id: string; lines: Array<{ lineId: string; receiveQty: number; destinationWarehouseId?: string }>; notes?: string; date?: string }
+    >({
+      query: ({ id, ...body }) => ({
+        url: `/delivery-notes/${encodeURIComponent(id)}/receive`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (r: { data: { deliveryNoteId: string; transitStatus: string | null; lines: unknown[] } }) =>
+        r.data,
+      invalidatesTags: STOCK_LEDGER_INVALIDATES,
+    }),
+
     deleteDeliveryNote: builder.mutation<{ deleted: boolean }, string>({
       query: (id) => ({
         url: `/delivery-notes/${encodeURIComponent(id)}`,
         method: 'DELETE',
       }),
       transformResponse: (r: { data: { deleted: boolean } }) => r.data,
-      invalidatesTags: [{ type: 'DispatchEntry' }],
+      invalidatesTags: STOCK_LEDGER_INVALIDATES,
     }),
   }),
 });
 
-export const { useGetDispatchEntriesQuery, useGetDispatchEntriesPageQuery, useDeleteDeliveryNoteMutation } =
-  dispatchApi;
+export const {
+  useGetDispatchEntriesQuery,
+  useGetDispatchEntriesPageQuery,
+  useReceiveDeliveryNoteMutation,
+  useDeleteDeliveryNoteMutation,
+} = dispatchApi;

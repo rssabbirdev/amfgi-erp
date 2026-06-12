@@ -8,6 +8,7 @@ import {
   mapCustomItemsForTemplate,
   parseDeliveryNoteCustomItemsFromNotes,
 } from '@/lib/utils/deliveryNoteCustomItems';
+import { parseSupplierContactsJson } from '@/lib/utils/supplierContactOptions';
 
 export interface TemplateDataContext {
   company: {
@@ -26,7 +27,37 @@ export interface TemplateDataContext {
     totalCost: number;
     quantity: number;
     signedCopyUrl: string;
+    deliveryType?: string;
+    transitStatus?: string;
+    /** Selected delivery contact for this note (job or supplier contact name) */
+    contactPerson?: string;
   };
+  supplier?: {
+    name: string;
+    /** Primary company contact on the supplier master record */
+    contactPerson?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    /** Supplier tax registration (TRN) number */
+    trnNumber?: string;
+    /** Contact selected on this subcontract delivery note */
+    deliveryContactPerson?: string;
+    deliveryContactPhone?: string;
+    deliveryContactEmail?: string;
+  } | null;
+  sourceWarehouse?: { name: string } | null;
+  targetWarehouse?: { name: string } | null;
+  materialLines?: Array<{
+    materialName: string;
+    materialUnit: string;
+    issuedQty: string;
+    receivedQty: string;
+    outstandingQty: string;
+    sourceWarehouseName?: string;
+    targetWarehouseName?: string;
+  }>;
+  referenceJob?: TemplateDataContext['job'];
   material: {
     name: string;
     unit: string;
@@ -415,6 +446,69 @@ function resolveCustomItemsForPrint(
 /**
  * Build preview/print context from a `DeliveryNote` row (incl. print-only notes with no stock lines).
  */
+function subcontractMaterialLinesForTemplate(
+  materialLines: unknown
+): NonNullable<TemplateDataContext['materialLines']> {
+  if (!Array.isArray(materialLines)) return [];
+  return materialLines
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null;
+      const r = row as Record<string, unknown>;
+      const materialName = typeof r.materialName === 'string' ? r.materialName : '';
+      if (!materialName) return null;
+      const issued = Number(r.issuedQty ?? 0);
+      const received = Number(r.receivedQty ?? 0);
+      const outstanding = Number(r.outstandingQty ?? Math.max(0, issued - received));
+      return {
+        materialName,
+        materialUnit: typeof r.materialUnit === 'string' ? r.materialUnit : '',
+        issuedQty: String(issued),
+        receivedQty: String(received),
+        outstandingQty: String(outstanding),
+        ...(typeof r.sourceWarehouseName === 'string' && r.sourceWarehouseName
+          ? { sourceWarehouseName: r.sourceWarehouseName }
+          : {}),
+        ...(typeof r.targetWarehouseName === 'string' && r.targetWarehouseName
+          ? { targetWarehouseName: r.targetWarehouseName }
+          : {}),
+      };
+    })
+    .filter(Boolean) as NonNullable<TemplateDataContext['materialLines']>;
+}
+
+function supplierTemplateSlice(supplier: unknown): TemplateDataContext['supplier'] {
+  if (!supplier || typeof supplier !== 'object') return null;
+  const s = supplier as Record<string, unknown>;
+  const name = typeof s.name === 'string' ? s.name.trim() : '';
+  if (!name) return null;
+  return {
+    name,
+    contactPerson: typeof s.contactPerson === 'string' ? s.contactPerson : undefined,
+    phone: typeof s.phone === 'string' ? s.phone : undefined,
+    email: typeof s.email === 'string' ? s.email : undefined,
+    address: typeof s.address === 'string' ? s.address : undefined,
+    trnNumber: s.trnNumber != null ? String(s.trnNumber) : undefined,
+  };
+}
+
+function enrichSupplierWithDeliveryContact(
+  base: NonNullable<TemplateDataContext['supplier']>,
+  contacts: unknown,
+  preferredName?: string
+): NonNullable<TemplateDataContext['supplier']> {
+  const rows = parseSupplierContactsJson(contacts);
+  const selectedName = preferredName?.trim();
+  const selected = selectedName
+    ? rows.find((row) => row.name.toLowerCase() === selectedName.toLowerCase())
+    : rows[0];
+  return {
+    ...base,
+    deliveryContactPerson: selectedName || selected?.name,
+    deliveryContactPhone: selected?.phone,
+    deliveryContactEmail: selected?.email,
+  };
+}
+
 export function buildDeliveryNoteTemplateDataFromEntity(
   dn: {
     id: string;
@@ -423,26 +517,65 @@ export function buildDeliveryNoteTemplateDataFromEntity(
     documentNotes?: string | null;
     contactPerson?: string | null;
     customItemsJson?: unknown;
+    deliveryType?: string;
+    transitStatus?: string | null;
+    supplier?: Record<string, unknown> | null;
+    sourceWarehouse?: { name?: string } | null;
+    targetWarehouse?: { name?: string } | null;
+    referenceJob?: Record<string, unknown> | null;
+    materialLines?: unknown;
     job?: Record<string, unknown> | null;
   },
   company: any
 ): TemplateDataContext {
   const customItems = resolveCustomItemsForPrint(dn.documentNotes, dn.customItemsJson);
-  const totalQty = customItems.reduce((sum, row) => sum + (Number.parseFloat(row.qty) || 0), 0);
+  const materialLines = subcontractMaterialLinesForTemplate(dn.materialLines);
+  const issuedQtyTotal = materialLines.reduce(
+    (sum, row) => sum + (Number.parseFloat(row.issuedQty) || 0),
+    0
+  );
+  const totalQty =
+    dn.deliveryType === 'SUBCONTRACT' && issuedQtyTotal > 0
+      ? issuedQtyTotal
+      : customItems.reduce((sum, row) => sum + (Number.parseFloat(row.qty) || 0), 0);
   const selectedContactPerson =
     (typeof dn.contactPerson === 'string' ? dn.contactPerson.trim() : '') ||
     (typeof dn.job?.contactPerson === 'string' ? dn.job.contactPerson.trim() : '');
-  const jobSlice = jobTemplateSlice(dn.job);
+  const jobSource =
+    dn.deliveryType === 'SUBCONTRACT' && dn.referenceJob ? dn.referenceJob : dn.job;
+  const jobSlice = jobTemplateSlice(jobSource);
   const enrichedJobSlice = jobSlice
     ? enrichWithPrimaryContact(
         jobSlice,
-        (dn.job as { contactsJson?: unknown } | null | undefined)?.contactsJson,
+        (jobSource as { contactsJson?: unknown } | null | undefined)?.contactsJson,
         selectedContactPerson
       )
     : null;
   const customerSlice = customerTemplateSlice(
-    dn.job?.customer as Record<string, unknown> | null | undefined
+    jobSource?.customer as Record<string, unknown> | null | undefined
   );
+  const referenceJobSlice =
+    dn.deliveryType === 'SUBCONTRACT' && dn.referenceJob
+      ? jobTemplateSlice(dn.referenceJob)
+      : null;
+  const supplierBase = supplierTemplateSlice(dn.supplier);
+  const supplierSlice =
+    supplierBase && dn.deliveryType === 'SUBCONTRACT'
+      ? enrichSupplierWithDeliveryContact(
+          supplierBase,
+          (dn.supplier as { contactsJson?: unknown } | null | undefined)?.contactsJson,
+          selectedContactPerson
+        )
+      : supplierBase;
+  const subcontractItems =
+    dn.deliveryType === 'SUBCONTRACT'
+      ? materialLines.map((row) => ({
+          name: row.materialName,
+          description: '',
+          qty: row.issuedQty,
+          unit: row.materialUnit,
+        }))
+      : [];
 
   return {
     company: {
@@ -461,12 +594,20 @@ export function buildDeliveryNoteTemplateDataFromEntity(
       totalCost: 0,
       quantity: totalQty,
       signedCopyUrl: '',
+      deliveryType: dn.deliveryType ?? 'DISPATCH',
+      transitStatus: dn.transitStatus ?? undefined,
+      contactPerson: selectedContactPerson || undefined,
     },
+    supplier: supplierSlice,
+    sourceWarehouse: dn.sourceWarehouse?.name ? { name: dn.sourceWarehouse.name } : null,
+    targetWarehouse: dn.targetWarehouse?.name ? { name: dn.targetWarehouse.name } : null,
+    materialLines,
     material: null,
     job: enrichedJobSlice,
+    referenceJob: referenceJobSlice,
     customer: customerSlice,
     customItems,
-    items: [],
+    items: subcontractItems,
     today: formatDate(new Date().toISOString()),
   };
 }
@@ -511,7 +652,17 @@ export function buildDeliveryNoteTemplateData(
       totalCost,
       quantity: totalQty,
       signedCopyUrl: first.signedCopyUrl ?? '',
+      deliveryType: first.deliveryNote?.deliveryType ?? 'DISPATCH',
+      transitStatus: first.deliveryNote?.transitStatus ?? undefined,
     },
+    supplier: supplierTemplateSlice(first.deliveryNote?.supplier),
+    sourceWarehouse: first.deliveryNote?.sourceWarehouse?.name
+      ? { name: first.deliveryNote.sourceWarehouse.name }
+      : null,
+    targetWarehouse: first.deliveryNote?.targetWarehouse?.name
+      ? { name: first.deliveryNote.targetWarehouse.name }
+      : null,
+    materialLines: subcontractMaterialLinesForTemplate(first.deliveryNote?.materialLines),
     material: withMat?.material
       ? {
           name: withMat.material.name ?? '',
@@ -592,6 +743,9 @@ export function resolveField(
   if (field === 'page.total') return '__PAGE_TOTAL__';
   if (field === 'customer.trxNumber' || field === 'customer.trxnumber') {
     return resolveField('customer.trnNumber', data);
+  }
+  if (field === 'supplier.trxNumber' || field === 'supplier.trxnumber') {
+    return resolveField('supplier.trnNumber', data);
   }
   const parts = field.split('.');
   let current: unknown = data;
@@ -724,6 +878,65 @@ export const MOCK_PREVIEW_DATA: TemplateDataContext = {
     month: 'short',
     year: 'numeric',
   }),
+};
+
+export const MOCK_SUBCONTRACT_DN_DATA: TemplateDataContext = {
+  ...MOCK_PREVIEW_DATA,
+  dn: {
+    ...MOCK_PREVIEW_DATA.dn,
+    number: '42',
+    notes: 'Send materials to subcontractor for galvanizing.',
+    quantity: 150,
+    deliveryType: 'SUBCONTRACT',
+    transitStatus: 'ON_TRANSIT',
+    contactPerson: 'Ahmed Site',
+  },
+  supplier: {
+    name: 'Galv Co LLC',
+    contactPerson: 'Sam Supplier',
+    phone: '+971 4 555 0101',
+    email: 'ops@galvco.ae',
+    address: 'Jebel Ali Free Zone',
+    trnNumber: '100987654300001',
+    deliveryContactPerson: 'Ahmed Site',
+    deliveryContactPhone: '+971 50 222 3344',
+    deliveryContactEmail: 'ahmed.site@galvco.ae',
+  },
+  sourceWarehouse: { name: 'Main Store' },
+  targetWarehouse: { name: 'At Subcontractor' },
+  material: null,
+  referenceJob: {
+    jobNumber: 'JOB-2024-001',
+    description: 'Infrastructure Project - Phase 1',
+    site: 'Dubai Industrial Zone',
+    projectName: 'Tower B Fit-out',
+    contactPerson: 'John Doe',
+  },
+  materialLines: [
+    {
+      materialName: 'Steel Angle 50x50',
+      materialUnit: 'kg',
+      issuedQty: '100',
+      receivedQty: '0',
+      outstandingQty: '100',
+      sourceWarehouseName: 'Main Store',
+      targetWarehouseName: 'At Subcontractor',
+    },
+    {
+      materialName: 'Flat Bar 25mm',
+      materialUnit: 'kg',
+      issuedQty: '50',
+      receivedQty: '25',
+      outstandingQty: '25',
+      sourceWarehouseName: 'Main Store',
+      targetWarehouseName: 'At Subcontractor',
+    },
+  ],
+  items: [
+    { name: 'Steel Angle 50x50', description: '', qty: '100', unit: 'kg' },
+    { name: 'Flat Bar 25mm', description: '', qty: '50', unit: 'kg' },
+  ],
+  customItems: [],
 };
 
 export const MOCK_GRN_DATA: GoodsReceiptContext = {
@@ -961,6 +1174,26 @@ function userSliceFromSession(user?: {
   };
 }
 
+/** Delivery note row from `/api/delivery-notes/:id` (not a stock transaction). */
+export function isDeliveryNoteRecord(doc: unknown): boolean {
+  if (!doc || typeof doc !== 'object') return false;
+  const d = doc as Record<string, unknown>;
+  return typeof d.number === 'number' && d.type === undefined && d.documentNotes !== undefined;
+}
+
+function buildDeliveryNoteFamilyContext(sourceDoc: any, company: any): TemplateDataContext {
+  if (isDeliveryNoteRecord(sourceDoc)) {
+    return buildDeliveryNoteTemplateDataFromEntity(sourceDoc, company);
+  }
+  if (sourceDoc?.type === 'STOCK_OUT') {
+    return buildDeliveryNoteTemplateData([sourceDoc], company);
+  }
+  if (sourceDoc?.deliveryType || sourceDoc?.materialLines) {
+    return buildDeliveryNoteTemplateDataFromEntity(sourceDoc, company);
+  }
+  return buildTemplateData(sourceDoc, company);
+}
+
 export function buildDataContext(
   itemType: ItemType,
   sourceDoc: any,
@@ -972,8 +1205,8 @@ export function buildDataContext(
   },
 ): AnyTemplateDataContext {
   let ctx: AnyTemplateDataContext;
-  if (itemType === 'delivery-note') {
-    ctx = buildTemplateData(sourceDoc, company) as AnyTemplateDataContext;
+  if (itemType === 'delivery-note' || itemType === 'subcontract-delivery-note') {
+    ctx = buildDeliveryNoteFamilyContext(sourceDoc, company) as AnyTemplateDataContext;
   } else if (itemType === 'goods-receipt') {
     ctx = MOCK_GRN_DATA as AnyTemplateDataContext;
   } else if (itemType === 'packing-slip') {
@@ -1003,6 +1236,8 @@ export function getMockData(itemType: ItemType): AnyTemplateDataContext {
   switch (itemType) {
     case 'delivery-note':
       return { ...MOCK_PREVIEW_DATA, ...MOCK_USER_PRINT };
+    case 'subcontract-delivery-note':
+      return { ...MOCK_SUBCONTRACT_DN_DATA, ...MOCK_USER_PRINT };
     case 'goods-receipt':
       return { ...MOCK_GRN_DATA, ...MOCK_USER_PRINT };
     case 'packing-slip':

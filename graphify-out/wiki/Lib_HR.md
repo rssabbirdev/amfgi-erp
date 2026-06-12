@@ -1,40 +1,45 @@
 # Lib HR
 
-> 14 nodes · cohesion 0.24
+> 22 nodes · cohesion 0.13
 
 ## Key Concepts
 
-- **attendanceDraftStatus.ts** (18 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **attendanceDraftStatus.test.ts** (12 connections) — `__tests__/lib/hr/attendanceDraftStatus.test.ts`
-- **defaultUnpaidLeaveTypeId()** (9 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **normalizeDraftStatusFromApi()** (6 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **AttendanceGridDraftRow** (3 connections) — `components/hr/AttendanceEntryGrid.tsx`
-- **LeaveTypeOption** (3 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **findUnpaidLeaveTypeId()** (3 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **resolveLeaveTypeIdFromStored()** (3 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **resolveApiStatusFromDraft()** (3 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **applyAbsentToDraft()** (2 connections) — `app/(app)/hr/attendance/create/page.tsx`
-- **isLeaveManagedDraft()** (2 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **ApiAttendanceStatus** (1 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **LEGACY_ENUM_TO_CODE** (1 connections) — `lib/hr/attendanceDraftStatus.ts`
-- **leaveTypes** (1 connections) — `__tests__/lib/hr/attendanceDraftStatus.test.ts`
+- **salaryComponent.ts** (26 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **calculatePayLine()** (20 connections) — `lib/hr/payroll/calculatePayLine.ts`
+- **salaryComponent.test.ts** (16 connections) — `__tests__/lib/hr/payroll/salaryComponent.test.ts`
+- **applySalaryComponentsToGross()** (7 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **fixedSalaryComponentNet()** (5 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **buildSalaryComponentTotals()** (4 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **attendanceSalaryComponentNet()** (3 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **workedHoursFromMinutes()** (2 connections) — `lib/hr/payroll/calculatePayLine.ts`
+- **dailyWagePay()** (2 connections) — `lib/hr/payroll/calculatePayLine.ts`
+- **countPresentDays()** (2 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **netSalaryComponentTotal()** (2 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **SalaryComponentKind** (1 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **SalaryComponentApplication** (1 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **SalaryComponentItem** (1 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **SalaryComponentTotals** (1 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **netSignedComponentAmount()** (1 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **totals** (1 connections) — `__tests__/lib/hr/payroll/salaryComponent.test.ts`
+- **compensation** (1 connections) — `__tests__/lib/hr/payroll/salaryComponent.test.ts`
+- **breakdown** (1 connections) — `__tests__/lib/hr/payroll/salaryComponent.test.ts`
+- **gross** (1 connections) — `__tests__/lib/hr/payroll/salaryComponent.test.ts`
+- **attendanceNet** (1 connections) — `__tests__/lib/hr/payroll/salaryComponent.test.ts`
+- **result** (1 connections) — `__tests__/lib/hr/payroll/salaryComponent.test.ts`
 
 ## Relationships
 
-- [[HR Attendance]] (11 shared connections)
-- [[Lib HR]] (8 shared connections)
-- [[Components, HR, and Attendance Entry Grid]] (4 shared connections)
+- [[Lib HR]] (38 shared connections)
 
 ## Source Files
 
-- `__tests__/lib/hr/attendanceDraftStatus.test.ts`
-- `app/(app)/hr/attendance/create/page.tsx`
-- `components/hr/AttendanceEntryGrid.tsx`
-- `lib/hr/attendanceDraftStatus.ts`
+- `__tests__/lib/hr/payroll/salaryComponent.test.ts`
+- `lib/hr/payroll/calculatePayLine.ts`
+- `lib/hr/payroll/salaryComponent.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 67 (100%)
+- EXTRACTED: 100 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

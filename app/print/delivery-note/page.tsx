@@ -11,6 +11,10 @@ import { buildDataContext } from '@/lib/utils/templateData';
 import { DEFAULT_DELIVERY_NOTE } from '@/lib/utils/documentDefaults';
 import type { DocumentTemplate } from '@/lib/types/documentTemplate';
 import {
+  deliveryNotePrintItemType,
+  filterTemplatesForDeliveryNotePrint,
+} from '@/lib/utils/printItemTypes';
+import {
   DELIVERY_NOTE_PRINT_DONE,
   DELIVERY_NOTE_PRINT_ERROR,
 } from '@/lib/print/openDeliveryNotePrint';
@@ -23,7 +27,13 @@ interface Transaction {
   date: string;
   totalCost: number;
   quantity: number;
-  deliveryNote?: { id: string; number: number } | null;
+  deliveryNote?: {
+    id: string;
+    number: number;
+    contactPerson?: string | null;
+    deliveryType?: string | null;
+    customItemsJson?: unknown;
+  } | null;
   material?: { name: string; unit: string; unitCost: number };
   job?: { jobNumber: string; description: string; site?: string; lpoNumber?: string; quotationNumber?: string };
   performedByUser?: {
@@ -63,6 +73,7 @@ export default function PrintDeliveryNotePage() {
   );
 
   const [transaction, setTransaction] = useState<Transaction | null>(null);
+  const [deliveryNoteEntity, setDeliveryNoteEntity] = useState<Record<string, unknown> | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
   const [screenPageCount, setScreenPageCount] = useState(1);
@@ -106,6 +117,19 @@ export default function PrintDeliveryNotePage() {
           if (cancelled) return;
           setTransaction(txn);
 
+          const linkedDeliveryNoteId = txn.deliveryNote?.id;
+          if (linkedDeliveryNoteId) {
+            const dnRes = await fetch(
+              `/api/delivery-notes/${encodeURIComponent(linkedDeliveryNoteId)}`
+            );
+            if (dnRes.ok && !cancelled) {
+              const dnJson = await dnRes.json();
+              if (dnJson.data) {
+                setDeliveryNoteEntity(dnJson.data as Record<string, unknown>);
+              }
+            }
+          }
+
           const cid = txn?.companyId;
           if (cid) {
             const companyRes = await fetch(`/api/companies/${cid}`);
@@ -127,7 +151,7 @@ export default function PrintDeliveryNotePage() {
             return;
           }
 
-          const dn = dnJson.data as {
+          const dn = dnJson.data as Record<string, unknown> & {
             id: string;
             number: number;
             date: string;
@@ -135,7 +159,9 @@ export default function PrintDeliveryNotePage() {
             contactPerson?: string | null;
             customItemsJson: unknown;
             job: Record<string, unknown> | null;
+            deliveryType?: string;
           };
+          setDeliveryNoteEntity(dn);
 
           let notesBody = (dn.documentNotes ?? '').trim();
           notesBody = notesBody ? `${notesBody}\n` : '';
@@ -172,6 +198,7 @@ export default function PrintDeliveryNotePage() {
               number: dn.number,
               contactPerson: dn.contactPerson ?? null,
               customItemsJson: dn.customItemsJson,
+              deliveryType: dn.deliveryType ?? null,
             },
             job: dn.job as unknown as Transaction['job'],
             material: undefined,
@@ -268,22 +295,22 @@ export default function PrintDeliveryNotePage() {
     );
   }
 
+  const deliveryType =
+    (typeof deliveryNoteEntity?.deliveryType === 'string' ? deliveryNoteEntity.deliveryType : null) ??
+    transaction.deliveryNote?.deliveryType ??
+    null;
+  const printItemType = deliveryNotePrintItemType(deliveryType);
+
   // Resolve template (supports array or { templates: [...] } company storage)
   const companyTemplates = readCompanyDocumentTemplates(company.printTemplates);
+  const templatePool = filterTemplatesForDeliveryNotePrint(companyTemplates, deliveryType);
   let template: DocumentTemplate = DEFAULT_DELIVERY_NOTE;
   if (companyTemplates.length > 0) {
     if (templateId) {
       const found = companyTemplates.find((t) => t.id === templateId);
       if (found) template = found;
-    } else {
-      const defaultDN = companyTemplates.find(
-        (t) => t.itemType === 'delivery-note' && t.isDefault
-      );
-      if (defaultDN) template = defaultDN;
-      else {
-        const firstDN = companyTemplates.find((t) => t.itemType === 'delivery-note');
-        if (firstDN) template = firstDN;
-      }
+    } else if (templatePool.length > 0) {
+      template = templatePool.find((t) => t.isDefault) ?? templatePool[0];
     }
   }
 
@@ -293,7 +320,12 @@ export default function PrintDeliveryNotePage() {
     signatureUrl: session?.user?.signatureUrl,
   };
 
-  const data = buildDataContext('delivery-note', transaction as any, company as any, creatorOrFallbackUser);
+  const data = buildDataContext(
+    printItemType,
+    (deliveryNoteEntity ?? transaction) as any,
+    company as any,
+    creatorOrFallbackUser
+  );
 
   return (
     <div className="delivery-note-print-root">

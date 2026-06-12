@@ -39,6 +39,7 @@ export const USER_PRINT_FIELDS: FieldDef[] = [
 
 export const ITEM_TYPE_LABELS: Record<KnownItemType, string> = {
   'delivery-note': 'Delivery Note',
+  'subcontract-delivery-note': 'Subcontract Delivery Note',
   'goods-receipt': 'Goods Receipt',
   'packing-slip': 'Packing Slip',
   'material-label': 'Material Label',
@@ -89,33 +90,62 @@ const JOB_PRINT_FIELDS: FieldDef[] = [
   { path: 'job.externalUpdatedAt', label: 'External Updated At (ISO)', category: 'Job' },
 ];
 
+const DELIVERY_NOTE_PRINT_FIELDS: FieldDef[] = [
+  { path: 'company.name', label: 'Company Name', category: 'Company' },
+  { path: 'company.address', label: 'Company Address', category: 'Company' },
+  { path: 'company.phone', label: 'Company Phone', category: 'Company' },
+  { path: 'company.email', label: 'Company Email', category: 'Company' },
+  { path: 'company.slug', label: 'Company Slug', category: 'Company' },
+  { path: 'company.description', label: 'Company Description', category: 'Company' },
+  { path: 'company.letterheadUrl', label: 'Letterhead Image URL', category: 'Company' },
+  { path: 'dn.number', label: 'DN Number', category: 'Document' },
+  { path: 'dn.date', label: 'DN Date', category: 'Document' },
+  { path: 'dn.notes', label: 'DN Notes', category: 'Document' },
+  { path: 'dn.totalCost', label: 'Total Cost', category: 'Document' },
+  { path: 'dn.quantity', label: 'Line Quantity', category: 'Document' },
+  { path: 'dn.signedCopyUrl', label: 'Signed Copy URL', category: 'Document' },
+  { path: 'dn.deliveryType', label: 'Delivery Type', category: 'Document' },
+  { path: 'dn.transitStatus', label: 'Transit Status', category: 'Document' },
+  { path: 'dn.contactPerson', label: 'Delivery Contact Person', category: 'Document' },
+  { path: 'supplier.name', label: 'Supplier Name', category: 'Supplier' },
+  { path: 'supplier.contactPerson', label: 'Supplier Primary Contact', category: 'Supplier' },
+  { path: 'supplier.phone', label: 'Supplier Phone', category: 'Supplier' },
+  { path: 'supplier.email', label: 'Supplier Email', category: 'Supplier' },
+  { path: 'supplier.address', label: 'Supplier Address', category: 'Supplier' },
+  { path: 'supplier.trnNumber', label: 'Supplier TRN Number', category: 'Supplier' },
+  { path: 'supplier.deliveryContactPerson', label: 'Supplier Delivery Contact', category: 'Supplier' },
+  { path: 'supplier.deliveryContactPhone', label: 'Supplier Delivery Contact Phone', category: 'Supplier' },
+  { path: 'supplier.deliveryContactEmail', label: 'Supplier Delivery Contact Email', category: 'Supplier' },
+  { path: 'sourceWarehouse.name', label: 'Source Warehouse', category: 'Warehouse' },
+  { path: 'targetWarehouse.name', label: 'Transit Warehouse', category: 'Warehouse' },
+  ...JOB_PRINT_FIELDS,
+  { path: 'customer.name', label: 'Customer Name', category: 'Customer' },
+  { path: 'customer.contactPerson', label: 'Customer Contact', category: 'Customer' },
+  { path: 'customer.phone', label: 'Customer Phone', category: 'Customer' },
+  { path: 'customer.email', label: 'Customer Email', category: 'Customer' },
+  { path: 'customer.address', label: 'Customer Address', category: 'Customer' },
+  { path: 'customer.trnNumber', label: 'Customer TRN Number', category: 'Customer' },
+  { path: 'material.name', label: 'Material Name', category: 'Material' },
+  { path: 'material.unit', label: 'Material Unit', category: 'Material' },
+  { path: 'material.unitCost', label: 'Material Unit Cost', category: 'Material' },
+  { path: 'today', label: "Today's Date", category: 'General' },
+];
+
+const SUBCONTRACT_DELIVERY_NOTE_EXTRA_FIELDS: FieldDef[] = [
+  { path: 'referenceJob.jobNumber', label: 'Reference Job Number', category: 'Reference Job' },
+  { path: 'referenceJob.description', label: 'Reference Job Description', category: 'Reference Job' },
+  { path: 'referenceJob.site', label: 'Reference Job Site', category: 'Reference Job' },
+  { path: 'referenceJob.projectName', label: 'Reference Project Name', category: 'Reference Job' },
+  { path: 'referenceJob.contactPerson', label: 'Reference Job Contact', category: 'Reference Job' },
+];
+
 export const ITEM_TYPE_FIELDS: Record<KnownItemType, FieldDef[]> = {
-  'delivery-note': [
-    { path: 'company.name', label: 'Company Name', category: 'Company' },
-    { path: 'company.address', label: 'Company Address', category: 'Company' },
-    { path: 'company.phone', label: 'Company Phone', category: 'Company' },
-    { path: 'company.email', label: 'Company Email', category: 'Company' },
-    { path: 'company.slug', label: 'Company Slug', category: 'Company' },
-    { path: 'company.description', label: 'Company Description', category: 'Company' },
-    { path: 'company.letterheadUrl', label: 'Letterhead Image URL', category: 'Company' },
-    { path: 'dn.number', label: 'DN Number', category: 'Document' },
-    { path: 'dn.date', label: 'DN Date', category: 'Document' },
-    { path: 'dn.notes', label: 'DN Notes', category: 'Document' },
-    { path: 'dn.totalCost', label: 'Total Cost', category: 'Document' },
-    { path: 'dn.quantity', label: 'Line Quantity', category: 'Document' },
-    { path: 'dn.signedCopyUrl', label: 'Signed Copy URL', category: 'Document' },
-    ...JOB_PRINT_FIELDS,
-    { path: 'customer.name', label: 'Customer Name', category: 'Customer' },
-    { path: 'customer.contactPerson', label: 'Customer Contact', category: 'Customer' },
-    { path: 'customer.phone', label: 'Customer Phone', category: 'Customer' },
-    { path: 'customer.email', label: 'Customer Email', category: 'Customer' },
-    { path: 'customer.address', label: 'Customer Address', category: 'Customer' },
-    { path: 'customer.trnNumber', label: 'Customer TRN Number', category: 'Customer' },
-    { path: 'material.name', label: 'Material Name', category: 'Material' },
-    { path: 'material.unit', label: 'Material Unit', category: 'Material' },
-    { path: 'material.unitCost', label: 'Material Unit Cost', category: 'Material' },
-    { path: 'today', label: "Today's Date", category: 'General' },
-  ],
+  'delivery-note': DELIVERY_NOTE_PRINT_FIELDS,
+
+  'subcontract-delivery-note': mergeFieldLists(
+    DELIVERY_NOTE_PRINT_FIELDS,
+    SUBCONTRACT_DELIVERY_NOTE_EXTRA_FIELDS
+  ),
 
   'goods-receipt': [
     { path: 'company.name', label: 'Company Name', category: 'Company' },
@@ -130,6 +160,7 @@ export const ITEM_TYPE_FIELDS: Record<KnownItemType, FieldDef[]> = {
     { path: 'supplier.name', label: 'Supplier Name', category: 'Supplier' },
     { path: 'supplier.contactPerson', label: 'Contact Person', category: 'Supplier' },
     { path: 'supplier.phone', label: 'Supplier Phone', category: 'Supplier' },
+    { path: 'supplier.trnNumber', label: 'Supplier TRN Number', category: 'Supplier' },
     { path: 'material.name', label: 'Material Name', category: 'Material' },
     { path: 'material.unit', label: 'Material Unit', category: 'Material' },
     { path: 'today', label: "Today's Date", category: 'General' },
@@ -213,7 +244,7 @@ export function getFieldsForItemType(itemType: string): FieldDef[] {
 
 /** Keys on each table row object in `DocumentRenderer` (not dot paths on document context). */
 export function getTableColumnFieldsForDataSource(
-  dataSource: 'customItems' | 'batches' | 'items' | 'scheduleGroups' | 'driverTrips'
+  dataSource: 'customItems' | 'batches' | 'items' | 'materialLines' | 'scheduleGroups' | 'driverTrips'
 ): FieldDef[] {
   if (dataSource === 'customItems') {
     return [
@@ -230,6 +261,18 @@ export function getTableColumnFieldsForDataSource(
       { path: 'batchNumber', label: 'Batch number', category: 'Table row' },
       { path: 'quantityFromBatch', label: 'Qty from batch', category: 'Table row' },
       { path: 'unitCost', label: 'Unit cost', category: 'Table row' },
+    ];
+  }
+  if (dataSource === 'materialLines') {
+    return [
+      { path: 'slno', label: 'Serial no. (auto)', category: 'Table row' },
+      { path: 'materialName', label: 'Material', category: 'Table row' },
+      { path: 'materialUnit', label: 'Unit', category: 'Table row' },
+      { path: 'issuedQty', label: 'Issued Qty', category: 'Table row' },
+      { path: 'receivedQty', label: 'Received Qty', category: 'Table row' },
+      { path: 'outstandingQty', label: 'Outstanding Qty', category: 'Table row' },
+      { path: 'sourceWarehouseName', label: 'Source Warehouse', category: 'Table row' },
+      { path: 'targetWarehouseName', label: 'Target Warehouse', category: 'Table row' },
     ];
   }
   if (dataSource === 'scheduleGroups') {

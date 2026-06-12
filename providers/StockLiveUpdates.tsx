@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useStore } from 'react-redux';
 import { appApi } from '@/store/api/appApi';
 import { adminApi } from '@/store/api/adminApi';
+import { STOCK_LEDGER_INVALIDATES } from '@/store/api/stockInvalidation';
 import { useAppDispatch } from '@/store/hooks';
 import type { RootState } from '@/store/store';
 
@@ -68,6 +69,8 @@ export default function StockLiveUpdates() {
   );
 
   const refreshCachedStockQueries = useCallback(async () => {
+    dispatch(appApi.util.invalidateTags(STOCK_LEDGER_INVALIDATES));
+
     const state = store.getState();
 
     const materialListArgs = selectCachedArgs(appApi, state, 'getMaterials');
@@ -336,7 +339,7 @@ export default function StockLiveUpdates() {
         upsertQueryData(appApi, 'getDispatchEntry', arg, json.data);
       }),
     ]);
-  }, [fetchJson, selectCachedArgs, store, upsertQueryData]);
+  }, [dispatch, fetchJson, selectCachedArgs, store, upsertQueryData]);
 
   const refreshCachedCustomerQueries = useCallback(async () => {
     const state = store.getState();

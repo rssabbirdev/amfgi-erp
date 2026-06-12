@@ -10,6 +10,7 @@
 /** Built-in document kinds; templates may use any string — unknown types use generic field hints. */
 export const KNOWN_ITEM_TYPES = [
   'delivery-note',
+  'subcontract-delivery-note',
   'goods-receipt',
   'packing-slip',
   'material-label',
@@ -168,6 +169,7 @@ export type TableDataSource =
   | 'customItems'
   | 'batches'
   | 'items'
+  | 'materialLines'
   | 'scheduleGroups'
   | 'driverTrips';
 

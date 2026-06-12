@@ -3,9 +3,9 @@
 	"version": "0.1.0",
 	"private": true,
 	"scripts": {
-		"postinstall": "prisma generate",
-		"dev": "prisma generate && next dev",
-		"build": "prisma generate && node --max-old-space-size=3072 ./node_modules/next/dist/bin/next build",
+		"postinstall": "node ./node_modules/prisma/build/index.js generate",
+		"dev": "node ./node_modules/prisma/build/index.js generate && next dev",
+		"build": "node ./node_modules/prisma/build/index.js generate && node --max-old-space-size=3072 ./node_modules/next/dist/bin/next build",
 		"build:deploy": "node scripts/build-deploy.mjs",
 		"check": "npm run typecheck",
 		"predeploy": "npm run typecheck",
@@ -23,8 +23,8 @@
 		"vercel:deploy": "vercel deploy --yes",
 		"vercel:deploy:with-check": "npm run typecheck && npm run vercel:deploy",
 		"vercel:deploy:prod": "vercel deploy --prod --yes",
-		"prisma:generate": "prisma generate",
-		"migrate:deploy": "prisma migrate deploy",
+		"prisma:generate": "node ./node_modules/prisma/build/index.js generate",
+		"migrate:deploy": "node ./node_modules/prisma/build/index.js migrate deploy",
 		"docker:build": "docker build -t amfgi-erp:local .",
 		"docker:publish": "bash scripts/docker-publish.sh"
 	},
