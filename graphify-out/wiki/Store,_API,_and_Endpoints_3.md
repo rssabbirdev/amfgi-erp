@@ -33,9 +33,9 @@
 
 ## Relationships
 
-- [[Components, Reports, and Settings]] (6 shared connections)
-- [[Store, Stock, and Lib]] (2 shared connections)
-- [[Store API]] (2 shared connections)
+- [[Reports, Components, and HR]] (6 shared connections)
+- [[Stock, Components, and Store]] (2 shared connections)
+- [[Store API and Slices]] (2 shared connections)
 
 ## Source Files
 

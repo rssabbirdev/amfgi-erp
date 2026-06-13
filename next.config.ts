@@ -14,6 +14,8 @@ const nextConfig: NextConfig = {
 	serverExternalPackages: ['@prisma/client', '@prisma/adapter-pg', 'pg'],
 	// Use Turbopack configuration (Next.js 16 default)
 	turbopack: {},
+	// Low-RAM Docker builds (Coolify VPS): single worker during static generation.
+	...(skipNextTypecheck ? { experimental: { cpus: 1 } } : {}),
 	// Google profile / Drive-hosted uploads (user avatar, signature, print assets)
 	images: {
 		minimumCacheTTL: 60 * 60 * 24 * 30,

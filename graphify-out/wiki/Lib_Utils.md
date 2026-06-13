@@ -1,58 +1,47 @@
 # Lib Utils
 
-> 41 nodes · cohesion 0.10
+> 18 nodes · cohesion 0.17
 
 ## Key Concepts
 
-- **templateData.ts** (74 connections) — `lib/utils/templateData.ts`
-- **buildDeliveryNoteTemplateData()** (15 connections) — `lib/utils/templateData.ts`
-- **buildDeliveryNoteTemplateDataFromEntity()** (13 connections) — `lib/utils/templateData.ts`
-- **buildTemplateData()** (13 connections) — `lib/utils/templateData.ts`
-- **buildDataContext()** (8 connections) — `lib/utils/templateData.ts`
-- **jobTemplateSlice()** (7 connections) — `lib/utils/templateData.ts`
-- **resolveCustomItemsForPrint()** (7 connections) — `lib/utils/templateData.ts`
-- **buildDeliveryNoteFamilyContext()** (6 connections) — `lib/utils/templateData.ts`
-- **enrichWithPrimaryContact()** (5 connections) — `lib/utils/templateData.ts`
-- **customerTemplateSlice()** (4 connections) — `lib/utils/templateData.ts`
-- **parseDeliveryNoteNumber()** (4 connections) — `lib/utils/templateData.ts`
-- **stockOutMaterialTableRows()** (4 connections) — `lib/utils/templateData.ts`
-- **deliveryNoteTableRowsFromNotesAndTransactions()** (4 connections) — `lib/utils/templateData.ts`
-- **deliveryNotePrintContext.test.ts** (4 connections) — `__tests__/unit/deliveryNotePrintContext.test.ts`
-- **parseCustomItems()** (4 connections) — `lib/utils/templateData.ts`
-- **finiteNumber()** (3 connections) — `lib/utils/templateData.ts`
-- **subcontractMaterialLinesForTemplate()** (3 connections) — `lib/utils/templateData.ts`
-- **supplierTemplateSlice()** (3 connections) — `lib/utils/templateData.ts`
-- **isDeliveryNoteRecord()** (3 connections) — `lib/utils/templateData.ts`
-- **deliveryNoteTemplateSubcontract.test.ts** (3 connections) — `__tests__/unit/deliveryNoteTemplateSubcontract.test.ts`
-- **parseDeliveryContactPerson()** (3 connections) — `lib/utils/templateData.ts`
-- **toIsoDateString()** (2 connections) — `lib/utils/templateData.ts`
-- **contactsJsonToString()** (2 connections) — `lib/utils/templateData.ts`
-- **parseJobContacts()** (2 connections) — `lib/utils/templateData.ts`
-- **customItemsFromJson()** (2 connections) — `lib/utils/templateData.ts`
-- *... and 16 more nodes in this community*
+- **route.ts** (11 connections) — `app/api/materials/price-logs/route.ts`
+- **route.ts** (11 connections) — `app/api/materials/[id]/assembly/route.ts`
+- **decimalEqualsNullable()** (10 connections) — `lib/utils/decimal.ts`
+- **receiptPriceLogs.ts** (10 connections) — `lib/utils/receiptPriceLogs.ts`
+- **materialAssembly.ts** (8 connections) — `lib/utils/materialAssembly.ts`
+- **recalculateAssemblyAncestorsTx()** (6 connections) — `lib/utils/materialAssembly.ts`
+- **reverseReceiptPriceLogUpdates()** (6 connections) — `lib/utils/receiptPriceLogs.ts`
+- **POST()** (5 connections) — `app/api/materials/price-logs/route.ts`
+- **GET()** (4 connections) — `app/api/materials/[id]/assembly/route.ts`
+- **PUT()** (4 connections) — `app/api/materials/[id]/assembly/route.ts`
+- **isPrismaDecimal()** (4 connections) — `lib/utils/decimal.ts`
+- **recalculateAssemblyUnitCostTx()** (4 connections) — `lib/utils/materialAssembly.ts`
+- **buildReceiptPriceLogNote()** (3 connections) — `lib/utils/receiptPriceLogs.ts`
+- **roundMoney()** (2 connections) — `lib/utils/materialAssembly.ts`
+- **PriceLogSchema** (1 connections) — `app/api/materials/price-logs/route.ts`
+- **UpdateAssemblySchema** (1 connections) — `app/api/materials/[id]/assembly/route.ts`
+- **TxClient** (1 connections) — `lib/utils/materialAssembly.ts`
+- **TxClient** (1 connections) — `lib/utils/receiptPriceLogs.ts`
 
 ## Relationships
 
-- [[Lib Utils and Types]] (10 shared connections)
-- [[Components Print Builder]] (9 shared connections)
-- [[Lib Utils]] (8 shared connections)
-- [[Lib Delivery Note Number, Dispatch Entry Revision, and Utils]] (7 shared connections)
-- [[API and Lib]] (4 shared connections)
-- [[Stock, Lib, and Components]] (4 shared connections)
-- [[API Reports, Jobs, and Materials]] (3 shared connections)
-- [[Components, Stock, and Lib]] (3 shared connections)
-- [[HR Schedule]] (1 shared connections)
-- [[Lib Types]] (1 shared connections)
+- [[API HR, Materials, and Me]] (17 shared connections)
+- [[Tests, API, and Lib]] (8 shared connections)
+- [[Lib Utils, Stock, and Dispatch Entry Revision]] (8 shared connections)
+- [[API Jobs, Suppliers, and Customers]] (6 shared connections)
+- [[Lib Integrations and Party List Record Payload]] (1 shared connections)
 
 ## Source Files
 
-- `__tests__/unit/deliveryNotePrintContext.test.ts`
-- `__tests__/unit/deliveryNoteTemplateSubcontract.test.ts`
-- `lib/utils/templateData.ts`
+- `app/api/materials/[id]/assembly/route.ts`
+- `app/api/materials/price-logs/route.ts`
+- `lib/utils/decimal.ts`
+- `lib/utils/materialAssembly.ts`
+- `lib/utils/receiptPriceLogs.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 214 (100%)
+- EXTRACTED: 92 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

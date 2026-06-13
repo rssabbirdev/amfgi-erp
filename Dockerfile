@@ -8,9 +8,15 @@ RUN apt-get update -y \
 	&& rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
+ENV NPM_CONFIG_maxsockets=1
+ENV NPM_CONFIG_audit=false
+ENV NPM_CONFIG_fund=false
+ENV NODE_OPTIONS=--max-old-space-size=1024
 COPY package.json package-lock.json .npmrc ./
 COPY prisma ./prisma/
-RUN npm ci
+# Split install + generate to lower peak RAM (Coolify 4GB VPS often OOMs during postinstall).
+RUN npm ci --ignore-scripts \
+	&& node node_modules/prisma/build/index.js generate
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules

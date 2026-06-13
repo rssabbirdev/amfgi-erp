@@ -2,7 +2,7 @@
 
 > God node · 173 connections · `lib/utils.ts`
 
-**Community:** [[Components, Reports, and Stock]]
+**Community:** [[Stock, Components, and Reports]]
 
 ## Connections by Relation
 
@@ -16,9 +16,9 @@
 - [[ReceiptEditor()]] `EXTRACTED`
 - [[SidebarMenuButton()]] `EXTRACTED`
 - [[CustomerJobLedgerPage()]] `EXTRACTED`
+- [[DispatchPage()]] `EXTRACTED`
 - [[StockBatchesPage()]] `EXTRACTED`
 - [[HrAttendancePage()]] `EXTRACTED`
-- [[DispatchPage()]] `EXTRACTED`
 - [[StockJobBudgetPage()]] `EXTRACTED`
 - [[MaterialEditor()]] `EXTRACTED`
 - [[SidebarMenuItem()]] `EXTRACTED`
@@ -36,9 +36,9 @@
 - [[button.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[ScheduleDayClient.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
 - [[input.tsx]] `EXTRACTED`
 - [[sidebar.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[AttendanceEntryGrid.tsx]] `EXTRACTED`
 - [[card.tsx]] `EXTRACTED`

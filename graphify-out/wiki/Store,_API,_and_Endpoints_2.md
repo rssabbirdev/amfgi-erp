@@ -33,7 +33,7 @@
 
 ## Relationships
 
-- [[Store API]] (2 shared connections)
+- [[Store API and Slices]] (2 shared connections)
 
 ## Source Files
 
