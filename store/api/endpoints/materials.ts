@@ -192,15 +192,33 @@ export const materialsApi = appApi.injectEndpoints({
       ],
     }),
 
-    deleteMaterial: builder.mutation<{ deleted: boolean }, string>({
+    deleteMaterial: builder.mutation<{ deleted: boolean; deactivated?: boolean }, string>({
       query: (id) => ({
         url: `/materials/${id}`,
         method: 'DELETE',
       }),
-      transformResponse: (r: { deleted: boolean }) => r,
+      transformResponse: (r: { data?: { deleted: boolean; deactivated?: boolean }; deleted?: boolean }) =>
+        r.data ?? { deleted: r.deleted ?? false },
       invalidatesTags: (result, error, id) => [
         { type: 'Material', id },
         { type: 'Material', id: 'LIST' },
+        { type: 'StockValuation' },
+      ],
+    }),
+
+    deactivateMaterial: builder.mutation<{ deactivated: boolean }, string>({
+      query: (id) => ({
+        url: `/materials/${id}`,
+        method: 'DELETE',
+        body: { deactivate: true },
+      }),
+      transformResponse: (r: { data?: { deactivated?: boolean; deleted?: boolean } }) => ({
+        deactivated: r.data?.deactivated ?? !r.data?.deleted,
+      }),
+      invalidatesTags: (result, error, id) => [
+        { type: 'Material', id },
+        { type: 'Material', id: 'LIST' },
+        { type: 'StockValuation' },
       ],
     }),
 
@@ -293,6 +311,7 @@ export const {
   useCreateMaterialMutation,
   useUpdateMaterialMutation,
   useDeleteMaterialMutation,
+  useDeactivateMaterialMutation,
   useGetCrossCompanyMaterialsQuery,
   useBulkCreateMaterialsMutation,
   useCreateMaterialUomMutation,

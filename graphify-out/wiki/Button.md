@@ -2,7 +2,7 @@
 
 > God node · 80 connections · `components/ui/shadcn/button.tsx`
 
-**Community:** [[Components, HR, and Admin]]
+**Community:** [[Components, Reports, and Settings]]
 
 ## Connections by Relation
 

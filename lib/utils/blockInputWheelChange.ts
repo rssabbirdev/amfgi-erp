@@ -6,6 +6,14 @@ export type InputPropsWithRef = InputHTMLAttributes<HTMLInputElement> & {
 
 const blockedInputs = new WeakSet<HTMLInputElement>();
 
+function isNumberInput(element: Element | null): element is HTMLInputElement {
+  return element instanceof HTMLInputElement && element.type === 'number';
+}
+
+function shouldBlockSpinKey(key: string) {
+  return key === 'ArrowUp' || key === 'ArrowDown';
+}
+
 function onNumberInputWheel(event: WheelEvent) {
   const input = event.currentTarget as HTMLInputElement;
   if (document.activeElement === input) {
@@ -13,15 +21,53 @@ function onNumberInputWheel(event: WheelEvent) {
   }
 }
 
+function onNumberInputKeyDown(event: KeyboardEvent) {
+  const input = event.currentTarget as HTMLInputElement;
+  if (document.activeElement !== input) return;
+  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    event.preventDefault();
+  }
+}
+
+export function installGlobalNumberInputSpinBlock() {
+  if (typeof document === 'undefined') return () => {};
+
+  const onWheel = (event: WheelEvent) => {
+    if (isNumberInput(document.activeElement)) {
+      event.preventDefault();
+    }
+  };
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (!shouldBlockSpinKey(event.key)) return;
+    const active = document.activeElement;
+    const target = event.target;
+    if (isNumberInput(active) || isNumberInput(target)) {
+      event.preventDefault();
+    }
+  };
+
+  document.addEventListener('wheel', onWheel, { passive: false, capture: true });
+  document.addEventListener('keydown', onKeyDown, { capture: true });
+
+  return () => {
+    document.removeEventListener('wheel', onWheel, { capture: true });
+    document.removeEventListener('keydown', onKeyDown, { capture: true });
+  };
+}
+
+/** @deprecated Prefer global NumberInputSpinGuard; kept for targeted input props. */
 export function attachBlockInputWheelChange(input: HTMLInputElement) {
   if (blockedInputs.has(input)) return;
   input.addEventListener('wheel', onNumberInputWheel, { passive: false });
+  input.addEventListener('keydown', onNumberInputKeyDown);
   blockedInputs.add(input);
 }
 
 export function detachBlockInputWheelChange(input: HTMLInputElement) {
   if (!blockedInputs.has(input)) return;
   input.removeEventListener('wheel', onNumberInputWheel);
+  input.removeEventListener('keydown', onNumberInputKeyDown);
   blockedInputs.delete(input);
 }
 
@@ -52,12 +98,19 @@ export function createBlockInputWheelRef<T extends HTMLInputElement>(
   };
 }
 
-/** Merge wheel blocking onto native input props (e.g. grid qty cells without keyboard nav). */
+/** Merge wheel / arrow-key spin blocking onto native number input props. */
 export function withBlockInputWheelChange(
   props: InputPropsWithRef = {}
 ): InputPropsWithRef {
+  const userOnKeyDown = props.onKeyDown;
   return {
     ...props,
     ref: createBlockInputWheelRef(props.ref),
+    onKeyDown: (event) => {
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+      }
+      userOnKeyDown?.(event);
+    },
   };
 }

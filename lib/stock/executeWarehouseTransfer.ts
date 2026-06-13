@@ -4,7 +4,10 @@ import { decimalToNumberOrZero } from '@/lib/utils/decimal';
 import { resolveQuantityToBase } from '@/lib/utils/materialUomDb';
 import { createBatchData } from '@/lib/utils/stockBatchManagement';
 import { applyMaterialWarehouseDelta, resolveEffectiveWarehouse } from '@/lib/warehouses/stockWarehouses';
-import { WAREHOUSE_TRANSFER_REFERENCE_TYPE } from '@/lib/stock/warehouseTransferConstants';
+import {
+  WAREHOUSE_TRANSFER_REFERENCE_TYPE,
+  warehouseTransferReceiptNumber,
+} from '@/lib/stock/warehouseTransferConstants';
 
 type Tx = Parameters<Parameters<typeof import('@/lib/db/prisma').prisma.$transaction>[0]>[0];
 
@@ -225,6 +228,8 @@ export async function executeWarehouseTransferBatch(
       },
     });
 
+    const transferReceiptNumber = warehouseTransferReceiptNumber(referenceType, transferOutTxn.id);
+
     for (const batchUsed of fifoResult.batchesUsed) {
       const inboundBatch = await tx.stockBatch.create({
         data: {
@@ -235,10 +240,11 @@ export async function executeWarehouseTransferBatch(
             quantity: batchUsed.quantityFromBatch,
             unitCost: batchUsed.unitCost,
             receivedDate: txDate,
-            receiptNumber: `WH-XFER-${transferOutTxn.id.slice(-8).toUpperCase()}`,
+            receiptNumber: transferReceiptNumber,
             notes: notes
               ? `Warehouse transfer from ${sourceWarehouse.warehouseName}: ${notes}`
               : `Warehouse transfer from ${sourceWarehouse.warehouseName}`,
+            meta: transferMeta,
           }),
         },
       });

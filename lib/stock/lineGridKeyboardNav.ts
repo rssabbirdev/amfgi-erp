@@ -111,6 +111,9 @@ export function mergeLineGridInputProps(
     ...existing,
     ...navProps,
     onKeyDown: (event) => {
+      if (blockWheel && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+        event.preventDefault();
+      }
       navOnKeyDown?.(event);
       if (!event.defaultPrevented) {
         existing?.onKeyDown?.(event);

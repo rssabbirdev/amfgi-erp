@@ -625,6 +625,8 @@ export async function POST(req: Request) {
             targetWarehouseId: deliveryType === 'SUBCONTRACT' ? targetWarehouseId?.trim() || null : null,
             referenceJobId: deliveryType === 'SUBCONTRACT' ? referenceJobId?.trim() || null : null,
             transitStatus: null,
+            createdByUserId: actorFields.performedByUserId,
+            createdByName: actorFields.performedByName,
           },
         });
         activeDeliveryNoteId = dnRow.id;

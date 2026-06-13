@@ -16,6 +16,7 @@ import { DEFAULT_MATERIAL_LIST_SORT } from '@/lib/pagination/materialListSort';
 import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination/serverList';
 import {
   useDeleteMaterialMutation,
+  useDeactivateMaterialMutation,
   useGetMaterialsPageQuery,
   useLazyGetMaterialsForExportQuery,
   useGetMaterialsForExportQuery,
@@ -116,6 +117,7 @@ export default function MaterialsPage() {
     refetchOnMountOrArgChange: 30,
   });
   const [deleteMaterial, { isLoading: isDeleting }] = useDeleteMaterialMutation();
+  const [deactivateMaterial, { isLoading: isDeactivating }] = useDeactivateMaterialMutation();
   const { openMenu: openContextMenu } = useGlobalContextMenu();
 
   useEffect(() => {
@@ -203,13 +205,21 @@ export default function MaterialsPage() {
       const res = await fetch(`/api/materials/${material.id}/check-delete`);
       const json = await res.json();
       if (json.data) {
+        const linkedCount = json.data.linkedTransactionsCount || 0;
+        const hasTransactionHistory = json.data.hasTransactionHistory ?? linkedCount > 0;
         setDeleteModal((prev) => ({
           ...prev,
           checking: false,
           linkedTransactions: json.data.linkedTransactions || [],
-          linkedCount: json.data.linkedTransactionsCount || 0,
+          linkedCount,
           canDelete: json.data.canDelete,
         }));
+        if (hasTransactionHistory) {
+          toast.error(
+            'This material has transaction history and cannot be deleted. Deactivate it instead.',
+            { duration: 6000 }
+          );
+        }
       }
     } catch {
       setDeleteModal((prev) => ({ ...prev, checking: false }));
@@ -264,6 +274,13 @@ export default function MaterialsPage() {
 
   const handleDelete = async () => {
     if (!deleteModal.material) return;
+    if (!deleteModal.canDelete) {
+      toast.error(
+        'This material has transaction history and cannot be deleted. Deactivate it instead.',
+        { duration: 6000 }
+      );
+      return;
+    }
     setDeleteModal((prev) => ({ ...prev, loading: true }));
     try {
       await deleteMaterial(deleteModal.material.id).unwrap();
@@ -271,6 +288,19 @@ export default function MaterialsPage() {
       closeDeleteModal();
     } catch (error: unknown) {
       toast.error(extractErrorMessage(error, 'Failed to delete material'));
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleDeactivate = async () => {
+    if (!deleteModal.material) return;
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
+    try {
+      await deactivateMaterial(deleteModal.material.id).unwrap();
+      toast.success('Material deactivated');
+      closeDeleteModal();
+    } catch (error: unknown) {
+      toast.error(extractErrorMessage(error, 'Failed to deactivate material'));
       setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
   };
@@ -534,11 +564,13 @@ export default function MaterialsPage() {
           <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={closeDeleteModal} />
           <div className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-card p-6 shadow-2xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-red-600 dark:text-red-300/75">
-              Remove material
+              {deleteModal.linkedCount > 0 ? 'Remove material' : 'Delete material'}
             </p>
             <h2 className="mt-2 text-lg font-semibold text-foreground">{deleteModal.material.name}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Deletion is blocked when linked dispatch or inventory transactions still exist.
+              {deleteModal.linkedCount > 0
+                ? 'Materials with transaction history cannot be deleted. Deactivate to hide them from active lists while keeping audit history.'
+                : 'This material has no transaction history and can be permanently deleted.'}
             </p>
 
             {deleteModal.checking ? (
@@ -577,29 +609,43 @@ export default function MaterialsPage() {
               </div>
             ) : null}
 
-            {!deleteModal.checking && !deleteModal.canDelete ? (
+            {!deleteModal.checking && !deleteModal.canDelete && deleteModal.linkedCount === 0 ? (
               <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/70 dark:bg-red-950/20 dark:text-red-200">
-                This material still has active dependencies and cannot be removed.
+                This material is still linked to other records and cannot be removed.
               </div>
             ) : null}
 
-            {!deleteModal.checking && deleteModal.canDelete && deleteModal.linkedCount === 0 ? (
+            {!deleteModal.checking && deleteModal.canDelete ? (
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-200">
-                No linked dependencies found. Safe to delete.
+                No transaction history found. Safe to delete permanently.
               </div>
             ) : null}
 
             <div className="mt-6 flex justify-end gap-3">
-              <Button variant="ghost" onClick={closeDeleteModal} disabled={isDeleting || deleteModal.checking}>
+              <Button
+                variant="ghost"
+                onClick={closeDeleteModal}
+                disabled={isDeleting || isDeactivating || deleteModal.checking}
+              >
                 Cancel
               </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={isDeleting || deleteModal.checking || !deleteModal.canDelete}
-              >
-                {isDeleting ? 'Deleting…' : 'Delete'}
-              </Button>
+              {deleteModal.linkedCount > 0 ? (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeactivate}
+                  disabled={isDeactivating || isDeleting || deleteModal.checking}
+                >
+                  {isDeactivating ? 'Deactivating…' : 'Deactivate'}
+                </Button>
+              ) : (
+                <Button
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={isDeleting || isDeactivating || deleteModal.checking || !deleteModal.canDelete}
+                >
+                  {isDeleting ? 'Deleting…' : 'Delete permanently'}
+                </Button>
+              )}
             </div>
           </div>
         </>

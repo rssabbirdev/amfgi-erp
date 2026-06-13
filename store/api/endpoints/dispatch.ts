@@ -72,20 +72,24 @@ export const dispatchApi = appApi.injectEndpoints({
         date?: string;
         limit?: number;
         offset?: number;
-        noteType?: 'all' | 'dispatch' | 'delivery';
+        noteType?: 'all' | 'dispatch' | 'delivery' | 'transit';
+        search?: string;
         jobSearch?: string;
         deliveryNoteSearch?: string;
       }
     >({
-      query: ({ filterType = 'all', date, limit, offset, noteType, jobSearch, deliveryNoteSearch }) => {
+      query: ({ filterType = 'all', date, limit, offset, noteType, search, jobSearch, deliveryNoteSearch }) => {
         const params = new URLSearchParams();
         params.set('filterType', filterType);
         if (date) params.set('date', date);
         if (limit != null) params.set('limit', String(limit));
         if (offset != null) params.set('offset', String(offset));
         if (noteType && noteType !== 'all') params.set('noteType', noteType);
-        if (jobSearch?.trim()) params.set('jobSearch', jobSearch.trim());
-        if (deliveryNoteSearch?.trim()) params.set('deliveryNoteSearch', deliveryNoteSearch.trim());
+        if (search?.trim()) params.set('search', search.trim());
+        else {
+          if (jobSearch?.trim()) params.set('jobSearch', jobSearch.trim());
+          if (deliveryNoteSearch?.trim()) params.set('deliveryNoteSearch', deliveryNoteSearch.trim());
+        }
         return `/materials/dispatch-history-entries?${params.toString()}`;
       },
       transformResponse: (r: { data: { entries: DispatchEntry[]; total: number; dateRange?: unknown } }) => r.data,

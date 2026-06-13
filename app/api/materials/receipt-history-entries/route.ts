@@ -12,6 +12,7 @@ import {
   parseReceiptHeaderMetadata,
   resolveReceiptBillAmount,
 } from '@/lib/utils/receiptHeaderMetadata';
+import { getDeliveryNoteTransferReceiptNumbers } from '@/lib/stock/receiptHistoryFilters';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -143,8 +144,18 @@ export async function GET(req: Request) {
       };
     });
 
+    const deliveryNoteTransferReceipts = await getDeliveryNoteTransferReceiptNumbers(
+      prisma,
+      session.user.activeCompanyId,
+      enrichedEntries.map((entry) => entry.receiptNumber)
+    );
+
+    const purchaseReceiptEntries = enrichedEntries.filter(
+      (entry) => !deliveryNoteTransferReceipts.has(entry.receiptNumber)
+    );
+
     const filteredEntries = search
-      ? enrichedEntries.filter((entry) => {
+      ? purchaseReceiptEntries.filter((entry) => {
           const haystack = [
             entry.receiptNumber,
             entry.supplier,
@@ -157,7 +168,7 @@ export async function GET(req: Request) {
             .toLowerCase();
           return haystack.includes(search);
         })
-      : enrichedEntries;
+      : purchaseReceiptEntries;
 
     const dateRange = {
       startDate,

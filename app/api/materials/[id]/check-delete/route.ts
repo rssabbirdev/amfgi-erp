@@ -46,6 +46,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   return successResponse({
     canDelete: txnCount === 0,
+    hasTransactionHistory: txnCount > 0,
     linkedTransactions: formattedTransactions,
     linkedTransactionsCount: txnCount,
   });

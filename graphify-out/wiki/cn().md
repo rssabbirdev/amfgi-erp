@@ -2,7 +2,7 @@
 
 > God node · 173 connections · `lib/utils.ts`
 
-**Community:** [[Reports, Components, and HR]]
+**Community:** [[Components, Reports, and Stock]]
 
 ## Connections by Relation
 

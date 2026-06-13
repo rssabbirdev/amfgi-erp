@@ -5,6 +5,10 @@ import { serializeMaterialUoms } from '@/lib/utils/materialUom';
 import type { MaterialUomWithUnit } from '@/lib/utils/materialUom';
 import { decimalToNumber, decimalToNumberOrZero } from '@/lib/utils/decimal';
 import { resolveCategoryRef, resolveWarehouseRef } from '@/lib/materialMasterData';
+import {
+  countMaterialBlockingLinks,
+  permanentlyDeleteMaterial,
+} from '@/lib/materials/permanentlyDeleteMaterial';
 import { applyMaterialWarehouseDelta } from '@/lib/warehouses/stockWarehouses';
 import { canViewFormulaMaterialsApi } from '@/lib/permissions/stockModuleAccess';
 import { publishLiveUpdate } from '@/lib/live-updates/server';
@@ -165,7 +169,7 @@ export async function POST(req: Request) {
   const parsed = MaterialSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
-  // Check if material name already exists for this company
+  // Check if an active material with this name already exists for this company.
   const existing = await prisma.material.findUnique({
     where: {
       companyId_name: {
@@ -174,11 +178,29 @@ export async function POST(req: Request) {
       },
     },
   });
-  if (existing) return errorResponse('Material with this name already exists', 409);
+  if (existing?.isActive) {
+    return errorResponse('Material with this name already exists', 409);
+  }
 
   const companyId = session.user.activeCompanyId;
 
+  if (existing && !existing.isActive) {
+    const blockingLinks = await countMaterialBlockingLinks(prisma, {
+      companyId,
+      materialId: existing.id,
+    });
+    if (blockingLinks > 0) {
+      return errorResponse(
+        'An inactive material with this name still has stock history. Reactivate it or choose a different name.',
+        409
+      );
+    }
+  }
+
   const material = await prisma.$transaction(async (tx) => {
+    if (existing && !existing.isActive) {
+      await permanentlyDeleteMaterial(tx, { companyId, materialId: existing.id });
+    }
     const categoryRef = await resolveCategoryRef(tx, companyId, {
       id: parsed.data.categoryId,
       name: parsed.data.category,

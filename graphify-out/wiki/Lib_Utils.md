@@ -1,56 +1,58 @@
 # Lib Utils
 
-> 20 nodes · cohesion 0.21
+> 41 nodes · cohesion 0.10
 
 ## Key Concepts
 
-- **route.ts** (27 connections) — `app/api/materials/receipt-history-entries/[receiptNumber]/adjust/route.ts`
-- **route.ts** (26 connections) — `app/api/materials/receipt-history-entries/[receiptNumber]/cancel/route.ts`
-- **route.ts** (14 connections) — `app/api/reports/stock-exceptions/route.ts`
-- **receiptCancellation.ts** (14 connections) — `lib/utils/receiptCancellation.ts`
-- **parseReceiptCancellationMetadata()** (10 connections) — `lib/utils/receiptCancellation.ts`
-- **GET()** (9 connections) — `app/api/reports/stock-exceptions/route.ts`
-- **parseReceiptAdjustmentMetadata()** (9 connections) — `lib/utils/receiptCancellation.ts`
-- **stockExceptionApproval.ts** (7 connections) — `lib/utils/stockExceptionApproval.ts`
-- **upsertStockExceptionApproval()** (6 connections) — `lib/utils/stockExceptionApproval.ts`
-- **sanitizeReason()** (5 connections) — `lib/utils/receiptCancellation.ts`
-- **buildReceiptCancellationNotes()** (3 connections) — `lib/utils/receiptCancellation.ts`
-- **buildReceiptAdjustmentNotes()** (3 connections) — `lib/utils/receiptCancellation.ts`
-- **buildReceiptCancellationTransactionNote()** (3 connections) — `lib/utils/receiptCancellation.ts`
-- **buildReceiptAdjustmentTransactionNote()** (3 connections) — `lib/utils/receiptCancellation.ts`
-- **parseOverrideReason()** (2 connections) — `app/api/reports/stock-exceptions/route.ts`
-- **uniqueStrings()** (2 connections) — `app/api/reports/stock-exceptions/route.ts`
-- **AdjustReceiptSchema** (1 connections) — `app/api/materials/receipt-history-entries/[receiptNumber]/adjust/route.ts`
-- **CancelReceiptSchema** (1 connections) — `app/api/materials/receipt-history-entries/[receiptNumber]/cancel/route.ts`
-- **Tx** (1 connections) — `lib/utils/stockExceptionApproval.ts`
-- **StockExceptionApprovalInput** (1 connections) — `lib/utils/stockExceptionApproval.ts`
+- **templateData.ts** (74 connections) — `lib/utils/templateData.ts`
+- **buildDeliveryNoteTemplateData()** (15 connections) — `lib/utils/templateData.ts`
+- **buildDeliveryNoteTemplateDataFromEntity()** (13 connections) — `lib/utils/templateData.ts`
+- **buildTemplateData()** (13 connections) — `lib/utils/templateData.ts`
+- **buildDataContext()** (8 connections) — `lib/utils/templateData.ts`
+- **jobTemplateSlice()** (7 connections) — `lib/utils/templateData.ts`
+- **resolveCustomItemsForPrint()** (7 connections) — `lib/utils/templateData.ts`
+- **buildDeliveryNoteFamilyContext()** (6 connections) — `lib/utils/templateData.ts`
+- **enrichWithPrimaryContact()** (5 connections) — `lib/utils/templateData.ts`
+- **customerTemplateSlice()** (4 connections) — `lib/utils/templateData.ts`
+- **parseDeliveryNoteNumber()** (4 connections) — `lib/utils/templateData.ts`
+- **stockOutMaterialTableRows()** (4 connections) — `lib/utils/templateData.ts`
+- **deliveryNoteTableRowsFromNotesAndTransactions()** (4 connections) — `lib/utils/templateData.ts`
+- **deliveryNotePrintContext.test.ts** (4 connections) — `__tests__/unit/deliveryNotePrintContext.test.ts`
+- **parseCustomItems()** (4 connections) — `lib/utils/templateData.ts`
+- **finiteNumber()** (3 connections) — `lib/utils/templateData.ts`
+- **subcontractMaterialLinesForTemplate()** (3 connections) — `lib/utils/templateData.ts`
+- **supplierTemplateSlice()** (3 connections) — `lib/utils/templateData.ts`
+- **isDeliveryNoteRecord()** (3 connections) — `lib/utils/templateData.ts`
+- **deliveryNoteTemplateSubcontract.test.ts** (3 connections) — `__tests__/unit/deliveryNoteTemplateSubcontract.test.ts`
+- **parseDeliveryContactPerson()** (3 connections) — `lib/utils/templateData.ts`
+- **toIsoDateString()** (2 connections) — `lib/utils/templateData.ts`
+- **contactsJsonToString()** (2 connections) — `lib/utils/templateData.ts`
+- **parseJobContacts()** (2 connections) — `lib/utils/templateData.ts`
+- **customItemsFromJson()** (2 connections) — `lib/utils/templateData.ts`
+- *... and 16 more nodes in this community*
 
 ## Relationships
 
-- [[API Jobs, Reports, and Transactions]] (14 shared connections)
-- [[Lib Utils]] (10 shared connections)
-- [[API Materials, Me, and Stock Exception Approvals]] (9 shared connections)
-- [[Tests Integration]] (8 shared connections)
-- [[API and Lib]] (7 shared connections)
-- [[API Transactions, Companies, and Delivery Notes]] (4 shared connections)
-- [[Lib Stock and Utils]] (4 shared connections)
-- [[API, Lib, and Auth]] (3 shared connections)
-- [[API HR and Stock Exception Approvals]] (3 shared connections)
-- [[Lib Utils and Stock Control]] (3 shared connections)
-- [[Lib Stock and Warehouses]] (2 shared connections)
-- [[Lib Dispatch Entry Revision, Utils, and Db]] (2 shared connections)
+- [[Lib Utils and Types]] (10 shared connections)
+- [[Components Print Builder]] (9 shared connections)
+- [[Lib Utils]] (8 shared connections)
+- [[Lib Delivery Note Number, Dispatch Entry Revision, and Utils]] (7 shared connections)
+- [[API and Lib]] (4 shared connections)
+- [[Stock, Lib, and Components]] (4 shared connections)
+- [[API Reports, Jobs, and Materials]] (3 shared connections)
+- [[Components, Stock, and Lib]] (3 shared connections)
+- [[HR Schedule]] (1 shared connections)
+- [[Lib Types]] (1 shared connections)
 
 ## Source Files
 
-- `app/api/materials/receipt-history-entries/[receiptNumber]/adjust/route.ts`
-- `app/api/materials/receipt-history-entries/[receiptNumber]/cancel/route.ts`
-- `app/api/reports/stock-exceptions/route.ts`
-- `lib/utils/receiptCancellation.ts`
-- `lib/utils/stockExceptionApproval.ts`
+- `__tests__/unit/deliveryNotePrintContext.test.ts`
+- `__tests__/unit/deliveryNoteTemplateSubcontract.test.ts`
+- `lib/utils/templateData.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 147 (100%)
+- EXTRACTED: 214 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

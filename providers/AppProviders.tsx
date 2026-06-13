@@ -5,6 +5,7 @@ import ReduxProvider        from './ReduxProvider';
 import SessionProvider      from './SessionProvider';
 import { ContextMenuProvider } from './ContextMenuProvider';
 import DoubleClickSelectionGuard from './DoubleClickSelectionGuard';
+import NumberInputSpinGuard from './NumberInputSpinGuard';
 import ThemeProvider, { useTheme } from './ThemeProvider';
 import StockLiveUpdates from './StockLiveUpdates';
 import type { Session }    from 'next-auth';
@@ -20,6 +21,7 @@ export default function AppProviders({
     <SessionProvider session={session}>
       <ReduxProvider>
         <StockLiveUpdates />
+        <NumberInputSpinGuard />
         <ThemeProvider>
         <ContextMenuProvider>
           <DoubleClickSelectionGuard />

@@ -1,48 +1,47 @@
 # Lib Utils
 
-> 16 nodes · cohesion 0.20
+> 19 nodes · cohesion 0.22
 
 ## Key Concepts
 
-- **manualStockAdjustmentExecution.ts** (20 connections) — `lib/utils/manualStockAdjustmentExecution.ts`
-- **transactionBatchLinks.ts** (17 connections) — `lib/utils/transactionBatchLinks.ts`
-- **applyManualStockAdjustmentApproval()** (11 connections) — `lib/utils/manualStockAdjustmentExecution.ts`
-- **calculateFIFOConsumption()** (8 connections) — `lib/utils/fifoConsumption.ts`
-- **createTransactionBatchRecords()** (8 connections) — `lib/utils/transactionBatchLinks.ts`
-- **consumeTransactionBatchQuantities()** (7 connections) — `lib/utils/transactionBatchLinks.ts`
-- **consumeTransactionBatchQuantitiesBestEffort()** (5 connections) — `lib/utils/transactionBatchLinks.ts`
-- **transactionBatchLinks.test.ts** (4 connections) — `__tests__/unit/transactionBatchLinks.test.ts`
-- **manualStockAdjustment.ts** (3 connections) — `lib/utils/manualStockAdjustment.ts`
-- **buildManualStockAdjustmentNote()** (3 connections) — `lib/utils/manualStockAdjustment.ts`
-- **TransactionBatchLinkInput** (3 connections) — `lib/utils/transactionBatchLinks.ts`
-- **parseManualStockAdjustmentMetadata()** (1 connections) — `lib/utils/manualStockAdjustment.ts`
-- **Tx** (1 connections) — `lib/utils/manualStockAdjustmentExecution.ts`
-- **Tx** (1 connections) — `lib/utils/transactionBatchLinks.ts`
-- **batches** (1 connections) — `__tests__/unit/transactionBatchLinks.test.ts`
-- **tx** (1 connections) — `__tests__/unit/transactionBatchLinks.test.ts`
+- **googleDrive.ts** (50 connections) — `lib/utils/googleDrive.ts`
+- **sanitizeFolderName()** (11 connections) — `lib/utils/googleDrive.ts`
+- **ensureFolderPath()** (9 connections) — `lib/utils/googleDrive.ts`
+- **moveDriveFile()** (8 connections) — `lib/utils/googleDrive.ts`
+- **route.ts** (7 connections) — `app/api/settings/google-drive/oauth/start/route.ts`
+- **createOAuthClient()** (6 connections) — `lib/utils/googleDrive.ts`
+- **getDriveClientForCompany()** (6 connections) — `lib/utils/googleDrive.ts`
+- **GET()** (4 connections) — `app/api/settings/google-drive/oauth/start/route.ts`
+- **ensureChildFolder()** (4 connections) — `lib/utils/googleDrive.ts`
+- **createGoogleDriveAuthorizationUrl()** (4 connections) — `lib/utils/googleDrive.ts`
+- **loadGlobalDriveOAuthRefreshToken()** (3 connections) — `lib/utils/googleDrive.ts`
+- **renameFolderIfNeeded()** (3 connections) — `lib/utils/googleDrive.ts`
+- **buildCompanyDriveFolderName()** (3 connections) — `lib/utils/googleDrive.ts`
+- **canManageDrive()** (2 connections) — `app/api/settings/google-drive/oauth/start/route.ts`
+- **requireClientCredentials()** (2 connections) — `lib/utils/googleDrive.ts`
+- **getGoogleDriveOAuthRedirectUri()** (2 connections) — `lib/utils/googleDrive.ts`
+- **escapeDriveQueryValue()** (2 connections) — `lib/utils/googleDrive.ts`
+- **isFolderAccessible()** (2 connections) — `lib/utils/googleDrive.ts`
+- **DriveUploadFolderTarget** (1 connections) — `lib/utils/googleDrive.ts`
 
 ## Relationships
 
-- [[Lib Stock and Utils]] (11 shared connections)
-- [[API and Lib]] (9 shared connections)
-- [[API Jobs, Reports, and Transactions]] (6 shared connections)
-- [[Lib Dispatch Entry Revision, Utils, and Db]] (5 shared connections)
-- [[Lib Stock and Warehouses]] (5 shared connections)
-- [[Lib Utils and Stock Control]] (4 shared connections)
-- [[Lib Utils]] (4 shared connections)
-- [[API Transactions, Companies, and Delivery Notes]] (2 shared connections)
+- [[API and Lib]] (19 shared connections)
+- [[API Upload, HR, and Media]] (12 shared connections)
+- [[Lib Delivery Note Number, Dispatch Entry Revision, and Utils]] (10 shared connections)
+- [[Lib Utils and Types]] (5 shared connections)
+- [[API Materials, Me, and Settings]] (4 shared connections)
+- [[API HR, Company Profiles, and Stock Exception Approvals]] (2 shared connections)
+- [[API HR, Me, and Stock]] (1 shared connections)
 
 ## Source Files
 
-- `__tests__/unit/transactionBatchLinks.test.ts`
-- `lib/utils/fifoConsumption.ts`
-- `lib/utils/manualStockAdjustment.ts`
-- `lib/utils/manualStockAdjustmentExecution.ts`
-- `lib/utils/transactionBatchLinks.ts`
+- `app/api/settings/google-drive/oauth/start/route.ts`
+- `lib/utils/googleDrive.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 94 (100%)
+- EXTRACTED: 129 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

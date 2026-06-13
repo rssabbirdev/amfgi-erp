@@ -9,6 +9,7 @@ import {
   resolveTransactionNetLineCost,
 } from '@/lib/stock/transactionFifoUnitCost';
 import { decimalToNumberOrZero } from '@/lib/utils/decimal';
+import { resolveEntryCreatedBy } from '@/lib/deliveryNote/resolveCreatedBy';
 
 function mapCustomItemsFromJson(json: unknown): Array<{ name: string; description: string; unit: string; qty: string }> {
   if (!Array.isArray(json)) return [];
@@ -44,6 +45,7 @@ export async function GET(req: Request) {
   const noteType = searchParams.get('noteType') ?? 'all';
   const jobSearch = searchParams.get('jobSearch')?.trim().toLowerCase() ?? '';
   const deliveryNoteSearchRaw = searchParams.get('deliveryNoteSearch')?.trim().replace(/^#/i, '') ?? '';
+  const searchRaw = searchParams.get('search')?.trim().toLowerCase() ?? '';
 
   let startDate = new Date(0);
   let endDate = new Date();
@@ -92,6 +94,8 @@ export async function GET(req: Request) {
           deliveryType: true,
           transitStatus: true,
           supplierId: true,
+          createdByUserId: true,
+          createdByName: true,
           supplier: { select: { id: true, name: true } },
         },
       },
@@ -117,7 +121,12 @@ export async function GET(req: Request) {
   });
 
   const creatorIds = Array.from(
-    new Set(transactions.map((txn) => txn.performedByUserId?.trim() ?? '').filter(Boolean))
+    new Set(
+      [
+        ...transactions.map((txn) => txn.performedByUserId?.trim() ?? ''),
+        ...transactions.map((txn) => txn.deliveryNote?.createdByUserId?.trim() ?? ''),
+      ].filter(Boolean)
+    )
   );
 
   const creators = creatorIds.length
@@ -237,6 +246,8 @@ export async function GET(req: Request) {
         Math.max(...groupedTxns.map((t) => new Date(t.createdAt).getTime()))
       );
 
+      const createdBy = resolveEntryCreatedBy(firstTxn.deliveryNote, firstTxn, creatorsById);
+
       return {
         id: entryId,
         _id: entryId,
@@ -262,18 +273,7 @@ export async function GET(req: Request) {
         documentNotes: firstTxn.deliveryNote?.documentNotes ?? undefined,
         customItemsJson: firstTxn.deliveryNote?.customItemsJson ?? undefined,
         signedCopyUrl: firstTxn.signedCopyUrl ?? undefined,
-        createdByUserId: firstTxn.performedByUserId ?? undefined,
-        createdByName:
-          (firstTxn.performedByUserId ? creatorsById.get(firstTxn.performedByUserId)?.name : undefined) ??
-          firstTxn.performedByName ??
-          firstTxn.performedBy ??
-          undefined,
-        createdByEmail:
-          (firstTxn.performedByUserId ? creatorsById.get(firstTxn.performedByUserId)?.email : undefined) ??
-          undefined,
-        createdBySignatureUrl:
-          (firstTxn.performedByUserId ? creatorsById.get(firstTxn.performedByUserId)?.signatureUrl : undefined) ??
-          undefined,
+        ...createdBy,
         deliveryType: firstTxn.deliveryNote?.deliveryType ?? 'DISPATCH',
         transitStatus: firstTxn.deliveryNote?.transitStatus ?? undefined,
         supplierId: firstTxn.deliveryNote?.supplierId ?? undefined,
@@ -303,6 +303,8 @@ export async function GET(req: Request) {
       deliveryType: true,
       transitStatus: true,
       supplierId: true,
+      createdByUserId: true,
+      createdByName: true,
       supplier: { select: { id: true, name: true } },
       job: {
         select: {
@@ -348,13 +350,37 @@ export async function GET(req: Request) {
             averageCost: true,
             totalCost: true,
             quantity: true,
+            performedByUserId: true,
+            performedByName: true,
+            performedBy: true,
             material: { select: { unitCost: true } },
           },
         })
       : [];
+  const subcontractTransferActorById = new Map(
+    subcontractTransferOutTxns.map((txn) => [txn.id, txn])
+  );
   const subcontractFifoUnitCostByTransferId = new Map(
     subcontractTransferOutTxns.map((txn) => [txn.id, resolveTransactionFifoUnitCost(txn)])
   );
+
+  const standaloneCreatorIds = Array.from(
+    new Set(
+      [
+        ...standaloneCandidates.map((dn) => dn.createdByUserId?.trim() ?? ''),
+        ...subcontractTransferOutTxns.map((txn) => txn.performedByUserId?.trim() ?? ''),
+      ].filter((id) => id && !creatorsById.has(id))
+    )
+  );
+  if (standaloneCreatorIds.length > 0) {
+    const extraCreators = await prisma.user.findMany({
+      where: { id: { in: standaloneCreatorIds } },
+      select: { id: true, name: true, email: true, signatureUrl: true },
+    });
+    for (const user of extraCreators) {
+      creatorsById.set(user.id, user);
+    }
+  }
 
   for (const dn of standaloneCandidates) {
     if (seenDeliveryNoteIds.has(dn.id)) continue;
@@ -387,6 +413,12 @@ export async function GET(req: Request) {
     const totalSubQty = subcontractMaterials.reduce((sum, row) => sum + row.quantity, 0);
     const totalSubVal = subcontractMaterials.reduce((sum, row) => sum + row.quantity * row.unitCost, 0);
 
+    const firstTransferOutId = dn.materialLines.find((line) => line.issueTransferOutId)?.issueTransferOutId;
+    const transferActor = firstTransferOutId
+      ? subcontractTransferActorById.get(firstTransferOutId)
+      : undefined;
+    const createdBy = resolveEntryCreatedBy(dn, transferActor, creatorsById);
+
     enrichedEntries.push({
       id: `dn-${dn.id}`,
       _id: `dn-${dn.id}`,
@@ -410,6 +442,7 @@ export async function GET(req: Request) {
       deliveryNoteContactPerson: dn.contactPerson?.trim() || undefined,
       documentNotes: dn.documentNotes ?? undefined,
       customItemsJson: dn.customItemsJson ?? undefined,
+      ...createdBy,
       deliveryType: dn.deliveryType,
       transitStatus: dn.transitStatus ?? undefined,
       supplierId: dn.supplierId ?? undefined,
@@ -426,8 +459,36 @@ export async function GET(req: Request) {
   const filteredEntries = enrichedEntries.filter((entry) => {
     if (noteType === 'delivery' && !entry.isDeliveryNote) return false;
     if (noteType === 'dispatch' && entry.isDeliveryNote) return false;
+    if (noteType === 'transit') {
+      if (!entry.isDeliveryNote || entry.deliveryType !== 'SUBCONTRACT') return false;
+      const status = entry.transitStatus;
+      if (status !== 'ON_TRANSIT' && status !== 'PARTIALLY_RECEIVED') return false;
+    }
+
+    if (searchRaw) {
+      const needle = searchRaw.replace(/^#/, '');
+      const jobHay = [entry.jobNumber, entry.jobDescription, entry.supplierName]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (jobHay.includes(needle)) return true;
+      if (entry.isDeliveryNote) {
+        const dn =
+          entry.deliveryNoteNumber ??
+          (() => {
+            const m = entry.notes?.match(/--- DELIVERY NOTE #(\d+)/);
+            return m?.[1] ? parseInt(m[1], 10) : null;
+          })();
+        if (dn != null && String(dn).includes(needle)) return true;
+      }
+      return false;
+    }
+
     if (jobSearch) {
-      const hay = [entry.jobNumber, entry.jobDescription].filter(Boolean).join(' ').toLowerCase();
+      const hay = [entry.jobNumber, entry.jobDescription, entry.supplierName]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
       if (!hay.includes(jobSearch)) return false;
     }
     if (deliveryNoteSearchRaw) {

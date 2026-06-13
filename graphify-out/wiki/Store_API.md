@@ -25,9 +25,10 @@
 
 ## Relationships
 
-- [[Store API and Slices]] (4 shared connections)
 - [[Components, HR, and Admin]] (4 shared connections)
-- [[Stock, Components, and Lib]] (2 shared connections)
+- [[Store, Providers, and Auth]] (2 shared connections)
+- [[Store Slices]] (2 shared connections)
+- [[Store, Stock, and Lib]] (2 shared connections)
 
 ## Source Files
 

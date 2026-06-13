@@ -55,6 +55,7 @@ export {
   useCreateMaterialMutation,
   useUpdateMaterialMutation,
   useDeleteMaterialMutation,
+  useDeactivateMaterialMutation,
   useGetCrossCompanyMaterialsQuery,
   useBulkCreateMaterialsMutation,
   useCreateMaterialUomMutation,

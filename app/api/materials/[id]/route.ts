@@ -5,6 +5,10 @@ import { serializeMaterialUoms } from '@/lib/utils/materialUom';
 import type { MaterialUomWithUnit } from '@/lib/utils/materialUom';
 import { decimalToNumber } from '@/lib/utils/decimal';
 import { resolveCategoryRef, resolveWarehouseRef } from '@/lib/materialMasterData';
+import {
+  countMaterialBlockingLinks,
+  permanentlyDeleteMaterial,
+} from '@/lib/materials/permanentlyDeleteMaterial';
 import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { recalculateAssemblyAncestorsTx } from '@/lib/utils/materialAssembly';
 import { z }                 from 'zod';
@@ -25,6 +29,7 @@ const UpdateSchema = z.object({
   assemblyOutputQuantity: z.number().finite().positive().optional(),
   assemblyOverheadPercent: z.number().finite().min(0).optional(),
   assemblyUseDynamicCost: z.boolean().optional(),
+  isActive: z.boolean().optional(),
   imageUrl: z.string().url().optional(),
   attachmentUrl: z.string().url().optional(),
   attachmentName: z.string().min(1).max(255).optional(),
@@ -117,7 +122,21 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         },
       },
     });
-    if (duplicate) return errorResponse('Material with this name already exists', 409);
+    if (duplicate && duplicate.id !== existing.id) {
+      if (duplicate.isActive) {
+        return errorResponse('Material with this name already exists', 409);
+      }
+      const blockingLinks = await countMaterialBlockingLinks(prisma, {
+        companyId: session.user.activeCompanyId,
+        materialId: duplicate.id,
+      });
+      if (blockingLinks > 0) {
+        return errorResponse(
+          'An inactive material with this name still has stock history and blocks the rename.',
+          409
+        );
+      }
+    }
   }
 
   const companyId = session.user.activeCompanyId;
@@ -240,7 +259,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);
 
   const { id } = await params;
-  const { hardDelete } = await req.json().catch(() => ({ hardDelete: false }));
+  const body = await req.json().catch(() => ({}));
+  const deactivate = body?.deactivate === true;
 
   // Verify material belongs to this company
   const material = await prisma.material.findUnique({ where: { id } });
@@ -248,43 +268,62 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return errorResponse('Material not found', 404);
   }
 
-  // Check for linked transactions
-  const txnCount = await prisma.transaction.count({
-    where: {
-      materialId: id,
-      companyId: session.user.activeCompanyId,
-    },
-  });
+  const companyId = session.user.activeCompanyId;
 
-  if (txnCount > 0 && !hardDelete) {
-    return errorResponse(
-      `Cannot delete: ${txnCount} transaction(s) linked to this material. Deactivate instead or use hard delete if you're certain.`,
-      400
-    );
-  }
-
-  if (hardDelete) {
-    // Permanently delete (only if no transactions OR user explicitly confirmed)
-    await prisma.material.delete({ where: { id } });
-    publishLiveUpdate({
-      companyId: session.user.activeCompanyId,
-      channel: 'stock',
-      entity: 'material',
-      action: 'deleted',
-    });
-    return successResponse({ deleted: true, permanent: true });
-  } else {
-    // Soft delete (deactivate)
+  if (deactivate) {
+    if (!material.isActive) {
+      return successResponse({ deleted: false, deactivated: true, message: 'Material is already inactive' });
+    }
     await prisma.material.update({
       where: { id },
       data: { isActive: false },
     });
     publishLiveUpdate({
-      companyId: session.user.activeCompanyId,
+      companyId,
       channel: 'stock',
       entity: 'material',
       action: 'updated',
     });
-    return successResponse({ deleted: true, permanent: false, message: 'Material deactivated' });
+    return successResponse({
+      deleted: false,
+      deactivated: true,
+      permanent: false,
+      message: 'Material deactivated',
+    });
   }
+
+  // Check for linked transactions
+  const txnCount = await prisma.transaction.count({
+    where: {
+      materialId: id,
+      companyId,
+    },
+  });
+
+  if (txnCount > 0) {
+    return errorResponse(
+      'This material has transaction history and cannot be deleted. Deactivate it instead.',
+      409
+    );
+  }
+
+  const blockingLinks = await countMaterialBlockingLinks(prisma, { companyId, materialId: id });
+  if (blockingLinks > 0) {
+    return errorResponse(
+      'Cannot delete: this material is still linked to delivery notes or job tracking records.',
+      400
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await permanentlyDeleteMaterial(tx, { companyId, materialId: id });
+  });
+
+  publishLiveUpdate({
+    companyId,
+    channel: 'stock',
+    entity: 'material',
+    action: 'deleted',
+  });
+  return successResponse({ deleted: true, permanent: true });
 }

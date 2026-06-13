@@ -7,19 +7,12 @@ import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
 import { Alert, AlertDescription } from '@/components/ui/shadcn/alert';
-import { buttonVariants } from '@/components/ui/shadcn/button';
-import { Card, CardContent } from '@/components/ui/shadcn/card';
+import { Button, buttonVariants } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
-import { Skeleton } from '@/components/ui/shadcn/skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/shadcn/table';
-import DirectoryListPagination from '@/components/ui/DirectoryListPagination';
+import { Select } from '@/components/ui/shadcn/select';
+import DataTable from '@/components/ui/DataTable';
+import type { Column } from '@/components/ui/DataTable';
+import type { ContextMenuOption } from '@/components/ui/ContextMenu';
 import { Badge } from '@/components/ui/Badge';
 import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination/serverList';
 import { cn } from '@/lib/utils';
@@ -52,10 +45,14 @@ interface Material {
 }
 
 type Entry = Omit<DispatchEntryRecord, 'materials'> & { materials: Material[] };
+type NoteTypeFilter = 'all' | 'dispatch' | 'delivery' | 'transit';
 
-function formatCount(value: number) {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
-}
+const NOTE_TYPE_TABS: Array<{ value: NoteTypeFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'dispatch', label: 'Dispatches' },
+  { value: 'delivery', label: 'Delivery notes' },
+  { value: 'transit', label: 'In transit' },
+];
 
 function parseJobContacts(value: unknown): Array<{ name: string; number?: string; email?: string; designation?: string; label?: string }> {
   if (!Array.isArray(value)) return [];
@@ -87,30 +84,36 @@ export default function DispatchPage() {
   const canEdit = isSA || perms.includes('transaction.stock_out');
   const canDelete = isSA || perms.includes('transaction.stock_out');
 
-  const [filterType, setFilterType] = useState<'day' | 'month' | 'all'>('month');
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  );
-  const [noteTypeFilter, setNoteTypeFilter] = useState<'all' | 'dispatch' | 'delivery'>('all');
-  const [jobSearch, setJobSearch] = useState('');
-  const [deliveryNoteSearch, setDeliveryNoteSearch] = useState('');
+  const [filterType, setFilterType] = useState<'day' | 'month' | 'all'>('all');
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [noteTypeFilter, setNoteTypeFilter] = useState<NoteTypeFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_LIST_PAGE_SIZE);
-  const deferredJobSearch = useDeferredValue(jobSearch);
-  const deferredDeliveryNoteSearch = useDeferredValue(deliveryNoteSearch);
+  const deferredSearch = useDeferredValue(searchQuery);
 
   // Load filter state from URL on mount
   useEffect(() => {
     const urlFilterType = searchParams.get('filterType') as 'day' | 'month' | 'all' | null;
     const urlDate = searchParams.get('date');
+    const urlNoteType = searchParams.get('noteType') as NoteTypeFilter | null;
+    const urlSearch = searchParams.get('search');
 
     if (urlFilterType && ['day', 'month', 'all'].includes(urlFilterType)) {
       setFilterType(urlFilterType);
     }
     if (urlDate) {
-      setSelectedDate(urlDate);
+      if (urlDate.length === 7 && /^\d{4}-\d{2}$/.test(urlDate)) {
+        setSelectedDate(`${urlDate}-01`);
+      } else {
+        setSelectedDate(urlDate.slice(0, 10));
+      }
     }
-  }, []);
+    if (urlNoteType && ['all', 'dispatch', 'delivery', 'transit'].includes(urlNoteType)) {
+      setNoteTypeFilter(urlNoteType);
+    }
+    if (urlSearch) setSearchQuery(urlSearch);
+  }, [searchParams]);
 
   const [viewModal, setViewModal] = useState<{ open: boolean; entry: Entry | null }>({
     open: false,
@@ -141,34 +144,28 @@ export default function DispatchPage() {
   const listQueryArgs = useMemo(
     () => ({
       filterType,
-      date: selectedDate,
+      date: filterType === 'all' ? undefined : selectedDate,
       noteType: noteTypeFilter,
-      jobSearch: deferredJobSearch,
-      deliveryNoteSearch: deferredDeliveryNoteSearch,
+      search: deferredSearch.trim() || undefined,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
     }),
-    [filterType, selectedDate, noteTypeFilter, deferredJobSearch, deferredDeliveryNoteSearch],
+    [filterType, selectedDate, noteTypeFilter, deferredSearch, page, pageSize],
   );
 
   useEffect(() => {
     setPage(1);
-  }, [listQueryArgs, pageSize]);
+  }, [filterType, selectedDate, noteTypeFilter, deferredSearch, pageSize]);
 
   const { data: dispatchPage, isLoading, isFetching } = useGetDispatchEntriesPageQuery(listQueryArgs, {
     skip: !canView,
     refetchOnMountOrArgChange: 300,
   });
 
-  const allEntries = (dispatchPage?.entries ?? []) as Entry[];
-  const totalEntries = dispatchPage?.total ?? allEntries.length;
-  const entries = useMemo(
-    () => allEntries.slice((page - 1) * pageSize, page * pageSize),
-    [allEntries, page, pageSize],
-  );
+  const entries = (dispatchPage?.entries ?? []) as Entry[];
+  const totalEntries = dispatchPage?.total ?? 0;
   const loading = isLoading;
   const isRefreshing = isFetching && !isLoading;
-  const totalPages = Math.max(1, Math.ceil(totalEntries / pageSize));
-  const pageStart = totalEntries === 0 ? 0 : (page - 1) * pageSize + 1;
-  const pageEnd = Math.min(page * pageSize, totalEntries);
 
   useEffect(() => {
     if (!printModalEntry || !session?.user?.activeCompanyId) return;
@@ -255,30 +252,87 @@ export default function DispatchPage() {
     return '/stock/dispatch/delivery-note';
   }
 
-  const totalDispatchValuation = entries.reduce((sum, e) => sum + e.totalValuation, 0);
-  const totalMaterials = new Set(entries.flatMap((e) => e.materials.map((m) => m.materialId))).size;
-  const deliveryNoteCount = entries.filter((e) => e.isDeliveryNote === true).length;
-  const dispatchNoteCount = entries.filter((e) => e.isDeliveryNote !== true).length;
+  const syncUrl = useCallback(
+    (next: {
+      filterType?: 'day' | 'month' | 'all';
+      date?: string;
+      noteType?: NoteTypeFilter;
+      search?: string;
+    }) => {
+      const params = new URLSearchParams();
+      const ft = next.filterType ?? filterType;
+      const dt = next.date ?? selectedDate;
+      const nt = next.noteType ?? noteTypeFilter;
+      const sq = next.search ?? searchQuery;
 
-  const handleFilterTypeChange = (newFilterType: 'day' | 'month' | 'all') => {
-    setFilterType(newFilterType);
-    // Update URL
-    const params = new URLSearchParams();
-    params.set('filterType', newFilterType);
-    if (newFilterType !== 'all') {
-      params.set('date', selectedDate);
-    }
-    router.push(`?${params.toString()}`);
-  };
+      params.set('filterType', ft);
+      if (ft !== 'all') params.set('date', dt);
+      if (nt !== 'all') params.set('noteType', nt);
+      if (sq.trim()) params.set('search', sq.trim());
+      router.push(`?${params.toString()}`);
+    },
+    [filterType, selectedDate, noteTypeFilter, searchQuery, router],
+  );
 
-  const handleDateChange = (newDate: string) => {
-    setSelectedDate(newDate);
-    // Update URL
-    const params = new URLSearchParams();
-    params.set('filterType', filterType);
-    params.set('date', newDate);
-    router.push(`?${params.toString()}`);
-  };
+  const handleFilterTypeChange = useCallback(
+    (newFilterType: 'day' | 'month' | 'all') => {
+      if (newFilterType === 'all') {
+        setFilterType('all');
+        syncUrl({ filterType: 'all' });
+        return;
+      }
+
+      let nextDate = selectedDate;
+      if (newFilterType === 'month') {
+        const base =
+          selectedDate.length >= 10 ? selectedDate.slice(0, 10) : new Date().toISOString().split('T')[0];
+        nextDate = `${base.slice(0, 7)}-01`;
+      } else {
+        nextDate =
+          selectedDate.length >= 10 ? selectedDate.slice(0, 10) : new Date().toISOString().split('T')[0];
+      }
+
+      setFilterType(newFilterType);
+      setSelectedDate(nextDate);
+      syncUrl({ filterType: newFilterType, date: nextDate });
+    },
+    [selectedDate, syncUrl],
+  );
+
+  const handleDateChange = useCallback(
+    (value: string) => {
+      const normalized =
+        filterType === 'month'
+          ? value.length === 7
+            ? `${value}-01`
+            : value.slice(0, 10)
+          : value.slice(0, 10);
+      setSelectedDate(normalized);
+      syncUrl({ date: normalized });
+    },
+    [filterType, syncUrl],
+  );
+
+  const handleNoteTypeChange = useCallback(
+    (value: NoteTypeFilter) => {
+      setNoteTypeFilter(value);
+      syncUrl({ noteType: value });
+    },
+    [syncUrl],
+  );
+
+  const clearFilters = useCallback(() => {
+    const today = new Date().toISOString().split('T')[0];
+    setFilterType('all');
+    setSelectedDate(today);
+    setNoteTypeFilter('all');
+    setSearchQuery('');
+    setPage(1);
+    router.push('?filterType=all');
+  }, [router]);
+
+  const hasActiveFilters =
+    noteTypeFilter !== 'all' || filterType !== 'all' || searchQuery.trim().length > 0;
 
   const closeDeleteModal = () => {
     setDeleteModal({ open: false, entry: null, loading: false, step: 1, confirmText: '' });
@@ -337,39 +391,167 @@ export default function DispatchPage() {
     return status.replace(/_/g, ' ');
   };
 
-  const handleRowContextMenu = useCallback((entry: Entry, e: React.MouseEvent) => {
-    e.preventDefault();
-    setSelectedRowId(entry.id);
-    const dateStr = typeof entry.dispatchDate === 'string'
-      ? entry.dispatchDate.split('T')[0]
-      : new Date(entry.dispatchDate).toISOString().split('T')[0];
-    const editPath = entry.isDeliveryNote
-      ? deliveryNoteEditHref(entry)
-      : `/stock/dispatch/entry?jobId=${entry.jobId}&date=${dateStr}`;
-    const options: any[] = [
-      { label: 'View', action: () => setViewModal({ open: true, entry }) },
-    ];
-    if (canEdit) {
-      options.push({ label: 'Edit', action: () => router.push(editPath) });
-    }
-    if (canEdit && entry.isDeliveryNote && isSubcontractEntry(entry) && entry.deliveryNoteId) {
-      options.push({
-        label: 'Receive',
-        action: () => router.push(`/stock/dispatch/delivery-note?deliveryNoteId=${entry.deliveryNoteId}`),
-      });
-    }
-    if (canEdit && entry.isDeliveryNote) {
-      options.push({
-        label: 'Duplicate',
-        action: () => router.push(deliveryNoteDuplicateHref(entry)),
-      });
-    }
-    if (canDelete) {
-      options.push({ divider: true });
-      options.push({ label: 'Delete', action: () => handleDelete(entry), danger: true });
-    }
-    openContextMenu(e.clientX, e.clientY, options);
-  }, [canEdit, canDelete, openContextMenu, router]);
+  const buildRowContextMenu = useCallback(
+    (entry: Entry): ContextMenuOption[] => {
+      const dateStr =
+        typeof entry.dispatchDate === 'string'
+          ? entry.dispatchDate.split('T')[0]
+          : new Date(entry.dispatchDate).toISOString().split('T')[0];
+      const editPath = entry.isDeliveryNote
+        ? deliveryNoteEditHref(entry)
+        : `/stock/dispatch/entry?jobId=${entry.jobId}&date=${dateStr}`;
+      const options: ContextMenuOption[] = [
+        { label: 'View details', action: () => setViewModal({ open: true, entry }) },
+      ];
+      if (canEdit) {
+        options.push({ label: 'Edit', action: () => router.push(editPath) });
+      }
+      if (canEdit && entry.isDeliveryNote && isSubcontractEntry(entry) && entry.deliveryNoteId) {
+        options.push({
+          label: 'Receive material',
+          action: () => router.push(`/stock/dispatch/delivery-note?deliveryNoteId=${entry.deliveryNoteId}`),
+        });
+      }
+      if (canEdit && entry.isDeliveryNote) {
+        options.push({
+          label: 'Duplicate',
+          action: () => router.push(deliveryNoteDuplicateHref(entry)),
+        });
+      }
+      if (entry.isDeliveryNote && (entry.transactionIds[0] || entry.deliveryNoteId)) {
+        options.push({
+          label: 'Print',
+          action: () => setPrintModalEntry(entry),
+        });
+      }
+      if (canDelete) {
+        options.push({ divider: true });
+        options.push({ label: 'Delete', action: () => handleDelete(entry), danger: true });
+      }
+      return options;
+    },
+    [canEdit, canDelete, router],
+  );
+
+  const columns = useMemo<Column<Entry>[]>(
+    () => [
+      {
+        key: 'job',
+        header: 'Job / project',
+        sortable: false,
+        render: (entry) => (
+          <div className="min-w-40">
+            <p className="font-medium text-primary">{entry.jobNumber}</p>
+            {entry.jobDescription ? (
+              <p className="max-w-56 truncate text-xs text-muted-foreground">{entry.jobDescription}</p>
+            ) : null}
+            {isSubcontractEntry(entry) && entry.supplierName ? (
+              <p className="mt-0.5 truncate text-xs text-amber-700 dark:text-amber-300">{entry.supplierName}</p>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        key: 'date',
+        header: 'Date',
+        render: (entry) => (
+          <span className="whitespace-nowrap text-sm text-foreground">{formatDateTime(entry.dispatchDate)}</span>
+        ),
+      },
+      {
+        key: 'type',
+        header: 'Document',
+        render: (entry) => {
+          if (!entry.isDeliveryNote) {
+            return <Badge label="Dispatch" variant="gray" />;
+          }
+          const dnNumber = getDeliveryNoteNumber(entry.notes, entry.deliveryNoteNumber);
+          return (
+            <div className="flex flex-col items-start gap-1">
+              <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-100">
+                DN #{dnNumber ?? '—'}
+              </span>
+              {isSubcontractEntry(entry) && entry.transitStatus ? (
+                <span className="text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                  {transitStatusLabel(entry.transitStatus)}
+                </span>
+              ) : null}
+            </div>
+          );
+        },
+      },
+      {
+        key: 'signed',
+        header: 'Signed copy',
+        className: 'hidden lg:table-cell',
+        render: (entry) => {
+          if (!entry.isDeliveryNote) return <span className="text-xs text-muted-foreground">—</span>;
+          return entry.signedCopyUrl ? (
+            <Badge label="Uploaded" variant="green" />
+          ) : (
+            <Badge label="Pending" variant="gray" />
+          );
+        },
+      },
+      {
+        key: 'materials',
+        header: 'Lines',
+        className: 'text-right',
+        render: (entry) =>
+          entry.isDeliveryNote && entry.materialsCount === 0 ? (
+            <span className="text-xs font-medium text-muted-foreground">Print only</span>
+          ) : (
+            <Badge label={String(entry.materialsCount)} variant="blue" />
+          ),
+      },
+      {
+        key: 'value',
+        header: 'Value',
+        className: 'text-right',
+        render: (entry) => (
+          <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+            {formatCurrency(entry.totalValuation)}
+          </span>
+        ),
+      },
+      {
+        key: 'actions',
+        header: '',
+        className: 'w-[1%] whitespace-nowrap text-right',
+        render: (entry) => (
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                setViewModal({ open: true, entry });
+              }}
+            >
+              View
+            </Button>
+            {entry.isDeliveryNote && (entry.transactionIds[0] || entry.deliveryNoteId) ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs text-emerald-700 dark:text-emerald-300"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPrintModalEntry(entry);
+                }}
+              >
+                Print
+              </Button>
+            ) : null}
+          </div>
+        ),
+      },
+    ],
+    [],
+  );
 
   if (!canView) {
     return (
@@ -382,237 +564,126 @@ export default function DispatchPage() {
   }
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-5">
-      <header className="flex w-full min-w-0 flex-col gap-4 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0 space-y-1">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Dispatch desk</p>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Stock-out history and note control</h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            Review every dispatch and delivery note, reopen any row for editing, and keep signed-copy follow-up visible
-            from one compact ledger.
-          </p>
+    <div className="flex w-full min-w-0 flex-col gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">Dispatch</h1>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <Link href="/stock/dispatch/entry" className={cn(buttonVariants({ size: 'sm' }))}>
             New dispatch
           </Link>
-          <Link href="/stock/dispatch/delivery-note" className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}>
+          <Link
+            href="/stock/dispatch/delivery-note"
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+          >
             New delivery note
           </Link>
         </div>
       </header>
 
-      <section className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Total entries</p>
-            <p className="mt-2 text-xl font-semibold tabular-nums text-foreground">{formatCount(totalEntries)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Dispatch notes (page)</p>
-            <p className="mt-2 text-xl font-semibold tabular-nums text-foreground">{dispatchNoteCount}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Delivery notes (page)</p>
-            <p className="mt-2 text-xl font-semibold tabular-nums text-foreground">{deliveryNoteCount}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Materials touched (page)</p>
-            <p className="mt-2 text-xl font-semibold tabular-nums text-foreground">{totalMaterials}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Total valuation</p>
-            <p className="mt-2 text-xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">
-              {formatCurrency(totalDispatchValuation)}
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-4 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: 'all' as const, label: 'All entries' },
-                { value: 'month' as const, label: 'Month' },
-                { value: 'day' as const, label: 'Day' },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handleFilterTypeChange(option.value)}
-                  className={cn(
-                    'rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors',
-                    filterType === option.value
-                      ? 'bg-primary text-primary-foreground'
-                      : 'border border-border bg-muted/40 text-muted-foreground hover:bg-muted/60',
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: 'all' as const, label: 'All types' },
-                { value: 'dispatch' as const, label: 'Dispatch only' },
-                { value: 'delivery' as const, label: 'Delivery notes only' },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setNoteTypeFilter(option.value)}
-                  className={cn(
-                    'rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors',
-                    noteTypeFilter === option.value
-                      ? 'bg-primary text-primary-foreground'
-                      : 'border border-border bg-muted/40 text-muted-foreground hover:bg-muted/60',
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+      <section className="rounded-lg border border-border bg-card shadow-sm">
+        <div className="flex border-b border-border px-2 pt-2 sm:px-3">
+          <div className="flex gap-0.5 overflow-x-auto" role="tablist" aria-label="Entry type">
+            {NOTE_TYPE_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={noteTypeFilter === tab.value}
+                onClick={() => handleNoteTypeChange(tab.value)}
+                className={cn(
+                  'shrink-0 rounded-t-md border border-b-0 px-3 py-2 text-xs font-medium transition-colors',
+                  noteTypeFilter === tab.value
+                    ? 'border-border bg-card text-foreground'
+                    : 'border-transparent bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
+        </div>
 
-          <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:min-w-[280px]">
+        <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:px-5 lg:flex-row lg:items-center">
+          <div className="min-w-0 flex-1">
+            <Input
+              id="dispatch-search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search job, supplier, or note #…"
+              className="h-9"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              aria-label="Time range"
+              value={filterType}
+              onChange={(e) => handleFilterTypeChange(e.target.value as 'day' | 'month' | 'all')}
+              className="h-9 w-32 shrink-0"
+            >
+              <option value="all">All time</option>
+              <option value="month">By month</option>
+              <option value="day">By day</option>
+            </Select>
             {filterType !== 'all' ? (
               <input
+                aria-label={filterType === 'day' ? 'Day' : 'Month'}
                 type={filterType === 'day' ? 'date' : 'month'}
-                value={selectedDate}
+                value={filterType === 'day' ? selectedDate.slice(0, 10) : selectedDate.slice(0, 7)}
                 onChange={(e) => handleDateChange(e.target.value)}
-                className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="h-9 shrink-0 rounded-md border border-border bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             ) : null}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Input
-                placeholder="Search job # or description"
-                value={jobSearch}
-                onChange={(e) => setJobSearch(e.target.value)}
-                className="h-9 min-w-0 sm:max-w-[220px]"
-              />
-              <Input
-                placeholder="Delivery note #"
-                value={deliveryNoteSearch}
-                onChange={(e) => setDeliveryNoteSearch(e.target.value)}
-                className="h-9 min-w-0 sm:max-w-[140px]"
-                inputMode="numeric"
-              />
-            </div>
+            {hasActiveFilters ? (
+              <Button type="button" variant="ghost" size="sm" onClick={clearFilters} className="h-9 px-2 text-xs">
+                Clear
+              </Button>
+            ) : null}
           </div>
         </div>
 
-        <div className="mt-4 rounded-md border border-border">
-          {isRefreshing ? (
-            <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">Refreshing list…</p>
-          ) : null}
-          {loading ? (
-            <div className="space-y-2 p-4">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          ) : entries.length === 0 ? (
-            <p className="p-8 text-center text-sm text-muted-foreground">No dispatch entries found for this period.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Job</TableHead>
-                  <TableHead>Dispatch date</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Signed copy</TableHead>
-                  <TableHead className="text-right">Materials</TableHead>
-                  <TableHead className="text-right">Total value</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entries.map((e) => {
-                  const dnNumber = e.isDeliveryNote ? getDeliveryNoteNumber(e.notes, e.deliveryNoteNumber) : null;
-                  return (
-                    <TableRow
-                      key={e.id}
-                      data-state={selectedRowId === e.id ? 'selected' : undefined}
-                      className={cn('cursor-pointer', selectedRowId === e.id && 'bg-muted/60')}
-                      onClick={() => handleRowClick(e)}
-                      onDoubleClick={() => handleRowDoubleClick(e)}
-                      onContextMenu={(ev) => handleRowContextMenu(e, ev)}
-                    >
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-primary">{e.jobNumber}</p>
-                          <p className="max-w-[10rem] truncate text-xs text-muted-foreground sm:max-w-[14rem]">
-                            {e.jobDescription}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-foreground">{formatDateTime(e.dispatchDate)}</TableCell>
-                      <TableCell>
-                        {e.isDeliveryNote ? (
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-100">
-                              {isSubcontractEntry(e) ? 'Subcontract' : 'Dispatch'} DN #{dnNumber ?? 'N/A'}
-                            </span>
-                            {isSubcontractEntry(e) && e.transitStatus ? (
-                              <span className="text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                                {transitStatusLabel(e.transitStatus)}
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <Badge label="Dispatch" variant="gray" />
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {!e.isDeliveryNote ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : e.signedCopyUrl ? (
-                          <Badge label="Uploaded" variant="green" />
-                        ) : (
-                          <Badge label="Not uploaded" variant="gray" />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {e.isDeliveryNote && e.materialsCount === 0 ? (
-                          <span className="text-xs font-medium text-muted-foreground">Print only</span>
-                        ) : (
-                          <Badge label={`${e.materialsCount}`} variant="blue" />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(e.totalValuation)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
+        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2 text-xs text-muted-foreground sm:px-5">
+          <span>
+            {totalEntries} entr{totalEntries === 1 ? 'y' : 'ies'}
+            {noteTypeFilter === 'transit' ? ' awaiting receive' : ''}
+            {isRefreshing ? ' · updating…' : ''}
+          </span>
+          <span className="hidden sm:inline">Double-click a row for details · right-click for actions</span>
         </div>
-        {totalEntries > 0 ? (
-          <DirectoryListPagination
-            className="border-t border-border px-4 py-3"
-            page={page}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            total={totalEntries}
-            pageStart={pageStart}
-            pageEnd={pageEnd}
-            pageSizeOptions={DISPATCH_ENTRY_PAGE_SIZE_OPTIONS}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-        ) : null}
+
+        <div className="px-2 pb-2 pt-1 sm:px-3">
+        <DataTable
+          columns={columns}
+          data={entries}
+          loading={loading && entries.length === 0}
+          emptyText={
+            noteTypeFilter === 'transit'
+              ? 'No delivery notes with material still in transit.'
+              : 'No dispatch or delivery note entries match these filters.'
+          }
+          enableColumnDisplayOptions
+          preferenceKey="stock-dispatch-table"
+          selectedRowId={selectedRowId}
+          onRowClick={(entry) => handleRowClick(entry)}
+          onRowDoubleClick={(entry) => handleRowDoubleClick(entry)}
+          onRowContextMenu={(entry, e) => {
+            setSelectedRowId(entry.id);
+            openContextMenu(e.clientX, e.clientY, buildRowContextMenu(entry));
+          }}
+          serverPagination={{
+            page,
+            pageSize,
+            total: totalEntries,
+            pageSizeOptions: DISPATCH_ENTRY_PAGE_SIZE_OPTIONS,
+            onPageChange: setPage,
+            onPageSizeChange: (size) => {
+              setPageSize(size);
+              setPage(1);
+            },
+          }}
+        />
+        </div>
       </section>
 
       {/* View Modal */}
@@ -710,7 +781,7 @@ export default function DispatchPage() {
                     {isDeliveryNote ? (
                       <div className="space-y-1">
                         <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-100">
-                          {isSubcontractEntry(entry) ? 'Subcontract' : 'Dispatch'} DN #{dnNumber || 'N/A'}
+                          DN #{dnNumber || 'N/A'}
                         </span>
                         {isSubcontractEntry(entry) && entry.transitStatus ? (
                           <p className="text-xs text-amber-700 dark:text-amber-300">
