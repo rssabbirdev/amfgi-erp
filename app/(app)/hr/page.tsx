@@ -102,6 +102,14 @@ const HUB_SECTIONS: Array<{
         perms: ['hr.settings.expertise_catalog', 'hr.employee.view'],
       },
       {
+        href: '/hr/settings/employment-options',
+        title: 'Employment options',
+        description: 'Manage designation, department, and employment type lists used on employee profiles.',
+        badge: 'Catalog',
+        tone: 'amber',
+        perms: ['hr.employee.edit'],
+      },
+      {
         href: '/hr/settings/employee-types',
         title: 'Employee Type Timings',
         description: 'Set baseline timing and hours logic for office staff, drivers, hybrid roles, and labour teams.',

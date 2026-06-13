@@ -1,27 +1,13 @@
 # HR Schedule
 
-> 47 nodes · cohesion 0.05
+> 29 nodes · cohesion 0.07
 
 ## Key Concepts
 
 - **ScheduleDayClient.tsx** (87 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **ScheduleWorkerDnD.tsx** (14 connections) — `components/hr/ScheduleWorkerDnD.tsx`
-- **extractSubTeamsFromMembers()** (4 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **ScheduleWorkerDraggableCard()** (4 connections) — `components/hr/ScheduleWorkerDnD.tsx`
-- **ScheduleFlatTeamDropSurface()** (4 connections) — `components/hr/ScheduleWorkerDnD.tsx`
-- **createEmptySubTeam()** (3 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **normalizeMemberList()** (3 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **normalizeDraft()** (3 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **scheduleTeamDropId()** (3 connections) — `components/hr/ScheduleWorkerDnD.tsx`
-- **ScheduleTeamDropZone()** (3 connections) — `components/hr/ScheduleWorkerDnD.tsx`
-- **page.tsx** (2 connections) — `app/(app)/hr/schedule/[workDate]/page.tsx`
 - **scheduleSearchInputProps()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **nextSubTeamLabel()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **HrScheduleDayPage()** (2 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- **scheduleWorkerDragId()** (2 connections) — `components/hr/ScheduleWorkerDnD.tsx`
-- **parseScheduleWorkerDragId()** (2 connections) — `components/hr/ScheduleWorkerDnD.tsx`
-- **parseScheduleTeamDropId()** (2 connections) — `components/hr/ScheduleWorkerDnD.tsx`
-- **HrScheduleDayPage()** (1 connections) — `app/(app)/hr/schedule/[workDate]/page.tsx`
+- **EmployeeTypeTimingSetting** (2 connections) — `lib/hr/employeeTypeSettings.ts`
 - **isGuestDriverRowKey()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **guestDriverRowKeyFromLogId()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **createPendingGuestDriverRowKey()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
@@ -29,32 +15,45 @@
 - **EmpOpt** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **JobOpt** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
 - **EmployeeProfile** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- *... and 22 more nodes in this community*
+- **MemberRow** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **subTeamDraft** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **AsgDraft** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **ScheduleTemplateOption** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **getNextTeamNumber()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **parseBrk()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **formatScheduleTimeForPrint()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **getInitialWorkProcessDetails()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **resolveWorkProcessDetails()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **readApiEnvelope()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **cloneDrafts()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **draftsEqual()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **createEmptyDraft()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- **normalizeSkill()** (1 connections) — `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
+- *... and 4 more nodes in this community*
 
 ## Relationships
 
-- [[Reports, Components, and HR]] (13 shared connections)
+- [[Reports, Components, and Settings]] (10 shared connections)
 - [[Lib, HR, and Schedule Search API]] (9 shared connections)
-- [[Components HR and Ui]] (8 shared connections)
-- [[Stock, Components, and Reports]] (8 shared connections)
-- [[Components Transactions, Ui, and HR]] (3 shared connections)
+- [[Components, Stock, and Lib]] (7 shared connections)
+- [[Components, HR, and Schedule Worker Dn D]] (7 shared connections)
+- [[HR, Schedule, and Work Date]] (6 shared connections)
+- [[Components, Stock, and Reports]] (5 shared connections)
+- [[Stock, HR, and Components]] (3 shared connections)
+- [[HR, Components, and Lib]] (3 shared connections)
 - [[Lib Utils and Types]] (3 shared connections)
-- [[Components Ui and App Shell]] (2 shared connections)
-- [[Lib, API, and Scripts]] (2 shared connections)
-- [[Lib, HR, and Workforce Profile]] (2 shared connections)
-- [[HR Settings and Payroll]] (1 shared connections)
-- [[Components Stock and HR]] (1 shared connections)
-- [[Lib Utils]] (1 shared connections)
+- [[Components Ui, App Shell, and Sidebar]] (2 shared connections)
+- [[Lib Utils]] (2 shared connections)
+- [[API, Lib, and Scripts]] (2 shared connections)
 
 ## Source Files
 
 - `app/(app)/hr/schedule/[workDate]/ScheduleDayClient.tsx`
-- `app/(app)/hr/schedule/[workDate]/page.tsx`
-- `components/hr/ScheduleWorkerDnD.tsx`
+- `lib/hr/employeeTypeSettings.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 172 (100%)
+- EXTRACTED: 118 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

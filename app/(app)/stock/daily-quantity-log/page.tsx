@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
@@ -50,7 +49,6 @@ export default function DailyQuantityLogLandingPage() {
   const isSA = session?.user?.isSuperAdmin ?? false;
   const canView = isSA || perms.includes('job.view');
   const canEdit = isSA || perms.includes('job.edit');
-  const canViewReports = isSA || perms.includes('report.view');
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(DEFAULT_LIST_PAGE_SIZE);
@@ -152,14 +150,6 @@ export default function DailyQuantityLogLandingPage() {
             <strong className="font-medium text-foreground">Finalized</strong> day to adjust saved values. Finalized days
             cannot accept new progress lines.
           </p>
-          {canViewReports ? (
-            <p className="text-sm text-muted-foreground">
-              <Link href="/reports/production-by-job" className="font-medium text-primary underline-offset-4 hover:underline">
-                Production by job report
-              </Link>{' '}
-              — totals by job and budget line across any date range.
-            </p>
-          ) : null}
         </div>
         {canEdit ? (
           <Button

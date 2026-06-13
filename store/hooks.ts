@@ -62,6 +62,7 @@ export {
   useDeleteMaterialUomMutation,
   useGetMaterialAssemblyQuery,
   useUpsertMaterialAssemblyMutation,
+  useLazyGetMaterialTransactionReportQuery,
   type Material,
   type MaterialUomDto,
   type MaterialAssembly,
@@ -155,7 +156,6 @@ export {
 export {
   useGetStockValuationQuery,
   useGetConsumptionQuery,
-  useLazyGetProductionByJobQuery,
   useGetJobProfitabilityQuery,
   useGetSupplierTraceabilityQuery,
   useGetInventoryByWarehouseQuery,
@@ -173,7 +173,6 @@ export {
   type InventoryByWarehouseWarehouseCol,
   type JobProfitabilityResponse,
   type JobProfitabilityRow,
-  type ProductionByJobRow,
   type StockAdjustmentsResponse,
   type StockAdjustmentRow,
   type StockExceptionApprovalsResponse,

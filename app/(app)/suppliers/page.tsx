@@ -15,6 +15,12 @@ import DirectoryListPagination from '@/components/ui/DirectoryListPagination';
 import Modal from '@/components/ui/Modal';
 import { TableSkeleton } from '@/components/ui/skeleton/TableSkeleton';
 import { cn } from '@/lib/utils';
+import {
+  canCreateSuppliers,
+  canDeleteSuppliers,
+  canEditSuppliers,
+  canImportSuppliers,
+} from '@/lib/auth/supplierAccess';
 import SupplierImportModal from '@/components/suppliers/SupplierImportModal';
 import { exportSuppliersToXlsx } from '@/lib/import-export/exportSuppliers';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
@@ -180,9 +186,11 @@ export default function SuppliersPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const { openMenu: openContextMenu } = useGlobalContextMenu();
-  const isSA = session?.user?.isSuperAdmin ?? false;
-  const perms = (session?.user?.permissions ?? []) as string[];
-  const canCreateSupplier = isSA || perms.includes('transaction.stock_in');
+  const user = session?.user;
+  const canCreate = user ? canCreateSuppliers(user) : false;
+  const canEdit = user ? canEditSuppliers(user) : false;
+  const canDelete = user ? canDeleteSuppliers(user) : false;
+  const canImport = user ? canImportSuppliers(user) : false;
 
   const [pageSize, setPageSize] = useState<number>(SUPPLIER_PAGE_SIZE_OPTIONS[0]);
   const [page, setPage] = useState(1);
@@ -240,7 +248,7 @@ export default function SuppliersPage() {
     };
   }, [session?.user?.activeCompanyId]);
 
-  const canCreateLocalSupplier = canCreateSupplier && supplierSourceMode !== 'EXTERNAL_ONLY';
+  const canCreateLocalSupplier = canCreate && supplierSourceMode !== 'EXTERNAL_ONLY';
 
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [fetchSuppliersForExport] = useLazyGetSuppliersForExportQuery();
@@ -332,13 +340,13 @@ export default function SuppliersPage() {
         label: 'Open details',
         action: () => openSupplierDetails(supplier.id),
       },
-      canCreateSupplier
+      canEdit
         ? {
             label: 'Edit supplier',
             action: () => router.push(`/suppliers/${supplier.id}/edit`),
           }
         : null,
-      canCreateSupplier
+      canDelete
         ? {
             label:
               supplier.source === 'PARTY_API_SYNC'
@@ -421,7 +429,7 @@ export default function SuppliersPage() {
             <Button type="button" size="sm" variant="outline" onClick={handleExport}>
               Export
             </Button>
-            {canCreateSupplier ? (
+            {canImport ? (
               <Button type="button" size="sm" variant="outline" onClick={() => setImportModalOpen(true)}>
                 Import
               </Button>
@@ -430,7 +438,7 @@ export default function SuppliersPage() {
               <Link href="/suppliers/new" className={buttonVariants({ size: 'sm' })}>
                 New supplier
               </Link>
-            ) : canCreateSupplier && supplierSourceMode === 'EXTERNAL_ONLY' ? (
+            ) : canCreate && supplierSourceMode === 'EXTERNAL_ONLY' ? (
               <Button
                 type="button"
                 size="sm"
@@ -607,7 +615,7 @@ export default function SuppliersPage() {
         title={detailsSupplier?.name ?? 'Supplier details'}
         size="lg"
         actions={
-          detailsSupplier && canCreateSupplier ? (
+          detailsSupplier && canEdit ? (
             <Button
               type="button"
               variant="secondary"

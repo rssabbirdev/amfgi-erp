@@ -30,6 +30,7 @@ function labelForSegment(segment: string, previous?: string) {
     settings: 'Settings',
     'document-types': 'Document Types',
     expertises: 'Expertises',
+    'employment-options': 'Employment options',
     'employee-types': 'Employee Types',
     'salary-structure': 'Salary structure',
     'pay-types': 'Salary structure',

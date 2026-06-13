@@ -83,6 +83,7 @@ model Company {
   visaPeriods              VisaPeriod[]
   employeeDocuments        EmployeeDocument[]
   workforceExpertises      WorkforceExpertise[]
+  employeeMetaOptions      EmployeeMetaOption[]
   materialWarehouseStocks  MaterialWarehouseStock[]
   materialAssemblyComponents MaterialAssemblyComponent[]
   tablePreferences         UserTablePreference[]
@@ -212,9 +213,10 @@ model UserCompanyAccess {
   role      Role    @relation(fields: [roleId], references: [id])
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, companyId])
+  @@unique([userId, companyId, roleId])
   @@index([companyId])
   @@index([roleId])
+  @@index([userId, companyId])
 }
 
 model UserTablePreference {
@@ -857,6 +859,29 @@ model WorkforceExpertise {
   @@unique([companyId, id])
   @@unique([companyId, name])
   @@index([companyId, isActive, sortOrder])
+}
+
+enum EmployeeMetaKind {
+  DESIGNATION
+  DEPARTMENT
+  EMPLOYMENT_TYPE
+}
+
+model EmployeeMetaOption {
+  id        String           @id @default(cuid())
+  companyId String
+  kind      EmployeeMetaKind
+  name      String
+  isActive  Boolean          @default(true)
+  sortOrder Int              @default(0)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, id])
+  @@unique([companyId, kind, name])
+  @@index([companyId, kind, isActive, sortOrder])
 }
 
 model JobRequiredExpertise {

@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { canAccessSettingsEmail } from '@/lib/auth/settingsAccess';
 import { prisma } from '@/lib/db/prisma';
 import {
   loadStoredEmailSettings,
@@ -14,7 +15,10 @@ function canManageSettings(user: {
   isSuperAdmin: boolean;
   permissions: string[];
 }) {
-  return user.isSuperAdmin || user.permissions.includes('settings.manage');
+  return canAccessSettingsEmail({
+    isSuperAdmin: user.isSuperAdmin,
+    permissions: user.permissions,
+  });
 }
 
 export async function GET() {

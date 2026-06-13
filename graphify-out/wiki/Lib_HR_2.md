@@ -1,49 +1,57 @@
 # Lib HR
 
-> 20 nodes · cohesion 0.19
+> 24 nodes · cohesion 0.15
 
 ## Key Concepts
 
-- **buildFormulaPreviewContext.ts** (28 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
-- **route.ts** (19 connections) — `app/api/hr/payroll/formula-preview/route.ts`
-- **parsePayTypeConfig()** (15 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
-- **resolveExcludedWeekdays()** (15 connections) — `lib/hr/payroll/payTypeConfigHelpers.ts`
-- **parsePayTypeConfig.ts** (14 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
-- **employeeFormulaPreviewContext()** (10 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
-- **POST()** (9 connections) — `app/api/hr/payroll/formula-preview/route.ts`
-- **formulaPreviewSamples.ts** (8 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
-- **previewPayConfig()** (8 connections) — `lib/hr/payroll/previewPayConfig.ts`
-- **dummyFormulaPreviewContext()** (4 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
-- **getFormulaPreviewScenario()** (3 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
-- **parsePayTypeConfig.test.ts** (3 connections) — `__tests__/lib/hr/payroll/parsePayTypeConfig.test.ts`
-- **FORMULA_PREVIEW_SCENARIOS** (2 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
-- **normalizeExcludedWeekdays()** (2 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
-- **BodySchema** (1 connections) — `app/api/hr/payroll/formula-preview/route.ts`
-- **FormulaPreviewContext** (1 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
-- **attendanceSelect** (1 connections) — `lib/hr/payroll/buildFormulaPreviewContext.ts`
-- **FormulaPreviewScenario** (1 connections) — `lib/hr/payroll/formulaPreviewSamples.ts`
-- **MODES** (1 connections) — `lib/hr/payroll/parsePayTypeConfig.ts`
-- **config** (1 connections) — `__tests__/lib/hr/payroll/parsePayTypeConfig.test.ts`
+- **attendanceReports.ts** (27 connections) — `lib/hr/attendanceReports.ts`
+- **route.ts** (22 connections) — `app/api/hr/attendance/monthly-report/route.ts`
+- **getMonthlyAttendanceReports()** (15 connections) — `lib/hr/attendanceReports.ts`
+- **GET()** (10 connections) — `app/api/hr/attendance/monthly-report/route.ts`
+- **employeeTypeFromProfileExtension()** (8 connections) — `lib/hr/employeeTypeSettings.ts`
+- **attendanceReportStatusLabel()** (4 connections) — `lib/hr/attendanceReportFormatting.ts`
+- **serializeAttendanceRow()** (3 connections) — `app/api/hr/attendance/route.ts`
+- **normalizeAttendanceReportBuilderSchema()** (3 connections) — `lib/hr/attendanceReportBuilder.ts`
+- **normalizeAttendanceReportColumns()** (3 connections) — `lib/hr/attendanceReportFormatting.ts`
+- **normalizeAttendanceReportFormats()** (3 connections) — `lib/hr/attendanceReportFormatting.ts`
+- **formatHoursFromMinutes()** (3 connections) — `lib/hr/attendanceReports.ts`
+- **exportStatusLabel()** (3 connections) — `lib/hr/attendanceReports.ts`
+- **exportWorkLocation()** (3 connections) — `lib/hr/attendanceReports.ts`
+- **sanitizeSheetName()** (2 connections) — `app/api/hr/attendance/monthly-report/route.ts`
+- **monthBounds()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **diffMinutes()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **minutesOfDay()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **isoDay()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **locationLabel()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **findMonthlyAttendanceRows()** (2 connections) — `lib/hr/attendanceReports.ts`
+- **AttendanceReportRow** (1 connections) — `lib/hr/attendanceReports.ts`
+- **AttendanceEmployeeReport** (1 connections) — `lib/hr/attendanceReports.ts`
+- **attendanceReportEmployeeSelect** (1 connections) — `lib/hr/attendanceReports.ts`
+- **attendanceReportWorkAssignmentSelect** (1 connections) — `lib/hr/attendanceReports.ts`
 
 ## Relationships
 
-- [[Lib HR]] (54 shared connections)
-- [[API HR, Materials, and Me]] (20 shared connections)
+- [[API HR, Stock Exception Approvals, and Warehouses]] (9 shared connections)
+- [[Lib HR]] (9 shared connections)
+- [[API, Lib, and Scripts]] (8 shared connections)
+- [[Lib and HR]] (8 shared connections)
+- [[API HR, Stock, and Transactions]] (4 shared connections)
+- [[API Materials, Transactions, and Me]] (4 shared connections)
+- [[Components, Lib, and HR]] (1 shared connections)
 
 ## Source Files
 
-- `__tests__/lib/hr/payroll/parsePayTypeConfig.test.ts`
-- `app/api/hr/payroll/formula-preview/route.ts`
-- `lib/hr/payroll/buildFormulaPreviewContext.ts`
-- `lib/hr/payroll/formulaPreviewSamples.ts`
-- `lib/hr/payroll/parsePayTypeConfig.ts`
-- `lib/hr/payroll/payTypeConfigHelpers.ts`
-- `lib/hr/payroll/previewPayConfig.ts`
+- `app/api/hr/attendance/monthly-report/route.ts`
+- `app/api/hr/attendance/route.ts`
+- `lib/hr/attendanceReportBuilder.ts`
+- `lib/hr/attendanceReportFormatting.ts`
+- `lib/hr/attendanceReports.ts`
+- `lib/hr/employeeTypeSettings.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 145 (99%)
-- INFERRED: 1 (1%)
+- EXTRACTED: 125 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

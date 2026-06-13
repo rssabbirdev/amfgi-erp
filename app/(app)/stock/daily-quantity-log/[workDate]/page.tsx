@@ -182,7 +182,6 @@ export default function DailyQuantityLogEntryPage() {
   const isSA = session?.user?.isSuperAdmin ?? false;
   const canView = isSA || perms.includes('job.view');
   const canEdit = isSA || perms.includes('job.edit');
-  const canViewReports = isSA || perms.includes('report.view');
 
   const { data, isLoading, isFetching, error, refetch } = useGetDailyQuantityLogQuery(workDateParam, {
     skip: !canView || !workDateOk,
@@ -691,14 +690,6 @@ export default function DailyQuantityLogEntryPage() {
               ? 'This day is finalized. Existing logged quantities can still be corrected, but adding jobs or new quantity rows requires unlocking the day first.'
               : 'Enter quantities for each scheduled or ad-hoc job, then save once to log and finalize this calendar day.'}
           </p>
-          {canViewReports ? (
-            <p className="text-sm text-muted-foreground">
-              <Link href="/reports/production-by-job" className="font-medium text-primary underline-offset-4 hover:underline">
-                Production by job report
-              </Link>{' '}
-              — compare recorded output to jobs over a range of dates.
-            </p>
-          ) : null}
         </div>
 
         {canEdit ? (

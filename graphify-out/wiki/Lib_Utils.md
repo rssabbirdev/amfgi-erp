@@ -1,47 +1,59 @@
 # Lib Utils
 
-> 18 nodes · cohesion 0.17
+> 27 nodes · cohesion 0.15
 
 ## Key Concepts
 
-- **route.ts** (11 connections) — `app/api/materials/price-logs/route.ts`
-- **route.ts** (11 connections) — `app/api/materials/[id]/assembly/route.ts`
-- **decimalEqualsNullable()** (10 connections) — `lib/utils/decimal.ts`
-- **receiptPriceLogs.ts** (10 connections) — `lib/utils/receiptPriceLogs.ts`
-- **materialAssembly.ts** (8 connections) — `lib/utils/materialAssembly.ts`
-- **recalculateAssemblyAncestorsTx()** (6 connections) — `lib/utils/materialAssembly.ts`
-- **reverseReceiptPriceLogUpdates()** (6 connections) — `lib/utils/receiptPriceLogs.ts`
-- **POST()** (5 connections) — `app/api/materials/price-logs/route.ts`
-- **GET()** (4 connections) — `app/api/materials/[id]/assembly/route.ts`
-- **PUT()** (4 connections) — `app/api/materials/[id]/assembly/route.ts`
-- **isPrismaDecimal()** (4 connections) — `lib/utils/decimal.ts`
-- **recalculateAssemblyUnitCostTx()** (4 connections) — `lib/utils/materialAssembly.ts`
-- **buildReceiptPriceLogNote()** (3 connections) — `lib/utils/receiptPriceLogs.ts`
-- **roundMoney()** (2 connections) — `lib/utils/materialAssembly.ts`
-- **PriceLogSchema** (1 connections) — `app/api/materials/price-logs/route.ts`
-- **UpdateAssemblySchema** (1 connections) — `app/api/materials/[id]/assembly/route.ts`
-- **TxClient** (1 connections) — `lib/utils/materialAssembly.ts`
-- **TxClient** (1 connections) — `lib/utils/receiptPriceLogs.ts`
+- **canvasLayout.ts** (23 connections) — `lib/utils/canvasLayout.ts`
+- **CanvasPreview.tsx** (22 connections) — `components/print-builder/CanvasPreview.tsx`
+- **documentDefaults.ts** (13 connections) — `lib/utils/documentDefaults.ts`
+- **seed-print-templates.ts** (12 connections) — `scripts/seed-print-templates.ts`
+- **contentWidthMm()** (10 connections) — `lib/utils/canvasLayout.ts`
+- **DocumentRenderer()** (9 connections) — `components/print-builder/DocumentRenderer.tsx`
+- **contentHeightMm()** (8 connections) — `lib/utils/canvasLayout.ts`
+- **getPageDimensionsMm()** (7 connections) — `lib/utils/canvasLayout.ts`
+- **buildCanvasRectsFromSections()** (6 connections) — `lib/utils/canvasLayout.ts`
+- **CanvasPreview()** (5 connections) — `components/print-builder/CanvasPreview.tsx`
+- **createWorkScheduleTemplateDraft()** (5 connections) — `lib/utils/documentDefaults.ts`
+- **marginBleedBox()** (4 connections) — `lib/utils/canvasLayout.ts`
+- **estimateSectionHeightMm()** (4 connections) — `lib/utils/canvasLayout.ts`
+- **ensureCanvasRects()** (4 connections) — `lib/utils/canvasLayout.ts`
+- **clampRectToContent()** (4 connections) — `lib/utils/canvasLayout.ts`
+- **snapCanvasRect()** (4 connections) — `lib/utils/canvasLayout.ts`
+- **companySeedPrintTemplates** (4 connections) — `scripts/seed-print-templates.ts`
+- **resolveCanvasRectsForSections()** (3 connections) — `lib/utils/canvasLayout.ts`
+- **ptToMm()** (2 connections) — `lib/utils/canvasLayout.ts`
+- **DEFAULT_DELIVERY_NOTE** (2 connections) — `lib/utils/documentDefaults.ts`
+- **CanvasPreviewProps** (1 connections) — `components/print-builder/CanvasPreview.tsx`
+- **SectionBounds** (1 connections) — `components/print-builder/CanvasPreview.tsx`
+- **Interaction** (1 connections) — `components/print-builder/CanvasPreview.tsx`
+- **DEFAULT_DELIVERY_NOTE_SECTIONS** (1 connections) — `lib/utils/documentDefaults.ts`
+- **DEFAULT_TEMPLATES** (1 connections) — `lib/utils/documentDefaults.ts`
+- *... and 2 more nodes in this community*
 
 ## Relationships
 
-- [[API HR, Materials, and Me]] (17 shared connections)
-- [[Tests, API, and Lib]] (8 shared connections)
-- [[Lib Utils, Stock, and Dispatch Entry Revision]] (8 shared connections)
-- [[API Jobs, Suppliers, and Customers]] (6 shared connections)
-- [[Lib Integrations and Party List Record Payload]] (1 shared connections)
+- [[Components Print Builder]] (17 shared connections)
+- [[Lib and Components]] (14 shared connections)
+- [[Lib Utils and Types]] (10 shared connections)
+- [[Lib, Scripts, and API]] (4 shared connections)
+- [[Components and Lib]] (3 shared connections)
+- [[Stock, Customers, and Settings]] (2 shared connections)
+- [[Scripts Seed]] (2 shared connections)
+- [[Lib Utils and Delivery Note Number]] (1 shared connections)
+- [[API and Lib]] (1 shared connections)
 
 ## Source Files
 
-- `app/api/materials/[id]/assembly/route.ts`
-- `app/api/materials/price-logs/route.ts`
-- `lib/utils/decimal.ts`
-- `lib/utils/materialAssembly.ts`
-- `lib/utils/receiptPriceLogs.ts`
+- `components/print-builder/CanvasPreview.tsx`
+- `components/print-builder/DocumentRenderer.tsx`
+- `lib/utils/canvasLayout.ts`
+- `lib/utils/documentDefaults.ts`
+- `scripts/seed-print-templates.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 92 (100%)
+- EXTRACTED: 158 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

@@ -355,10 +355,6 @@ export default function JobProfitabilityPage() {
 
       <p className="text-xs leading-relaxed text-muted-foreground">
         Use{' '}
-        <Link href="/reports/production-by-job" className="font-medium text-primary underline-offset-4 hover:underline">
-          Production by job
-        </Link>{' '}
-        for production log totals by job,{' '}
         <Link href="/reports/supplier-traceability" className="font-medium text-primary underline-offset-4 hover:underline">
           supplier traceability
         </Link>{' '}

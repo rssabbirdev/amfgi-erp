@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { P } from '@/lib/permissions';
 
 export interface AppNavItem {
   href: string;
@@ -58,7 +59,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     shortTitle: 'Suppliers',
     description: 'Keep supplier records, contacts, and trade details updated.',
     category: 'Master Data',
-    perm: 'supplier.view',
+    anyPerms: ['supplier.view', 'transaction.stock_in'],
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5.581a1 1 0 00-.424.106A2 2 0 005 19m2 0H3m2 0h5.581A2 2 0 0010 21m0-6h6m-6 0h6m0 0v-3m0 3v3" />
@@ -123,7 +124,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     shortTitle: 'Media',
     description: 'Review company uploads, usage links, and filters for the media library.',
     category: 'Administration',
-    perm: 'settings.manage',
+    anyPerms: [P.SETTINGS_MEDIA, P.SETTINGS_MANAGE],
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -141,7 +142,14 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     shortTitle: 'Settings',
     description: 'Configure company setup, print formats, and integrations.',
     category: 'Administration',
-    perm: 'settings.manage',
+    anyPerms: [
+      P.SETTINGS_PRINT_FORMAT,
+      P.SETTINGS_STORAGE,
+      P.SETTINGS_MEDIA,
+      P.SETTINGS_EMAIL,
+      P.SETTINGS_API,
+      P.SETTINGS_MANAGE,
+    ],
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />

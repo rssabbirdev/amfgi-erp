@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { canAccessSettingsPrintFormat } from '@/lib/auth/settingsAccess';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { uploadToDrive, deleteFromDrive } from '@/lib/utils/googleDrive';
@@ -10,8 +11,10 @@ export async function POST(req: Request) {
   if (!session?.user) return errorResponse('Unauthorized', 401);
 
   const isSA = session.user.isSuperAdmin ?? false;
-  const perms = (session.user.permissions ?? []) as string[];
-  const canManage = isSA || perms.includes('settings.manage');
+  const canManage = canAccessSettingsPrintFormat({
+    isSuperAdmin: isSA,
+    permissions: (session.user.permissions ?? []) as string[],
+  });
 
   if (!canManage) return errorResponse('Forbidden', 403);
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);

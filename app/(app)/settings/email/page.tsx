@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
+
+import { canAccessSettingsEmail } from '@/lib/auth/settingsAccess';
 
 import { Alert, AlertDescription } from '@/components/ui/shadcn/alert';
 import { Button } from '@/components/ui/shadcn/button';
@@ -43,7 +44,10 @@ const textareaClass = cn(
 export default function SettingsEmailPage() {
   const { data: session } = useSession();
   const perms = (session?.user?.permissions ?? []) as string[];
-  const canManage = Boolean(session?.user?.isSuperAdmin) || perms.includes('settings.manage');
+  const canManage = canAccessSettingsEmail({
+    isSuperAdmin: Boolean(session?.user?.isSuperAdmin),
+    permissions: perms,
+  });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -197,7 +201,7 @@ export default function SettingsEmailPage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-5">
-      <header className="flex w-full min-w-0 flex-col gap-1 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex w-full min-w-0 flex-col gap-1 border-b border-border pb-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Settings</p>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Email delivery</h1>
@@ -205,9 +209,6 @@ export default function SettingsEmailPage() {
             Configure how the system sends password reset and other transactional email.
           </p>
         </div>
-        <Link href="/settings" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
-          ← Back to settings
-        </Link>
       </header>
 
       {mailReady ? (

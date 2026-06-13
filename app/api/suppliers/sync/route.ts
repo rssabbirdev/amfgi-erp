@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { canSyncSuppliers } from '@/lib/auth/supplierAccess';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { requireActiveCompanyInDb } from '@/lib/utils/requireActiveCompanyInDb';
 import { syncExternalSuppliersForCompany } from '@/lib/partyListSync';
@@ -7,7 +8,7 @@ import { publishLiveUpdate } from '@/lib/live-updates/server';
 export async function POST() {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_in')) {
+  if (!canSyncSuppliers(session.user)) {
     return errorResponse('Forbidden', 403);
   }
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);

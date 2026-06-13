@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { canImportSuppliers } from '@/lib/auth/supplierAccess';
 import { prisma } from '@/lib/db/prisma';
 import { runSupplierBulkImport } from '@/lib/import-export/runSupplierBulkImport';
 import type { SupplierImportRow } from '@/lib/import-export/supplierFields';
@@ -30,7 +31,7 @@ const BulkSchema = z.object({
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_in')) {
+  if (!canImportSuppliers(session.user)) {
     return errorResponse('Forbidden', 403);
   }
   if (!session.user.activeCompanyId) return errorResponse('No active company selected', 400);

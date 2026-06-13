@@ -3,8 +3,8 @@ import Google      from 'next-auth/providers/google';
 import Credentials from 'next-auth/providers/credentials';
 import bcrypt      from 'bcryptjs';
 import type { Permission } from '@/lib/permissions';
-import { ALL_PERMISSIONS } from '@/lib/permissions';
 import { buildAuthCookieOptions, resolveAuthSecret, warnIfAuthMisconfigured } from '@/lib/auth/authEnv';
+import { resolvePermissionsForCompany, uniqueCompanyIdsFromAccess } from '@/lib/auth/resolvePermissions';
 import { convertGoogleDriveUrl } from '@/lib/utils/googleDriveUrl';
 
 warnIfAuthMisconfigured();
@@ -48,28 +48,8 @@ async function resolvePermissions(
   userId: string,
   companyId: string | null
 ): Promise<Permission[]> {
-  if (!companyId) return [];
   const prisma = await getPrisma();
-
-  // Get user's access to this company
-  const access = await prisma.userCompanyAccess.findUnique({
-    where: {
-      userId_companyId: { userId, companyId },
-    },
-    include: { role: true },
-  });
-
-  if (!access) return [];
-
-  // Super admin has all permissions
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-  });
-  if (user?.isSuperAdmin) return ALL_PERMISSIONS;
-
-  // Return role's permissions
-  const permissions = (access.role.permissions as Permission[]) ?? [];
-  return permissions;
+  return resolvePermissionsForCompany(prisma, userId, companyId);
 }
 
 const config: NextAuthConfig = {
@@ -130,7 +110,7 @@ const config: NextAuthConfig = {
         }
 
         const permissions    = await resolvePermissions(userId, companyId);
-        const allowedCompanyIds = user.companyAccess.map((a) => a.companyId);
+        const allowedCompanyIds = uniqueCompanyIdsFromAccess(user.companyAccess);
 
         const profileImg = user.image?.trim() ? convertGoogleDriveUrl(user.image.trim()) : null;
         const sigImg = user.signatureUrl?.trim()
@@ -186,7 +166,7 @@ const config: NextAuthConfig = {
         }
 
         const permissions       = await resolvePermissions(userId, companyId);
-        const allowedCompanyIds = dbUser.companyAccess.map((a) => a.companyId);
+        const allowedCompanyIds = uniqueCompanyIdsFromAccess(dbUser.companyAccess);
 
         const profileImg = dbUser.image?.trim()
           ? convertGoogleDriveUrl(dbUser.image.trim())

@@ -14,6 +14,11 @@ function normalizePreferenceKey(value: string) {
   return value.trim().toLowerCase();
 }
 
+function isAbortedRequest(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.name === 'AbortError' || error.message === 'aborted' || (error as NodeJS.ErrnoException).code === 'ECONNRESET';
+}
+
 export async function GET(
   _req: Request,
   context: { params: Promise<{ key: string }> }
@@ -36,6 +41,9 @@ export async function GET(
 
     return successResponse(preference?.state ?? null);
   } catch (error) {
+    if (isAbortedRequest(error)) {
+      return errorResponse('Request aborted', 499);
+    }
     console.error('Failed to load user table preference', error);
     return errorResponse('Table preference storage unavailable', 503);
   }
@@ -78,6 +86,9 @@ export async function PUT(
 
     return successResponse(preference.state);
   } catch (error) {
+    if (isAbortedRequest(error)) {
+      return errorResponse('Request aborted', 499);
+    }
     console.error('Failed to save user table preference', error);
     return errorResponse('Table preference storage unavailable', 503);
   }

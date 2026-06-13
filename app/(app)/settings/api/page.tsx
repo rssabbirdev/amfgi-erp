@@ -11,6 +11,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/sh
 import { Input } from '@/components/ui/shadcn/input';
 import { Select } from '@/components/ui/shadcn/select';
 import Modal from '@/components/ui/Modal';
+import { canAccessSettingsApi } from '@/lib/auth/settingsAccess';
 import { cn } from '@/lib/utils';
 
 type ApiCredential = {
@@ -64,7 +65,10 @@ const textareaClass = cn(
 export default function SettingsApiPage() {
   const { data: session } = useSession();
   const perms = (session?.user?.permissions ?? []) as string[];
-  const canManage = Boolean(session?.user?.isSuperAdmin) || perms.includes('settings.manage');
+  const canManage = canAccessSettingsApi({
+    isSuperAdmin: Boolean(session?.user?.isSuperAdmin),
+    permissions: perms,
+  });
 
   const [apiCredentials, setApiCredentials] = useState<ApiCredential[]>([]);
   const [apiLoading, setApiLoading] = useState(false);
@@ -264,12 +268,7 @@ export default function SettingsApiPage() {
     <div className="flex w-full min-w-0 flex-col gap-5">
       <header className="flex w-full min-w-0 flex-col gap-4 border-b border-border pb-4">
         <div className="flex min-w-0 flex-col gap-1">
-          <Link
-            href="/settings"
-            className="w-fit text-xs font-medium uppercase tracking-wide text-primary underline-offset-4 hover:underline"
-          >
-            Settings
-          </Link>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Settings</p>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">API Center</h1>
           <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
             Manage external API credentials, allowed domains, and sync logs from one place. Job, customer, and supplier

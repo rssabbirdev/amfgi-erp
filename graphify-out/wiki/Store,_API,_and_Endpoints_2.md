@@ -1,15 +1,14 @@
 # Store, API, and Endpoints
 
-> 29 nodes · cohesion 0.07
+> 32 nodes · cohesion 0.06
 
 ## Key Concepts
 
-- **reports.ts** (30 connections) — `store/api/endpoints/reports.ts`
+- **reports.ts** (33 connections) — `store/api/endpoints/reports.ts`
 - **Material** (1 connections) — `store/api/endpoints/reports.ts`
 - **StockValuationResponse** (1 connections) — `store/api/endpoints/reports.ts`
 - **ConsumptionData** (1 connections) — `store/api/endpoints/reports.ts`
 - **ConsumptionResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **JobConsumptionRow** (1 connections) — `store/api/endpoints/reports.ts`
 - **ProductionByJobRow** (1 connections) — `store/api/endpoints/reports.ts`
 - **InventoryByWarehouseWarehouseCol** (1 connections) — `store/api/endpoints/reports.ts`
 - **InventoryByWarehouseRow** (1 connections) — `store/api/endpoints/reports.ts`
@@ -29,11 +28,12 @@
 - **StockAdjustmentRow** (1 connections) — `store/api/endpoints/reports.ts`
 - **StockAdjustmentsResponse** (1 connections) — `store/api/endpoints/reports.ts`
 - **StockCountSessionReportRow** (1 connections) — `store/api/endpoints/reports.ts`
-- *... and 4 more nodes in this community*
+- **StockCountSessionMaterialReportRow** (1 connections) — `store/api/endpoints/reports.ts`
+- *... and 7 more nodes in this community*
 
 ## Relationships
 
-- [[Store API and Slices]] (2 shared connections)
+- [[Store API]] (2 shared connections)
 
 ## Source Files
 
@@ -41,7 +41,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 58 (100%)
+- EXTRACTED: 64 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

@@ -44,23 +44,6 @@ interface ConsumptionResponse {
   currentMonth: ConsumptionData | null;
 }
 
-export interface ProductionByJobRow {
-  jobId: string;
-  jobNumber: string;
-  customerName: string;
-  site: string | null;
-  jobItemId: string;
-  jobItemName: string;
-  trackerId: string | null;
-  trackerLabel: string;
-  unit: string | null;
-  targetValue: number | null;
-  totalProduced: number;
-  entryCount: number;
-  firstEntryDate: string | null;
-  lastEntryDate: string | null;
-}
-
 export interface InventoryByWarehouseWarehouseCol {
   id: string;
   name: string;
@@ -421,21 +404,6 @@ export const reportsApi = appApi.injectEndpoints({
       providesTags: ['Consumption'],
     }),
 
-    getProductionByJob: builder.query<
-      ProductionByJobRow[],
-      { from?: string; to?: string; jobIds: string[] }
-    >({
-      query: (params) => {
-        const searchParams = new URLSearchParams();
-        if (params.from) searchParams.append('from', params.from);
-        if (params.to) searchParams.append('to', params.to);
-        params.jobIds.forEach((id) => searchParams.append('jobId[]', id));
-        return `/reports/production-by-job?${searchParams.toString()}`;
-      },
-      transformResponse: (r: { data: ProductionByJobRow[] }) => r.data,
-      providesTags: ['ProductionByJob'],
-    }),
-
     getJobProfitability: builder.query<JobProfitabilityResponse, void>({
       query: () => '/reports/job-profitability',
       transformResponse: (r: { data: JobProfitabilityResponse }) => r.data,
@@ -568,7 +536,7 @@ export const reportsApi = appApi.injectEndpoints({
         return `/reports/monthly-job-summary?${searchParams.toString()}`;
       },
       transformResponse: (r: { data: import('@/lib/reports/monthlyJobSummary').MonthlyJobSummaryReport }) => r.data,
-      providesTags: ['Job', 'ProductionByJob', 'Transaction', 'Material'],
+      providesTags: ['Job', 'Transaction', 'Material'],
     }),
 
     updateStockExceptionApproval: builder.mutation<
@@ -605,7 +573,6 @@ export const reportsApi = appApi.injectEndpoints({
 export const {
   useGetStockValuationQuery,
   useGetConsumptionQuery,
-  useLazyGetProductionByJobQuery,
   useGetJobProfitabilityQuery,
   useGetSupplierTraceabilityQuery,
   useGetInventoryByWarehouseQuery,

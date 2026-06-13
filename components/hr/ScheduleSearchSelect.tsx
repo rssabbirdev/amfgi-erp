@@ -21,6 +21,10 @@ type ScheduleSearchSelectProps<T extends { id: string; label: string; searchText
   allowClearButton?: boolean;
   clearOnEmptyInput?: boolean;
   passThroughArrowKeys?: boolean;
+  emptyAction?: {
+    label?: string | ((query: string) => string);
+    onAction: (query: string) => void;
+  };
 };
 
 export default function ScheduleSearchSelect<T extends { id: string; label: string; searchText?: string }>({
@@ -40,6 +44,7 @@ export default function ScheduleSearchSelect<T extends { id: string; label: stri
   allowClearButton,
   clearOnEmptyInput,
   passThroughArrowKeys,
+  emptyAction,
 }: ScheduleSearchSelectProps<T>) {
   const [items, setItems] = useState<T[]>(() => (knownItem ? [knownItem] : []));
   const [loading, setLoading] = useState(false);
@@ -146,6 +151,7 @@ export default function ScheduleSearchSelect<T extends { id: string; label: stri
       allowClearButton={allowClearButton}
       clearOnEmptyInput={clearOnEmptyInput}
       passThroughArrowKeys={passThroughArrowKeys}
+      emptyAction={emptyAction}
     />
   );
 }

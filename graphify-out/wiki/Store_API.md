@@ -1,48 +1,50 @@
 # Store API
 
-> 18 nodes · cohesion 0.13
+> 19 nodes · cohesion 0.13
 
 ## Key Concepts
 
-- **customers.ts** (16 connections) — `store/api/endpoints/customers.ts`
-- **suppliers.ts** (16 connections) — `store/api/endpoints/suppliers.ts`
-- **exportSuppliers.ts** (8 connections) — `lib/import-export/exportSuppliers.ts`
-- **Supplier** (5 connections) — `store/api/endpoints/suppliers.ts`
-- **supplierToExportRow()** (4 connections) — `lib/import-export/supplierFields.ts`
-- **exportSuppliersToXlsx()** (3 connections) — `lib/import-export/exportSuppliers.ts`
-- **contactExportColumns()** (2 connections) — `lib/import-export/supplierFields.ts`
-- **PartyRecordSource** (2 connections) — `store/api/endpoints/customers.ts`
-- **PartyListSyncResult** (2 connections) — `store/api/endpoints/customers.ts`
-- **suppliersApi** (2 connections) — `store/api/endpoints/suppliers.ts`
-- **CustomerStatusFilter** (1 connections) — `store/api/endpoints/customers.ts`
-- **CustomerFilter** (1 connections) — `store/api/endpoints/customers.ts`
-- **CustomersListParams** (1 connections) — `store/api/endpoints/customers.ts`
-- **CustomersListResponse** (1 connections) — `store/api/endpoints/customers.ts`
-- **customersApi** (1 connections) — `store/api/endpoints/customers.ts`
-- **SupplierSourceFilter** (1 connections) — `store/api/endpoints/suppliers.ts`
-- **SuppliersListParams** (1 connections) — `store/api/endpoints/suppliers.ts`
-- **SuppliersListResponse** (1 connections) — `store/api/endpoints/suppliers.ts`
+- **appApi.ts** (20 connections) — `store/api/appApi.ts`
+- **appApi** (20 connections) — `store/api/appApi.ts`
+- **warehouses.ts** (6 connections) — `store/api/endpoints/warehouses.ts`
+- **categories.ts** (5 connections) — `store/api/endpoints/categories.ts`
+- **materialLogs.ts** (5 connections) — `store/api/endpoints/materialLogs.ts`
+- **units.ts** (5 connections) — `store/api/endpoints/units.ts`
+- **Category** (1 connections) — `store/api/endpoints/categories.ts`
+- **CategoryResponse** (1 connections) — `store/api/endpoints/categories.ts`
+- **categoriesApi** (1 connections) — `store/api/endpoints/categories.ts`
+- **MaterialLog** (1 connections) — `store/api/endpoints/materialLogs.ts`
+- **PriceLog** (1 connections) — `store/api/endpoints/materialLogs.ts`
+- **materialLogsApi** (1 connections) — `store/api/endpoints/materialLogs.ts`
+- **Unit** (1 connections) — `store/api/endpoints/units.ts`
+- **UnitResponse** (1 connections) — `store/api/endpoints/units.ts`
+- **unitsApi** (1 connections) — `store/api/endpoints/units.ts`
+- **Warehouse** (1 connections) — `store/api/endpoints/warehouses.ts`
+- **WarehouseResponse** (1 connections) — `store/api/endpoints/warehouses.ts`
+- **WarehouseMutationResponse** (1 connections) — `store/api/endpoints/warehouses.ts`
+- **warehousesApi** (1 connections) — `store/api/endpoints/warehouses.ts`
 
 ## Relationships
 
-- [[Lib Import Export]] (6 shared connections)
-- [[Lib Import Export, Party Contacts, and Party List Record Payload]] (6 shared connections)
-- [[Stock, Components, and Store]] (4 shared connections)
-- [[Store API and Slices]] (4 shared connections)
-- [[Lib, Components, and Suppliers]] (3 shared connections)
-- [[Stock, Lib, and Store]] (3 shared connections)
-- [[HR Attendance and Schedule]] (2 shared connections)
+- [[Store, API, and Endpoints]] (12 shared connections)
+- [[Store, Providers, and Auth]] (6 shared connections)
+- [[Store API]] (4 shared connections)
+- [[Components Ui, Company Switcher, and Sidebar Nav User]] (2 shared connections)
+- [[Store Slices]] (2 shared connections)
+- [[Lib Import Export]] (2 shared connections)
+- [[Stock Daily Quantity Log, Stock Batches, and Integrity]] (2 shared connections)
 
 ## Source Files
 
-- `lib/import-export/exportSuppliers.ts`
-- `lib/import-export/supplierFields.ts`
-- `store/api/endpoints/customers.ts`
-- `store/api/endpoints/suppliers.ts`
+- `store/api/appApi.ts`
+- `store/api/endpoints/categories.ts`
+- `store/api/endpoints/materialLogs.ts`
+- `store/api/endpoints/units.ts`
+- `store/api/endpoints/warehouses.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 68 (100%)
+- EXTRACTED: 74 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

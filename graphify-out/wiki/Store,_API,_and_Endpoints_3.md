@@ -33,9 +33,9 @@
 
 ## Relationships
 
-- [[Reports, Components, and HR]] (6 shared connections)
-- [[Stock, Components, and Store]] (2 shared connections)
-- [[Store API and Slices]] (2 shared connections)
+- [[Stock, HR, and Components]] (4 shared connections)
+- [[Stock Daily Quantity Log, Stock Batches, and Integrity]] (4 shared connections)
+- [[Store API]] (2 shared connections)
 
 ## Source Files
 

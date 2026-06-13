@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { EMPLOYEE_SELF_ROLE_SLUG } from '@/lib/permissions';
 import { ensureEmployeeSelfServiceRole } from '@/lib/hr/ensureEmployeeSelfServiceRole';
+import { syncUserCompanyAccess } from '@/lib/auth/syncUserCompanyAccess';
 
 export { EMPLOYEE_SELF_ROLE_SLUG };
 
@@ -69,13 +70,9 @@ export async function provisionEmployeeUser(
 
     const hasAccess = linkedUser.companyAccess.some((a) => a.companyId === params.companyId);
     if (!hasAccess) {
-      await db.userCompanyAccess.create({
-        data: {
-          userId: linkedUser.id,
-          companyId: params.companyId,
-          roleId: role.id,
-        },
-      });
+      await syncUserCompanyAccess(db, linkedUser.id, [
+        { companyId: params.companyId, roleId: role.id },
+      ]);
     }
 
     if (!linkedUser.activeCompanyId) {
@@ -108,13 +105,9 @@ export async function provisionEmployeeUser(
 
     const hasAccess = existingUser.companyAccess.some((a) => a.companyId === params.companyId);
     if (!hasAccess) {
-      await db.userCompanyAccess.create({
-        data: {
-          userId: existingUser.id,
-          companyId: params.companyId,
-          roleId: role.id,
-        },
-      });
+      await syncUserCompanyAccess(db, existingUser.id, [
+        { companyId: params.companyId, roleId: role.id },
+      ]);
     }
 
     if (!existingUser.activeCompanyId) {

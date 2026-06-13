@@ -1,7 +1,7 @@
 import { auth }   from '@/auth';
+import { resolvePermissionsForCompany, uniqueCompanyIdsFromAccess } from '@/lib/auth/resolvePermissions';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
-import { ALL_PERMISSIONS } from '@/lib/permissions';
 import type { Permission } from '@/lib/permissions';
 
 export async function POST(req: Request) {
@@ -22,11 +22,11 @@ export async function POST(req: Request) {
 
   if (!user) return errorResponse('User not found', 404);
 
-  allowedCompanyIds = user.companyAccess.map((a) => a.companyId);
+  allowedCompanyIds = uniqueCompanyIdsFromAccess(user.companyAccess);
 
   if (companyId) {
-    const access = user.companyAccess.find((a) => a.companyId === companyId);
-    if (!access && !user.isSuperAdmin) {
+    const hasAccess = user.isSuperAdmin || user.companyAccess.some((a) => a.companyId === companyId);
+    if (!hasAccess) {
       return errorResponse('Access denied to this company', 403);
     }
 
@@ -35,13 +35,7 @@ export async function POST(req: Request) {
 
     activeCompanySlug = company.slug;
     activeCompanyName = company.name;
-
-    if (user.isSuperAdmin) {
-      permissions = ALL_PERMISSIONS;
-    } else if (access) {
-      const role = await prisma.role.findUnique({ where: { id: access.roleId } });
-      permissions = (role?.permissions ?? []) as Permission[];
-    }
+    permissions = await resolvePermissionsForCompany(prisma, user.id, companyId);
 
     await prisma.user.update({
       where: { id: session.user.id },

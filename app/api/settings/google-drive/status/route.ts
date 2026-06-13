@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { canAccessSettingsStorage } from '@/lib/auth/settingsAccess';
 import { errorResponse, successResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 import { getGlobalGoogleDriveConfig, setGlobalGoogleDriveConfig } from '@/lib/utils/globalSettings';
@@ -6,9 +7,11 @@ import { validateDriveFolderAccess } from '@/lib/utils/googleDrive';
 import type { Session } from 'next-auth';
 
 function canManageDrive(session: Session | null) {
-  const isSA = session?.user?.isSuperAdmin ?? false;
-  const perms = (session?.user?.permissions ?? []) as string[];
-  return isSA || perms.includes('settings.manage');
+  if (!session?.user) return false;
+  return canAccessSettingsStorage({
+    isSuperAdmin: session.user.isSuperAdmin ?? false,
+    permissions: (session.user.permissions ?? []) as string[],
+  });
 }
 
 export async function GET() {

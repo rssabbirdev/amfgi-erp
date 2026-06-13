@@ -42,6 +42,11 @@ interface SearchSelectProps<T extends { id: string; label: string; searchText?: 
   loading?: boolean;
   /** When true, arrow keys move grid focus instead of opening the suggestion list. */
   passThroughArrowKeys?: boolean;
+  /** Shown at the bottom of the empty-results panel (e.g. create-new action). */
+  emptyAction?: {
+    label?: string | ((query: string) => string);
+    onAction: (query: string) => void;
+  };
 }
 
 export default function SearchSelect<T extends { id: string; label: string; searchText?: string }>(
@@ -70,6 +75,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     serverFiltered = false,
     loading = false,
     passThroughArrowKeys = false,
+    emptyAction,
   } = props;
 
   const [input, setInput] = useState('');
@@ -399,9 +405,27 @@ export default function SearchSelect<T extends { id: string; label: string; sear
 
       {isOpen && hasEnoughInput && !loading && input && filteredItems.length === 0
         ? renderFloatingPanel(
-            <p className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
-              No matches found for &quot;{input}&quot;
-            </p>
+            <div>
+              <p className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+                No matches found for &quot;{input}&quot;
+              </p>
+              {emptyAction ? (
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    ignoreBlurRef.current = true;
+                    emptyAction.onAction(input.trim());
+                    setIsOpen(false);
+                  }}
+                  className="w-full border-t border-slate-200 px-3 py-2 text-left text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-slate-700 dark:text-emerald-400 dark:hover:bg-emerald-600/20"
+                >
+                  {typeof emptyAction.label === 'function'
+                    ? emptyAction.label(input.trim())
+                    : (emptyAction.label ?? `Create "${input.trim()}"`)}
+                </button>
+              ) : null}
+            </div>
           )
         : null}
     </div>

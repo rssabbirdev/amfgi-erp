@@ -1,8 +1,8 @@
 # cn()
 
-> God node · 173 connections · `lib/utils.ts`
+> God node · 175 connections · `lib/utils.ts`
 
-**Community:** [[Stock, Components, and Reports]]
+**Community:** [[Components, Stock, and Reports]]
 
 ## Connections by Relation
 
@@ -40,11 +40,11 @@
 - [[input.tsx]] `EXTRACTED`
 - [[sidebar.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
-- [[AttendanceEntryGrid.tsx]] `EXTRACTED`
 - [[card.tsx]] `EXTRACTED`
+- [[AttendanceEntryGrid.tsx]] `EXTRACTED`
+- [[badge.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[alert.tsx]] `EXTRACTED`
-- [[badge.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`

@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { canAccessSettingsMedia } from '@/lib/auth/settingsAccess';
 import { prisma } from '@/lib/db/prisma';
 import type { AppSessionUser } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -6,9 +7,11 @@ import { deleteFromDrive } from '@/lib/utils/googleDrive';
 import { extractGoogleDriveFileId } from '@/lib/utils/googleDriveUrl';
 
 function canAccess(user: AppSessionUser) {
-  const isSA = user.isSuperAdmin ?? false;
-  const perms = (user.permissions ?? []) as string[];
-  return { canManage: isSA || perms.includes('settings.manage'), companyId: user.activeCompanyId };
+  const canManage = canAccessSettingsMedia({
+    isSuperAdmin: user.isSuperAdmin ?? false,
+    permissions: (user.permissions ?? []) as string[],
+  });
+  return { canManage, companyId: user.activeCompanyId };
 }
 
 /** Delete one unused (no links) media asset and its Drive file. */

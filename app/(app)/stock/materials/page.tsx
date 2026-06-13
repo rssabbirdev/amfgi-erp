@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
 import DataTable from '@/components/ui/DataTable';
 import BulkImportModal from '@/components/materials/BulkImportModal';
+import MaterialQuickReportModal from '@/components/materials/MaterialQuickReportModal';
 import toast from 'react-hot-toast';
 import type { Column } from '@/components/ui/DataTable';
 import type { ContextMenuOption } from '@/components/ui/ContextMenu';
@@ -129,6 +130,8 @@ export default function MaterialsPage() {
   const canDelete = isSA || perms.includes('material.delete');
 
   const [importModal, setImportModal] = useState(false);
+  const [quickReportMaterial, setQuickReportMaterial] = useState<Material | null>(null);
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
   const { data: importMaterials = [] } = useGetMaterialsForExportQuery(undefined, {
     skip: !importModal,
   });
@@ -245,6 +248,23 @@ export default function MaterialsPage() {
             </svg>
           ),
           action: () => router.push(`/stock/materials/${material.id}`),
+        },
+        {
+          label: 'Quick report',
+          icon: (
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 17v-6h6v6m2 4H7a2 2 0 01-2-2V7a2 2 0 012-2h3.172a2 2 0 011.414.586l1.828 1.828A2 2 0 0116.414 9H19a2 2 0 012 2v10a2 2 0 01-2 2z"
+              />
+            </svg>
+          ),
+          action: () => {
+            setSelectedMaterialId(material.id);
+            setQuickReportMaterial(material);
+          },
         },
       ];
 
@@ -548,8 +568,9 @@ export default function MaterialsPage() {
             },
           }}
           onRowContextMenu={handleMaterialContextMenu}
+          selectedRowId={selectedMaterialId}
+          onRowClick={(material) => setSelectedMaterialId(material.id)}
           onRowDoubleClick={(material) => router.push(`/stock/materials/${material.id}`)}
-          onRowClick={(material) => router.push(`/stock/materials/${material.id}`)}
         />
       </section>
 
@@ -557,6 +578,13 @@ export default function MaterialsPage() {
         isOpen={importModal}
         onClose={() => setImportModal(false)}
         existingMaterials={importMaterials}
+      />
+
+      <MaterialQuickReportModal
+        material={quickReportMaterial}
+        isOpen={Boolean(quickReportMaterial)}
+        onClose={() => setQuickReportMaterial(null)}
+        currencyCode={valuationCurrencyCode}
       />
 
       {deleteModal.open && deleteModal.material ? (

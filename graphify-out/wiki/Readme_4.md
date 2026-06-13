@@ -1,16 +1,17 @@
 # Readme
 
-> 7 nodes · cohesion 0.29
+> 8 nodes · cohesion 0.25
 
 ## Key Concepts
 
-- **API Overview** (7 connections) — `README.md`
+- **API Overview** (8 connections) — `README.md`
 - **Authentication** (1 connections) — `README.md`
 - **Materials (9 routes)** (1 connections) — `README.md`
 - **Transactions (5 routes)** (1 connections) — `README.md`
-- **Reports (3 routes)** (1 connections) — `README.md`
+- **Reports (2 routes)** (1 connections) — `README.md`
 - **Admin (11 routes)** (1 connections) — `README.md`
 - **Jobs, Customers, Suppliers (8 routes)** (1 connections) — `README.md`
+- **Reports (3 routes)** (1 connections) — `README.md`
 
 ## Relationships
 
@@ -22,7 +23,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 13 (100%)
+- EXTRACTED: 15 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

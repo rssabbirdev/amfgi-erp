@@ -22,11 +22,7 @@ import {
   canViewStockCountSession,
   canViewWarehouseTransfer,
 } from '@/lib/permissions/stockModuleAccess';
-import {
-  useGetStockDashboardStatsQuery,
-  useGetStockIntegrityQuery,
-  useGetStockValuationQuery,
-} from '@/store/hooks';
+import { useGetStockIntegrityQuery, useGetStockValuationQuery } from '@/store/hooks';
 
 function splitMoney(value: number, currencyCode: string) {
   const formatted = value.toLocaleString('en-AE', {
@@ -169,17 +165,10 @@ export default function StockPage() {
   const { data: valuation, isFetching: valuationLoading } = useGetStockValuationQuery(undefined, {
     skip: !canViewStock,
   });
-  const { data: dashboardStats, isFetching: statsLoading } = useGetStockDashboardStatsQuery(undefined, {
-    skip: !canSeeMaterials && !canSeeBatches,
-  });
   const { data: stockIntegrity, isFetching: integrityLoading } = useGetStockIntegrityQuery(undefined, {
     skip: !canViewStock,
   });
 
-  const activeMaterialsCount = dashboardStats?.activeMaterials ?? 0;
-  const lowStockCount = dashboardStats?.lowStockCount ?? 0;
-  const openBatchesCount = dashboardStats?.openBatches ?? 0;
-  const totalBatchesCount = dashboardStats?.totalBatches ?? 0;
   const integrityExceptionCount = stockIntegrity?.summary.materialsWithExceptions ?? 0;
 
   const preferredValue = valuation?.summary.totalStockValue ?? 0;
@@ -219,7 +208,6 @@ export default function StockPage() {
                   href: '/stock/materials',
                   title: 'Materials',
                   description: 'Maintain items, UOM, stock definitions, and current balance.',
-                  badge: `${formatCount(activeMaterialsCount)} active`,
                   tone: 'emerald',
                 },
               ]
@@ -252,7 +240,6 @@ export default function StockPage() {
                   href: '/stock/goods-receipt',
                   title: 'Goods receipt',
                   description: 'Create receipts, reopen bills, and trace incoming stock.',
-                  badge: `${formatCount(openBatchesCount)} open`,
                   tone: 'sky',
                 },
               ]
@@ -265,7 +252,6 @@ export default function StockPage() {
                   href: '/stock/dispatch',
                   title: 'Dispatch',
                   description: 'Browse dispatch history, delivery notes, and stock-out status.',
-                  badge: `${formatCount(lowStockCount)} low`,
                   tone: 'amber',
                 },
               ]
@@ -318,7 +304,6 @@ export default function StockPage() {
                   href: '/stock/stock-batches',
                   title: 'Stock batches',
                   description: 'Inspect FIFO layers, remaining balance, and receipt-by-receipt cost.',
-                  badge: `${formatCount(totalBatchesCount)} batches`,
                   tone: 'sky',
                 },
                 {
@@ -448,7 +433,7 @@ export default function StockPage() {
         title="Stock"
         description="Materials, receipts, production, inventory, transfers, and review. Valuation figures update from live materials and batches."
         trailing={
-          statsLoading ? 'Refreshing…' : `${linkModuleCount} destinations`
+          valuationLoading || integrityLoading ? 'Refreshing…' : `${linkModuleCount} destinations`
         }
       />
 

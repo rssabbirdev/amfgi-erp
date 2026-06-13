@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { dedupeUserCompanyAccess, syncUserCompanyAccess } from '@/lib/auth/syncUserCompanyAccess';
 import { prisma } from '@/lib/db/prisma';
 import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
 import { parseListLimit, parseListOffset } from '@/lib/pagination/serverList';
@@ -126,7 +127,7 @@ export async function POST(req: Request) {
         },
       });
 
-      for (const access of parsed.data.companyAccess) {
+      for (const access of dedupeUserCompanyAccess(parsed.data.companyAccess)) {
         await tx.userCompanyAccess.create({
           data: {
             userId:    newUser.id,

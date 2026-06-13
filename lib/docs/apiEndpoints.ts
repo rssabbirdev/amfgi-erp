@@ -97,6 +97,7 @@ export const API_DOC_SECTIONS: ApiDocSection[] = [
       { methods: 'POST', path: '/api/materials/price-logs', auth: 'session_cookie', summary: 'Record price changes.' },
       { methods: 'GET', path: '/api/materials/cross-company', auth: 'session_cookie', summary: 'Cross-company material lookup (permissioned).' },
       { methods: 'GET', path: '/api/materials/dispatch-history', auth: 'session_cookie', summary: 'Dispatch history listing.' },
+      { methods: 'GET', path: '/api/materials/{id}/transaction-report', auth: 'session_cookie', summary: 'Material transaction quick report.' },
       { methods: 'GET', path: '/api/materials/dispatch-history-entries', auth: 'session_cookie', summary: 'Dispatch history line items.' },
       { methods: 'GET', path: '/api/materials/receipt-history-entries', auth: 'session_cookie', summary: 'Receipt history listing.' },
       { methods: 'GET, DELETE', path: '/api/materials/receipt-history-entries/[receiptNumber]', auth: 'session_cookie', summary: 'Receipt detail or remove (rules apply).' },
@@ -126,7 +127,6 @@ export const API_DOC_SECTIONS: ApiDocSection[] = [
     title: 'Reports',
     endpoints: [
       { methods: 'GET', path: '/api/reports/consumption', auth: 'session_cookie', summary: 'Consumption report.' },
-      { methods: 'GET', path: '/api/reports/production-by-job', auth: 'session_cookie', summary: 'Production log totals by job and budget line.' },
       { methods: 'GET', path: '/api/reports/stock-valuation', auth: 'session_cookie', summary: 'Stock valuation.' },
     ],
   },

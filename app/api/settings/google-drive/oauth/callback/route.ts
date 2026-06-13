@@ -3,9 +3,8 @@ import { exchangeGoogleDriveAuthorizationCode, explainGoogleDriveError } from '@
 import { setGlobalGoogleDriveConfig } from '@/lib/utils/globalSettings';
 import { cookies } from 'next/headers';
 
-function redirectToSettings(request: Request, status: string, message?: string) {
-  const url = new URL('/settings', request.url);
-  url.searchParams.set('tab', 'drive');
+function redirectToStorageSettings(request: Request, status: string, message?: string) {
+  const url = new URL('/settings/storage', request.url);
   url.searchParams.set('driveConnected', status);
   if (message) url.searchParams.set('driveMessage', message);
   return Response.redirect(url, 302);
@@ -13,17 +12,17 @@ function redirectToSettings(request: Request, status: string, message?: string) 
 
 export async function GET(request: Request) {
   const session = await auth();
-  if (!session?.user) return redirectToSettings(request, 'error', 'Unauthorized');
+  if (!session?.user) return redirectToStorageSettings(request, 'error', 'Unauthorized');
 
   const url = new URL(request.url);
   const code = url.searchParams.get('code')?.trim();
   const state = url.searchParams.get('state')?.trim();
   const oauthError = url.searchParams.get('error')?.trim();
   if (oauthError) {
-    return redirectToSettings(request, 'error', oauthError);
+    return redirectToStorageSettings(request, 'error', oauthError);
   }
   if (!code || !state) {
-    return redirectToSettings(request, 'error', 'Missing OAuth response data');
+    return redirectToStorageSettings(request, 'error', 'Missing OAuth response data');
   }
 
   const cookieStore = await cookies();
@@ -39,7 +38,7 @@ export async function GET(request: Request) {
   }
 
   if (!expectedState || expectedState !== state) {
-    return redirectToSettings(request, 'error', 'Google Drive authorization state mismatch');
+    return redirectToStorageSettings(request, 'error', 'Google Drive authorization state mismatch');
   }
 
   try {
@@ -54,8 +53,8 @@ export async function GET(request: Request) {
       connectedEmail: connectedEmail ?? null,
     });
 
-    return redirectToSettings(request, 'connected', connectedEmail ?? 'Connected');
+    return redirectToStorageSettings(request, 'connected', connectedEmail ?? 'Connected');
   } catch (error) {
-    return redirectToSettings(request, 'error', explainGoogleDriveError(error));
+    return redirectToStorageSettings(request, 'error', explainGoogleDriveError(error));
   }
 }

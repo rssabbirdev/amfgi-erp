@@ -1,12 +1,14 @@
 import { auth } from '@/auth';
+import { canAccessSettingsApi } from '@/lib/auth/settingsAccess';
 import { prisma } from '@/lib/db/prisma';
 import type { AppSessionUser } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
 function hasManagePermission(user: AppSessionUser) {
-  const isSA = user.isSuperAdmin ?? false;
-  const perms = (user.permissions ?? []) as string[];
-  return isSA || perms.includes('settings.manage');
+  return canAccessSettingsApi({
+    isSuperAdmin: user.isSuperAdmin ?? false,
+    permissions: (user.permissions ?? []) as string[],
+  });
 }
 
 export async function GET(req: Request) {

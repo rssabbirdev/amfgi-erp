@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { canAccessSettingsPrintFormat } from '@/lib/auth/settingsAccess';
 import { TemplateBuilder } from '@/components/print-builder/TemplateBuilder';
 import type { DocumentTemplate } from '@/lib/types/documentTemplate';
 import {
@@ -31,7 +32,10 @@ function PrintTemplateEditInner() {
 
   const perms = (session?.user?.permissions ?? []) as string[];
   const isSA = session?.user?.isSuperAdmin ?? false;
-  const canManage = isSA || perms.includes('settings.manage');
+  const canManage = canAccessSettingsPrintFormat({
+    isSuperAdmin: isSA,
+    permissions: perms,
+  });
 
   const load = useCallback(async () => {
     if (!session?.user?.activeCompanyId) return;
@@ -53,7 +57,7 @@ function PrintTemplateEditInner() {
         if (!raw) {
           toast.error('Create a new template from Settings first.');
           setLoading(false);
-          router.replace('/settings?tab=template');
+          router.replace('/settings/print-format');
           return;
         }
         let draft: NewPrintTemplateDraft;
@@ -62,7 +66,7 @@ function PrintTemplateEditInner() {
         } catch {
           toast.error('Invalid new-template draft.');
           setLoading(false);
-          router.replace('/settings?tab=template');
+          router.replace('/settings/print-format');
           return;
         }
         setWorkingTemplate(draft.template);
@@ -74,18 +78,18 @@ function PrintTemplateEditInner() {
         if (!found) {
           toast.error('Template not found.');
           setLoading(false);
-          router.replace('/settings?tab=template');
+          router.replace('/settings/print-format');
           return;
         }
         setWorkingTemplate(found);
         setEditorIndex(list.findIndex((t) => t.id === idParam));
       } else {
-        router.replace('/settings?tab=template');
+        router.replace('/settings/print-format');
       }
     } catch (e) {
       console.error(e);
       toast.error('Failed to load data');
-      router.replace('/settings?tab=template');
+      router.replace('/settings/print-format');
     } finally {
       setLoading(false);
     }
@@ -98,7 +102,7 @@ function PrintTemplateEditInner() {
     }
     if (status === 'authenticated' && !canManage) {
       toast.error('You do not have access to print templates.');
-      router.replace('/settings');
+      router.replace('/settings/print-format');
       return;
     }
     if (status === 'authenticated' && canManage) void load();
@@ -179,7 +183,7 @@ function PrintTemplateEditInner() {
   };
 
   const handleClose = () => {
-    router.push('/settings?tab=template');
+    router.push('/settings/print-format');
   };
 
   if (status === 'loading' || loading || !workingTemplate) {

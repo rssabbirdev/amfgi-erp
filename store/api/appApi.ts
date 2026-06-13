@@ -18,7 +18,6 @@ export const appApi = createApi({
     'StockValuation',
     'StockIntegrity',
     'Consumption',
-    'ProductionByJob',
     'JobProfitability',
     'SupplierTraceability',
     'StockExceptionApproval',

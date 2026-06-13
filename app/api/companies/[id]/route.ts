@@ -1,4 +1,5 @@
 import { auth }            from '@/auth';
+import { canAccessSettingsPrintFormat } from '@/lib/auth/settingsAccess';
 import { prisma }          from '@/lib/db/prisma';
 import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
 import { assertWarehouseModeTransition, ensureCompanyFallbackWarehouse, normalizeWarehouseMode } from '@/lib/warehouses/companyWarehouseMode';
@@ -53,6 +54,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const isSA = session.user.isSuperAdmin ?? false;
   const perms = (session.user.permissions ?? []) as string[];
   const canManageSettings = isSA || perms.includes('settings.manage');
+  const settingsUser = { isSuperAdmin: isSA, permissions: perms };
+  const canEditPrintTemplates = canAccessSettingsPrintFormat(settingsUser);
 
   const { id } = await params;
 
@@ -63,14 +66,29 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   // Non-SA can only update profile fields (address, phone, email) for their own company
   // SA can update anything including name, description, isActive
   if (!isSA) {
-    // Check if trying to update restricted fields
     const restrictedFields = ['name', 'description', 'isActive'];
     const hasRestrictedFields = restrictedFields.some((field) => parsed.data[field as keyof typeof parsed.data] !== undefined);
-    if (hasRestrictedFields || !canManageSettings) {
+    if (hasRestrictedFields) {
       return errorResponse('Forbidden', 403);
     }
-    // Non-SA can only update their own company
     if (id !== session.user.activeCompanyId) {
+      return errorResponse('Forbidden', 403);
+    }
+
+    const profileFields = ['address', 'phone', 'email'] as const;
+    const touchesProfile = profileFields.some((field) => parsed.data[field] !== undefined);
+    if (touchesProfile && !canManageSettings) {
+      return errorResponse('Forbidden', 403);
+    }
+    if (parsed.data.printTemplates !== undefined && !canEditPrintTemplates) {
+      return errorResponse('Forbidden', 403);
+    }
+
+    const allowedNonSaFields = new Set<string>([...profileFields, 'printTemplates']);
+    const hasDisallowedFields = Object.entries(parsed.data).some(
+      ([field, value]) => value !== undefined && !allowedNonSaFields.has(field),
+    );
+    if (hasDisallowedFields) {
       return errorResponse('Forbidden', 403);
     }
   }

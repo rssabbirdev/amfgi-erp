@@ -149,6 +149,8 @@ const ReceiptMaterialSelectCell = memo(function ReceiptMaterialSelectCell({
   onMaterialResolved,
   isDuplicateRow,
   materialNavInputProps,
+  canCreateMaterial,
+  onRequestCreateMaterial,
 }: {
   lineId: string;
   materialId: string;
@@ -159,6 +161,8 @@ const ReceiptMaterialSelectCell = memo(function ReceiptMaterialSelectCell({
   onMaterialResolved: (lineId: string, material: Material) => void;
   isDuplicateRow: boolean;
   materialNavInputProps?: InputHTMLAttributes<HTMLInputElement>;
+  canCreateMaterial?: boolean;
+  onRequestCreateMaterial?: (lineId: string, suggestedName: string) => void;
 }) {
   const knownItem = useMemo(
     () => (material ? toMaterialSelectItem(material) : null),
@@ -171,6 +175,14 @@ const ReceiptMaterialSelectCell = memo(function ReceiptMaterialSelectCell({
     },
     [lineId, onMaterialResolved]
   );
+
+  const emptyAction = useMemo(() => {
+    if (!canCreateMaterial || !onRequestCreateMaterial) return undefined;
+    return {
+      label: (query: string) => `Create material "${query}"`,
+      onAction: (query: string) => onRequestCreateMaterial(lineId, query),
+    };
+  }, [canCreateMaterial, lineId, onRequestCreateMaterial]);
 
   return (
     <div className="min-w-0">
@@ -187,6 +199,7 @@ const ReceiptMaterialSelectCell = memo(function ReceiptMaterialSelectCell({
         allowClearButton={false}
         clearOnEmptyInput
         passThroughArrowKeys
+        emptyAction={emptyAction}
         inputProps={mergeLineGridInputProps(materialNavInputProps ?? {}, {
           className:
             '!rounded-none !border-0 !bg-transparent !px-2 !py-1.5 !text-sm focus:!ring-0 min-w-0',
@@ -299,6 +312,8 @@ interface GoodsReceiptLineGridProps {
   emptyMessage: string;
   duplicateMaterialIds?: readonly string[];
   onUpdateLine: (id: string, field: keyof GoodsReceiptLineGridRow, value: string) => void;
+  canCreateMaterial?: boolean;
+  onRequestCreateMaterial?: (lineId: string, suggestedName: string) => void;
 }
 
 export default function GoodsReceiptLineGrid({
@@ -312,6 +327,8 @@ export default function GoodsReceiptLineGrid({
   emptyMessage,
   duplicateMaterialIds,
   onUpdateLine,
+  canCreateMaterial = false,
+  onRequestCreateMaterial,
 }: GoodsReceiptLineGridProps) {
   const duplicateMaterialIdSet = useMemo(() => {
     if (!duplicateMaterialIds?.length) return null;
@@ -593,6 +610,8 @@ export default function GoodsReceiptLineGrid({
                               onMaterialResolved={onMaterialResolved}
                               isDuplicateRow={isDuplicateRow}
                               materialNavInputProps={cellNavInputProps(idx, 'material')}
+                              canCreateMaterial={canCreateMaterial}
+                              onRequestCreateMaterial={onRequestCreateMaterial}
                             />
                           </div>
                         );

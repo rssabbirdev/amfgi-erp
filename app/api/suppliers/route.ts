@@ -1,4 +1,8 @@
 import { auth } from '@/auth';
+import {
+  canCreateSuppliers,
+  canViewSuppliers,
+} from '@/lib/auth/supplierAccess';
 import { prisma } from '@/lib/db/prisma';
 import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -65,7 +69,7 @@ function buildSupplierListWhere(
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_in')) {
+  if (!canViewSuppliers(session.user)) {
     return errorResponse('Forbidden', 403);
   }
 
@@ -131,7 +135,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_in')) {
+  if (!canCreateSuppliers(session.user)) {
     return errorResponse('Forbidden', 403);
   }
 

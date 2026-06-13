@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { canAccessSettingsEmail } from '@/lib/auth/settingsAccess';
 import { prisma } from '@/lib/db/prisma';
 import { sendMail } from '@/lib/mail/sendMail';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -6,7 +7,12 @@ import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 export async function POST() {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('settings.manage')) {
+  if (
+    !canAccessSettingsEmail({
+      isSuperAdmin: session.user.isSuperAdmin,
+      permissions: session.user.permissions,
+    })
+  ) {
     return errorResponse('Forbidden', 403);
   }
 

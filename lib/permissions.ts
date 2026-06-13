@@ -32,6 +32,12 @@ export const P = {
   CUSTOMER_EDIT:   'customer.edit',
   CUSTOMER_DELETE: 'customer.delete',
 
+  // Suppliers
+  SUPPLIER_VIEW:   'supplier.view',
+  SUPPLIER_CREATE: 'supplier.create',
+  SUPPLIER_EDIT:   'supplier.edit',
+  SUPPLIER_DELETE: 'supplier.delete',
+
   // Transactions
   TXN_STOCK_IN:  'transaction.stock_in',
   TXN_STOCK_OUT: 'transaction.stock_out',
@@ -57,6 +63,11 @@ export const P = {
 
   // Settings
   SETTINGS_MANAGE: 'settings.manage',
+  SETTINGS_PRINT_FORMAT: 'settings.print_format',
+  SETTINGS_STORAGE: 'settings.storage',
+  SETTINGS_MEDIA: 'settings.media',
+  SETTINGS_EMAIL: 'settings.email',
+  SETTINGS_API: 'settings.api',
 
   // HR / Workforce
   HR_EMPLOYEE_VIEW: 'hr.employee.view',
@@ -89,8 +100,8 @@ export const ALL_PERMISSIONS = Object.values(P) as Permission[];
 /** System role slug for HR employee portal logins (`User.linkedEmployeeId`). */
 export const EMPLOYEE_SELF_ROLE_SLUG = 'employee-self';
 
-/** System role slug for full HR workforce access. */
-export const HR_SYSTEM_ROLE_SLUG = 'hr';
+/** Slug used by custom HR roles (not a protected system role). */
+export const HR_ROLE_SLUG = 'hr';
 
 // ── Predefined role permission sets ───────────────────────────────────────────
 export const ROLE_PRESETS: Record<string, Permission[]> = {
@@ -100,10 +111,16 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.MATERIAL_VIEW, P.MATERIAL_CREATE, P.MATERIAL_EDIT,
     P.JOB_VIEW,      P.JOB_CREATE,      P.JOB_EDIT,
     P.CUSTOMER_VIEW, P.CUSTOMER_CREATE, P.CUSTOMER_EDIT,
+    P.SUPPLIER_VIEW, P.SUPPLIER_CREATE, P.SUPPLIER_EDIT,
     P.TXN_STOCK_IN,  P.TXN_STOCK_OUT,   P.TXN_RETURN, P.TXN_TRANSFER, P.TXN_RECONCILE, P.TXN_ADJUST,
     P.REPORT_VIEW,
     P.USER_VIEW,
     P.SETTINGS_MANAGE,
+    P.SETTINGS_PRINT_FORMAT,
+    P.SETTINGS_STORAGE,
+    P.SETTINGS_MEDIA,
+    P.SETTINGS_EMAIL,
+    P.SETTINGS_API,
     P.HR_EMPLOYEE_VIEW, P.HR_EMPLOYEE_EDIT,
     P.HR_DOCUMENT_VIEW, P.HR_DOCUMENT_EDIT,
     P.HR_SCHEDULE_VIEW, P.HR_SCHEDULE_EDIT, P.HR_SCHEDULE_PUBLISH,
@@ -138,7 +155,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.SELF_LEAVE_REQUEST,
   ],
 
-  /** System HR role preset (also created as role slug `hr` on bootstrap). */
+  /** HR workforce preset for custom roles (create via Admin → Roles). */
   hr: [
     P.HR_EMPLOYEE_VIEW,
     P.HR_EMPLOYEE_EDIT,
@@ -163,7 +180,7 @@ export const ROLE_PRESET_LABELS: Record<keyof typeof ROLE_PRESETS, string> = {
   manager: 'Manager',
   store_keeper: 'Store keeper',
   employee_self: 'Employee self-service',
-  hr: 'HR (system)',
+  hr: 'HR',
 };
 
 // ── Permission group labels (for UI checkboxes) ───────────────────────────────
@@ -196,6 +213,15 @@ export const PERMISSION_GROUPS: Array<{
       { key: P.CUSTOMER_CREATE, label: 'Create' },
       { key: P.CUSTOMER_EDIT,   label: 'Edit'   },
       { key: P.CUSTOMER_DELETE, label: 'Delete' },
+    ],
+  },
+  {
+    group: 'Suppliers',
+    perms: [
+      { key: P.SUPPLIER_VIEW,   label: 'View'   },
+      { key: P.SUPPLIER_CREATE, label: 'Create' },
+      { key: P.SUPPLIER_EDIT,   label: 'Edit'   },
+      { key: P.SUPPLIER_DELETE, label: 'Delete' },
     ],
   },
   {
@@ -262,8 +288,18 @@ export const PERMISSION_GROUPS: Array<{
     perms: [{ key: P.ROLE_MANAGE, label: 'Manage Roles' }],
   },
   {
-    group: 'Settings',
-    perms: [{ key: P.SETTINGS_MANAGE, label: 'Manage Master Data' }],
+    group: 'Settings — Workspace',
+    perms: [
+      { key: P.SETTINGS_PRINT_FORMAT, label: 'Print formats' },
+      { key: P.SETTINGS_STORAGE, label: 'Storage (Google Drive)' },
+      { key: P.SETTINGS_MEDIA, label: 'Media library' },
+      { key: P.SETTINGS_EMAIL, label: 'Email delivery' },
+      { key: P.SETTINGS_API, label: 'API center' },
+    ],
+  },
+  {
+    group: 'Settings — Master data',
+    perms: [{ key: P.SETTINGS_MANAGE, label: 'Manage master data (full legacy access)' }],
   },
   {
     group: 'Company Management',

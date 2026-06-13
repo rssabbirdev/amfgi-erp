@@ -1,8 +1,8 @@
 # Button
 
-> God node · 81 connections · `components/ui/shadcn/button.tsx`
+> God node · 83 connections · `components/ui/shadcn/button.tsx`
 
-**Community:** [[Components Transactions, Ui, and HR]]
+**Community:** [[Reports, Components, and Settings]]
 
 ## Connections by Relation
 
@@ -24,8 +24,8 @@
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
-- [[EmployeeProfileView.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
+- [[EmployeeProfileView.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`

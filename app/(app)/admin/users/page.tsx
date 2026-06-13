@@ -1,6 +1,7 @@
 'use client';
 
 import { useDeferredValue, useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 
 import { Badge } from '@/components/ui/shadcn/badge';
 import { Button } from '@/components/ui/shadcn/button';
@@ -8,6 +9,8 @@ import { Input } from '@/components/ui/shadcn/input';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import { isEmployeeSelfServiceAccount } from '@/lib/auth/selfService';
+import { dedupeUserCompanyAccess } from '@/lib/auth/syncUserCompanyAccess';
+import { isSuperAdminSelfTarget } from '@/lib/auth/userSelfProtection';
 import { cn } from '@/lib/utils';
 import type { Column } from '@/components/ui/DataTable';
 import type { User } from '@/store/api/adminEndpoints/users';
@@ -27,6 +30,40 @@ type StatusFilter = 'all' | 'active' | 'inactive';
 
 const labelClass = 'text-[11px] font-medium uppercase tracking-wide text-muted-foreground';
 
+const checkClass =
+  'h-4 w-4 rounded border border-border bg-background text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+
+type CompanyAccessGroup = { companyId: string; roleIds: string[] };
+
+function groupCompanyAccess(access: User['companyAccess']): CompanyAccessGroup[] {
+  const grouped = new Map<string, string[]>();
+  for (const row of access ?? []) {
+    const roleIds = grouped.get(row.companyId) ?? [];
+    if (!roleIds.includes(row.roleId)) roleIds.push(row.roleId);
+    grouped.set(row.companyId, roleIds);
+  }
+  return [...grouped.entries()].map(([companyId, roleIds]) => ({ companyId, roleIds }));
+}
+
+function flattenCompanyAccess(groups: CompanyAccessGroup[]): { companyId: string; roleId: string }[] {
+  return groups.flatMap((group) =>
+    group.roleIds.filter(Boolean).map((roleId) => ({ companyId: group.companyId, roleId }))
+  );
+}
+
+function formatCompanyAccessLabel(access: User['companyAccess']): string {
+  const grouped = new Map<string, string[]>();
+  for (const row of access ?? []) {
+    const companyName = row.company?.name ?? row.companyId;
+    const roles = grouped.get(companyName) ?? [];
+    if (row.role?.name && !roles.includes(row.role.name)) roles.push(row.role.name);
+    grouped.set(companyName, roles);
+  }
+  return [...grouped.entries()]
+    .map(([companyName, roleNames]) => `${companyName}: ${roleNames.join(', ')}`)
+    .join(' · ');
+}
+
 const selectClass =
   'h-9 w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -34,6 +71,8 @@ const formSelectClass =
   'flex-1 min-h-9 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50';
 
 export default function AdminUsersPage() {
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [formLoading, setFormLoading] = useState(false);
@@ -78,7 +117,7 @@ export default function AdminUsersPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [accessRows, setAccessRows] = useState<{ companyId: string; roleId: string }[]>([]);
+  const [accessGroups, setAccessGroups] = useState<CompanyAccessGroup[]>([]);
 
   const openCreate = () => {
     setEditing(null);
@@ -86,7 +125,7 @@ export default function AdminUsersPage() {
     setEmail('');
     setPassword('');
     setIsSuperAdmin(false);
-    setAccessRows([]);
+    setAccessGroups([]);
     setModal(true);
   };
 
@@ -96,22 +135,30 @@ export default function AdminUsersPage() {
     setEmail(u.email);
     setPassword('');
     setIsSuperAdmin(u.isSuperAdmin);
-    setAccessRows(
-      (u.companyAccess ?? []).map((a) => ({
-        companyId: a.companyId,
-        roleId: a.roleId,
-      })),
-    );
+    setAccessGroups(groupCompanyAccess(u.companyAccess));
     setModal(true);
   };
 
-  const addAccessRow = () =>
-    setAccessRows((prev) => [...prev, { companyId: companies[0]?.id ?? '', roleId: roles[0]?.id ?? '' }]);
+  const addAccessGroup = () =>
+    setAccessGroups((prev) => [...prev, { companyId: companies[0]?.id ?? '', roleIds: [] }]);
 
-  const removeAccessRow = (i: number) => setAccessRows((prev) => prev.filter((_, idx) => idx !== i));
+  const removeAccessGroup = (i: number) => setAccessGroups((prev) => prev.filter((_, idx) => idx !== i));
 
-  const updateAccessRow = (i: number, field: 'companyId' | 'roleId', value: string) =>
-    setAccessRows((prev) => prev.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  const updateAccessGroupCompany = (i: number, companyId: string) =>
+    setAccessGroups((prev) => prev.map((group, idx) => (idx === i ? { ...group, companyId } : group)));
+
+  const toggleAccessGroupRole = (i: number, roleId: string, checked: boolean) =>
+    setAccessGroups((prev) =>
+      prev.map((group, idx) => {
+        if (idx !== i) return group;
+        const roleIds = checked
+          ? group.roleIds.includes(roleId)
+            ? group.roleIds
+            : [...group.roleIds, roleId]
+          : group.roleIds.filter((id) => id !== roleId);
+        return { ...group, roleIds };
+      })
+    );
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -120,7 +167,9 @@ export default function AdminUsersPage() {
     const body: Record<string, unknown> = {
       name,
       isSuperAdmin,
-      companyAccess: accessRows.filter((r) => r.companyId && r.roleId),
+      companyAccess: dedupeUserCompanyAccess(
+        flattenCompanyAccess(accessGroups.filter((group) => group.companyId))
+      ),
     };
     if (!editing) body.email = email;
     if (password) body.password = password;
@@ -142,6 +191,10 @@ export default function AdminUsersPage() {
   };
 
   const handleToggleActive = async (u: User) => {
+    if (currentUserId && isSuperAdminSelfTarget(currentUserId, u) && u.isActive) {
+      toast.error('Super admins cannot deactivate their own account');
+      return;
+    }
     try {
       await updateUser({ id: u.id, data: { isActive: !u.isActive } }).unwrap();
       toast.success(u.isActive ? 'User deactivated' : 'User activated');
@@ -150,9 +203,6 @@ export default function AdminUsersPage() {
       toast.error(message);
     }
   };
-
-  const checkClass =
-    'size-4 rounded border border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 
   const columns: Column<User>[] = [
     { key: 'name', header: 'Name', sortable: true },
@@ -182,16 +232,7 @@ export default function AdminUsersPage() {
         u.isSuperAdmin ? (
           <span className="text-xs text-muted-foreground">All companies</span>
         ) : (u.companyAccess ?? []).length ? (
-          <div className="flex flex-wrap gap-1">
-            {(u.companyAccess ?? []).map((a, i) => (
-              <span
-                key={i}
-                className="rounded-md border border-border bg-muted px-2 py-0.5 text-xs text-foreground"
-              >
-                {a.company?.name} / {a.role?.name}
-              </span>
-            ))}
-          </div>
+          <span className="text-xs text-foreground">{formatCompanyAccessLabel(u.companyAccess)}</span>
         ) : (
           <span className="text-xs text-muted-foreground">No access</span>
         ),
@@ -213,7 +254,9 @@ export default function AdminUsersPage() {
     {
       key: 'actions',
       header: '',
-      render: (u) => (
+      render: (u) => {
+        const selfProtected = Boolean(currentUserId && isSuperAdminSelfTarget(currentUserId, u) && u.isActive);
+        return (
         <div className="flex justify-end gap-2">
           <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(u)}>
             Edit
@@ -222,12 +265,15 @@ export default function AdminUsersPage() {
             type="button"
             size="sm"
             variant={u.isActive ? 'destructive' : 'default'}
+            disabled={selfProtected}
+            title={selfProtected ? 'Super admins cannot deactivate their own account' : undefined}
             onClick={() => void handleToggleActive(u)}
           >
             {u.isActive ? 'Deactivate' : 'Activate'}
           </Button>
         </div>
-      ),
+        );
+      },
     },
   ];
 
@@ -412,48 +458,54 @@ export default function AdminUsersPage() {
           </label>
 
           {!isSuperAdmin ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <span className={labelClass}>Company access</span>
-                <Button type="button" size="sm" variant="outline" onClick={addAccessRow}>
-                  Add row
+                <span className={labelClass}>Company access &amp; roles</span>
+                <Button type="button" size="sm" variant="outline" onClick={addAccessGroup}>
+                  Add company
                 </Button>
               </div>
-              {accessRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Select one or more roles per company. Permissions from all selected roles are combined for that company.
+              </p>
+              {accessGroups.length === 0 ? (
                 <p className="py-2 text-xs text-muted-foreground">
-                  No company access assigned. Use Add row to grant access.
+                  No company access assigned. Use Add company to grant access.
                 </p>
               ) : null}
-              <div className="space-y-2">
-                {accessRows.map((row, i) => (
-                  <div key={i} className="flex flex-wrap items-center gap-2">
-                    <select
-                      value={row.companyId}
-                      onChange={(e) => updateAccessRow(i, 'companyId', e.target.value)}
-                      className={formSelectClass}
-                    >
-                      <option value="">Select company…</option>
-                      {companies.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
+              <div className="space-y-3">
+                {accessGroups.map((group, i) => (
+                  <div key={i} className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={group.companyId}
+                        onChange={(e) => updateAccessGroupCompany(i, e.target.value)}
+                        className={formSelectClass}
+                      >
+                        <option value="">Select company…</option>
+                        {companies.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => removeAccessGroup(i)}>
+                        Remove company
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-2">
+                      {roles.map((role) => (
+                        <label key={role.id} className="flex cursor-pointer select-none items-center gap-2 text-sm text-foreground">
+                          <input
+                            type="checkbox"
+                            checked={group.roleIds.includes(role.id)}
+                            onChange={(e) => toggleAccessGroupRole(i, role.id, e.target.checked)}
+                            className={checkClass}
+                          />
+                          {role.name}
+                        </label>
                       ))}
-                    </select>
-                    <select
-                      value={row.roleId}
-                      onChange={(e) => updateAccessRow(i, 'roleId', e.target.value)}
-                      className={formSelectClass}
-                    >
-                      <option value="">Select role…</option>
-                      {roles.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => removeAccessRow(i)}>
-                      Remove
-                    </Button>
+                    </div>
                   </div>
                 ))}
               </div>

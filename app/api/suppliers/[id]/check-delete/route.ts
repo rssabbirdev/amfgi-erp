@@ -1,11 +1,12 @@
 import { auth } from '@/auth';
+import { canViewSuppliers } from '@/lib/auth/supplierAccess';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_in')) {
+  if (!canViewSuppliers(session.user)) {
     return errorResponse('Forbidden', 403);
   }
 

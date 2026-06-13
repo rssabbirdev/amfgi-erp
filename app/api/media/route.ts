@@ -1,4 +1,5 @@
 import { auth } from '@/auth';
+import { canAccessSettingsMedia } from '@/lib/auth/settingsAccess';
 import { prisma } from '@/lib/db/prisma';
 import type { AppSessionUser } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -6,8 +7,11 @@ import { resolveBoundFieldImageSrc } from '@/lib/utils/googleDriveUrl';
 
 function canAccess(user: AppSessionUser) {
   const isSA = user.isSuperAdmin ?? false;
-  const perms = (user.permissions ?? []) as string[];
-  return { isSA, canManage: isSA || perms.includes('settings.manage'), companyId: user.activeCompanyId };
+  const canManage = canAccessSettingsMedia({
+    isSuperAdmin: isSA,
+    permissions: (user.permissions ?? []) as string[],
+  });
+  return { isSA, canManage, companyId: user.activeCompanyId };
 }
 
 /** List media assets for the active company (usage links, category, uploader). */

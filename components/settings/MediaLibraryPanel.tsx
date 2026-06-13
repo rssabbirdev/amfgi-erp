@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { LayoutGrid, List } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
@@ -8,6 +9,7 @@ import { Badge } from '@/components/ui/shadcn/badge';
 import { Button } from '@/components/ui/shadcn/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/shadcn/card';
 import { Input } from '@/components/ui/shadcn/input';
+import { canAccessSettingsMedia } from '@/lib/auth/settingsAccess';
 import { cn } from '@/lib/utils';
 
 const LINK_KIND_LABEL: Record<string, string> = {
@@ -41,6 +43,28 @@ function usageSummary(row: MediaRow): string {
   return row.links.map((link) => LINK_KIND_LABEL[link.kind] ?? link.kind).join(' · ');
 }
 
+type MediaViewMode = 'grid' | 'list';
+
+function MediaPreview({ row, className }: { row: MediaRow; className?: string }) {
+  if (row.previewUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={row.previewUrl} alt="" className={cn('object-cover', className)} />
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        'flex items-center justify-center bg-muted text-xs font-medium text-muted-foreground',
+        className,
+      )}
+    >
+      No preview
+    </div>
+  );
+}
+
 function LinkStatusBadge({ linked }: { linked: boolean }) {
   return (
     <Badge
@@ -61,7 +85,10 @@ export function MediaLibraryPanel() {
   const { data: session, status } = useSession();
   const perms = (session?.user?.permissions ?? []) as string[];
   const isSA = session?.user?.isSuperAdmin ?? false;
-  const canManage = isSA || perms.includes('settings.manage');
+  const canManage = canAccessSettingsMedia({
+    isSuperAdmin: isSA,
+    permissions: perms,
+  });
 
   const [rows, setRows] = useState<MediaRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +96,7 @@ export function MediaLibraryPanel() {
   const [orphansOnly, setOrphansOnly] = useState(false);
   const [qDraft, setQDraft] = useState('');
   const [qApplied, setQApplied] = useState('');
+  const [viewMode, setViewMode] = useState<MediaViewMode>('grid');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,13 +122,10 @@ export function MediaLibraryPanel() {
     void load();
   }, [status, canManage, load]);
 
-  const stats = useMemo(() => {
-    const total = rows.length;
-    const inUse = rows.filter((r) => r.linkCount > 0).length;
-    const unused = total - inUse;
-    const bytesTotal = rows.reduce((acc, r) => acc + (typeof r.bytes === 'number' && r.bytes > 0 ? r.bytes : 0), 0);
-    return { total, inUse, unused, bytesTotal };
-  }, [rows]);
+  const bytesTotal = useMemo(
+    () => rows.reduce((acc, r) => acc + (typeof r.bytes === 'number' && r.bytes > 0 ? r.bytes : 0), 0),
+    [rows],
+  );
 
   if (status === 'loading') {
     return (
@@ -123,24 +148,6 @@ export function MediaLibraryPanel() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Files</p>
-          <p className="mt-2 text-3xl font-semibold tabular-nums text-foreground">{stats.total}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Matching current filters</p>
-        </div>
-        <div className="rounded-lg border border-emerald-500/35 bg-emerald-500/10 p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-800 dark:text-emerald-200">In use</p>
-          <p className="mt-2 text-3xl font-semibold tabular-nums text-emerald-900 dark:text-emerald-100">{stats.inUse}</p>
-          <p className="mt-1 text-xs text-emerald-900/80 dark:text-emerald-200/80">Linked to users or records</p>
-        </div>
-        <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-amber-900 dark:text-amber-100">Unlinked</p>
-          <p className="mt-2 text-3xl font-semibold tabular-nums text-amber-950 dark:text-amber-50">{stats.unused}</p>
-          <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-100/80">No active references</p>
-        </div>
-      </div>
-
       <div className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -173,7 +180,31 @@ export function MediaLibraryPanel() {
               <span className="text-sm font-medium text-foreground">Unlinked only</span>
             </label>
           </div>
-          <div className="flex flex-wrap gap-2 lg:shrink-0">
+          <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+            <div className="flex rounded-md border border-border p-0.5">
+              <Button
+                type="button"
+                variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 px-2.5"
+                aria-pressed={viewMode === 'grid'}
+                aria-label="Grid view"
+                onClick={() => setViewMode('grid')}
+              >
+                <LayoutGrid className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 px-2.5"
+                aria-pressed={viewMode === 'list'}
+                aria-label="List view"
+                onClick={() => setViewMode('list')}
+              >
+                <List className="size-4" />
+              </Button>
+            </div>
             <Button type="button" variant="secondary" size="sm" onClick={() => setQApplied(qDraft.trim())} disabled={loading}>
               Apply filters
             </Button>
@@ -182,29 +213,43 @@ export function MediaLibraryPanel() {
             </Button>
           </div>
         </div>
-        {stats.bytesTotal > 0 && (
+        {bytesTotal > 0 && (
           <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
             Approximate visible size:{' '}
-            <span className="font-medium text-foreground">{formatBytes(stats.bytesTotal)}</span>
+            <span className="font-medium text-foreground">{formatBytes(bytesTotal)}</span>
           </p>
         )}
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className="animate-pulse overflow-hidden rounded-lg border border-border bg-muted/40"
-            >
-              <div className="aspect-4/3 bg-muted" />
-              <div className="space-y-2 p-4">
-                <div className="h-4 w-3/4 rounded bg-muted" />
-                <div className="h-3 w-1/2 rounded bg-muted" />
+        viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse overflow-hidden rounded-lg border border-border bg-muted/40"
+              >
+                <div className="aspect-4/3 bg-muted" />
+                <div className="space-y-2 p-4">
+                  <div className="h-4 w-3/4 rounded bg-muted" />
+                  <div className="h-3 w-1/2 rounded bg-muted" />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex animate-pulse items-center gap-4 border-b border-border px-4 py-3 last:border-b-0">
+                <div className="size-14 shrink-0 rounded-md bg-muted" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="h-4 w-1/3 rounded bg-muted" />
+                  <div className="h-3 w-1/2 rounded bg-muted" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-muted/20 px-6 py-16 text-center">
           <p className="text-base font-medium text-foreground">No files match these filters</p>
@@ -212,7 +257,7 @@ export function MediaLibraryPanel() {
             Try clearing search or category, or turn off “Unlinked only” to see everything in the library.
           </p>
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {rows.map((row) => (
             <li
@@ -220,14 +265,7 @@ export function MediaLibraryPanel() {
               className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm transition hover:border-primary/30 hover:shadow-md"
             >
               <div className="relative aspect-4/3 bg-muted">
-                {row.previewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={row.previewUrl} alt="" className="size-full object-cover" />
-                ) : (
-                  <div className="flex size-full items-center justify-center text-xs font-medium text-muted-foreground">
-                    No preview
-                  </div>
-                )}
+                <MediaPreview row={row} className="size-full" />
                 <div className="absolute right-2 top-2">
                   <LinkStatusBadge linked={row.linkCount > 0} />
                 </div>
@@ -259,6 +297,49 @@ export function MediaLibraryPanel() {
             </li>
           ))}
         </ul>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+          <ul className="divide-y divide-border">
+            {rows.map((row) => (
+              <li
+                key={row.id}
+                className="flex flex-col gap-3 p-4 transition hover:bg-muted/30 sm:flex-row sm:items-center"
+              >
+                <div className="relative size-16 shrink-0 overflow-hidden rounded-md border border-border bg-muted sm:size-14">
+                  <MediaPreview row={row} className="size-full" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-foreground" title={row.fileName}>
+                      {row.fileName}
+                    </p>
+                    <LinkStatusBadge linked={row.linkCount > 0} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{row.mimeType}</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span>{formatBytes(row.bytes)}</span>
+                    <span className="text-muted-foreground/60">·</span>
+                    <span>{row.category || '—'}</span>
+                    <span className="text-muted-foreground/60">·</span>
+                    <span>{usageSummary(row)}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {new Date(row.createdAt).toLocaleString()}
+                    {row.uploadedBy ? ` · ${row.uploadedBy.name || row.uploadedBy.email}` : ''}
+                  </p>
+                </div>
+                <a
+                  href={row.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-xs font-medium text-primary underline-offset-4 hover:underline sm:self-center"
+                >
+                  Open →
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

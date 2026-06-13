@@ -1,4 +1,9 @@
 import { auth } from '@/auth';
+import {
+  canDeleteSuppliers,
+  canEditSuppliers,
+  canViewSuppliers,
+} from '@/lib/auth/supplierAccess';
 import { prisma } from '@/lib/db/prisma';
 import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -22,7 +27,7 @@ const UpdateSupplierSchema = z
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_in')) {
+  if (!canViewSuppliers(session.user)) {
     return errorResponse('Forbidden', 403);
   }
 
@@ -53,7 +58,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_in')) {
+  if (!canEditSuppliers(session.user)) {
     return errorResponse('Forbidden', 403);
   }
 
@@ -130,7 +135,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
-  if (!session.user.isSuperAdmin && !session.user.permissions.includes('transaction.stock_in')) {
+  if (!canDeleteSuppliers(session.user)) {
     return errorResponse('Forbidden', 403);
   }
 

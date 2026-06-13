@@ -1,46 +1,50 @@
 # Lib HR
 
-> 35 nodes · cohesion 0.12
+> 38 nodes · cohesion 0.15
 
 ## Key Concepts
 
+- **evaluateCustomFormula.ts** (33 connections) — `lib/hr/payroll/evaluateCustomFormula.ts`
 - **calculatePayLine.ts** (32 connections) — `lib/hr/payroll/calculatePayLine.ts`
-- **types.ts** (28 connections) — `lib/hr/payroll/types.ts`
-- **salaryComponent.ts** (26 connections) — `lib/hr/payroll/salaryComponent.ts`
 - **calculatePayLine()** (20 connections) — `lib/hr/payroll/calculatePayLine.ts`
+- **calendar.ts** (19 connections) — `lib/hr/payroll/calendar.ts`
 - **previewPayConfig.ts** (17 connections) — `lib/hr/payroll/previewPayConfig.ts`
-- **salaryComponent.test.ts** (16 connections) — `__tests__/lib/hr/payroll/salaryComponent.test.ts`
-- **CompensationInput** (11 connections) — `lib/hr/payroll/types.ts`
+- **daysInMonth()** (11 connections) — `lib/hr/payroll/calendar.ts`
+- **denomDaysExcludingWeekdays()** (11 connections) — `lib/hr/payroll/calendar.ts`
+- **buildMonthScope()** (11 connections) — `lib/hr/payroll/evaluateCustomFormula.ts`
+- **evaluateCustomFormula()** (10 connections) — `lib/hr/payroll/evaluateCustomFormula.ts`
+- **calculatePayLine.test.ts** (10 connections) — `__tests__/lib/hr/payroll/calculatePayLine.test.ts`
+- **denomDaysExcludingSundays()** (9 connections) — `lib/hr/payroll/calendar.ts`
 - **PayLineInput** (9 connections) — `lib/hr/payroll/types.ts`
+- **isPaidLeaveType()** (8 connections) — `lib/hr/leaveTypes.ts`
+- **previewPayConfig()** (8 connections) — `lib/hr/payroll/previewPayConfig.ts`
 - **lineBasicHours.ts** (7 connections) — `lib/hr/payroll/lineBasicHours.ts`
 - **applySalaryComponentsToGross()** (7 connections) — `lib/hr/payroll/salaryComponent.ts`
+- **sundaysInMonth()** (6 connections) — `lib/hr/payroll/calendar.ts`
 - **lineBasicHours()** (6 connections) — `lib/hr/payroll/lineBasicHours.ts`
 - **lineBasicHours.test.ts** (6 connections) — `__tests__/lib/hr/payroll/lineBasicHours.test.ts`
+- **buildDayScope()** (5 connections) — `lib/hr/payroll/evaluateCustomFormula.ts`
 - **fixedSalaryComponentNet()** (5 connections) — `lib/hr/payroll/salaryComponent.ts`
 - **PayLineResult** (5 connections) — `lib/hr/payroll/types.ts`
-- **buildSalaryComponentTotals()** (4 connections) — `lib/hr/payroll/salaryComponent.ts`
-- **attendanceSalaryComponentNet()** (3 connections) — `lib/hr/payroll/salaryComponent.ts`
-- **workedHoursFromMinutes()** (2 connections) — `lib/hr/payroll/calculatePayLine.ts`
-- **dailyWagePay()** (2 connections) — `lib/hr/payroll/calculatePayLine.ts`
-- **countPresentDays()** (2 connections) — `lib/hr/payroll/salaryComponent.ts`
-- **netSalaryComponentTotal()** (2 connections) — `lib/hr/payroll/salaryComponent.ts`
-- **PayConfigPreviewInput** (1 connections) — `lib/hr/payroll/previewPayConfig.ts`
-- **PayConfigPreviewResult** (1 connections) — `lib/hr/payroll/previewPayConfig.ts`
-- **SalaryComponentKind** (1 connections) — `lib/hr/payroll/salaryComponent.ts`
-- **SalaryComponentApplication** (1 connections) — `lib/hr/payroll/salaryComponent.ts`
-- **SalaryComponentItem** (1 connections) — `lib/hr/payroll/salaryComponent.ts`
-- *... and 10 more nodes in this community*
+- **countWeekdaysInMonth()** (4 connections) — `lib/hr/payroll/calendar.ts`
+- **isExcludedWeekdayYmd()** (4 connections) — `lib/hr/payroll/calendar.ts`
+- **averageLineBasicHours()** (4 connections) — `lib/hr/payroll/lineBasicHours.ts`
+- *... and 13 more nodes in this community*
 
 ## Relationships
 
-- [[Lib HR]] (84 shared connections)
-- [[HR Settings and Payroll]] (1 shared connections)
+- [[Lib HR]] (61 shared connections)
+- [[Lib, Components, and HR]] (18 shared connections)
+- [[HR, Components, and Lib]] (2 shared connections)
 
 ## Source Files
 
+- `__tests__/lib/hr/payroll/calculatePayLine.test.ts`
 - `__tests__/lib/hr/payroll/lineBasicHours.test.ts`
-- `__tests__/lib/hr/payroll/salaryComponent.test.ts`
+- `lib/hr/leaveTypes.ts`
 - `lib/hr/payroll/calculatePayLine.ts`
+- `lib/hr/payroll/calendar.ts`
+- `lib/hr/payroll/evaluateCustomFormula.ts`
 - `lib/hr/payroll/lineBasicHours.ts`
 - `lib/hr/payroll/previewPayConfig.ts`
 - `lib/hr/payroll/salaryComponent.ts`
@@ -48,7 +52,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 225 (100%)
+- EXTRACTED: 289 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

@@ -18,7 +18,7 @@
 ## Relationships
 
 - [[Jobs, Id, and Cost Engine]] (10 shared connections)
-- [[Stock, Components, and Reports]] (2 shared connections)
+- [[Components, Stock, and Reports]] (2 shared connections)
 
 ## Source Files
 

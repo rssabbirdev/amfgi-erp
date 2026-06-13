@@ -1,12 +1,9 @@
 'use client';
 
 import { Suspense } from 'react';
-import Link from 'next/link';
 
 import { MediaLibraryPanel } from '@/components/settings/MediaLibraryPanel';
-import { buttonVariants } from '@/components/ui/shadcn/button';
 import { Skeleton } from '@/components/ui/shadcn/skeleton';
-import { cn } from '@/lib/utils';
 
 function MediaPageSkeleton() {
   return (
@@ -25,7 +22,7 @@ function MediaPageSkeleton() {
 function SettingsMediaPageContent() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-5">
-      <header className="flex w-full min-w-0 flex-col gap-1 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+      <header className="flex w-full min-w-0 flex-col gap-1 border-b border-border pb-4">
         <div className="flex min-w-0 flex-col gap-1">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Settings</p>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Media library</h1>
@@ -34,9 +31,6 @@ function SettingsMediaPageContent() {
             category to see what is linked to records.
           </p>
         </div>
-        <Link href="/settings" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'shrink-0')}>
-          All settings
-        </Link>
       </header>
 
       <MediaLibraryPanel />

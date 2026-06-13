@@ -296,6 +296,71 @@ export const materialsApi = appApi.injectEndpoints({
         { type: 'Material', id: 'LIST' },
       ],
     }),
+
+    getMaterialTransactionReport: builder.query<
+      {
+        material: {
+          id: string;
+          name: string;
+          unit: string;
+          externalItemName: string | null;
+        };
+        dateRangeLabel: string;
+        from: string | null;
+        to: string | null;
+        rows: Array<{
+          id: string;
+          kind: string;
+          date: string;
+          sortDate: string;
+          kindLabel: string;
+          jobNumber: string | null;
+          partyName: string | null;
+          quantity: number;
+          unit: string;
+          value: number;
+          href: string | null;
+          notePreview: string | null;
+        }>;
+      },
+      { materialId: string; from?: string; to?: string }
+    >({
+      query: ({ materialId, from, to }) => {
+        const params = new URLSearchParams();
+        if (from) params.set('from', from);
+        if (to) params.set('to', to);
+        const query = params.toString();
+        return `/materials/${materialId}/transaction-report${query ? `?${query}` : ''}`;
+      },
+      transformResponse: (r: {
+        data: {
+          material: {
+            id: string;
+            name: string;
+            unit: string;
+            externalItemName: string | null;
+          };
+          dateRangeLabel: string;
+          from: string | null;
+          to: string | null;
+          rows: Array<{
+            id: string;
+            kind: string;
+            date: string;
+            sortDate: string;
+            kindLabel: string;
+            jobNumber: string | null;
+            partyName: string | null;
+            quantity: number;
+            unit: string;
+            value: number;
+            href: string | null;
+            notePreview: string | null;
+          }>;
+        };
+      }) => r.data,
+      providesTags: (_result, _error, { materialId }) => [{ type: 'Material', id: materialId }, 'Transaction'],
+    }),
   }),
 });
 
@@ -318,4 +383,5 @@ export const {
   useDeleteMaterialUomMutation,
   useGetMaterialAssemblyQuery,
   useUpsertMaterialAssemblyMutation,
+  useLazyGetMaterialTransactionReportQuery,
 } = materialsApi;

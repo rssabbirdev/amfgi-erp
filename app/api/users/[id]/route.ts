@@ -1,7 +1,10 @@
 import { auth }            from '@/auth';
+import { syncUserCompanyAccess } from '@/lib/auth/syncUserCompanyAccess';
+import { assertCanDeactivateUser } from '@/lib/auth/userSelfProtection';
 import { prisma }          from '@/lib/db/prisma';
 import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { Prisma }          from '@prisma/client';
 import { z }               from 'zod';
 import bcrypt              from 'bcryptjs';
 
@@ -51,11 +54,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const parsed = UpdateSchema.safeParse(body);
   if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
 
+  const existing = await prisma.user.findUnique({ where: { id } });
+  if (!existing) return errorResponse('User not found', 404);
+
+  if (parsed.data.isActive === false) {
+    const blocked = assertCanDeactivateUser(session.user.id, existing);
+    if (blocked) return errorResponse(blocked, 403);
+  }
+
   try {
     const user = await prisma.$transaction(async (tx) => {
-      const existing = await tx.user.findUnique({ where: { id } });
-      if (!existing) return null;
-
       const update: Record<string, unknown> = {};
       if (parsed.data.name !== undefined) update.name = parsed.data.name;
       if (parsed.data.isSuperAdmin !== undefined) update.isSuperAdmin = parsed.data.isSuperAdmin;
@@ -67,16 +75,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       await tx.user.update({ where: { id }, data: update });
 
       if (parsed.data.companyAccess) {
-        await tx.userCompanyAccess.deleteMany({ where: { userId: id } });
-        for (const access of parsed.data.companyAccess) {
-          await tx.userCompanyAccess.create({
-            data: {
-              userId:    id,
-              companyId: access.companyId,
-              roleId:    access.roleId,
-            },
-          });
-        }
+        await syncUserCompanyAccess(tx, id, parsed.data.companyAccess);
       }
 
       return tx.user.findUnique({
@@ -93,7 +92,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       });
     });
 
-    if (!user) return errorResponse('User not found', 404);
     publishLiveUpdate({
       companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
       channel: 'admin',
@@ -102,6 +100,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     });
     return successResponse(user);
   } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === 'P2002') {
+        return errorResponse('Duplicate company and role assignment for this user', 409);
+      }
+      if (err.code === 'P2003') {
+        return errorResponse('Invalid company or role ID', 422);
+      }
+    }
     if (err instanceof Error && err.message.includes('Foreign key constraint')) {
       return errorResponse('Invalid company or role ID', 422);
     }
@@ -113,6 +119,15 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const session = await auth();
   if (!session?.user?.isSuperAdmin) return errorResponse('Forbidden', 403);
   const { id } = await params;
+
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, isSuperAdmin: true },
+  });
+  if (!existing) return errorResponse('User not found', 404);
+
+  const blocked = assertCanDeactivateUser(session.user.id, existing);
+  if (blocked) return errorResponse(blocked, 403);
 
   await prisma.user.update({
     where: { id },

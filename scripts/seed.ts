@@ -3,7 +3,7 @@
  * Bootstraps the shared database with comprehensive test data:
  *   • Companies: AMFGI, K&M (with profiles: address, phone, email)
  *   • Company Print Templates: Delivery note + work schedule layouts ready for print builder and daily schedule printing
- *   • Roles: Admin, Manager (with settings.manage), Store Keeper (with permissions)
+ *   • System roles: Admin, Employee (self-service); demo custom roles: Manager, Store Keeper
  *   • Users: Super Admin, AMFGI Manager, Store Keeper
  *   • Per-company: Units, Categories, Warehouses
  *   • Per-company: Materials with stock batches, logs, transactions (STOCK_IN)
@@ -31,7 +31,7 @@ import { randomUUID } from 'crypto';
 import { createPostgresAdapter } from '../lib/db/postgresAdapter';
 import { resolveDatabaseUrlForScripts } from '../lib/db/resolveDatabaseUrl';
 import { ensureDefaultEmployeeDocumentTypes } from '../lib/hr/defaultDocumentTypes';
-import { ensureAllSystemRoles } from '../lib/auth/systemRoles';
+import { ensureAllSystemRoles, ensureCustomRoleFromPreset } from '../lib/auth/systemRoles';
 import { DEFAULT_EMPLOYEE_TYPE_SETTINGS } from '../lib/hr/employeeTypeSettings';
 import { buildWorkforceProfileExtension, type WorkforceEmployeeType } from '../lib/hr/workforceProfile';
 import { parsePartyListDateInput } from '../lib/partyListsApi';
@@ -1970,14 +1970,17 @@ async function seed() {
   // ── Roles ───────────────────────────────────────────────────────────────────
   console.log('\nCreating system roles…');
   const systemRoles = await ensureAllSystemRoles(prisma);
-  const adminRole = systemRoles.admin;
-  const managerRole = systemRoles.manager;
-  const skRole = systemRoles['store-keeper'];
   const employeeSelfRole = systemRoles['employee-self'];
 
   for (const role of Object.values(systemRoles)) {
-    console.log(`  ✓ ${role.name}`);
+    console.log(`  ✓ ${role.name} (system)`);
   }
+
+  console.log('\nCreating demo custom roles…');
+  const managerRole = await ensureCustomRoleFromPreset(prisma, 'manager', 'Manager', 'manager');
+  const skRole = await ensureCustomRoleFromPreset(prisma, 'store-keeper', 'Store Keeper', 'store_keeper');
+  console.log(`  ✓ ${managerRole.name}`);
+  console.log(`  ✓ ${skRole.name}`);
 
   // ── Users ───────────────────────────────────────────────────────────────────
   console.log('\nCreating users…');

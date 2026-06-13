@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/shadcn/aler
 import { Button, buttonVariants } from '@/components/ui/shadcn/button';
 import ScheduleSearchSelect from '@/components/hr/ScheduleSearchSelect';
 import GoodsReceiptLineGrid from '@/components/stock/GoodsReceiptLineGrid';
+import QuickCreateMaterialModal from '@/components/stock/QuickCreateMaterialModal';
 import {
   usePagedMaterialSearch,
   usePagedSupplierSearch,
@@ -130,10 +131,14 @@ function ReceiptEditor({
   const [includeTax, setIncludeTax] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [materialsById, setMaterialsById] = useState<Record<string, Material>>({});
+  const [createMaterialContext, setCreateMaterialContext] = useState<{ lineId: string; name: string } | null>(
+    null
+  );
 
   const perms = (session?.user?.permissions ?? []) as string[];
   const isSA = session?.user?.isSuperAdmin ?? false;
   const canPost = isSA || perms.includes('transaction.stock_in');
+  const canCreateMaterial = isSA || perms.includes('material.create');
   const showWarehouseColumn = true;
 
   const getMaterial = useCallback((id: string) => materialsById[id], [materialsById]);
@@ -201,6 +206,19 @@ function ReceiptEditor({
       );
     },
     [rememberMaterial, warehouses]
+  );
+
+  const handleRequestCreateMaterial = useCallback((lineId: string, suggestedName: string) => {
+    setCreateMaterialContext({ lineId, name: suggestedName });
+  }, []);
+
+  const handleQuickCreateMaterial = useCallback(
+    (material: Material) => {
+      if (!createMaterialContext) return;
+      handleMaterialResolved(createMaterialContext.lineId, material);
+      setCreateMaterialContext(null);
+    },
+    [createMaterialContext, handleMaterialResolved]
   );
 
   const updateLine = (id: string, field: keyof LineItem, value: string) => {
@@ -516,6 +534,16 @@ function ReceiptEditor({
           emptyMessage="No receipt lines yet. Search for a material on the first row to start."
           duplicateMaterialIds={duplicateMaterials}
           onUpdateLine={updateLine}
+          canCreateMaterial={canCreateMaterial}
+          onRequestCreateMaterial={handleRequestCreateMaterial}
+        />
+
+        <QuickCreateMaterialModal
+          isOpen={createMaterialContext !== null}
+          defaultName={createMaterialContext?.name ?? ''}
+          warehouses={warehouses}
+          onClose={() => setCreateMaterialContext(null)}
+          onCreated={handleQuickCreateMaterial}
         />
 
         <div className="border-t border-border">

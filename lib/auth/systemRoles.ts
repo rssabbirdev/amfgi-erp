@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient, Role } from '@prisma/client';
-import { EMPLOYEE_SELF_ROLE_SLUG, HR_SYSTEM_ROLE_SLUG, ROLE_PRESETS } from '@/lib/permissions';
+import { EMPLOYEE_SELF_ROLE_SLUG, ROLE_PRESETS } from '@/lib/permissions';
 
 type RoleDb = PrismaClient | Prisma.TransactionClient;
 
@@ -11,16 +11,51 @@ export type SystemRoleDefinition = {
   preset: SystemRolePreset;
 };
 
-/** Global system roles created on first setup and backfilled when missing. */
+/** Only Admin and Employee self-service are protected system roles. */
 export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
   { slug: 'admin', name: 'Admin', preset: 'super_admin' },
-  { slug: 'manager', name: 'Manager', preset: 'manager' },
-  { slug: 'store-keeper', name: 'Store Keeper', preset: 'store_keeper' },
   { slug: EMPLOYEE_SELF_ROLE_SLUG, name: 'Employee (self-service)', preset: 'employee_self' },
-  { slug: HR_SYSTEM_ROLE_SLUG, name: 'HR', preset: 'hr' },
 ] as const;
 
 export const SYSTEM_ROLE_SLUGS = SYSTEM_ROLE_DEFINITIONS.map((def) => def.slug);
+
+/** Former system roles — kept as editable custom roles when they already exist. */
+export const LEGACY_SYSTEM_ROLE_SLUGS = ['manager', 'store-keeper', 'hr'] as const;
+
+export async function demoteLegacySystemRoles(db: RoleDb): Promise<void> {
+  await db.role.updateMany({
+    where: { slug: { in: [...LEGACY_SYSTEM_ROLE_SLUGS] }, isSystem: true },
+    data: { isSystem: false },
+  });
+}
+
+/** Create or fetch a non-system role seeded from a permission preset (demo / migrations). */
+export async function ensureCustomRoleFromPreset(
+  db: RoleDb,
+  slug: string,
+  name: string,
+  preset: SystemRolePreset
+): Promise<Role> {
+  const existing = await db.role.findFirst({ where: { slug } });
+  if (existing) {
+    if (existing.isSystem) {
+      return db.role.update({
+        where: { id: existing.id },
+        data: { isSystem: false },
+      });
+    }
+    return existing;
+  }
+
+  return db.role.create({
+    data: {
+      name,
+      slug,
+      permissions: ROLE_PRESETS[preset],
+      isSystem: false,
+    },
+  });
+}
 
 export async function ensureSystemRole(db: RoleDb, slug: string): Promise<Role> {
   const def = SYSTEM_ROLE_DEFINITIONS.find((item) => item.slug === slug);
@@ -29,7 +64,15 @@ export async function ensureSystemRole(db: RoleDb, slug: string): Promise<Role> 
   }
 
   const existing = await db.role.findFirst({ where: { slug: def.slug } });
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.isSystem) {
+      return db.role.update({
+        where: { id: existing.id },
+        data: { isSystem: true, permissions: ROLE_PRESETS[def.preset] },
+      });
+    }
+    return existing;
+  }
 
   return db.role.create({
     data: {
@@ -42,6 +85,7 @@ export async function ensureSystemRole(db: RoleDb, slug: string): Promise<Role> 
 }
 
 export async function ensureAllSystemRoles(db: RoleDb): Promise<Record<string, Role>> {
+  await demoteLegacySystemRoles(db);
   const bySlug: Record<string, Role> = {};
   for (const def of SYSTEM_ROLE_DEFINITIONS) {
     bySlug[def.slug] = await ensureSystemRole(db, def.slug);
@@ -68,6 +112,7 @@ export async function syncSystemRolePermissionsFromPresets(db: RoleDb): Promise<
 
 /** Creates any system roles missing from the database (safe on every request). */
 export async function ensureMissingSystemRoles(db: RoleDb): Promise<void> {
+  await demoteLegacySystemRoles(db);
   const existing = await db.role.findMany({
     where: { slug: { in: [...SYSTEM_ROLE_SLUGS] }, isSystem: true },
     select: { slug: true },

@@ -14,10 +14,11 @@ import {
   buildWorkforceProfileExtension,
   parseWorkforceProfile,
 } from '@/lib/hr/workforceProfile';
-import { NATIONALITY_OPTIONS } from '@/lib/hr/employeeMeta';
-import toast from 'react-hot-toast';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
 import EmployeeCompensationPanel from '@/components/hr/EmployeeCompensationPanel';
+import { EmployeeMetaSelect } from '@/components/hr/EmployeeMetaSelect';
+import { NationalitySearchSelect } from '@/components/hr/NationalitySearchSelect';
+import toast from 'react-hot-toast';
 
 type Tab = 'overview' | 'visa' | 'documents' | 'compensation' | 'access';
 
@@ -157,7 +158,6 @@ function validityLabel(days: number | null): string {
 
 function buildOverviewDraftSignature(form: HTMLFormElement, expertises: string[]) {
   const read = (name: string) => String(form.elements.namedItem(name) && 'value' in (form.elements.namedItem(name) as Element) ? ((form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value ?? '') : '').trim();
-  const portalField = form.elements.namedItem('portalEnabled') as HTMLInputElement | null;
   const snapshot = {
     fullName: read('fullName'),
     preferredName: read('preferredName'),
@@ -179,8 +179,6 @@ function buildOverviewDraftSignature(form: HTMLFormElement, expertises: string[]
     emergencyContactPhone: read('emergencyContactPhone'),
     bloodGroup: read('bloodGroup'),
     adminNotes: read('adminNotes'),
-    profileExtensionJson: read('profileExtensionJson'),
-    portalEnabled: Boolean(portalField?.checked),
     expertises: [...expertises].sort(),
   };
   return JSON.stringify(snapshot);
@@ -208,13 +206,6 @@ function buildOverviewEmployeeSignature(emp: EmployeeRecord, expertises: string[
     emergencyContactPhone: String(emp.emergencyContactPhone ?? '').trim(),
     bloodGroup: String(emp.bloodGroup ?? '').trim(),
     adminNotes: String(emp.adminNotes ?? '').trim(),
-    profileExtensionJson:
-      emp.profileExtension == null
-        ? ''
-        : typeof emp.profileExtension === 'string'
-          ? emp.profileExtension.trim()
-          : JSON.stringify(emp.profileExtension, null, 2),
-    portalEnabled: Boolean(emp.portalEnabled),
     expertises: [...expertises].sort(),
   };
   return JSON.stringify(snapshot);
@@ -228,6 +219,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const [catalogDocTypes, setCatalogDocTypes] = useState<CatalogDocType[]>([]);
   const [expertiseCatalog, setExpertiseCatalog] = useState<string[]>([]);
   const [selectedExpertises, setSelectedExpertises] = useState<string[]>([]);
+  const [nationality, setNationality] = useState('');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('overview');
   const [linkUserId, setLinkUserId] = useState('');
@@ -337,7 +329,6 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     ] as const;
     const body: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(raw)) {
-      if (k === 'portalEnabled' || k === 'profileExtensionJson') continue;
       if (nullableDates.includes(k as (typeof nullableDates)[number])) {
         body[k] = v === '' ? null : v;
         continue;
@@ -351,34 +342,12 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     const employeeType = String(fd.get('employeeType') ?? '').trim();
     const visaHolding = String(fd.get('visaHolding') ?? '').trim();
     const expertises = selectedExpertises;
-    const extRaw = String(fd.get('profileExtensionJson') ?? '').trim();
-    if (extRaw === '') body.profileExtension = null;
-    else {
-      try {
-        body.profileExtension = JSON.parse(extRaw);
-      } catch {
-        toast.error('Extra profile data (JSON) is invalid');
-        setBusyKey(null);
-        return;
-      }
-    }
-    const existingExt =
-      body.profileExtension && typeof body.profileExtension === 'object'
-        ? (body.profileExtension as Record<string, unknown>)
-        : {};
-    body.profileExtension = {
-      ...existingExt,
-      ...buildWorkforceProfileExtension({
-        employeeType:
-          (employeeType as 'OFFICE_STAFF' | 'HYBRID_STAFF' | 'DRIVER' | 'LABOUR_WORKER') ||
-          'LABOUR_WORKER',
-        visaHolding:
-          (visaHolding as 'COMPANY_PROVIDED' | 'SELF_OWN' | 'NO_VISA') || 'COMPANY_PROVIDED',
-        expertises,
-      }),
-    };
-    const portalEl = form.elements.namedItem('portalEnabled') as HTMLInputElement | null;
-    body.portalEnabled = Boolean(portalEl?.checked);
+    body.profileExtension = buildWorkforceProfileExtension({
+      employeeType:
+        (employeeType as 'OFFICE_STAFF' | 'HYBRID_STAFF' | 'DRIVER' | 'LABOUR_WORKER') || 'LABOUR_WORKER',
+      visaHolding: (visaHolding as 'COMPANY_PROVIDED' | 'SELF_OWN' | 'NO_VISA') || 'COMPANY_PROVIDED',
+      expertises,
+    });
     const saved = await patchEmployee(body, { updateLocal: true });
     if (saved) {
       setOverviewDirty(false);
@@ -638,6 +607,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     if (!emp) return;
     const nextExpertises = parseWorkforceProfile(emp.profileExtension).expertises;
     setSelectedExpertises(nextExpertises);
+    setNationality(emp.nationality ?? '');
     setOverviewInitialSignature(buildOverviewEmployeeSignature(emp, nextExpertises));
     setOverviewDirty(false);
     const frame = requestAnimationFrame(() => {
@@ -766,6 +736,10 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const fieldClass =
     'mt-1 w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white shadow-inner placeholder:text-slate-600 focus:border-emerald-500/40 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-50';
   const labelClass = 'text-xs font-medium uppercase tracking-wider text-slate-500';
+  const sectionClass = 'rounded-xl border border-white/10 bg-slate-900/35 p-4 shadow-sm';
+  const sectionGrid = 'mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3';
+  const nationalityInputClass =
+    'mt-1 rounded-lg border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500/40 focus:ring-emerald-500/30';
   const workforce = parseWorkforceProfile(emp.profileExtension);
 
   return (
@@ -889,13 +863,12 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
               onSubmit={onSaveOverview}
               onInput={() => syncOverviewDirty()}
               onChange={() => syncOverviewDirty()}
-              className="space-y-6"
+              className="space-y-4"
             >
-              <section className="rounded-2xl border border-white/10 bg-slate-900/35 p-6 shadow-sm">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-400/90">Personal identity</h2>
-                <p className="mt-1 text-xs text-slate-500">Legal name and demographics kept for the lifetime of employment.</p>
-                <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                  <label className="block sm:col-span-2">
+              <section className={sectionClass}>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-400/90">Personal identity</h2>
+                <div className={sectionGrid}>
+                  <label className="block sm:col-span-2 lg:col-span-3">
                     <span className={labelClass}>Full legal name</span>
                     <input name="fullName" required defaultValue={emp.fullName} disabled={!canEdit} className={fieldClass} />
                   </label>
@@ -909,14 +882,16 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                   </label>
                   <label className="block">
                     <span className={labelClass}>Nationality</span>
-                    <select name="nationality" defaultValue={emp.nationality ?? ''} disabled={!canEdit} className={fieldClass}>
-                      <option value="">-</option>
-                      {NATIONALITY_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
+                    <NationalitySearchSelect
+                      name="nationality"
+                      value={nationality}
+                      onChange={(next) => {
+                        setNationality(next);
+                        requestAnimationFrame(() => syncOverviewDirty());
+                      }}
+                      disabled={!canEdit}
+                      inputClassName={nationalityInputClass}
+                    />
                   </label>
                   <label className="block">
                     <span className={labelClass}>Date of birth</span>
@@ -934,9 +909,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-white/10 bg-slate-900/35 p-6 shadow-sm">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-400/90">Contact</h2>
-                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <section className={sectionClass}>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-400/90">Contact</h2>
+                <div className={sectionGrid}>
                   <label className="block">
                     <span className={labelClass}>Work / personal email</span>
                     <input name="email" type="email" defaultValue={emp.email ?? ''} disabled={!canEdit} className={fieldClass} />
@@ -948,20 +923,41 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-white/10 bg-slate-900/35 p-6 shadow-sm">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-400/90">Employment and workforce setup</h2>
-                <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                  <label className="block sm:col-span-2">
+              <section className={sectionClass}>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-400/90">Employment & workforce</h2>
+                <div className={sectionGrid}>
+                  <label className="block sm:col-span-2 lg:col-span-3">
                     <span className={labelClass}>Designation</span>
-                    <input name="designation" defaultValue={emp.designation ?? ''} disabled={!canEdit} className={fieldClass} />
+                    <EmployeeMetaSelect
+                      kind="DESIGNATION"
+                      name="designation"
+                      defaultValue={emp.designation}
+                      disabled={!canEdit}
+                      fieldClass={fieldClass}
+                      onChange={() => syncOverviewDirty()}
+                    />
                   </label>
                   <label className="block">
                     <span className={labelClass}>Department</span>
-                    <input name="department" defaultValue={emp.department ?? ''} disabled={!canEdit} className={fieldClass} />
+                    <EmployeeMetaSelect
+                      kind="DEPARTMENT"
+                      name="department"
+                      defaultValue={emp.department}
+                      disabled={!canEdit}
+                      fieldClass={fieldClass}
+                      onChange={() => syncOverviewDirty()}
+                    />
                   </label>
                   <label className="block">
                     <span className={labelClass}>Employment type</span>
-                    <input name="employmentType" defaultValue={emp.employmentType ?? ''} disabled={!canEdit} className={fieldClass} placeholder="e.g. Permanent, Contract" />
+                    <EmployeeMetaSelect
+                      kind="EMPLOYMENT_TYPE"
+                      name="employmentType"
+                      defaultValue={emp.employmentType}
+                      disabled={!canEdit}
+                      fieldClass={fieldClass}
+                      onChange={() => syncOverviewDirty()}
+                    />
                   </label>
                   <label className="block">
                     <span className={labelClass}>Workforce role type</span>
@@ -993,9 +989,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       ))}
                     </select>
                   </label>
-                  <label className="block sm:col-span-2">
+                  <label className="block sm:col-span-2 lg:col-span-3">
                     <span className={labelClass}>Expertise (multi-select)</span>
-                    <div className="mt-1">
+                    <div className="mt-0.5">
                       <MultiSelectDropdown
                         options={(expertiseCatalog.length ? expertiseCatalog : [...WORKFORCE_EXPERTISE_OPTIONS]).map((ex) => ({
                           value: ex,
@@ -1029,24 +1025,12 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       ))}
                     </select>
                   </label>
-                  <label className="flex items-center gap-3 pt-6 sm:col-span-2">
-                    <input
-                      type="checkbox"
-                      name="portalEnabled"
-                      defaultChecked={emp.portalEnabled}
-                      disabled={!canEdit}
-                      className="h-4 w-4 rounded border-white/20 bg-slate-950 text-emerald-600"
-                    />
-                    <span className="text-sm text-slate-300">
-                      Allow employee self-service portal (requires a linked user, auto-created when you save an email and provision login, or link manually on Access)
-                    </span>
-                  </label>
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-white/10 bg-slate-900/35 p-6 shadow-sm">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-400/90">Emergency & medical</h2>
-                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <section className={sectionClass}>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-400/90">Emergency & medical</h2>
+                <div className={sectionGrid}>
                   <label className="block">
                     <span className={labelClass}>Emergency contact name</span>
                     <input name="emergencyContactName" defaultValue={emp.emergencyContactName ?? ''} disabled={!canEdit} className={fieldClass} />
@@ -1063,37 +1047,18 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
               </section>
 
               {canEdit && (
-                <section className="rounded-2xl border border-amber-500/15 bg-amber-950/10 p-6 shadow-sm">
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-200/90">HR record & extensions</h2>
-                  <p className="mt-1 text-xs text-slate-500">Internal notes and structured extras not shown to the employee in the portal.</p>
-                  <div className="mt-5 grid gap-4">
-                    <label className="block">
-                      <span className={labelClass}>Admin notes</span>
-                      <textarea
-                        name="adminNotes"
-                        rows={4}
-                        defaultValue={emp.adminNotes ?? ''}
-                        className={fieldClass}
-                        placeholder="Onboarding notes, compliance flags..."
-                      />
-                    </label>
-                    <label className="block">
-                      <span className={labelClass}>Extra profile (JSON object)</span>
-                      <textarea
-                        name="profileExtensionJson"
-                        rows={6}
-                        defaultValue={
-                          emp.profileExtension == null
-                            ? ''
-                            : typeof emp.profileExtension === 'string'
-                              ? emp.profileExtension
-                              : JSON.stringify(emp.profileExtension, null, 2)
-                        }
-                        className={`${fieldClass} font-mono text-xs`}
-                        placeholder='e.g. { "shiftPreference": "morning" }'
-                      />
-                    </label>
-                  </div>
+                <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm dark:border-amber-500/15 dark:bg-amber-950/10">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200/90">HR notes</h2>
+                  <label className="mt-3 block">
+                    <span className={labelClass}>Admin notes</span>
+                    <textarea
+                      name="adminNotes"
+                      rows={3}
+                      defaultValue={emp.adminNotes ?? ''}
+                      className={`${fieldClass} min-h-[4.5rem] py-1.5`}
+                      placeholder="Onboarding notes, compliance flags..."
+                    />
+                  </label>
                 </section>
               )}
 
@@ -1566,12 +1531,34 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                 <h2 className="text-lg font-semibold text-white">Employee portal</h2>
                 <p className="mt-2 text-sm text-slate-400 leading-relaxed">
                   When this employee has an email, you can <strong className="text-slate-200">create or link a User</strong> automatically so they can sign in with{' '}
-                  <strong className="text-slate-200">Google</strong> (same email). Self-service still respects the portal toggle above.
+                  <strong className="text-slate-200">Google</strong> (same email). Self-service still respects the portal access toggle below.
                 </p>
                 <p className="mt-2 text-sm text-slate-500">
                   You can still paste a user id below if you need a manual link. New employees created with an email are provisioned by default.
                 </p>
               </div>
+              {canEdit && (
+                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-slate-950/40 p-4">
+                  <input
+                    type="checkbox"
+                    checked={emp.portalEnabled}
+                    disabled={busyKey === 'portal'}
+                    className="h-4 w-4 rounded border-white/20 bg-slate-950 text-emerald-600"
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      setBusyKey('portal');
+                      void patchEmployee(
+                        { portalEnabled: enabled },
+                        {
+                          updateLocal: true,
+                          successMessage: enabled ? 'Portal access enabled' : 'Portal access disabled',
+                        }
+                      ).finally(() => setBusyKey(null));
+                    }}
+                  />
+                  <span className="text-sm text-slate-300">Allow employee self-service portal</span>
+                </label>
+              )}
               {canEdit && emp.email && (
                 <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4">
                   <p className="text-sm text-slate-300">

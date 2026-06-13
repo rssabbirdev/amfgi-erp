@@ -48,14 +48,6 @@ const REPORT_SECTIONS: Array<{
         tone: 'emerald',
       },
       {
-        href: '/reports/production-by-job',
-        title: 'Production by job',
-        description:
-          'Totals from production log progress entries — how much was recorded per job, budget line, and quantity tracker over a date range.',
-        badge: 'Production',
-        tone: 'sky',
-      },
-      {
         href: '/reports/supplier-traceability',
         title: 'Supplier traceability',
         description:
