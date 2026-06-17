@@ -27,6 +27,7 @@ const EmployeeImportRowSchema = z.object({
   emergencyContactName: z.string().max(200).optional().nullable(),
   emergencyContactPhone: z.string().max(50).optional().nullable(),
   bloodGroup: z.string().max(10).optional().nullable(),
+  adminNotes: z.string().max(20000).optional().nullable(),
   portalEnabled: z.boolean().optional(),
   employeeType: z
     .enum(['OFFICE_STAFF', 'HYBRID_STAFF', 'DRIVER', 'LABOUR_WORKER'])
@@ -78,6 +79,7 @@ export async function POST(req: Request) {
     emergencyContactPhone: row.emergencyContactPhone,
     bloodGroup: row.bloodGroup,
     portalEnabled: row.portalEnabled,
+    adminNotes: row.adminNotes,
     employeeType: row.employeeType,
     visaHolding: row.visaHolding,
     expertises: row.expertises,

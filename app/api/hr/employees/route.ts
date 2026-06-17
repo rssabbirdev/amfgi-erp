@@ -7,6 +7,12 @@ import {
   employeeTypeFromProfileExtension,
   readEmployeeTypeSettingsFromCompanyData,
 } from '@/lib/hr/employeeTypeSettings';
+import {
+  buildEmployeeListWhere,
+  filterEmployeesByWorkforceType,
+  sortEmployeesByName,
+} from '@/lib/hr/employeeListQuery';
+import { parseNationalityInput } from '@/lib/hr/countryNames';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { parseListLimit, parseListOffset } from '@/lib/pagination/serverList';
@@ -55,34 +61,40 @@ export async function GET(req: Request) {
   const limitParam = searchParams.get('limit');
 
   if (forExport) {
+    const where = buildEmployeeListWhere(companyId, { q, status, portal });
+    const needsTypeFilter = Boolean(employeeType && employeeType !== 'ALL');
+    const exportSelect = {
+      id: true,
+      employeeCode: true,
+      fullName: true,
+      preferredName: true,
+      email: true,
+      phone: true,
+      nationality: true,
+      dateOfBirth: true,
+      gender: true,
+      designation: true,
+      department: true,
+      employmentType: true,
+      hireDate: true,
+      terminationDate: true,
+      status: true,
+      emergencyContactName: true,
+      emergencyContactPhone: true,
+      bloodGroup: true,
+      portalEnabled: true,
+      adminNotes: true,
+      profileExtension: true,
+    } as const;
+
     const list = await prisma.employee.findMany({
-      where: { companyId },
+      where,
       orderBy: [{ fullName: 'asc' }],
       take: 10000,
-      select: {
-        id: true,
-        employeeCode: true,
-        fullName: true,
-        preferredName: true,
-        email: true,
-        phone: true,
-        nationality: true,
-        dateOfBirth: true,
-        gender: true,
-        designation: true,
-        department: true,
-        employmentType: true,
-        hireDate: true,
-        terminationDate: true,
-        status: true,
-        emergencyContactName: true,
-        emergencyContactPhone: true,
-        bloodGroup: true,
-        portalEnabled: true,
-        profileExtension: true,
-      },
+      select: exportSelect,
     });
-    return successResponse(list);
+    const filtered = needsTypeFilter ? filterEmployeesByWorkforceType(list, employeeType) : list;
+    return successResponse(sortEmployeesByName(filtered));
   }
 
   const company = await prisma.company.findUnique({
@@ -240,6 +252,13 @@ export async function POST(req: Request) {
   const emailNorm = d.email ? d.email.trim().toLowerCase() : null;
   const auto = d.autoProvisionLogin !== false && Boolean(emailNorm);
 
+  let nationality: string | null = null;
+  if (d.nationality !== undefined) {
+    const parsedNationality = parseNationalityInput(d.nationality);
+    if (!parsedNationality.ok) return errorResponse(parsedNationality.error, 422);
+    nationality = parsedNationality.value;
+  }
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       const emp = await tx.employee.create({
@@ -250,7 +269,7 @@ export async function POST(req: Request) {
           preferredName: d.preferredName?.trim() || null,
           email: emailNorm,
           phone: d.phone?.trim() || null,
-          nationality: d.nationality?.trim() || null,
+          nationality,
           dateOfBirth: d.dateOfBirth ? new Date(d.dateOfBirth) : null,
           gender: d.gender?.trim() || null,
           designation: d.designation?.trim() || null,

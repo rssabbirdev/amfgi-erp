@@ -4,6 +4,7 @@ import Credentials from 'next-auth/providers/credentials';
 import bcrypt      from 'bcryptjs';
 import type { Permission } from '@/lib/permissions';
 import { buildAuthCookieOptions, resolveAuthSecret, warnIfAuthMisconfigured } from '@/lib/auth/authEnv';
+import { refreshAuthJwtTokenFromDb } from '@/lib/auth/refreshSessionToken';
 import { resolvePermissionsForCompany, uniqueCompanyIdsFromAccess } from '@/lib/auth/resolvePermissions';
 import { ensureActiveCompanyForLinkedEmployee } from '@/lib/auth/selfService';
 import { convertGoogleDriveUrl } from '@/lib/utils/googleDriveUrl';
@@ -261,11 +262,18 @@ const config: NextAuthConfig = {
         if (session.signatureUrl !== undefined) token.signatureUrl = session.signatureUrl;
         if (session.name !== undefined) token.name = session.name;
       }
+      if (token.sub) {
+        const prisma = await getPrisma();
+        await refreshAuthJwtTokenFromDb(prisma, token);
+      }
       return token;
     },
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async session({ session, token }: any) {
+      if (token.isActive === false) {
+        return null;
+      }
       session.user.id                = token.sub;
       session.user.isSuperAdmin      = token.isSuperAdmin ?? false;
       session.user.activeCompanyId   = token.activeCompanyId ?? null;

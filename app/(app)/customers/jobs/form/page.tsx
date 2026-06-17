@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { Button, buttonVariants } from '@/components/ui/shadcn/button';
 import { cn } from '@/lib/utils';
 import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown';
+import SearchSelect from '@/components/ui/SearchSelect';
 import { emptyJobContactRow, jobContactsToRows, primaryJobContactPersonFromRows, rowsToJobContactsPayload, type JobContactRow } from '@/lib/jobContactFormUi';
 import { WORKFORCE_EXPERTISE_OPTIONS } from '@/lib/hr/workforceProfile';
 import { useCreateJobMutation, useGetCustomersQuery, useGetJobsQuery, useUpdateJobMutation } from '@/store/hooks';
@@ -204,6 +205,10 @@ export default function CustomerJobFormPage() {
   const currentJob = useMemo(() => (jobId ? (jobs as JobRecord[]).find((job) => job.id === jobId) ?? null : null), [jobId, jobs]);
   const parentJob = useMemo(() => (parentJobId ? (jobs as JobRecord[]).find((job) => job.id === parentJobId) ?? null : null), [parentJobId, jobs]);
   const customerNameById = useMemo(() => new Map((customers as Customer[]).map((customer) => [customer.id, customer.name])), [customers]);
+  const customerSearchItems = useMemo(
+    () => (customers as Customer[]).map((customer) => ({ id: customer.id, label: customer.name })),
+    [customers],
+  );
   const nextVariationSuffix = useMemo(
     () => getNextNumericVariationSuffix(parentJob, jobs as JobRecord[]),
     [jobs, parentJob]
@@ -492,15 +497,22 @@ export default function CustomerJobFormPage() {
                     className={INPUT_CLASS}
                   />
                 </label>
-                <label className={LABEL_CLASS}>
-                  Customer
-                  <select required value={form.customerId} onChange={(event) => updateField('customerId', event.target.value)} className={INPUT_CLASS}>
-                    <option value="">Select customer</option>
-                    {(customers as Customer[]).map((customer) => (
-                      <option key={customer.id} value={customer.id}>{customer.name}</option>
-                    ))}
-                  </select>
-                </label>
+                <div>
+                  <p className={LABEL_CLASS}>Customer</p>
+                  <SearchSelect
+                    items={customerSearchItems}
+                    value={form.customerId}
+                    onChange={(customerId) => updateField('customerId', customerId)}
+                    placeholder="Search customers…"
+                    required
+                    openOnFocus
+                    minCharactersToSearch={0}
+                    inputProps={{
+                      required: true,
+                      className: cn(INPUT_CLASS, 'mt-1.5 !rounded-md !border-border !bg-background focus:!ring-ring/20'),
+                    }}
+                  />
+                </div>
               </div>
             )}
           </Section>
@@ -516,16 +528,10 @@ export default function CustomerJobFormPage() {
                 placeholder="Describe the work scope, site condition, and customer expectation..."
               />
             </label>
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className={LABEL_CLASS}>
-                Site
-                <input value={form.site} onChange={(event) => updateField('site', event.target.value)} className={INPUT_CLASS} />
-              </label>
-              <label className={LABEL_CLASS}>
-                Location name
-                <input value={form.locationName} onChange={(event) => updateField('locationName', event.target.value)} className={INPUT_CLASS} placeholder="Map place name" />
-              </label>
-            </div>
+            <label className={LABEL_CLASS}>
+              Site
+              <input value={form.site} onChange={(event) => updateField('site', event.target.value)} className={INPUT_CLASS} />
+            </label>
             <label className={LABEL_CLASS}>
               Address
               <textarea value={form.address} onChange={(event) => updateField('address', event.target.value)} rows={2} className={`${INPUT_CLASS} resize-none`} />
@@ -547,16 +553,6 @@ export default function CustomerJobFormPage() {
               <label className={LABEL_CLASS}>
                 End date
                 <input type="date" value={form.endDate} onChange={(event) => updateField('endDate', event.target.value)} className={INPUT_CLASS} />
-              </label>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className={LABEL_CLASS}>
-                Latitude
-                <input type="number" step="any" value={form.locationLat} onChange={(event) => updateField('locationLat', event.target.value)} className={INPUT_CLASS} />
-              </label>
-              <label className={LABEL_CLASS}>
-                Longitude
-                <input type="number" step="any" value={form.locationLng} onChange={(event) => updateField('locationLng', event.target.value)} className={INPUT_CLASS} />
               </label>
             </div>
           </Section>

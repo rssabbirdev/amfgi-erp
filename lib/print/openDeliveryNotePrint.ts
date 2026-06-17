@@ -1,11 +1,13 @@
+import {
+  buildDeliveryNotePrintUrl,
+  prefersPrintWindow,
+  type DeliveryNotePrintParams,
+} from '@/lib/print/printEnvironment';
+
 export const DELIVERY_NOTE_PRINT_DONE = 'delivery-note-print-finished';
 export const DELIVERY_NOTE_PRINT_ERROR = 'delivery-note-print-error';
 
-export type DeliveryNotePrintParams = {
-  transactionId?: string;
-  deliveryNoteId?: string;
-  templateId?: string;
-};
+export type { DeliveryNotePrintParams };
 
 type OpenDeliveryNotePrintOptions = {
   onError?: (message: string) => void;
@@ -16,11 +18,14 @@ export function openDeliveryNotePrint(
   params: DeliveryNotePrintParams,
   options?: OpenDeliveryNotePrintOptions
 ): void {
-  const sp = new URLSearchParams();
-  if (params.transactionId) sp.set('id', params.transactionId);
-  if (params.deliveryNoteId) sp.set('deliveryNoteId', params.deliveryNoteId);
-  if (params.templateId) sp.set('templateId', params.templateId);
-  sp.set('embed', '1');
+  if (prefersPrintWindow()) {
+    const url = buildDeliveryNotePrintUrl(params);
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      window.location.assign(url);
+    }
+    return;
+  }
 
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
@@ -53,6 +58,6 @@ export function openDeliveryNotePrint(
   window.addEventListener('message', onMessage);
   window.setTimeout(cleanup, 5 * 60 * 1000);
 
-  iframe.src = `/print/delivery-note?${sp.toString()}`;
+  iframe.src = buildDeliveryNotePrintUrl(params, { embed: true });
   document.body.appendChild(iframe);
 }

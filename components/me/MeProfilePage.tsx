@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { displayNationalityCountryName } from '@/lib/hr/countryNames';
 import { parseWorkforceProfile, WORKFORCE_VISA_HOLDING_OPTIONS } from '@/lib/hr/workforceProfile';
 import {
   type EmployeeRecord,
@@ -95,7 +96,7 @@ export default function MeProfilePage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <InfoCard label="Mobile number" value={employee.phone} />
             <InfoCard label="Email" value={employee.email} />
-            <InfoCard label="Nationality" value={employee.nationality} />
+            <InfoCard label="Nationality" value={displayNationalityCountryName(employee.nationality) || '-'} />
             <InfoCard label="Gender" value={employee.gender} />
             <InfoCard label="Date of birth" value={formatDate(employee.dateOfBirth)} />
             <InfoCard label="Blood group" value={employee.bloodGroup} />

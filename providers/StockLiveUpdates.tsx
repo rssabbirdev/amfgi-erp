@@ -7,7 +7,10 @@ import { appApi } from '@/store/api/appApi';
 import { adminApi } from '@/store/api/adminApi';
 import { STOCK_LEDGER_INVALIDATES } from '@/store/api/stockInvalidation';
 import { useAppDispatch } from '@/store/hooks';
+import { switchActiveCompany } from '@/store/slices/companySlice';
 import type { RootState } from '@/store/store';
+import { isPermissionAffectingLiveUpdate } from '@/lib/live-updates/client';
+import type { Permission } from '@/lib/permissions';
 
 type LiveUpdateChannel =
   | 'stock'
@@ -32,9 +35,10 @@ type ApiWithUtils = typeof appApi | typeof adminApi;
 export default function StockLiveUpdates() {
   const dispatch = useAppDispatch();
   const store = useStore<RootState>();
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const activeCompanyId = session?.user?.activeCompanyId;
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const sessionRefreshInFlightRef = useRef(false);
   const pendingChannelsRef = useRef(new Set<LiveUpdateChannel>());
 
   const fetchJson = useCallback(async <T,>(url: string) => {
@@ -487,53 +491,36 @@ export default function StockLiveUpdates() {
     ]);
   }, [fetchJson, selectCachedArgs, store, upsertQueryData]);
 
-  const refreshCachedAdminQueries = useCallback(async () => {
-    const state = store.getState();
-    const companyArgs = selectCachedArgs(adminApi, state, 'getCompanies');
-    const companyProfileArgs = selectCachedArgs(adminApi, state, 'getCompanyProfiles');
-    const userArgs = selectCachedArgs(adminApi, state, 'getUsers');
-    const userPageArgs = selectCachedArgs(adminApi, state, 'getUsersPage');
-    const roleArgs = selectCachedArgs(adminApi, state, 'getRoles');
+  const refreshSessionPermissions = useCallback(async () => {
+    if (sessionRefreshInFlightRef.current) return;
+    sessionRefreshInFlightRef.current = true;
+    try {
+      const previous = (session?.user?.permissions ?? []) as Permission[];
+      const updated = await update();
+      const user = updated?.user;
+      if (!user) return;
 
-    await Promise.allSettled([
-      ...companyArgs.map(async (arg) => {
-        const json = await fetchJson<{ data: unknown }>('/api/companies');
-        upsertQueryData(adminApi, 'getCompanies', arg, json.data);
-      }),
-      ...companyProfileArgs.map(async (arg) => {
-        const json = await fetchJson<{ data: unknown }>('/api/company-profiles');
-        upsertQueryData(adminApi, 'getCompanyProfiles', arg, json.data);
-      }),
-      ...userArgs.map(async (arg) => {
-        const json = await fetchJson<{ data: unknown }>('/api/users');
-        upsertQueryData(adminApi, 'getUsers', arg, json.data);
-      }),
-      ...userPageArgs.map(async (arg) => {
-        if (!arg || typeof arg !== 'object') return;
-        const params = arg as {
-          limit: number;
-          offset: number;
-          search?: string;
-          status?: string;
-          tab?: string;
-          companyId?: string;
-        };
-        const searchParams = new URLSearchParams();
-        searchParams.set('limit', String(params.limit));
-        searchParams.set('offset', String(params.offset));
-        if (params.search?.trim()) searchParams.set('search', params.search.trim());
-        if (params.status && params.status !== 'all') searchParams.set('status', params.status);
-        if (params.tab) searchParams.set('tab', params.tab);
-        if (params.companyId && params.companyId !== 'all') searchParams.set('companyId', params.companyId);
-        const json = await fetchJson<{ data: unknown }>(`/api/users?${searchParams.toString()}`);
-        upsertQueryData(adminApi, 'getUsersPage', arg, json.data);
-      }),
-      ...roleArgs.map(async (arg) => {
-        const json = await fetchJson<{ data: unknown }>('/api/roles');
-        upsertQueryData(adminApi, 'getRoles', arg, json.data);
-      }),
-    ]);
-  }, [fetchJson, selectCachedArgs, store, upsertQueryData]);
+      dispatch(
+        switchActiveCompany({
+          activeCompanyId: user.activeCompanyId ?? null,
+          activeCompanySlug: user.activeCompanySlug ?? null,
+          activeCompanyName: user.activeCompanyName ?? null,
+          permissions: user.permissions ?? [],
+        }),
+      );
+
+      const next = (user.permissions ?? []) as Permission[];
+      const permissionsChanged =
+        previous.length !== next.length ||
+        previous.some((permission) => !next.includes(permission));
+
+      if (permissionsChanged) {
+        dispatch(appApi.util.resetApiState());
+      }
+    } finally {
+      sessionRefreshInFlightRef.current = false;
+    }
+  }, [dispatch, session?.user?.permissions, update]);
 
   const refreshCachedHrQueries = useCallback(async () => {
     const state = store.getState();
@@ -634,7 +621,9 @@ export default function StockLiveUpdates() {
           await Promise.allSettled([refreshCachedSettingsQueries(), refreshCachedStockQueries()]);
           return;
         case 'admin':
-          await refreshCachedAdminQueries();
+          dispatch(
+            adminApi.util.invalidateTags(['User', 'Role', 'Company', 'CompanyProfile']),
+          );
           return;
         case 'hr':
           await refreshCachedHrQueries();
@@ -642,7 +631,7 @@ export default function StockLiveUpdates() {
       }
     },
     [
-      refreshCachedAdminQueries,
+      dispatch,
       refreshCachedCustomerQueries,
       refreshCachedHrQueries,
       refreshCachedJobQueries,
@@ -676,7 +665,7 @@ export default function StockLiveUpdates() {
   );
 
   useEffect(() => {
-    if (status !== 'authenticated' || !activeCompanyId) return;
+    if (status !== 'authenticated') return;
 
     const source = new EventSource('/api/live-updates');
 
@@ -687,6 +676,10 @@ export default function StockLiveUpdates() {
         if (!payload.channel) return;
         if (payload.companyId !== activeCompanyId && payload.companyId !== 'GLOBAL') return;
 
+        if (isPermissionAffectingLiveUpdate(payload)) {
+          void refreshSessionPermissions();
+        }
+
         queueSilentRefresh(payload.channel);
       } catch {}
     };
@@ -694,7 +687,7 @@ export default function StockLiveUpdates() {
     return () => {
       source.close();
     };
-  }, [activeCompanyId, queueSilentRefresh, status]);
+  }, [activeCompanyId, queueSilentRefresh, refreshSessionPermissions, status]);
 
   return null;
 }

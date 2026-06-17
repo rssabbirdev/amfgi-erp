@@ -50,9 +50,9 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\customers\\jobs\\form\\page.tsx": {
-    "mtime": 1778587818.0,
-    "ast_hash": "b48197aa4fe0fcaa3533df187d483922",
-    "semantic_hash": "b48197aa4fe0fcaa3533df187d483922"
+    "mtime": 1781685523.1969008,
+    "ast_hash": "f1502721b3bda46f76df3bec43ce09ca",
+    "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\customers\\jobs\\[id]\\page.tsx": {
     "mtime": 1778587818.0,
@@ -85,13 +85,13 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\hr\\employees\\page.tsx": {
-    "mtime": 1780500788.6209998,
-    "ast_hash": "c4b3a548370c5d26c7b045e6d762a9ef",
+    "mtime": 1781686430.8252234,
+    "ast_hash": "0fa33e5e029c7cff04aa89b1cf477c1d",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\hr\\employees\\new\\page.tsx": {
-    "mtime": 1781391053.645284,
-    "ast_hash": "1640382c99026cfa17277c20f1d28b7e",
+    "mtime": 1781693304.6640458,
+    "ast_hash": "265dc3c09112ef2bb392e5c9c8b66fe0",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\hr\\employees\\[id]\\page.tsx": {
@@ -270,13 +270,13 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\stock\\dispatch\\page.tsx": {
-    "mtime": 1781354527.997393,
-    "ast_hash": "b5ec345fe3f41da8d304a9e692c64b5c",
+    "mtime": 1781683521.5712795,
+    "ast_hash": "3f6fb7395c82a384f16aec5d31cf9bcd",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\stock\\dispatch\\delivery-note\\page.tsx": {
-    "mtime": 1781619800.63203,
-    "ast_hash": "19b0cbb64187b9926e6fce4551412bf0",
+    "mtime": 1781684100.3903375,
+    "ast_hash": "ad7ac1737fd1e052039810252e5e3135",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\stock\\dispatch\\entry\\page.tsx": {
@@ -570,13 +570,13 @@
     "semantic_hash": "4c4d8646b2a654425287372dbf3980b7"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\hr\\employees\\route.ts": {
-    "mtime": 1780500788.5130355,
-    "ast_hash": "3cda117e62fdb61481b7edbbd65b0234",
+    "mtime": 1781692424.1311092,
+    "ast_hash": "5fb06838c79906bfa0fafb384da019ca",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\hr\\employees\\[id]\\route.ts": {
-    "mtime": 1781619800.664468,
-    "ast_hash": "5866b530a322bb3579d4291d549b5d7b",
+    "mtime": 1781692391.6523716,
+    "ast_hash": "d8827a5d71b59d40af17f729edcac772",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\hr\\employees\\[id]\\documents\\route.ts": {
@@ -795,8 +795,8 @@
     "semantic_hash": "b49d2789201d0df5ceaafca8e6a74451"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\materials\\dispatch-history-entries\\route.ts": {
-    "mtime": 1781354943.7533169,
-    "ast_hash": "2f3c1a4658bb0d4630dde5bb9dce73d6",
+    "mtime": 1781682093.1181133,
+    "ast_hash": "da5c74a7c4cabff10507a5306b04bdd0",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\materials\\logs\\route.ts": {
@@ -1250,8 +1250,8 @@
     "semantic_hash": "d00bac5a038b02b65ba63c24a057c376"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\print\\delivery-note\\page.tsx": {
-    "mtime": 1781248937.8345912,
-    "ast_hash": "2b3833e1c48b3dd8c238e4ee2d112d8a",
+    "mtime": 1781682556.4867163,
+    "ast_hash": "e6c5a53d5ece72cb0dd20e157883580a",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\privacy-policy\\page.tsx": {
@@ -1305,8 +1305,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\hr\\EmployeeProfileView.tsx": {
-    "mtime": 1781391053.645284,
-    "ast_hash": "4f6b03571a2916a20a2c5fbfd00b7755",
+    "mtime": 1781693411.6223216,
+    "ast_hash": "27ace77e0549c7d53b56149d4eb6e4e6",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\hr\\HrPageChrome.tsx": {
@@ -1430,9 +1430,9 @@
     "semantic_hash": "673bf8b4ff60175690ddc8d9db8b4bb8"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\me\\MeProfilePage.tsx": {
-    "mtime": 1776408960.0,
-    "ast_hash": "459222d90bfa1950c9c6adb674506965",
-    "semantic_hash": "459222d90bfa1950c9c6adb674506965"
+    "mtime": 1781692424.8907168,
+    "ast_hash": "8cccbee73f7e22180ce840ebc8daebfc",
+    "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\me\\shared.tsx": {
     "mtime": 1781676500.3090134,
@@ -1560,8 +1560,8 @@
     "semantic_hash": "a5e7228f980b2b407d76373aa423211b"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\ui\\Modal.tsx": {
-    "mtime": 1780500788.4249992,
-    "ast_hash": "30501202069a4ce2bcacd24af93c82d1",
+    "mtime": 1781683523.539915,
+    "ast_hash": "2b58e34f060e411728401b1f5848a875",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\ui\\MultiSelectDropdown.tsx": {
@@ -1880,9 +1880,9 @@
     "semantic_hash": "efd8a15c6730c97fcc2750992b3b7ee7"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\employeeMeta.ts": {
-    "mtime": 1776342958.0,
-    "ast_hash": "29e36be5633419d85067060c44570fa9",
-    "semantic_hash": "29e36be5633419d85067060c44570fa9"
+    "mtime": 1781692314.4891326,
+    "ast_hash": "8b95ce36af1ee38bb53cbc493463a176",
+    "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\employeeTypeSettings.ts": {
     "mtime": 1777300842.0,
@@ -1975,8 +1975,8 @@
     "semantic_hash": "b64147a2a77b278292d642ad3c18ca85"
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\import-export\\formatImportErrors.ts": {
-    "mtime": 1780500788.554462,
-    "ast_hash": "af16442c166f93434c9c3f327f0a3a5b",
+    "mtime": 1781686449.6834989,
+    "ast_hash": "ec8b8202d73b64bda42e4bf21dc55c13",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\import-export\\jobVariationFields.ts": {
@@ -2385,8 +2385,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\auth.ts": {
-    "mtime": 1781619800.7189357,
-    "ast_hash": "9d71383f91404055b78271bf7ce53f9f",
+    "mtime": 1781684411.714048,
+    "ast_hash": "d550e1a642015a0a0940094c413c4398",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\eslint.config.mjs": {
@@ -2400,7 +2400,7 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\next-env.d.ts": {
-    "mtime": 1781676326.6630757,
+    "mtime": 1781700460.0680425,
     "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
     "semantic_hash": ""
   },
@@ -2730,13 +2730,13 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\providers\\SessionProvider.tsx": {
-    "mtime": 1775465014.0,
+    "mtime": 1781684913.507205,
     "ast_hash": "47efdcf270d537668a6caf862215fe3b",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\providers\\StockLiveUpdates.tsx": {
-    "mtime": 1781248107.7586937,
-    "ast_hash": "bba700131c1ad97a56a2eaa3ff53c2a0",
+    "mtime": 1781684913.0853448,
+    "ast_hash": "ca768f5e8f313e193fc602da5f646729",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\providers\\ThemeProvider.tsx": {
@@ -2820,13 +2820,13 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\store\\api\\endpoints\\dispatch.ts": {
-    "mtime": 1781354515.7875056,
-    "ast_hash": "12e0a708492d537f4a27792849e5b0c3",
+    "mtime": 1781682061.5493493,
+    "ast_hash": "412abb72dd9f2df1f6f803d3f3281025",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\store\\api\\endpoints\\hr.ts": {
-    "mtime": 1780500788.5574715,
-    "ast_hash": "646c6a3a59dc4f393e25a9d9099a2745",
+    "mtime": 1781700360.8080144,
+    "ast_hash": "2f8bff3b8dbb6d42a4b01daa2caa9279",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\store\\api\\endpoints\\jobs.ts": {
@@ -3235,13 +3235,13 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\api\\hr\\employees\\import\\bulk\\route.ts": {
-    "mtime": 1780500788.5965188,
-    "ast_hash": "9cbde7c1f4126ec307665e4d19cd8573",
+    "mtime": 1781686414.7237897,
+    "ast_hash": "7a9f8729c2d46ca0fee49f0854d6b61a",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\hr\\EmployeeImportModal.tsx": {
-    "mtime": 1780500788.588552,
-    "ast_hash": "b6d8b877564290473e5052cb8614ffdf",
+    "mtime": 1781686432.9110215,
+    "ast_hash": "5d141ff72a6ab23bf544c9a419a80e8b",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\import-export\\apiErrors.ts": {
@@ -3255,18 +3255,18 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\import-export\\employeeFields.ts": {
-    "mtime": 1780500788.4249992,
-    "ast_hash": "6e817ad2ed1849ff7101c72f0c1e7bc4",
+    "mtime": 1781692378.969296,
+    "ast_hash": "1f4a2e372fc866e5aed2e45c54d74f66",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\import-export\\exportEmployees.ts": {
-    "mtime": 1780500788.5729103,
-    "ast_hash": "6067ad4c0032b6a1b6d2fb9f22411749",
+    "mtime": 1781686392.7629538,
+    "ast_hash": "31ab3da232c88b6f18527f91df871d78",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\import-export\\runEmployeeBulkImport.ts": {
-    "mtime": 1780500788.4328783,
-    "ast_hash": "83cc035c6474b0dd2b9a29a14d9cc542",
+    "mtime": 1781692425.4552693,
+    "ast_hash": "afc2a8e8c85d2ffd9dcda38d191268be",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\job-costing\\buildStoredJobItemEstimate.ts": {
@@ -3320,8 +3320,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\scripts\\delete-jobs.ts": {
-    "mtime": 1780993265.6871295,
-    "ast_hash": "a01459f5fa86108c22015cca618f7bf0",
+    "mtime": 1781698649.9561167,
+    "ast_hash": "a42b76342dce6b96a701af8675a9af31",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\jobVariationImportKey.test.ts": {
@@ -3895,8 +3895,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\print\\openDeliveryNotePrint.ts": {
-    "mtime": 1781100056.3533635,
-    "ast_hash": "ee31a111569567743218f175fa0bdee7",
+    "mtime": 1781682568.0612319,
+    "ast_hash": "e97cd2fd4e9223711e160a5fc50e535f",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\utils\\deliveryNoteCustomItems.ts": {
@@ -4110,8 +4110,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\hr\\NationalitySearchSelect.tsx": {
-    "mtime": 1781391053.5336323,
-    "ast_hash": "c17ac7938d543585da925d95930db443",
+    "mtime": 1781692318.6029124,
+    "ast_hash": "5fbe06c0c9272a04ccbf2761f2b77d80",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\app\\(app)\\hr\\settings\\employment-options\\page.tsx": {
@@ -4130,8 +4130,8 @@
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\components\\hr\\EmployeeMetaSelect.tsx": {
-    "mtime": 1781391053.614936,
-    "ast_hash": "f4629635680a39148bd3ac1dbe1a51fe",
+    "mtime": 1781693204.9446733,
+    "ast_hash": "3de0f45f79d6f360b5e71048c2ccb113",
     "semantic_hash": ""
   },
   "E:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\employeeMetaOptions.ts": {
@@ -4437,6 +4437,96 @@
   "E:\\almuraqib-custom-application\\AMFGI\\prisma\\migrations-postgres\\20260616120000_company_holidays_wps_compensation\\migration.sql": {
     "mtime": 1781676087.578612,
     "ast_hash": "bcbed4a7ff0a378a261516308edf89a7",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\print\\printEnvironment.ts": {
+    "mtime": 1781682565.6229496,
+    "ast_hash": "dc209dd480a78b40c59c87a2c32a6a6b",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\printEnvironment.test.ts": {
+    "mtime": 1781682621.3016398,
+    "ast_hash": "4a1857d2abc58c0a63ecfdabe4fcb545",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\components\\ui\\ResponsiveDialog.tsx": {
+    "mtime": 1781683518.427461,
+    "ast_hash": "c505a526062862ec89cbb13a877b987b",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\auth\\refreshSessionToken.ts": {
+    "mtime": 1781700625.223308,
+    "ast_hash": "ee6be74532af5a729595f3eda7f7f2ed",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\refreshSessionToken.test.ts": {
+    "mtime": 1781684430.2275002,
+    "ast_hash": "71536b0c6ddde27ba00db93d3cf09e78",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\live-updates\\client.ts": {
+    "mtime": 1781684898.5046425,
+    "ast_hash": "c71df6231f1909cea15e4787ac28371e",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\unit\\liveUpdatesClient.test.ts": {
+    "mtime": 1781684942.0157454,
+    "ast_hash": "12986262afef31a5d010b085c2de4f3c",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\employeeImportProfile.ts": {
+    "mtime": 1781700874.5883782,
+    "ast_hash": "efb0efe4c351b3864131fc393d978c73",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\employeeListQuery.ts": {
+    "mtime": 1781686308.8225737,
+    "ast_hash": "6216c843ccce0f0eed47a710a8a02304",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\lib\\import-export\\employeeFields.test.ts": {
+    "mtime": 1781686448.7433453,
+    "ast_hash": "41b00597b04f07bc42c1065008ce0e64",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\countryNames.ts": {
+    "mtime": 1781692381.02448,
+    "ast_hash": "56f4a955f4f5147a9d34d14d88c1a63c",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\__tests__\\lib\\hr\\countryNames.test.ts": {
+    "mtime": 1781692437.5215967,
+    "ast_hash": "98f22e9d9848b29b61319af613039172",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\components\\hr\\CatalogSearchSelect.tsx": {
+    "mtime": 1781693201.7527735,
+    "ast_hash": "605551ee15af94a6b51bdfea9e809b4a",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\components\\hr\\useEmployeeMetaOptions.ts": {
+    "mtime": 1781693207.5280192,
+    "ast_hash": "0a9b07daa3d0c541ecbaaa1fbd502d68",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\hr\\employeeFieldOptions.ts": {
+    "mtime": 1781693214.9017787,
+    "ast_hash": "29ca23d3cf2b127f9b3535f2f9e484bf",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\db\\postgresAdapter.js": {
+    "mtime": 1781698804.7620554,
+    "ast_hash": "d291be7dc825af5d8f2c6ae38ccd3532",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\db\\postgresPoolConfig.js": {
+    "mtime": 1781698804.7620554,
+    "ast_hash": "7272cbdf29605e9e4ec2e196c41eac5a",
+    "semantic_hash": ""
+  },
+  "E:\\almuraqib-custom-application\\AMFGI\\lib\\db\\resolveDatabaseUrl.js": {
+    "mtime": 1781698804.75224,
+    "ast_hash": "d8b65c3d948aa1200ca414858215403e",
     "semantic_hash": ""
   }
 }

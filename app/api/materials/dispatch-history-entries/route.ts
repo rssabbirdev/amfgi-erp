@@ -111,6 +111,7 @@ export async function GET(req: Request) {
           jobNumber: true,
           description: true,
           contactPerson: true,
+          customer: { select: { name: true } },
           contacts: {
             orderBy: { sortOrder: 'asc' },
           },
@@ -255,6 +256,7 @@ export async function GET(req: Request) {
         jobId: firstTxn.jobId,
         jobNumber: firstTxn.job?.jobNumber ?? 'N/A',
         jobDescription: firstTxn.job?.description ?? '',
+        customerName: firstTxn.job?.customer?.name ?? undefined,
         jobContactPerson: serializedJob?.contactPerson ?? undefined,
         jobContactsJson: serializedJob?.contactsJson ?? undefined,
         dispatchDate: firstTxn.date,
@@ -312,6 +314,7 @@ export async function GET(req: Request) {
           jobNumber: true,
           description: true,
           contactPerson: true,
+          customer: { select: { name: true } },
           contacts: {
             orderBy: { sortOrder: 'asc' },
           },
@@ -426,6 +429,7 @@ export async function GET(req: Request) {
       jobId: dn.jobId ?? '',
       jobNumber: dn.job?.jobNumber ?? 'N/A',
       jobDescription: dn.job?.description ?? '',
+      customerName: dn.job?.customer?.name ?? undefined,
       jobContactPerson: serializedJob?.contactPerson ?? undefined,
       jobContactsJson: serializedJob?.contactsJson ?? undefined,
       dispatchDate: dn.date,
@@ -467,7 +471,7 @@ export async function GET(req: Request) {
 
     if (searchRaw) {
       const needle = searchRaw.replace(/^#/, '');
-      const jobHay = [entry.jobNumber, entry.jobDescription, entry.supplierName]
+      const jobHay = [entry.jobNumber, entry.jobDescription, entry.customerName, entry.supplierName]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
@@ -485,7 +489,7 @@ export async function GET(req: Request) {
     }
 
     if (jobSearch) {
-      const hay = [entry.jobNumber, entry.jobDescription, entry.supplierName]
+      const hay = [entry.jobNumber, entry.jobDescription, entry.customerName, entry.supplierName]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();

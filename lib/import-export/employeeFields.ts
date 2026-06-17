@@ -2,13 +2,14 @@ import { cellToString, downloadWorkbook, parseOptionalBoolean } from '@/lib/impo
 import type { ImportFieldDef, MappedImportRow } from '@/lib/import-export/types';
 import {
   WORKFORCE_EMPLOYEE_TYPE_OPTIONS,
+  WORKFORCE_EMPLOYEE_TYPE_SHORT_LABELS,
   WORKFORCE_VISA_HOLDING_OPTIONS,
   type WorkforceEmployeeType,
   type WorkforceVisaHolding,
-  buildWorkforceProfileExtension,
   parseWorkforceProfile,
 } from '@/lib/hr/workforceProfile';
 import { parsePartyListDateInput } from '@/lib/partyListsApi';
+import { normalizeNationalityCountryName } from '@/lib/hr/countryNames';
 import type { HrEmployeeExportRecord } from '@/store/api/endpoints/hr';
 
 export const EMPLOYEE_IMPORT_FIELDS: ImportFieldDef[] = [
@@ -18,7 +19,7 @@ export const EMPLOYEE_IMPORT_FIELDS: ImportFieldDef[] = [
   { key: 'preferred_name', label: 'Preferred Name' },
   { key: 'email', label: 'Email' },
   { key: 'phone', label: 'Phone', aliases: ['mobile', 'mobile number'] },
-  { key: 'nationality', label: 'Nationality' },
+  { key: 'nationality', label: 'Nationality', aliases: ['country', 'country name'] },
   { key: 'date_of_birth', label: 'Date of Birth', aliases: ['dob', 'birth date'] },
   { key: 'gender', label: 'Gender' },
   { key: 'designation', label: 'Designation' },
@@ -31,7 +32,8 @@ export const EMPLOYEE_IMPORT_FIELDS: ImportFieldDef[] = [
   { key: 'emergency_contact_phone', label: 'Emergency Contact Phone' },
   { key: 'blood_group', label: 'Blood Group' },
   { key: 'portal_enabled', label: 'Portal Enabled', aliases: ['portal'] },
-  { key: 'employee_type', label: 'Employee Type', aliases: ['workforce type'] },
+  { key: 'admin_notes', label: 'Admin Notes', aliases: ['hr notes', 'internal notes'] },
+  { key: 'employee_type', label: 'Employee Type', aliases: ['workforce type', 'workforce role'] },
   { key: 'visa_holding', label: 'Visa Holding' },
   { key: 'expertises', label: 'Expertises', aliases: ['skills', 'expertise'] },
   { key: '__skip__', label: 'Skip Column' },
@@ -59,6 +61,7 @@ export type EmployeeImportRow = {
   emergencyContactPhone?: string | null;
   bloodGroup?: string | null;
   portalEnabled?: boolean;
+  adminNotes?: string | null;
   employeeType?: WorkforceEmployeeType;
   visaHolding?: WorkforceVisaHolding;
   expertises?: string[];
@@ -101,7 +104,9 @@ export function employeeToExportRow(employee: HrEmployeeExportRecord): Record<st
     'Emergency Contact Phone': employee.emergencyContactPhone ?? '',
     'Blood Group': employee.bloodGroup ?? '',
     'Portal Enabled': employee.portalEnabled ? 'TRUE' : 'FALSE',
+    'Admin Notes': employee.adminNotes ?? '',
     'Employee Type': employeeTypeLabel(profile.employeeType),
+    'Workforce Role Short': WORKFORCE_EMPLOYEE_TYPE_SHORT_LABELS[profile.employeeType] ?? profile.employeeType,
     'Visa Holding': visaHoldingLabel(profile.visaHolding),
     Expertises: profile.expertises.join(', '),
   };
@@ -132,6 +137,10 @@ function parseEmployeeTypeInput(value: string, errors: string[]): WorkforceEmplo
   const upper = trimmed.toUpperCase().replace(/\s+/g, '_');
   const byValue = WORKFORCE_EMPLOYEE_TYPE_OPTIONS.find((o) => o.value === upper);
   if (byValue) return byValue.value;
+  const byShort = Object.entries(WORKFORCE_EMPLOYEE_TYPE_SHORT_LABELS).find(
+    ([, label]) => label.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (byShort) return byShort[0] as WorkforceEmployeeType;
   const byLabel = WORKFORCE_EMPLOYEE_TYPE_OPTIONS.find(
     (o) => o.label.toLowerCase() === trimmed.toLowerCase() || o.label.toLowerCase().startsWith(trimmed.toLowerCase())
   );
@@ -159,6 +168,11 @@ function parseVisaHoldingInput(value: string, errors: string[]): WorkforceVisaHo
 function parseExpertisesInput(value: string): string[] {
   if (!value.trim()) return [];
   return [...new Set(value.split(/[,;|]/).map((part) => part.trim()).filter(Boolean))];
+}
+
+function optionalMappedString(row: MappedImportRow, key: string): string | null | undefined {
+  if (!(key in row)) return undefined;
+  return cellToString(row[key] as string | undefined) || null;
 }
 
 export function mapEmployeeImportRow(
@@ -195,6 +209,16 @@ export function mapEmployeeImportRow(
     parsed.__errors.push('Email must be a valid email address');
   }
 
+  const nationalityRaw = cellToString(parsed.nationality as string | undefined);
+  if (nationalityRaw) {
+    const normalized = normalizeNationalityCountryName(nationalityRaw);
+    if (!normalized.value) {
+      parsed.__errors.push(normalized.error ?? 'Invalid nationality');
+    } else {
+      parsed.nationality = normalized.value;
+    }
+  }
+
   const phone = cellToString(parsed.phone as string | undefined);
   if (phone.length > 50) {
     parsed.__errors.push(`Phone: maximum 50 characters (your value has ${phone.length})`);
@@ -213,8 +237,6 @@ export function mapEmployeeImportRow(
   if (statusRaw) {
     const status = parseEmployeeStatus(statusRaw, parsed.__errors);
     if (status) parsed.status = status;
-  } else {
-    parsed.status = 'ACTIVE';
   }
 
   const portalRaw = parsed.portal_enabled;
@@ -240,66 +262,67 @@ export function mapEmployeeImportRow(
   }
 
   const expertisesRaw = cellToString(parsed.expertises as string | undefined);
-  if (expertisesRaw) parsed.expertisesList = parseExpertisesInput(expertisesRaw);
+  if (expertisesRaw !== undefined && expertisesRaw !== '') {
+    parsed.expertisesList = parseExpertisesInput(expertisesRaw);
+  } else if ('expertises' in parsed) {
+    parsed.expertisesList = [];
+  }
 
   return parsed;
 }
 
 export function employeeImportRowToPayload(row: MappedImportRow): EmployeeImportRow {
-  const profile = parseWorkforceProfile(null);
-  const employeeType =
-    (row.employeeType as WorkforceEmployeeType | undefined) ?? profile.employeeType;
-  const visaHolding = (row.visaHolding as WorkforceVisaHolding | undefined) ?? profile.visaHolding;
-  const expertises = (row.expertisesList as string[] | undefined) ?? profile.expertises;
-
-  return {
-    id: cellToString(row.id as string | undefined) || undefined,
+  const payload: EmployeeImportRow = {
     employeeCode: cellToString(row.employee_code as string),
     fullName: cellToString(row.full_name as string),
-    preferredName: cellToString(row.preferred_name as string | undefined) || null,
-    email: cellToString(row.email as string | undefined) || null,
-    phone: cellToString(row.phone as string | undefined) || null,
-    nationality: cellToString(row.nationality as string | undefined) || null,
-    dateOfBirth: cellToString(row.date_of_birth as string | undefined) || null,
-    gender: cellToString(row.gender as string | undefined) || null,
-    designation: cellToString(row.designation as string | undefined) || null,
-    department: cellToString(row.department as string | undefined) || null,
-    employmentType: cellToString(row.employment_type as string | undefined) || null,
-    hireDate: cellToString(row.hire_date as string | undefined) || null,
-    terminationDate: cellToString(row.termination_date as string | undefined) || null,
-    status: (row.status as EmployeeImportRow['status']) ?? 'ACTIVE',
-    emergencyContactName: cellToString(row.emergency_contact_name as string | undefined) || null,
-    emergencyContactPhone: cellToString(row.emergency_contact_phone as string | undefined) || null,
-    bloodGroup: cellToString(row.blood_group as string | undefined) || null,
-    portalEnabled:
-      row.portalEnabled !== undefined
-        ? Boolean(row.portalEnabled)
-        : parseOptionalBoolean(row.portal_enabled as string | number | boolean | undefined),
-    employeeType,
-    visaHolding,
-    expertises,
   };
-}
 
-export function buildEmployeeProfileExtensionFromImport(row: EmployeeImportRow): Record<string, unknown> {
-  return buildWorkforceProfileExtension({
-    employeeType: row.employeeType ?? 'LABOUR_WORKER',
-    visaHolding: row.visaHolding ?? 'COMPANY_PROVIDED',
-    expertises: row.expertises ?? [],
-  });
+  const id = optionalMappedString(row, 'id');
+  if (id !== undefined) payload.id = id || undefined;
+  if ('preferred_name' in row) payload.preferredName = optionalMappedString(row, 'preferred_name') ?? null;
+  if ('email' in row) payload.email = optionalMappedString(row, 'email') ?? null;
+  if ('phone' in row) payload.phone = optionalMappedString(row, 'phone') ?? null;
+  if ('nationality' in row) payload.nationality = optionalMappedString(row, 'nationality') ?? null;
+  if ('date_of_birth' in row) payload.dateOfBirth = optionalMappedString(row, 'date_of_birth') ?? null;
+  if ('gender' in row) payload.gender = optionalMappedString(row, 'gender') ?? null;
+  if ('designation' in row) payload.designation = optionalMappedString(row, 'designation') ?? null;
+  if ('department' in row) payload.department = optionalMappedString(row, 'department') ?? null;
+  if ('employment_type' in row) payload.employmentType = optionalMappedString(row, 'employment_type') ?? null;
+  if ('hire_date' in row) payload.hireDate = optionalMappedString(row, 'hire_date') ?? null;
+  if ('termination_date' in row) payload.terminationDate = optionalMappedString(row, 'termination_date') ?? null;
+  if (row.status !== undefined) payload.status = row.status as EmployeeImportRow['status'];
+  if ('emergency_contact_name' in row) {
+    payload.emergencyContactName = optionalMappedString(row, 'emergency_contact_name') ?? null;
+  }
+  if ('emergency_contact_phone' in row) {
+    payload.emergencyContactPhone = optionalMappedString(row, 'emergency_contact_phone') ?? null;
+  }
+  if ('blood_group' in row) payload.bloodGroup = optionalMappedString(row, 'blood_group') ?? null;
+  if ('admin_notes' in row) payload.adminNotes = optionalMappedString(row, 'admin_notes') ?? null;
+  if (row.portalEnabled !== undefined) payload.portalEnabled = Boolean(row.portalEnabled);
+  if (row.employeeType !== undefined) payload.employeeType = row.employeeType as WorkforceEmployeeType;
+  if (row.visaHolding !== undefined) payload.visaHolding = row.visaHolding as WorkforceVisaHolding;
+  if (row.expertisesList !== undefined) payload.expertises = row.expertisesList as string[];
+
+  return payload;
 }
 
 export function downloadEmployeeImportTemplate() {
   const instructions = [
     ['Field', 'Required', 'Instructions'],
     ['ID', 'No', 'Leave blank for new employees. Use existing ID to update.'],
-    ['Employee Code', 'Yes', 'Unique per company. Used to match duplicates.'],
+    ['Employee Code', 'Yes', 'Unique per company. Used to match duplicates on update.'],
     ['Full Name', 'Yes', 'Legal / display name.'],
-    ['Status', 'No', 'ACTIVE, ON_LEAVE, SUSPENDED, or EXITED. Defaults to ACTIVE.'],
+    ['Status', 'No', 'ACTIVE, ON_LEAVE, SUSPENDED, or EXITED. New rows default to ACTIVE when blank.'],
     ['Portal Enabled', 'No', 'TRUE/FALSE. Does not auto-create login accounts on import.'],
-    ['Employee Type', 'No', 'Office Staff, Hybrid Staff, Driver, or Labour / Worker.'],
-    ['Expertises', 'No', 'Comma-separated skill labels.'],
+    ['Admin Notes', 'No', 'HR-only internal notes from the employee profile.'],
+    ['Employee Type', 'No', 'Office Staff, Hybrid Staff, Driver, Labour / Worker, or short names (Office, Hybrid, Driver, Labour).'],
+    ['Visa Holding', 'No', 'Company provided, Self own, or No visa.'],
+    ['Expertises', 'No', 'Comma-separated names from HR → Expertise catalog.'],
+    ['Nationality', 'No', 'Use country names (e.g. India, United Arab Emirates). Legacy demonyms like Indian or Emirati are accepted on import.'],
+    ['Designation / Department / Employment Type', 'No', 'Free text or values from HR → Employment options.'],
     ['Dates', 'No', 'Use YYYY-MM-DD.'],
+    ['Updates', '—', 'Only mapped columns with values are changed; blank cells keep existing data.'],
   ];
   const template = [
     {
@@ -309,12 +332,12 @@ export function downloadEmployeeImportTemplate() {
       'Preferred Name': '',
       Email: 'employee@example.com',
       Phone: '+971500000000',
-      Nationality: 'UAE',
+      Nationality: 'United Arab Emirates',
       'Date of Birth': '1990-01-15',
       Gender: '',
       Designation: 'Technician',
       Department: 'Production',
-      'Employment Type': 'Full time',
+      'Employment Type': 'Permanent',
       'Hire Date': '2024-01-01',
       'Termination Date': '',
       Status: 'ACTIVE',
@@ -322,6 +345,7 @@ export function downloadEmployeeImportTemplate() {
       'Emergency Contact Phone': '',
       'Blood Group': '',
       'Portal Enabled': 'FALSE',
+      'Admin Notes': '',
       'Employee Type': 'Labour / Worker',
       'Visa Holding': 'Company provided',
       Expertises: 'Lamination, Finishing',

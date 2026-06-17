@@ -39,7 +39,7 @@ export default function EmployeeImportModal({ isOpen, onClose }: Props) {
       previewColumn2Label="Full name"
       duplicateInFileLabel="employee code"
       duplicateMatchLabel="employee code"
-      duplicateNote="Rows matching an existing employee code can be updated. Login accounts are not created automatically during import."
+      duplicateNote="Rows matching an existing employee code can be updated. Only columns you map with values are changed. Login accounts are not created automatically during import."
       onDownloadTemplate={downloadEmployeeImportTemplate}
       existingRecords={employees.map((e) => ({ id: e.id, name: e.employeeCode }))}
       isSubmitting={isLoading}

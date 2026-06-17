@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { cn } from '@/lib/utils';
+import { modalFooterActionsClassName } from '@/components/ui/ResponsiveDialog';
 
 interface ModalProps {
   isOpen: boolean;
@@ -87,7 +88,7 @@ export default function Modal({
 
         {actions ? (
           <div className="shrink-0 border-t border-border bg-muted/20 px-4 py-4 sm:px-6">
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-2 [&_button]:h-10 [&_button]:w-full sm:[&_button]:h-9 sm:[&_button]:w-auto">
+            <div className={cn(modalFooterActionsClassName)}>
               {actions}
             </div>
           </div>

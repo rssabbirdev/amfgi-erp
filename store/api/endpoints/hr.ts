@@ -49,6 +49,7 @@ export interface HrEmployeeExportRecord {
   emergencyContactPhone: string | null;
   bloodGroup: string | null;
   portalEnabled: boolean;
+  adminNotes: string | null;
   profileExtension: unknown;
 }
 
@@ -133,6 +134,8 @@ export type HrEmployeesListParams = {
   portal?: 'ALL' | 'enabled' | 'disabled';
 };
 
+export type HrEmployeesExportParams = Omit<HrEmployeesListParams, 'limit' | 'offset'>;
+
 export type HrEmployeesListResponse = {
   items: HrEmployee[];
   total: number;
@@ -156,8 +159,18 @@ export const hrApi = appApi.injectEndpoints({
           : [{ type: 'Employee', id: 'LIST' }],
     }),
 
-    getHrEmployeesForExport: builder.query<HrEmployeeExportRecord[], void>({
-      query: () => '/hr/employees?forExport=1',
+    getHrEmployeesForExport: builder.query<HrEmployeeExportRecord[], HrEmployeesExportParams | void>({
+      query: (params) => {
+        const search = new URLSearchParams();
+        search.set('forExport', '1');
+        if (params?.q?.trim()) search.set('q', params.q.trim());
+        if (params?.status && params.status !== 'ALL') search.set('status', params.status);
+        if (params?.employeeType && params.employeeType !== 'ALL') {
+          search.set('employeeType', params.employeeType);
+        }
+        if (params?.portal && params.portal !== 'ALL') search.set('portal', params.portal);
+        return `/hr/employees?${search.toString()}`;
+      },
       transformResponse: (r: { data: HrEmployeeExportRecord[] }) => r.data,
     }),
 

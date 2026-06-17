@@ -9,14 +9,11 @@ import { Alert, AlertDescription } from '@/components/ui/shadcn/alert';
 import { Button } from '@/components/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/shadcn/card';
 import { Input } from '@/components/ui/shadcn/input';
-import { Select } from '@/components/ui/shadcn/select';
 import { EmployeeMetaSelect } from '@/components/hr/EmployeeMetaSelect';
 import { NationalitySearchSelect } from '@/components/hr/NationalitySearchSelect';
-import {
-  WORKFORCE_EMPLOYEE_TYPE_OPTIONS,
-  WORKFORCE_VISA_HOLDING_OPTIONS,
-  buildWorkforceProfileExtension,
-} from '@/lib/hr/workforceProfile';
+import { CatalogSearchSelect } from '@/components/hr/CatalogSearchSelect';
+import { GENDER_OPTIONS, visaHoldingOptions, workforceRoleTypeOptions } from '@/lib/hr/employeeFieldOptions';
+import { buildWorkforceProfileExtension } from '@/lib/hr/workforceProfile';
 
 function generateEmployeeCode() {
   const stamp = Date.now().toString(36).toUpperCase();
@@ -30,6 +27,7 @@ export default function NewEmployeePage() {
   const [fullName, setFullName] = useState('');
   const [preferredName, setPreferredName] = useState('');
   const [nationality, setNationality] = useState('');
+  const [gender, setGender] = useState('');
   const [phone, setPhone] = useState('');
   const [designation, setDesignation] = useState('');
   const [department, setDepartment] = useState('');
@@ -44,7 +42,11 @@ export default function NewEmployeePage() {
   const labelClass = 'text-xs font-medium uppercase tracking-wider text-muted-foreground';
   const fieldGrid = 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3';
   const metaSelectClass =
-    'mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50';
+    'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50';
+  const searchInputClass =
+    'border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring';
+  const workforceRoleOptions = useMemo(() => workforceRoleTypeOptions(), []);
+  const visaHoldingOptionList = useMemo(() => visaHoldingOptions(), []);
   const proposedCode = useMemo(() => generateEmployeeCode(), []);
 
   const submit = async (e: React.FormEvent) => {
@@ -62,6 +64,7 @@ export default function NewEmployeePage() {
           fullName: legalName,
           preferredName: displayName || null,
           nationality: nationality || null,
+          gender: gender || null,
           phone: phone.trim() || null,
           designation: designation.trim() || null,
           department: department.trim() || null,
@@ -141,11 +144,22 @@ export default function NewEmployeePage() {
                 />
               </div>
               <div className="space-y-1">
-                <span className={labelClass}>Nationality</span>
+                <span className={labelClass}>Nationality (country)</span>
                 <NationalitySearchSelect
                   value={nationality}
                   onChange={setNationality}
                   inputClassName="border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1">
+                <span className={labelClass}>Gender</span>
+                <CatalogSearchSelect
+                  value={gender}
+                  onChange={setGender}
+                  options={GENDER_OPTIONS}
+                  placeholder="Search gender…"
+                  inputClassName={searchInputClass}
+                  allowLegacyValue={false}
                 />
               </div>
               <div className="space-y-1">
@@ -182,34 +196,30 @@ export default function NewEmployeePage() {
                 />
               </div>
               <div className="space-y-1">
-                <span className={labelClass}>Employee type</span>
-                <Select
+                <span className={labelClass}>Workforce role type</span>
+                <CatalogSearchSelect
                   value={employeeType}
-                  onChange={(e) =>
-                    setEmployeeType(e.target.value as 'OFFICE_STAFF' | 'HYBRID_STAFF' | 'DRIVER' | 'LABOUR_WORKER')
+                  onChange={(next) =>
+                    setEmployeeType(next as 'OFFICE_STAFF' | 'HYBRID_STAFF' | 'DRIVER' | 'LABOUR_WORKER')
                   }
-                >
-                  {WORKFORCE_EMPLOYEE_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
+                  options={workforceRoleOptions}
+                  placeholder="Search workforce role…"
+                  inputClassName={searchInputClass}
+                  allowLegacyValue={false}
+                />
               </div>
               <div className="space-y-1">
                 <span className={labelClass}>Visa holding</span>
-                <Select
+                <CatalogSearchSelect
                   value={visaHolding}
-                  onChange={(e) =>
-                    setVisaHolding(e.target.value as 'COMPANY_PROVIDED' | 'SELF_OWN' | 'NO_VISA')
+                  onChange={(next) =>
+                    setVisaHolding(next as 'COMPANY_PROVIDED' | 'SELF_OWN' | 'NO_VISA')
                   }
-                >
-                  {WORKFORCE_VISA_HOLDING_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
+                  options={visaHoldingOptionList}
+                  placeholder="Search visa holding…"
+                  inputClassName={searchInputClass}
+                  allowLegacyValue={false}
+                />
               </div>
             </div>
 

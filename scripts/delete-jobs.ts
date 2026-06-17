@@ -17,25 +17,26 @@ async function seed() {
   console.log('Clearing old data…');
  
   
-  await prisma.stockBatch.updateMany({ data: { businessDocumentId: null } });
-  await prisma.transaction.updateMany({ data: { businessDocumentId: null } });
-  await prisma.materialAssemblyComponent.deleteMany({});
-  await prisma.stockCountSessionRevision.deleteMany({});
-  await prisma.stockCountSessionLine.deleteMany({});
-  await prisma.stockCountSession.deleteMany({});
-  await prisma.stockExceptionApproval.deleteMany({});
-  await prisma.transactionBatch.deleteMany({});
-  await prisma.transaction.deleteMany({});
-  await prisma.deliveryNote.deleteMany({});
-  await prisma.priceLog.deleteMany({});
-  await prisma.materialLog.deleteMany({});
-  await prisma.materialUom.updateMany({ data: { parentUomId: null } });
-  await prisma.materialUom.deleteMany({});
-  await prisma.stockBatch.deleteMany({});
-  await prisma.materialWarehouseStock.deleteMany({});
-  await prisma.material.deleteMany({});
+  // await prisma.stockBatch.updateMany({ data: { businessDocumentId: null } });
+  // await prisma.transaction.updateMany({ data: { businessDocumentId: null } });
+  // await prisma.materialAssemblyComponent.deleteMany({});
+  // await prisma.stockCountSessionRevision.deleteMany({});
+  // await prisma.stockCountSessionLine.deleteMany({});
+  // await prisma.stockCountSession.deleteMany({});
+  // await prisma.stockExceptionApproval.deleteMany({});
+  // await prisma.transactionBatch.deleteMany({});
+  // await prisma.transaction.deleteMany({});
+  // await prisma.deliveryNote.deleteMany({});
+  // await prisma.priceLog.deleteMany({});
+  // await prisma.materialLog.deleteMany({});
+  // await prisma.materialUom.updateMany({ data: { parentUomId: null } });
+  // await prisma.materialUom.deleteMany({});
+  // await prisma.stockBatch.deleteMany({});
+  // await prisma.materialWarehouseStock.deleteMany({});
+  // await prisma.material.deleteMany({});
   // await prisma.category.deleteMany({});
   // await prisma.unit.deleteMany({});
+  await prisma.employee.deleteMany({});
 
 }
 

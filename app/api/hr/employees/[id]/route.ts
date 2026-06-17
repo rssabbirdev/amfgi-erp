@@ -6,6 +6,7 @@ import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { mergeProfileExtensionForStatusChange } from '@/lib/hr/employeeLeavePeriod';
+import { parseNationalityInput } from '@/lib/hr/countryNames';
 import { z } from 'zod';
 
 const PatchSchema = z.object({
@@ -89,7 +90,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (d.preferredName !== undefined) data.preferredName = d.preferredName?.trim() || null;
     if (d.email !== undefined) data.email = emailNorm === undefined ? undefined : emailNorm ?? null;
     if (d.phone !== undefined) data.phone = d.phone?.trim() || null;
-    if (d.nationality !== undefined) data.nationality = d.nationality?.trim() || null;
+    if (d.nationality !== undefined) {
+      const parsedNationality = parseNationalityInput(d.nationality);
+      if (!parsedNationality.ok) return errorResponse(parsedNationality.error, 422);
+      data.nationality = parsedNationality.value;
+    }
     if (d.dateOfBirth !== undefined) data.dateOfBirth = d.dateOfBirth ? new Date(d.dateOfBirth) : null;
     if (d.gender !== undefined) data.gender = d.gender?.trim() || null;
     if (d.designation !== undefined) data.designation = d.designation?.trim() || null;

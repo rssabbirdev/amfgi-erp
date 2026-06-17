@@ -1871,7 +1871,74 @@ export default function DeliveryNoteCreatePage() {
         </div>
 
         {/* Job / subcontract header */}
-        <div className="border-b border-border p-5">
+        <div className="border-b border-border p-5 space-y-5">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="lg:col-start-3">
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Delivery date
+              </label>
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={(e) => handleDateChange(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm font-bold text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="lg:col-start-4">
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Delivery note number
+              </label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={deliveryNoteNumber ?? ''}
+                readOnly={!deliveryNoteNumberOverride}
+                onChange={(e) => {
+                  const parsed = Number.parseInt(e.target.value, 10);
+                  setDeliveryNoteNumber(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                }}
+                placeholder={deliveryNoteNumber == null ? 'Loading…' : undefined}
+                {...withBlockInputWheelChange({
+                  className: cn(
+                    'w-full rounded-md border border-border px-3 py-2.5 font-mono text-sm font-bold text-red-600 shadow-sm focus:outline-none focus:ring-2 focus:ring-ring dark:text-red-400',
+                    deliveryNoteNumberOverride ? 'bg-background' : 'cursor-default bg-muted/40'
+                  ),
+                })}
+              />
+              <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={deliveryNoteNumberOverride}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    setDeliveryNoteNumberOverride(enabled);
+                    if (!enabled) {
+                      if (loadedDeliveryNoteNumber != null) {
+                        setDeliveryNoteNumber(loadedDeliveryNoteNumber);
+                      } else {
+                        void fetchNextDeliveryNoteNumber().then((nextNumber) => {
+                          if (nextNumber != null) {
+                            setDeliveryNoteNumber(nextNumber);
+                          }
+                        });
+                      }
+                    }
+                  }}
+                  className="rounded border-border"
+                />
+                Override auto number
+              </label>
+              {!deliveryNoteNumberOverride ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Auto-assigned from last delivery note + 1 on save
+                </p>
+              ) : null}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {!isSubcontract ? (
               <>
@@ -2052,70 +2119,6 @@ export default function DeliveryNoteCreatePage() {
                 </div>
               </>
             )}
-            <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Delivery Date
-              </label>
-              <input
-                type="date"
-                required
-                value={date}
-                onChange={(e) => handleDateChange(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Delivery note number
-              </label>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                inputMode="numeric"
-                value={deliveryNoteNumber ?? ''}
-                readOnly={!deliveryNoteNumberOverride}
-                onChange={(e) => {
-                  const parsed = Number.parseInt(e.target.value, 10);
-                  setDeliveryNoteNumber(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
-                }}
-                placeholder={deliveryNoteNumber == null ? 'Loading…' : undefined}
-                {...withBlockInputWheelChange({
-                  className: cn(
-                    'w-full rounded-md border border-border px-3 py-2.5 font-mono text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring',
-                    deliveryNoteNumberOverride ? 'bg-background' : 'cursor-default bg-muted/40'
-                  ),
-                })}
-              />
-              <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={deliveryNoteNumberOverride}
-                  onChange={(e) => {
-                    const enabled = e.target.checked;
-                    setDeliveryNoteNumberOverride(enabled);
-                    if (!enabled) {
-                      if (loadedDeliveryNoteNumber != null) {
-                        setDeliveryNoteNumber(loadedDeliveryNoteNumber);
-                      } else {
-                        void fetchNextDeliveryNoteNumber().then((nextNumber) => {
-                          if (nextNumber != null) {
-                            setDeliveryNoteNumber(nextNumber);
-                          }
-                        });
-                      }
-                    }
-                  }}
-                  className="rounded border-border"
-                />
-                Override auto number
-              </label>
-              {!deliveryNoteNumberOverride ? (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Auto-assigned from last delivery note + 1 on save
-                </p>
-              ) : null}
-            </div>
             {!isSubcontract ? (
               <div>
                 <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -2321,7 +2324,7 @@ export default function DeliveryNoteCreatePage() {
                 </p>
               </div>
               {deliveryNoteNumber != null ? (
-                <span className="rounded-full border border-primary/30 bg-background/80 px-3 py-1 font-mono text-xs font-semibold text-primary">
+                <span className="rounded-full border border-red-500/30 bg-background/80 px-3 py-1 font-mono text-xs font-bold text-red-600 dark:text-red-400">
                   {deliveryNoteNumber}
                 </span>
               ) : null}

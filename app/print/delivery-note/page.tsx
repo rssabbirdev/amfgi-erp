@@ -18,6 +18,7 @@ import {
   DELIVERY_NOTE_PRINT_DONE,
   DELIVERY_NOTE_PRINT_ERROR,
 } from '@/lib/print/openDeliveryNotePrint';
+import { prefersPrintWindow } from '@/lib/print/printEnvironment';
 
 interface Transaction {
   id: string;
@@ -231,9 +232,12 @@ export default function PrintDeliveryNotePage() {
     };
   }, [transactionId, deliveryNoteId, router, session?.user?.activeCompanyId, embed, notifyParent]);
 
-  // Auto-print after data loads (double rAF so layout/print height settle first)
+  // Auto-print after data loads (desktop embed / direct desktop view only).
+  // Mobile browsers block print() inside hidden iframes and often outside a tap gesture.
   useEffect(() => {
     if (!loading && transaction && company) {
+      if (!embed && prefersPrintWindow()) return;
+
       let cancelled = false;
       const timer = setTimeout(() => {
         requestAnimationFrame(() => {
@@ -247,7 +251,7 @@ export default function PrintDeliveryNotePage() {
         clearTimeout(timer);
       };
     }
-  }, [loading, transaction, company]);
+  }, [loading, transaction, company, embed]);
 
   useEffect(() => {
     if (!embed) return;
@@ -396,6 +400,40 @@ export default function PrintDeliveryNotePage() {
           body {
             background: #e5e7eb;
           }
+          .print-toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 12px 20px;
+            background: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+          }
+          .print-toolbar button {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+          }
+          @media (pointer: coarse) {
+            .print-toolbar {
+              top: auto;
+              bottom: 0;
+              padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+              gap: 10px;
+            }
+            .print-toolbar button {
+              flex: 1;
+              min-height: 44px;
+              font-size: 15px;
+            }
+          }
           .print-page-wrapper {
             max-width: 210mm;
             margin: 20px auto;
@@ -434,30 +472,21 @@ export default function PrintDeliveryNotePage() {
 
       {/* Screen-only controls (hidden in embedded direct-print mode) */}
       {!embed && (
-      <div className="screen-only" style={{
-        position: 'fixed', top: 0, left: 0, right: 0,
-        padding: '12px 20px',
-        background: '#1e293b',
-        display: 'flex', alignItems: 'center', gap: '12px',
-        zIndex: 100,
-        boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-      }}>
+      <div className="screen-only print-toolbar">
         <button
+          type="button"
           onClick={() => window.print()}
           style={{
-            padding: '8px 20px', background: '#059669', color: '#fff',
-            border: 'none', borderRadius: '6px', cursor: 'pointer',
-            fontWeight: 600, fontSize: '14px',
+            background: '#059669', color: '#fff',
           }}
         >
           Print
         </button>
         <button
+          type="button"
           onClick={() => window.close()}
           style={{
-            padding: '8px 20px', background: '#475569', color: '#fff',
-            border: 'none', borderRadius: '6px', cursor: 'pointer',
-            fontWeight: 600, fontSize: '14px',
+            background: '#475569', color: '#fff',
           }}
         >
           Close
@@ -469,7 +498,7 @@ export default function PrintDeliveryNotePage() {
       )}
 
       {/* Spacer for the fixed header on screen */}
-      {!embed && <div className="screen-only" style={{ height: '60px' }} />}
+      {!embed && <div className="screen-only" style={{ height: prefersPrintWindow() ? '0' : '60px', paddingBottom: prefersPrintWindow() ? 'calc(72px + env(safe-area-inset-bottom, 0px))' : 0 }} />}
 
       {/* The actual document */}
       <div

@@ -4,12 +4,13 @@ import { useMemo } from 'react';
 
 import SearchSelect from '@/components/ui/SearchSelect';
 import { NATIONALITY_OPTIONS } from '@/lib/hr/employeeMeta';
+import { displayNationalityCountryName } from '@/lib/hr/countryNames';
 import { cn } from '@/lib/utils';
 
-const nationalityItems = NATIONALITY_OPTIONS.map((nationality) => ({
-  id: nationality,
-  label: nationality,
-  searchText: nationality,
+const nationalityItems = NATIONALITY_OPTIONS.map((country) => ({
+  id: country,
+  label: country,
+  searchText: country,
 }));
 
 type NationalitySearchSelectProps = {
@@ -30,16 +31,17 @@ export function NationalitySearchSelect({
   name,
   className,
   inputClassName,
-  placeholder = 'Search nationality…',
+  placeholder = 'Search country…',
 }: NationalitySearchSelectProps) {
   const items = useMemo(() => nationalityItems, []);
+  const resolvedValue = displayNationalityCountryName(value);
 
   return (
     <div className={cn('min-w-0', className)}>
-      {name ? <input type="hidden" name={name} value={value} /> : null}
+      {name ? <input type="hidden" name={name} value={resolvedValue} /> : null}
       <SearchSelect
         items={items}
-        value={value}
+        value={resolvedValue}
         onChange={onChange}
         placeholder={placeholder}
         disabled={disabled}

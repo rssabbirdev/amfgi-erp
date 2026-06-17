@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/shadcn/select';
 import DataTable from '@/components/ui/DataTable';
 import type { Column } from '@/components/ui/DataTable';
 import type { ContextMenuOption } from '@/components/ui/ContextMenu';
+import ResponsiveDialog, { modalFooterActionsClassName } from '@/components/ui/ResponsiveDialog';
 import { Badge } from '@/components/ui/Badge';
 import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination/serverList';
 import { cn } from '@/lib/utils';
@@ -437,19 +438,30 @@ export default function DispatchPage() {
     () => [
       {
         key: 'job',
-        header: 'Job / project',
+        header: 'Job / party',
         sortable: false,
-        render: (entry) => (
-          <div className="min-w-40">
-            <p className="font-medium text-primary">{entry.jobNumber}</p>
-            {entry.jobDescription ? (
-              <p className="max-w-56 truncate text-xs text-muted-foreground">{entry.jobDescription}</p>
-            ) : null}
-            {isSubcontractEntry(entry) && entry.supplierName ? (
-              <p className="mt-0.5 truncate text-xs text-amber-700 dark:text-amber-300">{entry.supplierName}</p>
-            ) : null}
-          </div>
-        ),
+        render: (entry) => {
+          const partyName = isSubcontractEntry(entry) ? entry.supplierName : entry.customerName;
+          return (
+            <div className="min-w-44">
+              <p className="font-medium text-primary">{entry.jobNumber}</p>
+              {partyName ? (
+                <div className="mt-1">
+                  <p
+                    className={cn(
+                      'max-w-56 truncate text-xs',
+                      isSubcontractEntry(entry)
+                        ? 'text-amber-700 dark:text-amber-300'
+                        : 'text-muted-foreground'
+                    )}
+                  >
+                    {partyName}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         key: 'date',
@@ -709,7 +721,7 @@ export default function DispatchPage() {
           parsedContacts.find((c) => c.name.toLowerCase() === primaryContact.toLowerCase()) ??
           parsedContacts[0];
         const baseNotes = getBaseNotesForEntry(entry);
-        const customerName = entry.jobDescription || '';
+        const customerName = entry.customerName || '';
         const dateStr = typeof entry.dispatchDate === 'string'
           ? entry.dispatchDate.split('T')[0]
           : new Date(entry.dispatchDate).toISOString().split('T')[0];
@@ -718,14 +730,13 @@ export default function DispatchPage() {
           : `/stock/dispatch/entry?jobId=${entry.jobId}&date=${dateStr}`;
 
         return (
-          <>
-            <div
-              className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
-              onClick={() => setViewModal({ open: false, entry: null })}
-            />
-            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-card border border-border rounded-xl max-w-3xl w-[90vw] max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+          <ResponsiveDialog
+            open
+            onClose={() => setViewModal({ open: false, entry: null })}
+            size="xl"
+          >
               {/* Header */}
-              <div className={`px-6 py-4 border-b border-border ${isDeliveryNote ? 'bg-blue-500/10' : 'bg-muted/40'}`}>
+              <div className={`shrink-0 px-4 py-4 border-b border-border sm:px-6 ${isDeliveryNote ? 'bg-blue-500/10' : 'bg-muted/40'}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
                     {isDeliveryNote ? (
@@ -762,9 +773,9 @@ export default function DispatchPage() {
               </div>
 
               {/* Scrollable content */}
-              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-5 sm:px-6 sm:py-5">
                 {/* Meta info grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
                   <div className="bg-muted/30 rounded-lg p-3 border border-border">
                     <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Job Number</p>
                     <p className="text-sm font-semibold text-primary">{entry.jobNumber}</p>
@@ -835,8 +846,8 @@ export default function DispatchPage() {
                       </h3>
                       <span className="text-xs text-muted-foreground">{entry.materials.length} item{entry.materials.length !== 1 ? 's' : ''}</span>
                     </div>
-                    <div className="bg-muted/30 rounded-lg border border-border overflow-hidden">
-                      <table className="w-full text-sm">
+                    <div className="bg-muted/30 rounded-lg border border-border overflow-x-auto">
+                      <table className="w-full min-w-[36rem] text-sm">
                         <thead>
                           <tr className="bg-card/80 border-b border-border">
                             <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground uppercase w-8">#</th>
@@ -889,8 +900,8 @@ export default function DispatchPage() {
                       </h3>
                       <span className="text-xs text-muted-foreground">{customItems.length} item{customItems.length !== 1 ? 's' : ''}</span>
                     </div>
-                    <div className="bg-muted/30 rounded-lg border border-border overflow-hidden">
-                      <table className="w-full text-sm">
+                    <div className="bg-muted/30 rounded-lg border border-border overflow-x-auto">
+                      <table className="w-full min-w-[36rem] text-sm">
                         <thead>
                           <tr className="bg-card/80 border-b border-border">
                             <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground uppercase w-12">No.</th>
@@ -937,7 +948,7 @@ export default function DispatchPage() {
 
                 {/* Summary */}
                 <div className="bg-muted/50 border border-border rounded-lg p-4">
-                  <div className={`grid ${isDeliveryNote ? 'grid-cols-3' : 'grid-cols-2'} gap-4`}>
+                  <div className={`grid gap-4 ${isDeliveryNote ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Materials</p>
                       <p className="text-xl font-bold text-foreground mt-1">{entry.materialsCount}</p>
@@ -959,9 +970,9 @@ export default function DispatchPage() {
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-4 border-t border-border bg-card/80 flex items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">Double-click any row to view details</p>
-                <div className="flex gap-2">
+              <div className="shrink-0 border-t border-border bg-card/80 px-4 py-4 sm:px-6">
+                <p className="mb-3 hidden text-xs text-muted-foreground sm:block">Double-click any row to view details</p>
+                <div className={modalFooterActionsClassName}>
                   <button
                     onClick={() => setViewModal({ open: false, entry: null })}
                     className="px-4 py-2 rounded-lg bg-muted text-foreground hover:bg-muted/80 text-sm font-medium transition-colors"
@@ -1020,34 +1031,32 @@ export default function DispatchPage() {
                   )}
                 </div>
               </div>
-            </div>
-          </>
+          </ResponsiveDialog>
         );
       })()}
 
       {/* Print format picker (delivery notes) */}
-      {printModalEntry && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/50 z-40"
-            onClick={() => setPrintModalEntry(null)}
-          />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl">
-            <h2 className="text-lg font-semibold text-foreground mb-1">Print delivery note</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Job {printModalEntry.jobNumber} · choose a layout (from Settings → Print templates).
-            </p>
+      <ResponsiveDialog open={printModalEntry !== null} onClose={() => setPrintModalEntry(null)} size="sm">
+          <div className="shrink-0 border-b border-border px-4 py-4 sm:px-6">
+            <h2 className="text-base font-semibold text-foreground sm:text-lg">Print delivery note</h2>
+            {printModalEntry ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Job {printModalEntry.jobNumber} · choose a layout (from Settings → Print templates).
+              </p>
+            ) : null}
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
             {printTplLoading ? (
               <p className="text-sm text-muted-foreground py-4">Loading formats…</p>
             ) : printTemplates.length === 0 ? (
-              <p className="text-sm text-muted-foreground mb-4">
+              <p className="text-sm text-muted-foreground">
                 No delivery-note templates saved. Print will use the built-in default layout.
               </p>
             ) : (
-              <ul className="space-y-2 max-h-56 overflow-y-auto mb-4">
+              <ul className="space-y-2">
                 {printTemplates.map((tpl) => (
                   <li key={tpl.id}>
-                    <label className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-muted/50 has-checked:border-primary has-checked:bg-primary/10">
+                    <label className="flex items-center gap-3 rounded-lg border border-border cursor-pointer p-3 hover:bg-muted/50 has-checked:border-primary has-checked:bg-primary/10">
                       <input
                         type="radio"
                         name="print-tpl"
@@ -1055,7 +1064,7 @@ export default function DispatchPage() {
                         onChange={() => setSelectedPrintTplId(tpl.id)}
                         className="accent-primary"
                       />
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">{tpl.name}</p>
                         {tpl.isDefault && (
                           <span className="text-xs text-emerald-400">Default</span>
@@ -1066,17 +1075,20 @@ export default function DispatchPage() {
                 ))}
               </ul>
             )}
-            <div className="flex gap-2 justify-end">
+          </div>
+          <div className="shrink-0 border-t border-border bg-muted/20 px-4 py-4 sm:px-6">
+            <div className={modalFooterActionsClassName}>
               <button
                 type="button"
                 onClick={() => setPrintModalEntry(null)}
-                className="px-4 py-2 rounded-lg bg-muted text-foreground text-sm"
+                className="rounded-lg bg-muted px-4 py-2 text-sm text-foreground"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => {
+                  if (!printModalEntry) return;
                   const tid = printModalEntry.transactionIds[0];
                   const dnid = printModalEntry.deliveryNoteId;
                   const templateId = selectedPrintTplId || undefined;
@@ -1095,21 +1107,20 @@ export default function DispatchPage() {
                   }
                   setPrintModalEntry(null);
                 }}
-                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500"
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
               >
                 Print
               </button>
             </div>
           </div>
-        </>
-      )}
+      </ResponsiveDialog>
 
       {/* Delete Confirmation Modal */}
-      {deleteModal.open && deleteModal.entry && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/50" onClick={closeDeleteModal} />
-          <div className="fixed top-1/2 left-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-6 shadow-2xl">
-            <h2 className="mb-2 text-lg font-semibold text-foreground">
+      <ResponsiveDialog open={deleteModal.open && deleteModal.entry !== null} onClose={closeDeleteModal} size="sm">
+          {deleteModal.entry ? (
+            <>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+            <h2 className="mb-2 text-base font-semibold text-foreground sm:text-lg">
               {deleteModal.step === 1 ? 'Delete this entry?' : 'Confirm deletion'}
             </h2>
             <p className="mb-4 text-sm text-muted-foreground">
@@ -1170,8 +1181,10 @@ export default function DispatchPage() {
                 />
               </div>
             ) : null}
+            </div>
 
-            <div className="flex justify-end gap-3">
+            <div className="shrink-0 border-t border-border bg-muted/20 px-4 py-4 sm:px-6">
+            <div className={modalFooterActionsClassName}>
               <button
                 type="button"
                 onClick={closeDeleteModal}
@@ -1197,9 +1210,10 @@ export default function DispatchPage() {
                     : 'Delete permanently'}
               </button>
             </div>
-          </div>
-        </>
-      )}
+            </div>
+            </>
+          ) : null}
+      </ResponsiveDialog>
     </div>
   );
 }

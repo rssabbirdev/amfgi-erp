@@ -1,42 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
+import { CatalogSearchSelect } from '@/components/hr/CatalogSearchSelect';
 import type { EmployeeMetaKind } from '@/lib/hr/employeeMetaOptions';
-import { readApiJson } from '@/lib/utils/readApiResponse';
-
-type MetaOption = {
-  id: string;
-  kind: EmployeeMetaKind;
-  name: string;
-  isActive: boolean;
-};
-
-export function useEmployeeMetaOptions(kind: EmployeeMetaKind, activeOnly = true) {
-  const [options, setOptions] = useState<MetaOption[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      setLoading(true);
-      const res = await fetch(
-        `/api/hr/employee-meta-options?kind=${encodeURIComponent(kind)}${activeOnly ? '&activeOnly=1' : ''}`,
-        { cache: 'no-store' }
-      );
-      const json = await readApiJson<MetaOption[]>(res);
-      if (!cancelled && res.ok && json?.success) {
-        setOptions((json.data ?? []) as MetaOption[]);
-      }
-      if (!cancelled) setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [kind, activeOnly]);
-
-  return { options, loading };
-}
+import { EMPLOYEE_META_KIND_LABELS } from '@/lib/hr/employeeMetaOptions';
+import { useEmployeeMetaOptions } from '@/components/hr/useEmployeeMetaOptions';
 
 type EmployeeMetaSelectProps = {
   kind: EmployeeMetaKind;
@@ -62,44 +31,29 @@ export function EmployeeMetaSelect({
   onValueChange,
 }: EmployeeMetaSelectProps) {
   const { options, loading } = useEmployeeMetaOptions(kind, true);
-  const resolvedDefault = value !== undefined ? value : (defaultValue ?? '');
-  const legacyValue = useMemo(() => {
-    const v = String(resolvedDefault ?? '').trim();
-    if (!v) return null;
-    if (options.some((option) => option.name === v)) return null;
-    return v;
-  }, [resolvedDefault, options]);
+  const resolvedValue = value !== undefined ? value : (defaultValue ?? '');
 
-  const selectProps =
-    value !== undefined
-      ? {
-          value,
-          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => {
-            onValueChange?.(e.target.value);
-            onChange?.();
-          },
-        }
-      : {
-          defaultValue: defaultValue ?? '',
-          onChange,
-        };
+  const catalogOptions = useMemo(
+    () => options.map((option) => ({ value: option.name, label: option.name, searchText: option.name })),
+    [options]
+  );
+
+  const handleChange = (next: string) => {
+    onValueChange?.(next);
+    onChange?.();
+  };
 
   return (
-    <select
+    <CatalogSearchSelect
       name={name}
-      {...selectProps}
-      disabled={disabled || loading}
-      className={fieldClass}
-    >
-      <option value="">{loading ? 'Loading…' : emptyLabel}</option>
-      {legacyValue ? (
-        <option value={legacyValue}>{legacyValue} (not in catalog)</option>
-      ) : null}
-      {options.map((option) => (
-        <option key={option.id} value={option.name}>
-          {option.name}
-        </option>
-      ))}
-    </select>
+      value={resolvedValue}
+      onChange={handleChange}
+      options={catalogOptions}
+      disabled={disabled}
+      loading={loading}
+      placeholder={loading ? 'Loading…' : `Search ${EMPLOYEE_META_KIND_LABELS[kind].toLowerCase()}…`}
+      inputClassName={fieldClass}
+      allowLegacyValue
+    />
   );
 }

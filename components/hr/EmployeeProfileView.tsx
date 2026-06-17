@@ -1,23 +1,29 @@
 ﻿'use client';
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/shadcn/button';
 import Modal from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
 import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown';
+import { CatalogSearchSelect } from '@/components/hr/CatalogSearchSelect';
+import EmployeeCompensationPanel from '@/components/hr/EmployeeCompensationPanel';
+import { EmployeeMetaSelect } from '@/components/hr/EmployeeMetaSelect';
+import { NationalitySearchSelect } from '@/components/hr/NationalitySearchSelect';
+import { displayNationalityCountryName } from '@/lib/hr/countryNames';
 import {
-  WORKFORCE_EMPLOYEE_TYPE_OPTIONS,
+  EMPLOYMENT_STATUS_OPTIONS,
+  GENDER_OPTIONS,
+  visaHoldingOptions,
+  workforceRoleTypeOptions,
+} from '@/lib/hr/employeeFieldOptions';
+import {
   WORKFORCE_EXPERTISE_OPTIONS,
-  WORKFORCE_VISA_HOLDING_OPTIONS,
   buildWorkforceProfileExtension,
   parseWorkforceProfile,
 } from '@/lib/hr/workforceProfile';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
-import EmployeeCompensationPanel from '@/components/hr/EmployeeCompensationPanel';
-import { EmployeeMetaSelect } from '@/components/hr/EmployeeMetaSelect';
-import { NationalitySearchSelect } from '@/components/hr/NationalitySearchSelect';
 import toast from 'react-hot-toast';
 
 type Tab = 'overview' | 'visa' | 'documents' | 'compensation' | 'access';
@@ -220,6 +226,13 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const [expertiseCatalog, setExpertiseCatalog] = useState<string[]>([]);
   const [selectedExpertises, setSelectedExpertises] = useState<string[]>([]);
   const [nationality, setNationality] = useState('');
+  const [gender, setGender] = useState('');
+  const [designation, setDesignation] = useState('');
+  const [department, setDepartment] = useState('');
+  const [employmentType, setEmploymentType] = useState('');
+  const [workforceRoleType, setWorkforceRoleType] = useState('LABOUR_WORKER');
+  const [visaHolding, setVisaHolding] = useState('COMPANY_PROVIDED');
+  const [employmentStatus, setEmploymentStatus] = useState('ACTIVE');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('overview');
   const [linkUserId, setLinkUserId] = useState('');
@@ -607,7 +620,15 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     if (!emp) return;
     const nextExpertises = parseWorkforceProfile(emp.profileExtension).expertises;
     setSelectedExpertises(nextExpertises);
-    setNationality(emp.nationality ?? '');
+    setNationality(displayNationalityCountryName(emp.nationality));
+    setGender(emp.gender ?? '');
+    setDesignation(emp.designation ?? '');
+    setDepartment(emp.department ?? '');
+    setEmploymentType(emp.employmentType ?? '');
+    const workforce = parseWorkforceProfile(emp.profileExtension);
+    setWorkforceRoleType(workforce.employeeType);
+    setVisaHolding(workforce.visaHolding);
+    setEmploymentStatus(emp.status);
     setOverviewInitialSignature(buildOverviewEmployeeSignature(emp, nextExpertises));
     setOverviewDirty(false);
     const frame = requestAnimationFrame(() => {
@@ -695,6 +716,8 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     };
   }, [confirmOverviewLeave, overviewDirty]);
 
+  const workforceRoleOptions = useMemo(() => workforceRoleTypeOptions(), []);
+  const visaHoldingOptionList = useMemo(() => visaHoldingOptions(), []);
 
   if (!canView) {
     return (
@@ -738,9 +761,8 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const labelClass = 'text-xs font-medium uppercase tracking-wider text-slate-500';
   const sectionClass = 'rounded-xl border border-white/10 bg-slate-900/35 p-4 shadow-sm';
   const sectionGrid = 'mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3';
-  const nationalityInputClass =
+  const searchInputClass =
     'mt-1 rounded-lg border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500/40 focus:ring-emerald-500/30';
-  const workforce = parseWorkforceProfile(emp.profileExtension);
 
   return (
     <div className="space-y-0 pb-12">
@@ -881,7 +903,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                     <input name="employeeCode" required defaultValue={emp.employeeCode} disabled={!canEdit} className={fieldClass} />
                   </label>
                   <label className="block">
-                    <span className={labelClass}>Nationality</span>
+                    <span className={labelClass}>Nationality (country)</span>
                     <NationalitySearchSelect
                       name="nationality"
                       value={nationality}
@@ -890,7 +912,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                         requestAnimationFrame(() => syncOverviewDirty());
                       }}
                       disabled={!canEdit}
-                      inputClassName={nationalityInputClass}
+                      inputClassName={searchInputClass}
                     />
                   </label>
                   <label className="block">
@@ -899,12 +921,19 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                   </label>
                   <label className="block">
                     <span className={labelClass}>Gender</span>
-                    <select name="gender" defaultValue={emp.gender ?? ''} disabled={!canEdit} className={fieldClass}>
-                      <option value="">-</option>
-                      <option value="M">Male</option>
-                      <option value="F">Female</option>
-                      <option value="X">Prefer not to say</option>
-                    </select>
+                    <CatalogSearchSelect
+                      name="gender"
+                      value={gender}
+                      onChange={(next) => {
+                        setGender(next);
+                        syncOverviewDirty();
+                      }}
+                      options={GENDER_OPTIONS}
+                      disabled={!canEdit}
+                      placeholder="Search gender…"
+                      inputClassName={searchInputClass}
+                      allowLegacyValue={false}
+                    />
                   </label>
                 </div>
               </section>
@@ -931,10 +960,13 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                     <EmployeeMetaSelect
                       kind="DESIGNATION"
                       name="designation"
-                      defaultValue={emp.designation}
+                      value={designation}
+                      onValueChange={(next) => {
+                        setDesignation(next);
+                        syncOverviewDirty();
+                      }}
                       disabled={!canEdit}
-                      fieldClass={fieldClass}
-                      onChange={() => syncOverviewDirty()}
+                      fieldClass={searchInputClass}
                     />
                   </label>
                   <label className="block">
@@ -942,10 +974,13 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                     <EmployeeMetaSelect
                       kind="DEPARTMENT"
                       name="department"
-                      defaultValue={emp.department}
+                      value={department}
+                      onValueChange={(next) => {
+                        setDepartment(next);
+                        syncOverviewDirty();
+                      }}
                       disabled={!canEdit}
-                      fieldClass={fieldClass}
-                      onChange={() => syncOverviewDirty()}
+                      fieldClass={searchInputClass}
                     />
                   </label>
                   <label className="block">
@@ -953,41 +988,46 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                     <EmployeeMetaSelect
                       kind="EMPLOYMENT_TYPE"
                       name="employmentType"
-                      defaultValue={emp.employmentType}
+                      value={employmentType}
+                      onValueChange={(next) => {
+                        setEmploymentType(next);
+                        syncOverviewDirty();
+                      }}
                       disabled={!canEdit}
-                      fieldClass={fieldClass}
-                      onChange={() => syncOverviewDirty()}
+                      fieldClass={searchInputClass}
                     />
                   </label>
                   <label className="block">
                     <span className={labelClass}>Workforce role type</span>
-                    <select
+                    <CatalogSearchSelect
                       name="employeeType"
-                      defaultValue={workforce.employeeType}
+                      value={workforceRoleType}
+                      onChange={(next) => {
+                        setWorkforceRoleType(next);
+                        syncOverviewDirty();
+                      }}
+                      options={workforceRoleOptions}
                       disabled={!canEdit}
-                      className={fieldClass}
-                    >
-                      {WORKFORCE_EMPLOYEE_TYPE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Search workforce role…"
+                      inputClassName={searchInputClass}
+                      allowLegacyValue={false}
+                    />
                   </label>
                   <label className="block">
                     <span className={labelClass}>Visa holding</span>
-                    <select
+                    <CatalogSearchSelect
                       name="visaHolding"
-                      defaultValue={workforce.visaHolding}
+                      value={visaHolding}
+                      onChange={(next) => {
+                        setVisaHolding(next);
+                        syncOverviewDirty();
+                      }}
+                      options={visaHoldingOptionList}
                       disabled={!canEdit}
-                      className={fieldClass}
-                    >
-                      {WORKFORCE_VISA_HOLDING_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Search visa holding…"
+                      inputClassName={searchInputClass}
+                      allowLegacyValue={false}
+                    />
                   </label>
                   <label className="block sm:col-span-2 lg:col-span-3">
                     <span className={labelClass}>Expertise (multi-select)</span>
@@ -1017,13 +1057,19 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                   </label>
                   <label className="block">
                     <span className={labelClass}>Employment status</span>
-                    <select name="status" defaultValue={emp.status} disabled={!canEdit} className={fieldClass}>
-                      {['ACTIVE', 'ON_LEAVE', 'SUSPENDED', 'EXITED'].map((s) => (
-                        <option key={s} value={s}>
-                          {s.replace(/_/g, ' ')}
-                        </option>
-                      ))}
-                    </select>
+                    <CatalogSearchSelect
+                      name="status"
+                      value={employmentStatus}
+                      onChange={(next) => {
+                        setEmploymentStatus(next);
+                        syncOverviewDirty();
+                      }}
+                      options={EMPLOYMENT_STATUS_OPTIONS}
+                      disabled={!canEdit}
+                      placeholder="Search employment status…"
+                      inputClassName={searchInputClass}
+                      allowLegacyValue={false}
+                    />
                   </label>
                 </div>
               </section>

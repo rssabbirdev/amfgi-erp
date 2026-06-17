@@ -28,6 +28,7 @@ const FIELD_LABELS: Record<string, string> = {
   emergencyContactPhone: 'Emergency Contact Phone',
   bloodGroup: 'Blood Group',
   portalEnabled: 'Portal Enabled',
+  adminNotes: 'Admin Notes',
   employeeType: 'Employee Type',
   visaHolding: 'Visa Holding',
 };

@@ -234,12 +234,22 @@ export default function HrEmployeesPage() {
                 variant="outline"
                 onClick={async () => {
                   try {
-                    const all = await fetchEmployeesForExport().unwrap();
+                    const all = await fetchEmployeesForExport({
+                      q: deferredQuery,
+                      status,
+                      employeeType,
+                      portal,
+                    }).unwrap();
                     if (all.length === 0) {
-                      toast.error('No employees to export');
+                      toast.error('No employees to export for current filters');
                       return;
                     }
-                    exportEmployeesToXlsx(all);
+                    const hasFilters =
+                      deferredQuery.trim() ||
+                      status !== 'ALL' ||
+                      employeeType !== 'ALL' ||
+                      portal !== 'ALL';
+                    exportEmployeesToXlsx(all, hasFilters ? 'employees-filtered' : 'employees');
                     toast.success(`Exported ${all.length} employee(s)`);
                   } catch {
                     toast.error('Failed to export employees');

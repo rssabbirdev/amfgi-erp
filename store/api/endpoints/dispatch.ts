@@ -11,6 +11,7 @@ export interface DispatchEntry {
   jobId: string;
   jobNumber: string;
   jobDescription?: string;
+  customerName?: string;
   jobContactPerson?: string;
   jobContactsJson?: unknown;
   dispatchDate: string | Date;
