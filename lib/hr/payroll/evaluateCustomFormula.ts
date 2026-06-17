@@ -1,3 +1,4 @@
+import { isPayrollLeaveLine } from '@/lib/hr/attendanceLeavePay';
 import { isPaidLeaveType } from '@/lib/hr/leaveTypes';
 import {
   daysInMonth,
@@ -36,13 +37,14 @@ function buildMonthScope(params: {
   for (const line of lines) {
     const workedHours = workedHoursFromMinutes(line.workedMinutes);
     workedHoursTotal += workedHours;
-    if (line.status === 'ABSENT') absentDays += 1;
-    if (line.status === 'LEAVE') {
+    if (isPayrollLeaveLine(line)) {
       leaveDays += 1;
       if (isPaidLeaveType(line.leaveType as 'ANNUAL' | 'SICK' | 'EMERGENCY' | 'ONE_DAY')) {
         paidLeaveDays += 1;
       }
+      continue;
     }
+    if (line.status === 'ABSENT') absentDays += 1;
     if (line.status === 'PRESENT') presentDays += 1;
   }
 
@@ -82,13 +84,13 @@ function buildDayScope(
   excludedWeekdays: number[]
 ): FormulaScope {
   const workedHours = workedHoursFromMinutes(line.workedMinutes);
-  const isAbsent = line.status === 'ABSENT' ? 1 : 0;
-  const isLeave = line.status === 'LEAVE' ? 1 : 0;
+  const isLeave = isPayrollLeaveLine(line) ? 1 : 0;
   const isPaidLeave =
-    line.status === 'LEAVE' &&
+    isPayrollLeaveLine(line) &&
     isPaidLeaveType(line.leaveType as 'ANNUAL' | 'SICK' | 'EMERGENCY' | 'ONE_DAY')
       ? 1
       : 0;
+  const isAbsent = line.status === 'ABSENT' && !isPayrollLeaveLine(line) ? 1 : 0;
   const isPresent = line.status === 'PRESENT' ? 1 : 0;
 
   return {

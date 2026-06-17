@@ -10,14 +10,14 @@ import {
   calculateOvertimeMinutes,
   resolveBasicHoursForEmployee,
 } from '@/lib/hr/attendanceBasicHours';
-import { resolveAttendanceFromLeaveType } from '@/lib/hr/leaveTypeRules';
 import { ensureLeaveTypesReady } from '@/lib/hr/seedLeaveTypes';
+import { dubaiWallTimeToUtc, parseTimeCell } from '@/lib/hr/dubaiShift';
 import { z } from 'zod';
 
 const RowSchema = z.object({
   employeeId: z.string().min(1),
   workAssignmentId: z.string().optional().nullable(),
-  status: z.enum(['PRESENT', 'ABSENT', 'LEAVE']),
+  status: z.enum(['PRESENT', 'ABSENT']),
   leaveTypeId: z.string().optional().nullable(),
   remarks: z.string().max(2000).optional().nullable(),
   checkInAt: z.string().optional().nullable(),
@@ -92,10 +92,7 @@ export async function POST(req: Request) {
         employeeId: true,
         workflowStatus: true,
         basicHours: true,
-        leaveRequestId: true,
         source: true,
-        status: true,
-        leaveTypeId: true,
       },
     }),
     prisma.leaveType.findMany({
@@ -108,7 +105,6 @@ export async function POST(req: Request) {
   const empById = new Map(employees.map((e) => [e.id, e]));
   const asgById = new Map(assignments.map((a) => [a.id, a]));
   const existingByEmployee = new Map(existing.map((e) => [e.employeeId, e]));
-  const leaveTypeById = new Map(leaveTypes.map((t) => [t.id, t]));
   const unpaidLeaveType = leaveTypes.find((t) => t.code.toUpperCase() === 'UNPAID') ?? null;
 
   const txOps: Prisma.PrismaPromise<unknown>[] = [];
@@ -116,53 +112,17 @@ export async function POST(req: Request) {
     const emp = empById.get(row.employeeId);
     if (!emp) continue;
     const existingRow = existingByEmployee.get(row.employeeId);
-    if (existingRow?.workflowStatus === 'APPROVED') continue;
 
-    let resolvedStatus: 'PRESENT' | 'ABSENT' | 'LEAVE' = 'PRESENT';
+    let resolvedStatus: 'PRESENT' | 'ABSENT' = row.status === 'ABSENT' ? 'ABSENT' : 'PRESENT';
     let leaveTypeId: string | null = null;
     let legacyLeaveType: 'ANNUAL' | 'SICK' | 'EMERGENCY' | 'ONE_DAY' | null = null;
-    let attendanceSource: 'MANUAL' | 'LEAVE_REQUEST' = 'MANUAL';
-    let leaveRequestId: string | null = null;
+    const attendanceSource =
+      existingRow?.source === 'SCHEDULE_BOILERPLATE' && resolvedStatus === 'PRESENT'
+        ? existingRow.source
+        : 'MANUAL';
 
-    if (row.status === 'LEAVE') {
-      const lt = row.leaveTypeId ? leaveTypeById.get(row.leaveTypeId) : null;
-      if (lt) {
-        const resolved = resolveAttendanceFromLeaveType(lt);
-        if (resolved.status === 'LEAVE') {
-          leaveTypeId = lt.id;
-          resolvedStatus = 'LEAVE';
-          legacyLeaveType = resolved.legacyLeaveType;
-          if (existingRow?.source === 'LEAVE_REQUEST' && existingRow.leaveRequestId) {
-            attendanceSource = 'LEAVE_REQUEST';
-            leaveRequestId = existingRow.leaveRequestId;
-          }
-        } else if (unpaidLeaveType) {
-          leaveTypeId = unpaidLeaveType.id;
-          resolvedStatus = 'ABSENT';
-        } else {
-          resolvedStatus = 'ABSENT';
-        }
-      } else if (existingRow?.status === 'LEAVE' && existingRow.leaveTypeId) {
-        const existingLeaveType = leaveTypeById.get(existingRow.leaveTypeId);
-        leaveTypeId = existingRow.leaveTypeId;
-        resolvedStatus = 'LEAVE';
-        legacyLeaveType = existingLeaveType
-          ? resolveAttendanceFromLeaveType(existingLeaveType).legacyLeaveType
-          : null;
-        if (existingRow.source === 'LEAVE_REQUEST' && existingRow.leaveRequestId) {
-          attendanceSource = 'LEAVE_REQUEST';
-          leaveRequestId = existingRow.leaveRequestId;
-        }
-      } else {
-        resolvedStatus = 'ABSENT';
-        leaveTypeId = unpaidLeaveType?.id ?? null;
-      }
-    } else if (row.status === 'ABSENT') {
-      if (unpaidLeaveType) {
-        leaveTypeId = unpaidLeaveType.id;
-      }
-      resolvedStatus = 'ABSENT';
-      legacyLeaveType = null;
+    if (resolvedStatus === 'ABSENT' && unpaidLeaveType) {
+      leaveTypeId = unpaidLeaveType.id;
     }
 
     const checkInAt = parseDt(row.checkInAt);
@@ -180,8 +140,14 @@ export async function POST(req: Request) {
     const asg = row.workAssignmentId ? asgById.get(row.workAssignmentId) : null;
     let dutyStart: Date | null = null;
     let dutyEnd: Date | null = null;
-    if (asg?.shiftStart) dutyStart = parseDt(`${workDateYmd}T${asg.shiftStart}:00`);
-    if (asg?.shiftEnd) dutyEnd = parseDt(`${workDateYmd}T${asg.shiftEnd}:00`);
+    if (asg?.shiftStart) {
+      const st = parseTimeCell(asg.shiftStart);
+      if (st) dutyStart = dubaiWallTimeToUtc(workDateYmd, st.hour, st.minute);
+    }
+    if (asg?.shiftEnd) {
+      const en = parseTimeCell(asg.shiftEnd);
+      if (en) dutyEnd = dubaiWallTimeToUtc(workDateYmd, en.hour, en.minute);
+    }
 
     const lateMinutes = dutyStart && checkInAt ? Math.max(0, diffMinutes(dutyStart, checkInAt)) : 0;
     const earlyLeaveMinutes = dutyEnd && checkOutAt ? Math.max(0, diffMinutes(checkOutAt, dutyEnd)) : 0;
@@ -204,20 +170,18 @@ export async function POST(req: Request) {
       lateMinutes,
       earlyLeaveMinutes,
       overtimeMinutes,
-      workflowStatus: 'DRAFT',
+      workflowStatus: 'APPROVED',
+      approvedAt: new Date(),
+      approvedById: session.user.id,
       source: attendanceSource,
-      leaveRequestId,
+      leaveRequestId: null,
     };
 
     if (existingRow) {
       txOps.push(
         prisma.attendanceEntry.update({
           where: { id: existingRow.id },
-          data: {
-            ...data,
-            approvedAt: null,
-            approvedById: null,
-          } as Prisma.AttendanceEntryUncheckedUpdateInput,
+          data: data as Prisma.AttendanceEntryUncheckedUpdateInput,
         })
       );
     } else {

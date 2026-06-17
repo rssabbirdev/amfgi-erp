@@ -25,7 +25,7 @@ import {
 } from '@/lib/hr/payroll/payTypeForm';
 import { describePayTypeRow } from '@/lib/hr/payroll/payTypeFormulas';
 import { WEEKDAY_OPTIONS } from '@/lib/hr/payroll/payTypeConfigHelpers';
-import type { PayCalculationMode, PayTypeConfig } from '@/lib/hr/payroll/types';
+import type { DeductDenominator, PayCalculationMode, PayTypeConfig } from '@/lib/hr/payroll/types';
 import { readApiJson } from '@/lib/utils/readApiResponse';
 
 export type PayTypeRecord = {
@@ -66,9 +66,11 @@ export default function PayTypeEditorTable({
   const [moreOpen, setMoreOpen] = useState(false);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
-  const [mode, setMode] = useState<PayCalculationMode>('MONTHLY_FIXED');
+  const [mode, setMode] = useState<PayCalculationMode>('MONTHLY_CALENDAR_DEDUCT');
   const [otPercent, setOtPercent] = useState('125');
   const [excludedWeekdays, setExcludedWeekdays] = useState<number[]>([0]);
+  const [deductDenominator, setDeductDenominator] = useState<DeductDenominator>('WORKING_DAYS');
+  const [payExcludedWeekdayWorkAtOt, setPayExcludedWeekdayWorkAtOt] = useState(false);
   const [sortOrder, setSortOrder] = useState('100');
   const [isActive, setIsActive] = useState(true);
   const [formulaScript, setFormulaScript] = useState('');
@@ -76,9 +78,21 @@ export default function PayTypeEditorTable({
   const editingRow = editor.kind === 'edit' ? editor.row : null;
   const isCreate = editor.kind === 'create';
   const isEditing = editor.kind !== 'none';
-  const usesWorkingDayExclusions = mode === 'HOURLY_SPLIT' || mode === 'CUSTOM';
+  const isEditingDeprecatedFixedMonthly =
+    Boolean(editingRow) && payTypeConfigFields(editingRow!.config as Record<string, unknown>).mode === 'MONTHLY_FIXED';
+  const usesWorkingDayExclusions =
+    mode === 'DAILY_WAGE' ||
+    mode === 'HOURLY_SPLIT' ||
+    mode === 'CUSTOM' ||
+    mode === 'MONTHLY_CALENDAR_DEDUCT';
+  const usesOfficeDeductDenominator = mode === 'MONTHLY_CALENDAR_DEDUCT';
 
   const modeMeta = PAY_CALCULATION_MODE_OPTIONS.find((o) => o.value === mode);
+
+  const usesSundayWorkOt =
+    mode === 'DAILY_WAGE' ||
+    mode === 'CUSTOM' ||
+    (mode === 'MONTHLY_CALENDAR_DEDUCT' && payExcludedWeekdayWorkAtOt);
 
   const liveConfig = useMemo(
     () =>
@@ -86,18 +100,32 @@ export default function PayTypeEditorTable({
         mode,
         otPercent: Number(otPercent),
         excludedWeekdays: usesWorkingDayExclusions ? excludedWeekdays : undefined,
+        deductDenominator: usesOfficeDeductDenominator ? deductDenominator : undefined,
+        payExcludedWeekdayWorkAtOt:
+          mode === 'MONTHLY_CALENDAR_DEDUCT' ? payExcludedWeekdayWorkAtOt : undefined,
         formulaScript: mode === 'CUSTOM' ? formulaScript : null,
       }),
-    [mode, otPercent, excludedWeekdays, formulaScript, usesWorkingDayExclusions]
+    [
+      mode,
+      otPercent,
+      excludedWeekdays,
+      deductDenominator,
+      payExcludedWeekdayWorkAtOt,
+      formulaScript,
+      usesWorkingDayExclusions,
+      usesOfficeDeductDenominator,
+    ]
   );
 
   const openCreate = () => {
     setEditor({ kind: 'create' });
     setName('');
     setCode('');
-    setMode('MONTHLY_FIXED');
+    setMode('MONTHLY_CALENDAR_DEDUCT');
     setOtPercent('125');
     setExcludedWeekdays([0]);
+    setDeductDenominator('WORKING_DAYS');
+    setPayExcludedWeekdayWorkAtOt(false);
     setSortOrder('100');
     setIsActive(true);
     setFormulaScript('');
@@ -112,19 +140,30 @@ export default function PayTypeEditorTable({
     setMode(fields.mode);
     setOtPercent(String(fields.otPercent));
     setExcludedWeekdays(fields.excludedWeekdays);
+    setDeductDenominator(fields.deductDenominator);
+    setPayExcludedWeekdayWorkAtOt(fields.payExcludedWeekdayWorkAtOt);
     setSortOrder(String(row.sortOrder));
     setIsActive(row.isActive);
     setFormulaScript(
       fields.formulaScript ||
-        (fields.mode === 'CUSTOM' ? formulaScriptForMode('MONTHLY_FIXED') : '')
+        (fields.mode === 'CUSTOM' ? formulaScriptForMode('MONTHLY_CALENDAR_DEDUCT') : '')
     );
     setMoreOpen(false);
   };
 
   const handleModeChange = (next: PayCalculationMode) => {
     setMode(next);
+    if (next === 'DAILY_WAGE') {
+      setExcludedWeekdays([]);
+    } else if (
+      next === 'HOURLY_SPLIT' ||
+      next === 'CUSTOM' ||
+      next === 'MONTHLY_CALENDAR_DEDUCT'
+    ) {
+      setExcludedWeekdays([0]);
+    }
     if (next === 'CUSTOM' && !formulaScript.trim()) {
-      setFormulaScript(formulaScriptForMode(mode === 'CUSTOM' ? 'MONTHLY_FIXED' : mode));
+      setFormulaScript(formulaScriptForMode(mode === 'CUSTOM' ? 'MONTHLY_CALENDAR_DEDUCT' : mode));
     }
   };
 
@@ -225,7 +264,10 @@ export default function PayTypeEditorTable({
     onSavingChange(false);
   };
 
-  const sortedRows = [...rows].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  // Hide deprecated fixed-monthly pay types from the UI.
+  const sortedRows = [...rows]
+    .filter((row) => payTypeConfigFields(row.config).mode !== 'MONTHLY_FIXED')
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-4">
@@ -342,17 +384,23 @@ export default function PayTypeEditorTable({
                   className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-60"
                   value={mode}
                   onChange={(e) => handleModeChange(e.target.value as PayCalculationMode)}
+                disabled={isEditingDeprecatedFixedMonthly}
                 >
                   {PAY_CALCULATION_MODE_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>
                   ))}
+                {mode === 'MONTHLY_FIXED' ? (
+                  <option value="MONTHLY_FIXED" disabled>
+                    Fixed monthly (removed)
+                  </option>
+                ) : null}
                 </select>
                 {modeMeta ? <p className="mt-1.5 text-sm text-muted-foreground">{modeMeta.description}</p> : null}
               </div>
 
-              {mode === 'DAILY_WAGE' || mode === 'CUSTOM' ? (
+              {usesSundayWorkOt ? (
                 <div>
                   <label className={labelClass}>Overtime % of basic hour rate</label>
                   <Input
@@ -364,8 +412,9 @@ export default function PayTypeEditorTable({
                     onChange={(e) => setOtPercent(e.target.value)}
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Example: 125 means OT pays 1.25× the basic hourly rate. Standard hours per day come from each
-                    attendance row (employee type timing), not from this screen.
+                    {mode === 'MONTHLY_CALENDAR_DEDUCT'
+                      ? 'Used only when weekly off work pay is enabled below. Fixed monthly employees are not paid for Sunday or weekly off work unless this is turned on.'
+                      : 'Example: 125 means OT pays 1.25× the basic hourly rate. Standard hours per day come from each attendance row (employee type timing), not from this screen.'}
                   </p>
                 </div>
               ) : null}
@@ -377,12 +426,33 @@ export default function PayTypeEditorTable({
                 </p>
               ) : null}
 
+              {usesOfficeDeductDenominator ? (
+                <div>
+                  <label className={labelClass}>Divide monthly basic by</label>
+                  <select
+                    className="mt-1 flex h-9 w-full max-w-md rounded-md border border-input bg-background px-3 text-sm"
+                    value={deductDenominator}
+                    onChange={(e) => setDeductDenominator(e.target.value as DeductDenominator)}
+                  >
+                    <option value="WORKING_DAYS">Working days (recommended)</option>
+                    <option value="CALENDAR_DAYS">All calendar days in the month</option>
+                  </select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Working days excludes the weekly off-days below when calculating how much one absent
+                    day costs. Public holidays are handled separately in Company holidays.
+                  </p>
+                </div>
+              ) : null}
+
               {usesWorkingDayExclusions ? (
                 <div>
-                  <label className={labelClass}>Exclude from working-day count</label>
+                  <label className={labelClass}>
+                    {usesOfficeDeductDenominator ? 'Weekly off-days' : 'Exclude from working-day count'}
+                  </label>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Selected weekdays are subtracted from the month when spreading monthly pay. Leave all unchecked to
-                    use every calendar day.
+                    {usesOfficeDeductDenominator
+                      ? 'These weekdays are not counted in the working-day divisor and absences on them do not deduct pay. Work on those days is informational only unless weekly off work pay is enabled below.'
+                      : 'Selected weekdays are subtracted from the month when spreading monthly pay. Work on those days is paid at OT rate only when enabled for daily wage and hourly split. Leave all unchecked to use every calendar day.'}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {WEEKDAY_OPTIONS.map((day) => {
@@ -409,6 +479,26 @@ export default function PayTypeEditorTable({
                       );
                     })}
                   </div>
+                </div>
+              ) : null}
+
+              {usesOfficeDeductDenominator ? (
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <label className="inline-flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-4 rounded border-border"
+                      checked={payExcludedWeekdayWorkAtOt}
+                      onChange={(e) => setPayExcludedWeekdayWorkAtOt(e.target.checked)}
+                    />
+                    <span>
+                      <span className="font-medium text-foreground">Pay weekly off work at OT rate</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        When off, Sunday and other weekly off work is shown in payroll preview but earns no extra pay.
+                        Enable this to pay worked hours on weekly off-days at the OT rate above.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               ) : null}
 
@@ -461,7 +551,9 @@ export default function PayTypeEditorTable({
               config={liveConfig}
               formulaScript={
                 formulaScript ||
-                (mode === 'CUSTOM' ? formulaScriptForMode('MONTHLY_FIXED') : formulaScriptForMode(mode))
+                (mode === 'CUSTOM'
+                  ? formulaScriptForMode('MONTHLY_CALENDAR_DEDUCT')
+                  : formulaScriptForMode(mode))
               }
               mode={mode}
             />
@@ -472,7 +564,7 @@ export default function PayTypeEditorTable({
               mode={mode}
               formulaScript={
                 formulaScript ||
-                (mode === 'CUSTOM' ? formulaScriptForMode('MONTHLY_FIXED') : '')
+                (mode === 'CUSTOM' ? formulaScriptForMode('MONTHLY_CALENDAR_DEDUCT') : '')
               }
               onFormulaScriptChange={setFormulaScript}
               onSwitchToCustom={switchToCustom}

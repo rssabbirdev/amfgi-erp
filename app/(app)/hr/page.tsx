@@ -27,13 +27,13 @@ const HUB_SECTIONS: Array<{
   cards: HubItem[];
 }> = [
   {
-    id: 'daily-operations',
-    title: 'Daily Operations',
-    description: 'Move through the core HR day from workforce planning into attendance confirmation.',
+    id: 'schedule-attendance',
+    title: 'Schedule & attendance',
+    description: 'Plan daily work, manage attendance sheets, and export monthly records.',
     cards: [
       {
         href: '/hr/schedule',
-        title: 'Schedule Planning',
+        title: 'Schedule planning',
         description: 'Create team groups, assign drivers and workers, and prepare day timing before attendance opens.',
         badge: 'Planning',
         tone: 'emerald',
@@ -41,7 +41,7 @@ const HUB_SECTIONS: Array<{
       },
       {
         href: '/hr/attendance',
-        title: 'Attendance Management',
+        title: 'Attendance management',
         description: 'Review published schedules, generate attendance sheets, and correct daily worked-hour records.',
         badge: 'Attendance',
         tone: 'sky',
@@ -49,7 +49,7 @@ const HUB_SECTIONS: Array<{
       },
       {
         href: '/hr/reports/attendance',
-        title: 'Monthly Attendance Reports',
+        title: 'Monthly attendance reports',
         description: 'Review employee-wise monthly attendance and export Excel files for one employee or the full month.',
         badge: 'Reports',
         tone: 'amber',
@@ -58,48 +58,17 @@ const HUB_SECTIONS: Array<{
     ],
   },
   {
-    id: 'workforce',
-    title: 'Workforce',
-    description: 'Maintain the employee master file and monitor the people records that support planning and payroll.',
+    id: 'employees',
+    title: 'Employees',
+    description: 'Employee records, workforce attributes, documents, and profile setup.',
     cards: [
       {
         href: '/hr/employees',
         title: 'Employees',
-        description: 'Manage employee records, profile details, default timing, documents, and workforce attributes.',
+        description: 'Manage employee records, profile details, default timing, documents, and portal access.',
         badge: 'People',
         tone: 'emerald',
         perms: ['hr.employee.view'],
-      },
-      {
-        href: '/hr/leave',
-        title: 'Leave requests',
-        description: 'Approve employee leave and manage annual leave balances.',
-        badge: 'Leave',
-        tone: 'amber',
-        perms: ['hr.leave.view', 'hr.leave.approve'],
-      },
-    ],
-  },
-  {
-    id: 'hr-setup',
-    title: 'HR Setup',
-    description: 'Configure the reference data that keeps the HR module structured and consistent across companies.',
-    cards: [
-      {
-        href: '/hr/settings/document-types',
-        title: 'Document Types',
-        description: 'Define passport, visa, licence, and other tracked document categories with compliance rules.',
-        badge: 'Compliance',
-        tone: 'amber',
-        perms: ['hr.settings.document_types', 'hr.document.view'],
-      },
-      {
-        href: '/hr/settings/expertises',
-        title: 'Expertise Catalog',
-        description: 'Maintain the workforce skill catalog used when matching employees to jobs and teams.',
-        badge: 'Skills',
-        tone: 'sky',
-        perms: ['hr.settings.expertise_catalog', 'hr.employee.view'],
       },
       {
         href: '/hr/settings/employment-options',
@@ -111,11 +80,74 @@ const HUB_SECTIONS: Array<{
       },
       {
         href: '/hr/settings/employee-types',
-        title: 'Employee Type Timings',
+        title: 'Employee type timings',
         description: 'Set baseline timing and hours logic for office staff, drivers, hybrid roles, and labour teams.',
-        badge: 'Timing Rules',
+        badge: 'Timing',
         tone: 'emerald',
         perms: ['hr.settings.employee_types', 'hr.employee.view'],
+      },
+      {
+        href: '/hr/settings/expertises',
+        title: 'Expertise catalog',
+        description: 'Maintain the workforce skill catalog used when matching employees to jobs and teams.',
+        badge: 'Skills',
+        tone: 'sky',
+        perms: ['hr.settings.expertise_catalog', 'hr.employee.view'],
+      },
+      {
+        href: '/hr/settings/document-types',
+        title: 'Document types',
+        description: 'Define passport, visa, licence, and other tracked document categories with compliance rules.',
+        badge: 'Compliance',
+        tone: 'amber',
+        perms: ['hr.settings.document_types', 'hr.document.view'],
+      },
+    ],
+  },
+  {
+    id: 'payroll-leave-holidays',
+    title: 'Payroll, leave & holidays',
+    description: 'Leave requests, pay preview and runs, holiday calendar, and payroll rules.',
+    cards: [
+      {
+        href: '/hr/leave',
+        title: 'Leave management',
+        description: 'Review pending leave, record official leave for employees, and track balances from leave types setup.',
+        badge: 'Leave',
+        tone: 'amber',
+        perms: ['hr.leave.view', 'hr.leave.approve', 'hr.leave.edit', 'hr.leave.delete'],
+      },
+      {
+        href: '/hr/payroll/preview',
+        title: 'Payroll preview',
+        description: 'Estimate gross pay per employee for a month using compensation and approved attendance.',
+        badge: 'Preview',
+        tone: 'emerald',
+        perms: ['hr.payroll.compensation'],
+      },
+      {
+        href: '/hr/payroll/runs',
+        title: 'Pay runs',
+        description: 'View finalized runs and print payslips (PDF).',
+        badge: 'History',
+        tone: 'sky',
+        perms: ['hr.payroll.compensation'],
+      },
+      {
+        href: '/hr/settings/leave-types',
+        title: 'Leave types',
+        description: 'Configure leave categories, allocation rules, portal visibility, and tiered pay rules.',
+        badge: 'Leave',
+        tone: 'amber',
+        perms: ['hr.payroll.settings'],
+      },
+      {
+        href: '/hr/settings/company-holidays',
+        title: 'Company holidays',
+        description: 'Maintain the public holiday calendar used by payroll — separate from attendance and leave.',
+        badge: 'Holidays',
+        tone: 'sky',
+        perms: ['hr.payroll.settings'],
       },
       {
         href: '/hr/settings/salary-structure',
@@ -130,53 +162,6 @@ const HUB_SECTIONS: Array<{
         title: 'Salary components',
         description: 'Define earnings and deductions (housing, transport, loans) and how they apply to pay.',
         badge: 'Payroll',
-        tone: 'sky',
-        perms: ['hr.payroll.settings'],
-      },
-      {
-        href: '/hr/settings/leave-types',
-        title: 'Leave types',
-        description: 'Configure leave categories and tiered pay rules (UAE sick leave, annual leave, etc.).',
-        badge: 'Leave',
-        tone: 'amber',
-        perms: ['hr.payroll.settings'],
-      },
-    ],
-  },
-  {
-    id: 'payroll',
-    title: 'Payroll',
-    description: 'Estimate monthly gross, finalize pay runs, and manage salary structures.',
-    cards: [
-      {
-        href: '/hr/payroll/preview',
-        title: 'Payroll preview',
-        description: 'Estimate gross pay per employee for a month using compensation and approved attendance.',
-        badge: 'Preview',
-        tone: 'emerald',
-        perms: ['hr.payroll.compensation'],
-      },
-      {
-        href: '/hr/payroll/runs',
-        title: 'Pay runs',
-        description: 'View finalized runs, print payslips (PDF), and export CSV.',
-        badge: 'History',
-        tone: 'sky',
-        perms: ['hr.payroll.compensation'],
-      },
-      {
-        href: '/hr/settings/salary-structure',
-        title: 'Salary structure',
-        description: 'Configure calculation templates, OT %, and working-day rules.',
-        badge: 'Setup',
-        tone: 'sky',
-        perms: ['hr.payroll.settings'],
-      },
-      {
-        href: '/hr/settings/salary-component',
-        title: 'Salary components',
-        description: 'Earnings and deductions (housing, transport, loans) assigned per employee.',
-        badge: 'Setup',
         tone: 'sky',
         perms: ['hr.payroll.settings'],
       },
@@ -211,7 +196,7 @@ export default function HrHubPage() {
       <WorkspaceHubHeader
         eyebrow="People"
         title="HR operations hub"
-        description="Run daily workforce planning, attendance control, employee records, and HR setup from one entry point for operations teams."
+        description="Schedule and attendance, employee records, payroll, leave, and holidays — grouped in three columns."
         trailing={`${totalVisibleLinks} link${totalVisibleLinks === 1 ? '' : 's'}`}
       />
 

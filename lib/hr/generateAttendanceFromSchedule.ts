@@ -44,11 +44,6 @@ export async function regenerateAttendanceBoilerplate(
   const workDateYmd = ymd(sch.workDate);
   const typeSettings = readEmployeeTypeSettingsFromCompanyData(sch.company);
   const absent = new Set(sch.absences.map((a) => a.employeeId));
-  const activeEmployees = await prisma.employee.findMany({
-    where: { companyId: sch.companyId, status: 'ACTIVE' },
-    select: { id: true, profileExtension: true },
-    orderBy: { fullName: 'asc' },
-  });
 
   const assignedByEmployee = new Map<string, string>();
 
@@ -68,8 +63,26 @@ export async function regenerateAttendanceBoilerplate(
   }
 
   const asgById = new Map(sch.assignments.map((a) => [a.id, a]));
+  const employeeIdsToCreate = new Set([...assignedByEmployee.keys(), ...absent]);
+  if (employeeIdsToCreate.size === 0) {
+    await prisma.attendanceEntry.deleteMany({
+      where: {
+        companyId: sch.companyId,
+        workDate: sch.workDate,
+        source: 'SCHEDULE_BOILERPLATE',
+      },
+    });
+    return;
+  }
+
+  const scheduledEmployees = await prisma.employee.findMany({
+    where: { companyId: sch.companyId, id: { in: [...employeeIdsToCreate] } },
+    select: { id: true, profileExtension: true },
+    orderBy: { fullName: 'asc' },
+  });
+
   const createRows: Record<string, unknown>[] = [];
-  for (const emp of activeEmployees) {
+  for (const emp of scheduledEmployees) {
     const employeeId = emp.id;
     const assignmentId = assignedByEmployee.get(employeeId) ?? null;
     const asg = assignmentId ? asgById.get(assignmentId) : null;
@@ -124,9 +137,9 @@ export async function regenerateAttendanceBoilerplate(
       checkOutAt: onLeave ? null : checkOutAt,
       breakStartAt: onLeave ? null : breakStartAt,
       breakEndAt: onLeave ? null : breakEndAt,
-      status: onLeave ? 'LEAVE' : defaultStatus,
+      status: onLeave ? 'ABSENT' : defaultStatus,
       basicHours,
-      workflowStatus: 'DRAFT',
+      workflowStatus: 'APPROVED',
       source: 'SCHEDULE_BOILERPLATE',
     });
   }
@@ -135,7 +148,6 @@ export async function regenerateAttendanceBoilerplate(
     companyId: sch.companyId,
     workDate: sch.workDate,
     source: 'SCHEDULE_BOILERPLATE',
-    workflowStatus: 'DRAFT',
   } satisfies Prisma.AttendanceEntryDeleteManyArgs['where'];
 
   const createWithoutBreakFields = createRows.map((row) => {

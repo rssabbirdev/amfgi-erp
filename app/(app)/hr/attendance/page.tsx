@@ -97,7 +97,6 @@ export default function HrAttendancePage() {
   useEffect(() => {
     if (linkedMonth) setMonth(linkedMonth);
   }, [linkedMonth]);
-  const [convertingScheduleId, setConvertingScheduleId] = useState<string | null>(null);
   const [deletingDate, setDeletingDate] = useState<string | null>(null);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [pickerDate, setPickerDate] = useState(todayYmd());
@@ -148,20 +147,6 @@ export default function HrAttendancePage() {
     }
     setDatePickerOpen(false);
     await openAttendanceSheetWithScheduleCheck(ymd);
-  };
-
-  const convertScheduleToAttendance = async (scheduleId: string, dateYmd: string) => {
-    setConvertingScheduleId(scheduleId);
-    const res = await fetch(`/api/hr/schedule/${scheduleId}/generate-attendance`, { method: 'POST' });
-    const json = await res.json();
-    if (!res.ok || !json?.success) {
-      toast.error(json?.error ?? 'Failed to convert schedule');
-    } else {
-      toast.success('Attendance generated from published schedule');
-      const generatedDate = String(json?.data?.workDate ?? '').slice(0, 10) || dateYmd;
-      goToAttendanceSheet(generatedDate);
-    }
-    setConvertingScheduleId(null);
   };
 
   const deleteAttendanceByDate = async (dateYmd: string) => {
@@ -309,14 +294,14 @@ export default function HrAttendancePage() {
                               >
                                 Schedule
                               </Button>
-                              {canEdit && day.scheduleId ? (
+                              {canEdit ? (
                                 <Button
                                   type="button"
                                   size="sm"
-                                  disabled={convertingScheduleId === day.scheduleId}
-                                  onClick={() => void convertScheduleToAttendance(day.scheduleId!, dateYmd)}
+                                  disabled={checkingSchedule}
+                                  onClick={() => void openAttendanceSheetWithScheduleCheck(dateYmd)}
                                 >
-                                  {convertingScheduleId === day.scheduleId ? 'Generating…' : 'Generate'}
+                                  Open sheet
                                 </Button>
                               ) : null}
                             </>

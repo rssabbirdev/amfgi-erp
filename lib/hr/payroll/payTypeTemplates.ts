@@ -11,17 +11,14 @@ export type PayTypeTemplateSeed = {
 export const DEFAULT_PAY_TYPE_TEMPLATES: PayTypeTemplateSeed[] = [
   {
     name: 'Fixed monthly',
-    code: 'FIXED_MONTHLY',
-    isSystem: true,
-    sortOrder: 10,
-    config: { mode: 'MONTHLY_FIXED' },
-  },
-  {
-    name: 'Office — calendar deduct',
     code: 'OFFICE_CALENDAR_DEDUCT',
     isSystem: true,
     sortOrder: 20,
-    config: { mode: 'MONTHLY_CALENDAR_DEDUCT' },
+    config: {
+      mode: 'MONTHLY_CALENDAR_DEDUCT',
+      deductDenominator: 'WORKING_DAYS',
+      excludedWeekdays: [0],
+    },
   },
   {
     name: 'Daily wage (9h basic, OT 90%)',

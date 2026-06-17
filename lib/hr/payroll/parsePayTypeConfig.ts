@@ -83,13 +83,14 @@ export function parsePayTypeConfig(raw: unknown): PayTypeConfig {
   const otDivisor = typeof o.otDivisor === 'number' && o.otDivisor > 0 ? o.otDivisor : undefined;
 
   const excludedWeekdays = normalizeExcludedWeekdays(o.excludedWeekdays);
-
-
+  const deductDenominator =
+    o.deductDenominator === 'CALENDAR_DAYS' || o.deductDenominator === 'WORKING_DAYS'
+      ? o.deductDenominator
+      : undefined;
 
   const config: PayTypeConfig = {
-
     mode,
-
+    deductDenominator,
     otPercent,
 
     otDivisor,
@@ -99,6 +100,12 @@ export function parsePayTypeConfig(raw: unknown): PayTypeConfig {
     formulaScript: formulaScript || undefined,
 
     customParams,
+
+    payExcludedWeekdayWorkAtOt:
+      o.payExcludedWeekdayWorkAtOt === true &&
+      (mode === 'MONTHLY_CALENDAR_DEDUCT' || mode === 'MONTHLY_FIXED')
+        ? true
+        : undefined,
 
   };
 
@@ -110,7 +117,17 @@ export function parsePayTypeConfig(raw: unknown): PayTypeConfig {
 
   } else if (mode === 'HOURLY_SPLIT' || mode === 'CUSTOM') {
 
-    config.excludedWeekdays = resolveExcludedWeekdays({});
+    config.excludedWeekdays = resolveExcludedWeekdays({ mode });
+
+  } else if (mode === 'MONTHLY_CALENDAR_DEDUCT') {
+
+    config.excludedWeekdays = resolveExcludedWeekdays({ mode });
+
+    if (!deductDenominator) config.deductDenominator = 'WORKING_DAYS';
+
+  } else if (mode === 'DAILY_WAGE') {
+
+    config.excludedWeekdays = [];
 
   }
 

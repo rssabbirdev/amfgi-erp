@@ -2,7 +2,11 @@ import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { P, type Permission } from '@/lib/permissions';
-import { isEmployeeSelfServiceUser } from '@/lib/auth/selfService';
+import {
+  EMPLOYEE_PORTAL_HOME,
+  isEmployeeSelfServiceUser,
+  isSelfServiceLandingPath,
+} from '@/lib/auth/selfService';
 
 type RoutePermissionRule = {
   prefix: string;
@@ -84,6 +88,10 @@ export async function proxy(req: NextRequest) {
   const selfServiceOnly = isEmployeeSelfServiceUser(session?.user);
 
   if (selfServiceOnly) {
+    if (isSelfServiceLandingPath(pathname)) {
+      return NextResponse.redirect(new URL(EMPLOYEE_PORTAL_HOME, req.url));
+    }
+
     const allowedPagePrefixes = ['/me', '/unauthorized'];
     const allowedApiPrefixes = ['/api/me', '/api/auth'];
     const isAllowedPage = allowedPagePrefixes.some((prefix) => pathname.startsWith(prefix));
@@ -114,6 +122,7 @@ export async function proxy(req: NextRequest) {
 
   if (
     !session.user.isSuperAdmin &&
+    !selfServiceOnly &&
     !session.user.activeCompanyId &&
     !pathname.startsWith('/select-company') &&
     !pathname.startsWith('/api/')

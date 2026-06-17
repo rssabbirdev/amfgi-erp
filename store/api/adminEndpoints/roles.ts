@@ -44,10 +44,11 @@ export const rolesApi = adminApi.injectEndpoints({
       ],
     }),
 
-    deleteRole: builder.mutation<{ deleted: boolean }, string>({
-      query: (id) => ({
+    deleteRole: builder.mutation<{ deleted: boolean }, { id: string; hardDelete?: boolean }>({
+      query: ({ id, hardDelete }) => ({
         url: `/roles/${id}`,
         method: 'DELETE',
+        body: hardDelete ? { hardDelete: true } : undefined,
       }),
       transformResponse: (r: { deleted: boolean }) => r,
       invalidatesTags: (result, error, id) => [

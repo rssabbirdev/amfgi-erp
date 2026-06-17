@@ -21,6 +21,26 @@ export const WORKFORCE_EMPLOYEE_TYPE_OPTIONS = [
 ] as const;
 
 export type WorkforceEmployeeType = (typeof WORKFORCE_EMPLOYEE_TYPE_OPTIONS)[number]['value'];
+
+export const WORKFORCE_EMPLOYEE_TYPE_SHORT_LABELS: Record<WorkforceEmployeeType, string> = {
+  OFFICE_STAFF: 'Office',
+  HYBRID_STAFF: 'Hybrid',
+  DRIVER: 'Driver',
+  LABOUR_WORKER: 'Labour',
+};
+
+export function workforceEmployeeTypeShortName(type: WorkforceEmployeeType): string {
+  return WORKFORCE_EMPLOYEE_TYPE_SHORT_LABELS[type] ?? type;
+}
+
+export function workforceEmployeeTypeShortNameFromProfile(profileExtension: unknown): string {
+  return workforceEmployeeTypeShortName(parseWorkforceProfile(profileExtension).employeeType);
+}
+
+export function workforceVisaHoldingLabelFromProfile(profileExtension: unknown): string {
+  const value = parseWorkforceProfile(profileExtension).visaHolding;
+  return WORKFORCE_VISA_HOLDING_OPTIONS.find((option) => option.value === value)?.label ?? value;
+}
 export const WORKFORCE_VISA_HOLDING_OPTIONS = [
   { value: 'COMPANY_PROVIDED', label: 'Company provided' },
   { value: 'SELF_OWN', label: 'Self own' },

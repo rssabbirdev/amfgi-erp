@@ -95,10 +95,28 @@ export default function AdminRolesPage() {
   const handleDelete = async (r: Role) => {
     if (!confirm(`Delete role "${r.name}"? This cannot be undone.`)) return;
     try {
-      await deleteRole(r.id).unwrap();
+      await deleteRole({ id: r.id }).unwrap();
       toast.success('Role deleted');
     } catch (error) {
-      const message = (error as { data?: { error?: string } }).data?.error ?? 'Delete failed';
+      const err = error as { status?: number; data?: { error?: string; details?: { assignmentCount?: number } } };
+      const assignmentCount = err.data?.details?.assignmentCount;
+      if (err.status === 409 && assignmentCount) {
+        const force = confirm(
+          `${assignmentCount} user${assignmentCount === 1 ? '' : 's'} still ${assignmentCount === 1 ? 'has' : 'have'} this role. Remove those assignments and delete the role?`
+        );
+        if (!force) return;
+        try {
+          await deleteRole({ id: r.id, hardDelete: true }).unwrap();
+          toast.success('Role deleted');
+          return;
+        } catch (retryError) {
+          const message =
+            (retryError as { data?: { error?: string } }).data?.error ?? 'Delete failed';
+          toast.error(message);
+          return;
+        }
+      }
+      const message = err.data?.error ?? 'Delete failed';
       toast.error(message);
     }
   };

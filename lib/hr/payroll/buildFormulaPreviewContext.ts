@@ -117,9 +117,7 @@ export async function employeeFormulaPreviewContext(
     ? toCompensationInput(match, allowanceItems, month, excludedWeekdays)
     : { monthlyBasic: 0, monthlyAllowance: 0, dailyRate: 0 };
 
-  const approved = attendance.filter((r) => r.workflowStatus === 'APPROVED');
-  const draftCount = attendance.length - approved.length;
-  const lines = attendanceLinesForPayroll(approved, month);
+  const lines = attendanceLinesForPayroll(attendance, month);
   const name = employee.preferredName || employee.fullName;
 
   return {
@@ -130,7 +128,7 @@ export async function employeeFormulaPreviewContext(
     employeeId: employee.id,
     employeeName: name,
     attendanceNote: match
-      ? `${approved.length} approved rows${draftCount > 0 ? `, ${draftCount} draft excluded` : ''}`
+      ? `${attendance.length} saved attendance row${attendance.length === 1 ? '' : 's'}`
       : 'No compensation on file — using zeros unless overridden',
   };
 }

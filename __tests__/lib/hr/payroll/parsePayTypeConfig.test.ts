@@ -9,7 +9,17 @@ describe('parsePayTypeConfig', () => {
     expect(config).toMatchObject({
       mode: 'DAILY_WAGE',
       otPercent: 125,
+      excludedWeekdays: [],
     });
+  });
+
+  it('persists empty excluded weekdays for daily wage', () => {
+    const config = parsePayTypeConfig({
+      mode: 'DAILY_WAGE',
+      otPercent: 125,
+      excludedWeekdays: [],
+    });
+    expect(config.excludedWeekdays).toEqual([]);
   });
 
   it('parses hourly split with excluded weekdays', () => {

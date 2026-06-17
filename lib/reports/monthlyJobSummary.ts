@@ -240,7 +240,7 @@ function roundHours(minutes: number) {
 
 function sumMaterialCosts(
   transactions: Array<{
-    type: 'STOCK_OUT' | 'RETURN';
+    type: string;
     totalCost: unknown;
     notes: string | null;
     batchesUsed: Array<{ costAmount: unknown }>;
@@ -251,6 +251,7 @@ function sumMaterialCosts(
   let reconcileCost = 0;
 
   for (const txn of transactions) {
+    if (txn.type !== 'STOCK_OUT' && txn.type !== 'RETURN') continue;
     const cost = transactionCost(txn);
     if (txn.type === 'STOCK_OUT') {
       issuedCost += cost;

@@ -1,11 +1,9 @@
-import { regenerateAttendanceBoilerplate } from '@/lib/hr/generateAttendanceFromSchedule';
 import { prisma } from '@/lib/db/prisma';
-import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
-/** Rebuilds draft boilerplate rows from the current published schedule. */
+/** Legacy endpoint — attendance rows are created only when saving the day sheet. */
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
@@ -20,19 +18,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (!sch) return errorResponse('Not found', 404);
   if (sch.status !== 'PUBLISHED') return errorResponse('Schedule must be published', 400);
 
-  try {
-    await regenerateAttendanceBoilerplate(prisma, id);
-    const count = await prisma.attendanceEntry.count({
-      where: { companyId, workDate: sch.workDate },
-    });
-    publishLiveUpdate({
-      companyId,
-      channel: 'hr',
-      entity: 'attendance',
-      action: 'changed',
-    });
-    return successResponse({ ok: true, attendanceRows: count });
-  } catch (e) {
-    return errorResponse(e instanceof Error ? e.message : 'Failed', 500);
-  }
+  return successResponse({
+    ok: true,
+    workDate: sch.workDate,
+    message: 'Open the attendance day sheet and save to create rows. This endpoint no longer writes attendance automatically.',
+  });
 }

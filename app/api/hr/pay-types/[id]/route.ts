@@ -138,6 +138,16 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
   }
 
+  const holidayLinks = await prisma.companyHolidayPayType.count({
+    where: { companyId, payTypeId: id },
+  });
+  if (holidayLinks > 0) {
+    return errorResponse(
+      `Cannot delete: this salary structure is assigned to ${holidayLinks} company holiday(s).`,
+      409
+    );
+  }
+
 
 
   await prisma.payType.delete({ where: { id } });

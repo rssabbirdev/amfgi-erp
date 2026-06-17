@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { getPortalEmployeeForSession } from '@/lib/hr/linkedEmployee';
+import { filterLeaveTypesForEmployeePortal } from '@/lib/hr/leaveTypeRules';
 import { ensureLeaveTypesReady } from '@/lib/hr/seedLeaveTypes';
 import { requireCompanySession } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -27,5 +28,5 @@ export async function GET() {
     orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     select: { id: true, name: true, code: true, description: true, rules: true },
   });
-  return successResponse(rows);
+  return successResponse(portalEmp ? filterLeaveTypesForEmployeePortal(rows) : rows);
 }

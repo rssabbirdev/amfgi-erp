@@ -6,7 +6,7 @@ export type InputPropsWithRef = InputHTMLAttributes<HTMLInputElement> & {
 
 const blockedInputs = new WeakSet<HTMLInputElement>();
 
-function isNumberInput(element: Element | null): element is HTMLInputElement {
+function isNumberInput(element: EventTarget | null): element is HTMLInputElement {
   return element instanceof HTMLInputElement && element.type === 'number';
 }
 

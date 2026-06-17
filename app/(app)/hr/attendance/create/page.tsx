@@ -1,8 +1,8 @@
-﻿'use client';
+'use client';
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import AttendanceEntryGrid, {
   type AttendanceGridDraftRow,
@@ -14,6 +14,8 @@ import {
   normalizeDraftStatusFromApi,
   type LeaveTypeOption,
 } from '@/lib/hr/attendanceDraftStatus';
+import { isEmployeeOnLeaveForWorkDate } from '@/lib/hr/employeeLeavePeriod';
+import { dubaiWallTimeToUtc, parseTimeCell } from '@/lib/hr/dubaiShift';
 import { Alert, AlertDescription } from '@/components/ui/shadcn/alert';
 import { Badge } from '@/components/ui/shadcn/badge';
 import { Button, buttonVariants } from '@/components/ui/shadcn/button';
@@ -28,6 +30,7 @@ interface EmployeeRow {
   preferredName: string | null;
   employeeCode: string;
   status?: 'ACTIVE' | 'ON_LEAVE' | 'SUSPENDED' | 'EXITED';
+  profileExtension?: unknown;
   basicHoursPerDay?: number;
   employeeType?: 'OFFICE_STAFF' | 'HYBRID_STAFF' | 'DRIVER' | 'LABOUR_WORKER';
   defaultTiming?: {
@@ -204,8 +207,10 @@ function toLocalTimeInput(iso: string | null | undefined): string {
   if (!iso) return '';
   const dt = new Date(iso);
   if (Number.isNaN(dt.getTime())) return '';
+  const dubaiMs = dt.getTime() + 4 * 60 * 60 * 1000;
+  const dubai = new Date(dubaiMs);
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  return `${pad(dubai.getUTCHours())}:${pad(dubai.getUTCMinutes())}`;
 }
 
 function parseBreakWindow(raw: string | null | undefined): { breakInAt: string; breakOutAt: string } {
@@ -217,9 +222,9 @@ function parseBreakWindow(raw: string | null | undefined): { breakInAt: string; 
 
 function combineDateAndTimeToIso(workDate: string, timeVal: string): string | null {
   if (!timeVal) return null;
-  const d = new Date(`${workDate}T${timeVal}:00`);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
+  const parsed = parseTimeCell(timeVal);
+  if (!parsed) return null;
+  return dubaiWallTimeToUtc(workDate, parsed.hour, parsed.minute).toISOString();
 }
 
 function minutesFromTimeValue(timeVal: string): number | null {
@@ -257,6 +262,83 @@ function employeeDisplayName(employee: EmployeeRow | undefined): string {
 function employeeTypeSortValue(employee: EmployeeRow | undefined): number {
   const type = employee?.employeeType ?? 'LABOUR_WORKER';
   return EMPLOYEE_TYPE_ORDER[type];
+}
+
+function buildAssignedByEmp(
+  scheduleData: SchedulePayload | null,
+  assignments: AssignmentRow[]
+): Map<string, AssignmentRow[]> {
+  const assignedByEmp = new Map<string, AssignmentRow[]>();
+
+  const push = (employeeId: string | null | undefined, assignment: AssignmentRow) => {
+    const id = String(employeeId ?? '').trim();
+    if (!id) return;
+    const existing = assignedByEmp.get(id) ?? [];
+    if (existing.some((item) => item.id === assignment.id)) return;
+    assignedByEmp.set(id, [...existing, assignment]);
+  };
+
+  for (const assignment of assignments) {
+    push(assignment.teamLeaderEmployeeId, assignment);
+    push(assignment.driver1EmployeeId, assignment);
+    push(assignment.driver2EmployeeId, assignment);
+    for (const member of assignment.members ?? []) {
+      push(member.employeeId, assignment);
+    }
+  }
+
+  if (scheduleData?.assignments) {
+    for (const rawAssignment of scheduleData.assignments) {
+      const raw = rawAssignment as unknown as Record<string, unknown>;
+      const assignmentId = String(raw.id ?? '');
+      const assignment = assignments.find((item) => item.id === assignmentId);
+      if (!assignment) continue;
+      push(raw.teamLeaderEmployeeId as string | null | undefined, assignment);
+      push(raw.driver1EmployeeId as string | null | undefined, assignment);
+      push(raw.driver2EmployeeId as string | null | undefined, assignment);
+      push((raw.teamLeader as { id?: string } | null | undefined)?.id, assignment);
+      push((raw.driver1 as { id?: string } | null | undefined)?.id, assignment);
+      push((raw.driver2 as { id?: string } | null | undefined)?.id, assignment);
+      if (Array.isArray(raw.members)) {
+        for (const member of raw.members) {
+          const row = member as Record<string, unknown>;
+          push(row.employeeId as string | null | undefined, assignment);
+          push((row.employee as { id?: string } | null | undefined)?.id, assignment);
+        }
+      }
+    }
+  }
+
+  return assignedByEmp;
+}
+
+function mergeActiveAndOnLeaveEmployees(
+  activeEmployees: EmployeeRow[],
+  onLeaveEmployees: EmployeeRow[]
+): EmployeeRow[] {
+  const merged = new Map<string, EmployeeRow>();
+  for (const employee of activeEmployees) merged.set(employee.id, employee);
+  for (const employee of onLeaveEmployees) merged.set(employee.id, employee);
+  return [...merged.values()];
+}
+
+function buildInitialDraftForEmployee(
+  employee: EmployeeRow,
+  assigned: AssignmentRow | undefined,
+  absentEmployeeIds: Set<string>,
+  leaveTypes: LeaveTypeOption[],
+  workDate: string
+): AttendanceDraftRow {
+  if (isEmployeeOnLeaveForWorkDate(employee, workDate) && !assigned) {
+    return buildDraftForOnLeavePeriodEmployee(employee, leaveTypes);
+  }
+  return buildDraftFromDefaults(employee, assigned, absentEmployeeIds, leaveTypes);
+}
+
+function sortEmployeesForSheet(a: EmployeeRow, b: EmployeeRow): number {
+  const typeDiff = employeeTypeSortValue(a) - employeeTypeSortValue(b);
+  if (typeDiff !== 0) return typeDiff;
+  return employeeDisplayName(a).localeCompare(employeeDisplayName(b), undefined, { sensitivity: 'base' });
 }
 
 function buildDraftFromDefaults(
@@ -335,6 +417,34 @@ function buildDraftFromDefaults(
   };
 }
 
+function buildDraftForOnLeavePeriodEmployee(
+  employee: EmployeeRow,
+  leaveTypes: LeaveTypeOption[]
+): AttendanceDraftRow {
+  const basicHours = employee.basicHoursPerDay ?? 8;
+  return {
+    employeeId: employee.id,
+    workAssignmentId: '',
+    jobNumber: '',
+    status: 'ABSENT',
+    leaveTypeId: defaultUnpaidLeaveTypeId(leaveTypes),
+    basicHours,
+    checkInAt: '',
+    checkOutAt: '',
+    breakInAt: '',
+    breakOutAt: '',
+    remarks: '',
+    source: 'manual',
+  };
+}
+
+function isOnLeaveSectionEmployee(
+  employee: EmployeeRow | AttendanceGridEmployee | undefined,
+  workDate: string
+): boolean {
+  return isEmployeeOnLeaveForWorkDate(employee, workDate);
+}
+
 function buildDraftFromExistingRow(
   employee: EmployeeRow,
   row: Record<string, unknown>,
@@ -344,12 +454,7 @@ function buildDraftFromExistingRow(
   const scheduledBreak = parseBreakWindow((existingAssignment?.breakWindow as string | null | undefined) ?? undefined);
   const defaultTiming = employee.defaultTiming ?? null;
   const storedStatus = (row.status as AttendanceDraftRow['status'] | 'LEAVE' | 'HALF_DAY' | 'MISSING_PUNCH') ?? 'PRESENT';
-  const normalized = normalizeDraftStatusFromApi(
-    storedStatus,
-    (row.leaveTypeId as string | null | undefined) ?? null,
-    (row.leaveType as 'ANNUAL' | 'SICK' | 'EMERGENCY' | 'ONE_DAY' | null | undefined) ?? null,
-    leaveTypes
-  );
+  const normalized = normalizeDraftStatusFromApi(storedStatus, leaveTypes);
   const shouldClearTiming = isDraftNonWorking(normalized);
 
   const snapBasic = Number(row.basicHours);
@@ -392,11 +497,11 @@ function buildDraftFromExistingRow(
 }
 
 export default function AttendanceCreatePage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const workDate = searchParams.get('workDate') || todayYmd();
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [onLeaveEmployees, setOnLeaveEmployees] = useState<EmployeeRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [schedule, setSchedule] = useState<SchedulePayload | null>(null);
   const [drafts, setDrafts] = useState<AttendanceDraftRow[]>([]);
@@ -416,7 +521,8 @@ export default function AttendanceCreatePage() {
   const perms = (session?.user?.permissions ?? []) as string[];
   const canView = isSA || perms.includes('hr.attendance.view');
   const canEdit = isSA || perms.includes('hr.attendance.edit');
-  const canApprove = isSA || perms.includes('hr.attendance.approve');
+  const [reloadToken, setReloadToken] = useState(0);
+  const [leavePreviewByEmployeeId, setLeavePreviewByEmployeeId] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -447,15 +553,26 @@ export default function AttendanceCreatePage() {
         setBulkAbsentSnapshot(null);
       }
 
-      const [scheduleRes, attendanceRes, leaveTypesRes] = await Promise.all([
+      const [scheduleRes, attendanceRes, leaveTypesRes, activeEmpRes, onLeaveEmpRes, leavePreviewRes] =
+        await Promise.all([
         fetch(`/api/hr/schedule?workDate=${encodeURIComponent(workDate)}`, { cache: 'no-store' }),
         fetch(`/api/hr/attendance?workDate=${encodeURIComponent(workDate)}`, { cache: 'no-store' }),
         fetch('/api/hr/leave-types', { cache: 'no-store' }),
+        fetch('/api/hr/employees?status=ACTIVE', { cache: 'no-store' }),
+        fetch('/api/hr/employees?status=ON_LEAVE', { cache: 'no-store' }),
+        fetch(
+          `/api/hr/leave-requests?workDate=${encodeURIComponent(workDate)}&status=APPROVED`,
+          { cache: 'no-store' }
+        ),
       ]);
-      const [scheduleJson, attendanceJson, leaveTypesJson] = await Promise.all([
+      const [scheduleJson, attendanceJson, leaveTypesJson, activeEmpJson, onLeaveEmpJson, leavePreviewJson] =
+        await Promise.all([
         scheduleRes.json(),
         attendanceRes.json(),
         leaveTypesRes.json(),
+        activeEmpRes.json(),
+        onLeaveEmpRes.json(),
+        leavePreviewRes.json(),
       ]);
       if (cancelled) return;
 
@@ -469,6 +586,19 @@ export default function AttendanceCreatePage() {
             }))
           : [];
       setLeaveTypes(loadedLeaveTypes);
+
+      const previewMap: Record<string, string> = {};
+      if (leavePreviewRes.ok && leavePreviewJson?.success && Array.isArray(leavePreviewJson.data)) {
+        for (const req of leavePreviewJson.data as Array<{
+          employee?: { id?: string };
+          leaveTypeRef?: { name?: string } | null;
+        }>) {
+          const employeeId = req.employee?.id;
+          if (!employeeId) continue;
+          previewMap[employeeId] = req.leaveTypeRef?.name ?? 'Leave';
+        }
+      }
+      setLeavePreviewByEmployeeId(previewMap);
 
       const scheduleData: SchedulePayload | null = scheduleRes.ok && scheduleJson?.success ? scheduleJson.data : null;
       const asgs: AssignmentRow[] = Array.isArray(scheduleData?.assignments)
@@ -491,6 +621,7 @@ export default function AttendanceCreatePage() {
             preferredName: (employee?.preferredName as string | null | undefined) ?? null,
             employeeCode: String((employee?.employeeCode as string | undefined) ?? ''),
             status: ((employee?.status as EmployeeRow['status'] | undefined) ?? 'ACTIVE'),
+            profileExtension: employee?.profileExtension,
             employeeType: (employee?.employeeType as EmployeeRow['employeeType'] | undefined) ?? 'LABOUR_WORKER',
             basicHoursPerDay: Number((employee?.basicHoursPerDay as number | undefined) ?? 0) || undefined,
             defaultTiming: (employee?.defaultTiming as EmployeeRow['defaultTiming'] | undefined) ?? null,
@@ -507,21 +638,7 @@ export default function AttendanceCreatePage() {
       setAssignments(asgs);
       setSchedule(scheduleData);
 
-      const assignedByEmp = new Map<string, AssignmentRow[]>();
-      for (const assignment of asgs) {
-        const pushEmployee = (employeeId: string | null | undefined) => {
-          if (!employeeId) return;
-          const existing = assignedByEmp.get(employeeId) ?? [];
-          if (existing.some((item) => item.id === assignment.id)) return;
-          assignedByEmp.set(employeeId, [...existing, assignment]);
-        };
-        pushEmployee(assignment.teamLeaderEmployeeId);
-        pushEmployee(assignment.driver1EmployeeId);
-        pushEmployee(assignment.driver2EmployeeId);
-        for (const member of assignment.members ?? []) {
-          pushEmployee(member.employeeId ? String(member.employeeId) : '');
-        }
-      }
+      const assignedByEmp = buildAssignedByEmp(scheduleData, asgs);
 
       const absentEmployeeIds = new Set(
         Array.isArray(scheduleData?.absences)
@@ -534,33 +651,52 @@ export default function AttendanceCreatePage() {
       const hasExistingAttendance = existingByEmp.size > 0;
 
       let activeEmployees: EmployeeRow[] = [];
-      if (!hasExistingAttendance) {
-        const empRes = await fetch('/api/hr/employees?status=ACTIVE', { cache: 'no-store' });
-        const empJson = await empRes.json();
-        if (empRes.ok && empJson?.success) {
-          activeEmployees = empJson.data as EmployeeRow[];
-        }
+      if (activeEmpRes.ok && activeEmpJson?.success && Array.isArray(activeEmpJson.data)) {
+        activeEmployees = activeEmpJson.data as EmployeeRow[];
       }
+
+      const loadedOnLeaveEmployees: EmployeeRow[] =
+        onLeaveEmpRes.ok && onLeaveEmpJson?.success && Array.isArray(onLeaveEmpJson.data)
+          ? (onLeaveEmpJson.data as EmployeeRow[])
+          : [];
 
       if (cancelled) return;
 
+      const rosterEmployees = mergeActiveAndOnLeaveEmployees(activeEmployees, loadedOnLeaveEmployees);
+
       const nextEmployees = new Map<string, EmployeeRow>();
-      for (const employee of activeEmployees) nextEmployees.set(employee.id, employee);
+      for (const employee of rosterEmployees) nextEmployees.set(employee.id, employee);
       for (const [employeeId, employee] of existingEmployees) nextEmployees.set(employeeId, employee);
 
       const nextDrafts = hasExistingAttendance
-        ? [...existingByEmp.entries()].map(([employeeId, row]) =>
-            buildDraftFromExistingRow(
-              nextEmployees.get(employeeId) ?? existingEmployees.get(employeeId)!,
-              row,
-              loadedLeaveTypes
+        ? [...existingByEmp.entries()].map(([employeeId, row]) => {
+            const employee = nextEmployees.get(employeeId) ?? existingEmployees.get(employeeId)!;
+            return buildDraftFromExistingRow(employee, row, loadedLeaveTypes);
+          })
+        : [...rosterEmployees].sort(sortEmployeesForSheet).map((employee) =>
+            buildInitialDraftForEmployee(
+              employee,
+              assignedByEmp.get(employee.id)?.[0],
+              absentEmployeeIds,
+              loadedLeaveTypes,
+              workDate
             )
-          )
-        : activeEmployees.map((employee) =>
-            buildDraftFromDefaults(employee, assignedByEmp.get(employee.id)?.[0], absentEmployeeIds, loadedLeaveTypes)
           );
 
+      if (hasExistingAttendance) {
+        const draftEmployeeIds = new Set(nextDrafts.map((draft) => draft.employeeId));
+        for (const employee of loadedOnLeaveEmployees) {
+          if (
+            !draftEmployeeIds.has(employee.id) &&
+            isEmployeeOnLeaveForWorkDate(employee, workDate)
+          ) {
+            nextDrafts.push(buildDraftForOnLeavePeriodEmployee(employee, loadedLeaveTypes));
+          }
+        }
+      }
+
       setEmployees([...nextEmployees.values()]);
+      setOnLeaveEmployees(loadedOnLeaveEmployees);
       setDrafts(nextDrafts);
       setLoading(false);
 
@@ -578,12 +714,19 @@ export default function AttendanceCreatePage() {
             });
           })
           .catch(() => undefined);
+        void fetch('/api/hr/employees?status=ON_LEAVE', { cache: 'no-store' })
+          .then(async (empRes) => {
+            const empJson = await empRes.json();
+            if (cancelled || !empRes.ok || !empJson?.success) return;
+            setOnLeaveEmployees(empJson.data as EmployeeRow[]);
+          })
+          .catch(() => undefined);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [canView, workDate]);
+  }, [canView, workDate, reloadToken]);
 
   const assignmentsById = useMemo(
     () => new Map(assignments.map((assignment) => [assignment.id, assignment])),
@@ -608,9 +751,25 @@ export default function AttendanceCreatePage() {
     [assignments]
   );
 
-  const employeeById = useMemo(
-    () => new Map<string, AttendanceGridEmployee>(employees.map((employee) => [employee.id, employee])),
-    [employees]
+  const employeeById = useMemo(() => {
+    const map = new Map<string, AttendanceGridEmployee>();
+    for (const employee of employees) map.set(employee.id, employee);
+    for (const employee of onLeaveEmployees) map.set(employee.id, employee);
+    return map;
+  }, [employees, onLeaveEmployees]);
+
+  const mainSheetDrafts = useMemo(
+    () =>
+      drafts.filter(
+        (draft) => !isOnLeaveSectionEmployee(employeeById.get(draft.employeeId), workDate)
+      ),
+    [drafts, employeeById, workDate]
+  );
+
+  const onLeaveDrafts = useMemo(
+    () =>
+      drafts.filter((draft) => isOnLeaveSectionEmployee(employeeById.get(draft.employeeId), workDate)),
+    [drafts, employeeById, workDate]
   );
 
   const insertableEmployees = useMemo(
@@ -644,6 +803,7 @@ export default function AttendanceCreatePage() {
     return drafts
       .filter((draft) => {
         const employee = employeeById.get(draft.employeeId);
+        if (isOnLeaveSectionEmployee(employee, workDate)) return false;
         const assignment = draft.workAssignmentId
           ? assignmentsById.get(draft.workAssignmentId)
           : undefined;
@@ -676,7 +836,37 @@ export default function AttendanceCreatePage() {
           sensitivity: 'base',
         });
       });
-  }, [assignmentsById, deferredSearch, drafts, employeeById, scopeFilter]);
+  }, [assignmentsById, deferredSearch, drafts, employeeById, scopeFilter, workDate]);
+
+  const visibleOnLeaveEmployees = useMemo(() => {
+    const merged = new Map<string, { employee: EmployeeRow; draft: AttendanceDraftRow | null }>();
+    for (const draft of onLeaveDrafts) {
+      const employee = employeeById.get(draft.employeeId);
+      if (employee) merged.set(employee.id, { employee: employee as EmployeeRow, draft });
+    }
+    for (const employee of onLeaveEmployees) {
+      if (
+        !merged.has(employee.id) &&
+        isEmployeeOnLeaveForWorkDate(employee, workDate)
+      ) {
+        merged.set(employee.id, { employee, draft: null });
+      }
+    }
+
+    return [...merged.values()]
+      .filter(({ employee }) => {
+        if (!deferredSearch) return true;
+        return [employee.fullName, employee.preferredName ?? '', employee.employeeCode]
+          .join(' ')
+          .toLowerCase()
+          .includes(deferredSearch);
+      })
+      .sort((a, b) =>
+        employeeDisplayName(a.employee).localeCompare(employeeDisplayName(b.employee), undefined, {
+          sensitivity: 'base',
+        })
+      );
+  }, [deferredSearch, employeeById, onLeaveDrafts, onLeaveEmployees, workDate]);
 
   const updateDraft = (employeeId: string, patch: Partial<AttendanceDraftRow>) => {
     setDrafts((prev) =>
@@ -735,7 +925,7 @@ export default function AttendanceCreatePage() {
   };
 
   const openBulkAbsentConfirm = () => {
-    if (!canEdit || drafts.length === 0) return;
+    if (!canEdit || mainSheetDrafts.length === 0) return;
     setBulkAbsentConfirm(bulkAbsentSnapshot ? 'undo' : 'mark');
   };
 
@@ -747,44 +937,31 @@ export default function AttendanceCreatePage() {
       setBulkAbsentSnapshot(null);
     } else if (bulkAbsentConfirm === 'mark') {
       setBulkAbsentSnapshot(cloneDraftRows(drafts));
-      setDrafts((prev) => prev.map((d) => applyAbsentToDraft(d, leaveTypes)));
+      setDrafts((prev) =>
+        prev.map((draft) => {
+          if (isOnLeaveSectionEmployee(employeeById.get(draft.employeeId), workDate)) return draft;
+          return applyAbsentToDraft(draft, leaveTypes);
+        })
+      );
     }
 
     setBulkAbsentConfirm(null);
   };
 
-  const runWorkflow = async (action: 'submit' | 'approve') => {
-    const res = await fetch('/api/hr/attendance/workflow', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workDate, action }),
-    });
-    const json = await res.json();
-    if (!res.ok || !json?.success) {
-      toast.error(json?.error ?? 'Workflow action failed');
+  const saveAll = async () => {
+    if (!canEdit) return;
+    if (drafts.length === 0) {
+      toast.error('No attendance rows to save');
       return;
     }
-    toast.success(`${action === 'approve' ? 'Approved' : 'Submitted'} ${json.data?.updated ?? 0} rows`);
-    router.push(`/hr/attendance?workDate=${encodeURIComponent(workDate)}`);
-  };
-
-  const saveAll = async (options?: { refreshBasicHoursFromTypeSettings?: boolean }) => {
-    if (!canEdit) return;
     setSaving(true);
     const payload = {
       workDate,
-      refreshBasicHoursFromTypeSettings: options?.refreshBasicHoursFromTypeSettings ?? false,
       rows: drafts.map((draft) => ({
         employeeId: draft.employeeId,
         workAssignmentId: draft.workAssignmentId || null,
-        status:
-          draft.status === 'LEAVE' ? 'LEAVE' : draft.status === 'ABSENT' ? 'ABSENT' : 'PRESENT',
-        leaveTypeId:
-          draft.status === 'ABSENT'
-            ? defaultUnpaidLeaveTypeId(leaveTypes)
-            : draft.status === 'LEAVE'
-              ? draft.leaveTypeId ?? null
-              : null,
+        status: draft.status,
+        leaveTypeId: draft.status === 'ABSENT' ? defaultUnpaidLeaveTypeId(leaveTypes) : null,
         remarks: draft.remarks?.trim() || null,
         checkInAt: combineDateAndTimeToIso(workDate, draft.checkInAt),
         checkOutAt: combineDateAndTimeToIso(workDate, draft.checkOutAt),
@@ -803,12 +980,13 @@ export default function AttendanceCreatePage() {
       toast.error(json?.error ?? 'Failed to save attendance');
       return;
     }
-    toast.success(`Saved ${json.data?.affectedRows ?? 0} attendance rows`);
-    if (options?.refreshBasicHoursFromTypeSettings) {
-      window.location.reload();
+    const affectedRows = json.data?.affectedRows ?? 0;
+    if (affectedRows === 0) {
+      toast.error('No rows were saved. Check the data and try again.');
       return;
     }
-    router.push(`/hr/attendance?workDate=${encodeURIComponent(workDate)}`);
+    toast.success(`Saved ${affectedRows} attendance row${affectedRows === 1 ? '' : 's'}`);
+    setReloadToken((value) => value + 1);
   };
 
   if (!canView) {
@@ -844,8 +1022,8 @@ export default function AttendanceCreatePage() {
             Attendance day sheet · {formatWorkDateLabel(workDate)}
           </h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Preloads from the schedule when available. Mark absent as unpaid leave; annual, sick, and other paid
-            leave is applied via leave management when approved.
+            Attendance records present or absent only. The Leave column previews approved leave from
+            Leave management. Payroll combines both when calculating pay.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -897,30 +1075,8 @@ export default function AttendanceCreatePage() {
             Cancel
           </Link>
           {canEdit ? (
-            <Button type="submit" form="attendance-create-form" size="sm" disabled={saving}>
+            <Button type="submit" form="attendance-create-form" size="sm" disabled={saving || drafts.length === 0}>
               {saving ? 'Saving…' : 'Save attendance'}
-            </Button>
-          ) : null}
-          {canEdit ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={saving}
-              title="Re-apply current Employee Type Timings basic hours to all rows (e.g. after Ramadan change)"
-              onClick={() => void saveAll({ refreshBasicHoursFromTypeSettings: true })}
-            >
-              Refresh basic hrs
-            </Button>
-          ) : null}
-          {canEdit ? (
-            <Button type="button" variant="outline" size="sm" onClick={() => void runWorkflow('submit')}>
-              Submit day
-            </Button>
-          ) : null}
-          {canApprove ? (
-            <Button type="button" variant="secondary" size="sm" onClick={() => void runWorkflow('approve')}>
-              Approve day
             </Button>
           ) : null}
         </div>
@@ -945,6 +1101,7 @@ export default function AttendanceCreatePage() {
           assignmentsById={assignmentsById}
           assignmentOptions={assignmentOptions}
           leaveTypes={leaveTypes}
+          leavePreviewByEmployeeId={leavePreviewByEmployeeId}
           canEdit={canEdit}
           emptyMessage="No employees match the current filters."
           onUpdateRow={updateDraft}
@@ -1014,9 +1171,46 @@ export default function AttendanceCreatePage() {
                 {stats.existing} saved
               </Badge>
               <span className="text-[9px] text-muted-foreground">
-                Showing {visibleDrafts.length} of {drafts.length}
+                Showing {visibleDrafts.length} of {mainSheetDrafts.length}
+                {onLeaveDrafts.length > 0 ? ` · ${onLeaveDrafts.length} on leave` : ''}
               </span>
             </>
+          }
+          tableFooter={
+            visibleOnLeaveEmployees.length > 0 ? (
+              <div className="border-t border-border bg-muted/25">
+                <div className="border-b border-border/80 px-4 py-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Employees on leave
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    Saved as absent for this day. Official leave dates and balance are managed in Leave management.
+                  </p>
+                </div>
+                <div className="divide-y divide-border/80">
+                  {visibleOnLeaveEmployees.map(({ employee, draft }) => (
+                    <div
+                      key={employee.id}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-sm"
+                    >
+                      <span className="font-medium text-foreground">{employeeDisplayName(employee)}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{employee.employeeCode}</span>
+                      {draft ? (
+                        <span className="text-xs text-muted-foreground capitalize">
+                          {draft.status === 'ABSENT' ? 'Absent' : draft.status.replace(/_/g, ' ').toLowerCase()}
+                        </span>
+                      ) : null}
+                      <Badge
+                        variant="outline"
+                        className="h-auto border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] font-medium text-amber-950 dark:text-amber-100"
+                      >
+                        On leave
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null
           }
         />
       </form>
@@ -1045,7 +1239,7 @@ export default function AttendanceCreatePage() {
         {bulkAbsentConfirm === 'mark' ? (
           <div className="space-y-3 text-sm text-muted-foreground">
             <p>
-              You are about to mark all <strong className="text-foreground">{drafts.length}</strong> employees
+              You are about to mark all <strong className="text-foreground">{mainSheetDrafts.length}</strong> employees
               absent for <strong className="text-foreground">{formatWorkDateLabel(workDate)}</strong>.
             </p>
             <Alert variant="destructive">

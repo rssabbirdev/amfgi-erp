@@ -5,11 +5,12 @@ import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
 import HrPageChrome from '@/components/hr/HrPageChrome';
+import Modal from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/shadcn/badge';
 import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
-import type { LeavePayTier, LeaveTypeRules } from '@/lib/hr/leaveTypeRules';
-import { summarizeLeaveRules } from '@/lib/hr/leaveTypeRules';
+import type { LeaveAllocationBasis, LeavePayTier, LeaveTypeRules } from '@/lib/hr/leaveTypeRules';
+import { LEAVE_ALLOCATION_BASIS_OPTIONS, summarizeLeaveRules } from '@/lib/hr/leaveTypeRules';
 import { readApiJson } from '@/lib/utils/readApiResponse';
 
 type LeaveTypeRow = {
@@ -23,6 +24,8 @@ type LeaveTypeRow = {
 };
 
 const labelClass = 'text-[11px] font-medium uppercase tracking-wide text-muted-foreground';
+const selectClass =
+  'mt-1 flex h-9 w-full rounded-md border border-border bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 function slugifyCode(name: string) {
   return name
@@ -45,15 +48,18 @@ export default function LeaveTypesSettingsPage() {
   const [rows, setRows] = useState<LeaveTypeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [description, setDescription] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [entitlementDays, setEntitlementDays] = useState('');
+  const [allocationBasis, setAllocationBasis] = useState<LeaveAllocationBasis>('OLDEST_VISA_OR_HIRE');
   const [requiresProbation, setRequiresProbation] = useState(false);
   const [countsAsPaidLeave, setCountsAsPaidLeave] = useState(false);
   const [deductFromBalance, setDeductFromBalance] = useState(false);
+  const [hideFromEmployeePortal, setHideFromEmployeePortal] = useState(false);
   const [payTiers, setPayTiers] = useState<LeavePayTier[]>([]);
 
   const load = useCallback(async () => {
@@ -75,17 +81,21 @@ export default function LeaveTypesSettingsPage() {
 
   const loadRulesIntoForm = (rules: LeaveTypeRules) => {
     setEntitlementDays(rules.entitlementDays != null ? String(rules.entitlementDays) : '');
+    setAllocationBasis(rules.allocationBasis ?? 'HIRE_DATE');
     setRequiresProbation(Boolean(rules.requiresProbationComplete));
     setCountsAsPaidLeave(Boolean(rules.countsAsPaidLeave));
     setDeductFromBalance(Boolean(rules.deductFromBalance));
+    setHideFromEmployeePortal(Boolean(rules.hideFromEmployeePortal));
     setPayTiers(rules.payTiers?.length ? rules.payTiers : []);
   };
 
   const buildRulesFromForm = (): LeaveTypeRules => ({
     ...(entitlementDays ? { entitlementDays: Number(entitlementDays) || undefined } : {}),
+    allocationBasis,
     requiresProbationComplete: requiresProbation || undefined,
     countsAsPaidLeave: countsAsPaidLeave || undefined,
     deductFromBalance: deductFromBalance || undefined,
+    hideFromEmployeePortal: hideFromEmployeePortal || undefined,
     ...(payTiers.length > 0 ? { payTiers } : {}),
   });
 
@@ -95,7 +105,17 @@ export default function LeaveTypesSettingsPage() {
     setCode('');
     setDescription('');
     setIsActive(true);
-    loadRulesIntoForm({});
+    loadRulesIntoForm({ allocationBasis: 'OLDEST_VISA_OR_HIRE' });
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    resetForm();
+  };
+
+  const openCreateModal = () => {
+    resetForm();
+    setModalOpen(true);
   };
 
   const startEdit = (row: LeaveTypeRow) => {
@@ -105,6 +125,7 @@ export default function LeaveTypesSettingsPage() {
     setDescription(row.description ?? '');
     setIsActive(row.isActive);
     loadRulesIntoForm(row.rules ?? {});
+    setModalOpen(true);
   };
 
   const save = async () => {
@@ -130,7 +151,7 @@ export default function LeaveTypesSettingsPage() {
       if (!res.ok || !json?.success) toast.error(json?.error ?? 'Save failed');
       else {
         toast.success('Leave type saved');
-        resetForm();
+        closeModal();
         await load();
       }
     } else {
@@ -150,7 +171,7 @@ export default function LeaveTypesSettingsPage() {
       if (!res.ok || !json?.success) toast.error(json?.error ?? 'Create failed');
       else {
         toast.success('Leave type created');
-        resetForm();
+        closeModal();
         await load();
       }
     }
@@ -165,7 +186,7 @@ export default function LeaveTypesSettingsPage() {
     if (!res.ok || !json?.success) toast.error(json?.error ?? 'Delete failed');
     else {
       toast.success('Leave type deleted');
-      if (editingId === row.id) resetForm();
+      if (editingId === row.id) closeModal();
       await load();
     }
     setSaving(false);
@@ -181,17 +202,73 @@ export default function LeaveTypesSettingsPage() {
 
   return (
     <HrPageChrome>
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold">Leave types</h1>
-        <p className="text-sm text-muted-foreground">
-          Configure leave categories and pay rules (e.g. UAE sick leave tiers). Attendance day sheets pick from
-          these types when marking an employee absent.
-        </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold">Leave types</h1>
+          <p className="text-sm text-muted-foreground">
+            Configure leave categories and pay rules (e.g. UAE sick leave tiers). Annual entitlement
+            is prorated per calendar year from the allocation date configured below.
+          </p>
+        </div>
+        <Button onClick={openCreateModal}>Add leave type</Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-lg border border-border p-4 space-y-4">
-          <h2 className="text-sm font-semibold">{editingId ? 'Edit leave type' : 'New leave type'}</h2>
+      <section className="rounded-lg border border-border">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold">Leave types</h2>
+        </div>
+        {loading ? (
+          <p className="p-4 text-sm text-muted-foreground">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground">No leave types yet.</p>
+        ) : (
+          <div className="divide-y">
+            {rows.map((row) => (
+              <div key={row.id} className="flex flex-wrap items-start justify-between gap-2 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="font-medium">{row.name}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{row.code}</p>
+                  {row.description ? (
+                    <p className="mt-0.5 text-xs text-muted-foreground">{row.description}</p>
+                  ) : null}
+                  <p className="mt-1 text-xs text-muted-foreground">{summarizeLeaveRules(row.rules ?? {})}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!row.isActive ? <Badge variant="outline">Inactive</Badge> : null}
+                  {row.rules?.hideFromEmployeePortal ? (
+                    <Badge variant="outline">Hidden from portal</Badge>
+                  ) : null}
+                  <Button size="sm" variant="outline" onClick={() => startEdit(row)}>
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={saving} onClick={() => void remove(row)}>
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <Modal
+        isOpen={modalOpen}
+        onClose={closeModal}
+        title={editingId ? 'Edit leave type' : 'New leave type'}
+        description="Configure leave category, pay tiers, and how annual entitlement is allocated."
+        size="lg"
+        actions={
+          <>
+            <Button variant="outline" disabled={saving} onClick={closeModal}>
+              Cancel
+            </Button>
+            <Button disabled={saving} onClick={() => void save()}>
+              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create leave type'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
           <div>
             <label className={labelClass}>Name</label>
             <Input
@@ -231,12 +308,30 @@ export default function LeaveTypesSettingsPage() {
                   type="number"
                   min={1}
                   className="mt-1"
-                  placeholder="e.g. 90"
+                  placeholder="e.g. 30"
                   value={entitlementDays}
                   onChange={(e) => setEntitlementDays(e.target.value)}
                 />
               </div>
+              <div>
+                <label className={labelClass}>Allocation from</label>
+                <select
+                  className={selectClass}
+                  value={allocationBasis}
+                  onChange={(e) => setAllocationBasis(e.target.value as LeaveAllocationBasis)}
+                >
+                  {LEAVE_ALLOCATION_BASIS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              For balance-deducting types, entitlement is prorated for the first calendar year from this
+              date. Company-provided visa uses the oldest visa period start; otherwise hire date is used.
+            </p>
             <div className="flex flex-col gap-2 text-sm">
               <label className="flex items-center gap-2">
                 <input
@@ -265,6 +360,15 @@ export default function LeaveTypesSettingsPage() {
                 />
                 Deduct from leave balance
               </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={hideFromEmployeePortal}
+                  onChange={(e) => setHideFromEmployeePortal(e.target.checked)}
+                  className="size-4 rounded border-border"
+                />
+                Hide from employee portal (HR-only assignment)
+              </label>
             </div>
 
             <div>
@@ -291,8 +395,8 @@ export default function LeaveTypesSettingsPage() {
                           onChange={(e) =>
                             setPayTiers((rows) =>
                               rows.map((r, i) =>
-                                i === idx ? { ...r, fromDay: Number(e.target.value) || 1 } : r
-                              )
+                                i === idx ? { ...r, fromDay: Number(e.target.value) || 1 } : r,
+                              ),
                             )
                           }
                         />
@@ -306,8 +410,8 @@ export default function LeaveTypesSettingsPage() {
                           onChange={(e) =>
                             setPayTiers((rows) =>
                               rows.map((r, i) =>
-                                i === idx ? { ...r, toDay: Number(e.target.value) || 1 } : r
-                              )
+                                i === idx ? { ...r, toDay: Number(e.target.value) || 1 } : r,
+                              ),
                             )
                           }
                         />
@@ -322,8 +426,8 @@ export default function LeaveTypesSettingsPage() {
                           onChange={(e) =>
                             setPayTiers((rows) =>
                               rows.map((r, i) =>
-                                i === idx ? { ...r, payPercent: Number(e.target.value) || 0 } : r
-                              )
+                                i === idx ? { ...r, payPercent: Number(e.target.value) || 0 } : r,
+                              ),
                             )
                           }
                         />
@@ -355,54 +459,8 @@ export default function LeaveTypesSettingsPage() {
             />
             Active
           </label>
-
-          <div className="flex gap-2">
-            <Button disabled={saving} onClick={() => void save()}>
-              {saving ? 'Saving…' : editingId ? 'Save' : 'Create'}
-            </Button>
-            {editingId ? (
-              <Button variant="outline" disabled={saving} onClick={resetForm}>
-                Cancel
-              </Button>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-border">
-          <div className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold">Leave types</h2>
-          </div>
-          {loading ? (
-            <p className="p-4 text-sm text-muted-foreground">Loading…</p>
-          ) : rows.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">No leave types yet.</p>
-          ) : (
-            <div className="divide-y">
-              {rows.map((row) => (
-                <div key={row.id} className="flex flex-wrap items-start justify-between gap-2 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="font-medium">{row.name}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{row.code}</p>
-                    {row.description ? (
-                      <p className="mt-0.5 text-xs text-muted-foreground">{row.description}</p>
-                    ) : null}
-                    <p className="mt-1 text-xs text-muted-foreground">{summarizeLeaveRules(row.rules ?? {})}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!row.isActive ? <Badge variant="outline">Inactive</Badge> : null}
-                    <Button size="sm" variant="outline" onClick={() => startEdit(row)}>
-                      Edit
-                    </Button>
-                    <Button size="sm" variant="ghost" disabled={saving} onClick={() => void remove(row)}>
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
+        </div>
+      </Modal>
     </HrPageChrome>
   );
 }

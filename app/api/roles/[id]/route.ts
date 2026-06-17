@@ -62,16 +62,33 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params;
 
   const body = await req.json().catch(() => ({ hardDelete: false }));
-  const { hardDelete } = body;
+  const hardDelete = Boolean((body as { hardDelete?: boolean })?.hardDelete);
 
-  const role = await prisma.role.findUnique({ where: { id } });
+  const role = await prisma.role.findUnique({
+    where: { id },
+    include: { _count: { select: { userAccess: true } } },
+  });
   if (!role) return errorResponse('Role not found', 404);
 
   if (role.isSystem && !hardDelete) {
     return errorResponse('System roles can only be deleted with explicit confirmation', 403);
   }
 
-  await prisma.role.delete({ where: { id } });
+  const assignmentCount = role._count.userAccess;
+  if (assignmentCount > 0 && !hardDelete) {
+    return errorResponse(
+      `This role is assigned to ${assignmentCount} user${assignmentCount === 1 ? '' : 's'}. Remove those assignments to delete the role.`,
+      409,
+      { assignmentCount, requiresHardDelete: true }
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (assignmentCount > 0) {
+      await tx.userCompanyAccess.deleteMany({ where: { roleId: id } });
+    }
+    await tx.role.delete({ where: { id } });
+  });
   publishLiveUpdate({
     companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
     channel: 'admin',

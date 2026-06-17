@@ -17,8 +17,14 @@ import {
   TableRow,
 } from '@/components/ui/shadcn/table';
 import { readApiJson } from '@/lib/utils/readApiResponse';
+import type { PayCalculationMode } from '@/lib/hr/payroll/types';
 
-type PayType = { id: string; name: string; code: string };
+type PayType = {
+  id: string;
+  name: string;
+  code: string;
+  config?: { mode?: PayCalculationMode };
+};
 type AllowanceType = {
   id: string;
   name: string;
@@ -53,6 +59,7 @@ type CompensationPackage = {
   visaPeriod: VisaPeriod | null;
   monthlyBasic: number | null;
   dailyRate: number | null;
+  wpsTransferAmount: number | null;
   totalAllowance: number;
   totalMonthly: number;
   effectiveFrom: string;
@@ -66,6 +73,18 @@ type CompensationPackage = {
 };
 
 const labelClass = 'text-[11px] font-medium uppercase tracking-wide text-muted-foreground';
+
+function resolvePayTypeMode(payType: PayType | undefined): PayCalculationMode | null {
+  return payType?.config?.mode ?? null;
+}
+
+function usesDailyRateField(mode: PayCalculationMode | null): boolean {
+  return mode === 'DAILY_WAGE';
+}
+
+function usesMonthlyBasicField(mode: PayCalculationMode | null): boolean {
+  return mode != null && mode !== 'DAILY_WAGE';
+}
 
 function formatMoney(value: number | null | undefined) {
   if (value == null) return '—';
@@ -162,6 +181,11 @@ function CompensationDetailBody({ pkg }: { pkg: CompensationPackage }) {
             Daily rate: {formatMoney(pkg.dailyRate)} AED
           </p>
         ) : null}
+        {pkg.wpsTransferAmount != null ? (
+          <p className="mt-2 text-xs text-muted-foreground tabular-nums">
+            WPS transfer amount: {formatMoney(pkg.wpsTransferAmount)} AED
+          </p>
+        ) : null}
       </div>
 
       {pkg.allowances.length > 0 ? (
@@ -255,6 +279,7 @@ export default function EmployeeCompensationPanel({
   const [visaPeriodId, setVisaPeriodId] = useState('');
   const [monthlyBasic, setMonthlyBasic] = useState('');
   const [dailyRate, setDailyRate] = useState('');
+  const [wpsTransferAmount, setWpsTransferAmount] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
   const [allowanceAmounts, setAllowanceAmounts] = useState<Record<string, string>>({});
@@ -286,6 +311,23 @@ export default function EmployeeCompensationPanel({
     [sortedPackages]
   );
 
+  const selectedPayType = useMemo(
+    () => payTypes.find((pt) => pt.id === payTypeId),
+    [payTypes, payTypeId]
+  );
+  const selectedPayTypeMode = resolvePayTypeMode(selectedPayType);
+  const monthlyBasicEnabled = usesMonthlyBasicField(selectedPayTypeMode);
+  const dailyRateEnabled = usesDailyRateField(selectedPayTypeMode);
+
+  useEffect(() => {
+    if (!selectedPayTypeMode) return;
+    if (selectedPayTypeMode === 'DAILY_WAGE') {
+      setMonthlyBasic('');
+    } else {
+      setDailyRate('');
+    }
+  }, [selectedPayTypeMode, payTypeId]);
+
   const load = useCallback(async () => {
     const [compRes, ptRes, atRes, visaRes] = await Promise.all([
       fetch(`/api/hr/employees/${employeeId}/compensation`, { cache: 'no-store' }),
@@ -298,8 +340,17 @@ export default function EmployeeCompensationPanel({
     const atJson = await readApiJson<AllowanceType[]>(atRes);
     const visaJson = await readApiJson<VisaPeriod[]>(visaRes);
 
-    if (compRes.ok && compJson?.success) setPackages((compJson.data ?? []) as CompensationPackage[]);
-    if (ptRes.ok && ptJson?.success) setPayTypes((ptJson.data ?? []) as PayType[]);
+    if (!compRes.ok || !compJson?.success) {
+      toast.error(compJson?.error ?? 'Failed to load compensation history');
+      setPackages([]);
+    } else {
+      setPackages((compJson.data ?? []) as CompensationPackage[]);
+    }
+    if (ptRes.ok && ptJson?.success) {
+      setPayTypes(
+        ((ptJson.data ?? []) as PayType[]).filter((row) => row.config?.mode !== 'MONTHLY_FIXED')
+      );
+    }
     if (atRes.ok && atJson?.success) {
       setAllowanceTypes(((atJson.data ?? []) as AllowanceType[]).filter((t) => t.isActive !== false));
     }
@@ -312,10 +363,23 @@ export default function EmployeeCompensationPanel({
 
   const resetForm = () => {
     const activeVisa = visaPeriods.find((v) => v.status === 'ACTIVE') ?? visaPeriods[0] ?? null;
-    setPayTypeId(currentPackage?.payType.id ?? payTypes[0]?.id ?? '');
+    const initialPayTypeId = currentPackage?.payType.id ?? payTypes[0]?.id ?? '';
+    const initialMode = resolvePayTypeMode(payTypes.find((pt) => pt.id === initialPayTypeId));
+    setPayTypeId(initialPayTypeId);
     setVisaPeriodId(activeVisa?.id ?? '');
-    setMonthlyBasic(currentPackage?.monthlyBasic != null ? String(currentPackage.monthlyBasic) : '');
-    setDailyRate(currentPackage?.dailyRate != null ? String(currentPackage.dailyRate) : '');
+    if (usesDailyRateField(initialMode)) {
+      setMonthlyBasic('');
+      setDailyRate(currentPackage?.dailyRate != null ? String(currentPackage.dailyRate) : '');
+    } else if (usesMonthlyBasicField(initialMode)) {
+      setDailyRate('');
+      setMonthlyBasic(currentPackage?.monthlyBasic != null ? String(currentPackage.monthlyBasic) : '');
+    } else {
+      setMonthlyBasic(currentPackage?.monthlyBasic != null ? String(currentPackage.monthlyBasic) : '');
+      setDailyRate(currentPackage?.dailyRate != null ? String(currentPackage.dailyRate) : '');
+    }
+    setWpsTransferAmount(
+      currentPackage?.wpsTransferAmount != null ? String(currentPackage.wpsTransferAmount) : ''
+    );
     setEffectiveFrom(new Date().toISOString().slice(0, 10));
     setNotes('');
     const amounts: Record<string, string> = {};
@@ -336,6 +400,15 @@ export default function EmployeeCompensationPanel({
       toast.error('Select a salary structure');
       return;
     }
+    const mode = resolvePayTypeMode(selectedPayType);
+    if (usesDailyRateField(mode) && !dailyRate.trim()) {
+      toast.error('Enter daily rate for daily wage');
+      return;
+    }
+    if (usesMonthlyBasicField(mode) && !monthlyBasic.trim()) {
+      toast.error('Enter monthly basic for this salary structure');
+      return;
+    }
     setSaving(true);
 
     const allowances = allowanceTypes
@@ -350,8 +423,9 @@ export default function EmployeeCompensationPanel({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         payTypeId,
-        monthlyBasic: monthlyBasic ? Number(monthlyBasic) : null,
-        dailyRate: dailyRate ? Number(dailyRate) : null,
+        monthlyBasic: monthlyBasicEnabled && monthlyBasic ? Number(monthlyBasic) : null,
+        dailyRate: dailyRateEnabled && dailyRate ? Number(dailyRate) : null,
+        wpsTransferAmount: wpsTransferAmount.trim() ? Number(wpsTransferAmount) : null,
         effectiveFrom,
         visaPeriodId: visaPeriodId || null,
         notes: notes.trim() || null,
@@ -428,6 +502,11 @@ export default function EmployeeCompensationPanel({
               Daily rate: {formatMoney(currentPackage.dailyRate)} AED
             </p>
           ) : null}
+          {currentPackage.wpsTransferAmount != null ? (
+            <p className="mt-1 tabular-nums text-xs text-muted-foreground">
+              WPS transfer: {formatMoney(currentPackage.wpsTransferAmount)} AED
+            </p>
+          ) : null}
           <p className="mt-1 text-xs text-muted-foreground">
             Effective {formatDate(currentPackage.effectiveFrom)}
             {currentPackage.visaPeriod ? ` · Visa: ${currentPackage.visaPeriod.label}` : ''}
@@ -463,6 +542,7 @@ export default function EmployeeCompensationPanel({
                   <TableHead className="text-right">Basic</TableHead>
                   <TableHead className="text-right">Components (net)</TableHead>
                   <TableHead className="text-right">Total / mo</TableHead>
+                  <TableHead className="text-right">WPS transfer</TableHead>
                   <TableHead>Recorded</TableHead>
                   <TableHead className="w-[120px]" />
                 </TableRow>
@@ -486,6 +566,9 @@ export default function EmployeeCompensationPanel({
                     <TableCell className="text-right tabular-nums">{formatMoney(pkg.totalAllowance)}</TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
                       {formatMoney(pkg.totalMonthly)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(pkg.wpsTransferAmount)}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                       {formatDateTime(pkg.createdAt)}
@@ -572,12 +655,44 @@ export default function EmployeeCompensationPanel({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className={labelClass}>Monthly basic (AED)</label>
-              <Input className="mt-1" value={monthlyBasic} onChange={(e) => setMonthlyBasic(e.target.value)} />
+              <Input
+                className="mt-1"
+                type="number"
+                min={0}
+                value={monthlyBasic}
+                disabled={!monthlyBasicEnabled}
+                placeholder={monthlyBasicEnabled ? '0' : 'Not used for daily wage'}
+                onChange={(e) => setMonthlyBasic(e.target.value)}
+              />
             </div>
             <div>
               <label className={labelClass}>Daily rate (AED)</label>
-              <Input className="mt-1" value={dailyRate} onChange={(e) => setDailyRate(e.target.value)} />
+              <Input
+                className="mt-1"
+                type="number"
+                min={0}
+                value={dailyRate}
+                disabled={!dailyRateEnabled}
+                placeholder={dailyRateEnabled ? '0' : 'Not used for fixed monthly / hourly'}
+                onChange={(e) => setDailyRate(e.target.value)}
+              />
             </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>WPS transfer amount (AED)</label>
+            <Input
+              className="mt-1 max-w-xs"
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="Optional"
+              value={wpsTransferAmount}
+              onChange={(e) => setWpsTransferAmount(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Monthly amount sent via Wage Protection System (WPS) for this package.
+            </p>
           </div>
 
           <div>
@@ -613,13 +728,19 @@ export default function EmployeeCompensationPanel({
                   </div>
                 ))}
               </div>
-              {draftAllowanceTotal !== 0 || monthlyBasic ? (
+              {draftAllowanceTotal !== 0 || (monthlyBasicEnabled && monthlyBasic) ? (
                 <p className="mt-2 text-sm tabular-nums">
-                  Basic {formatMoney(Number(monthlyBasic) || 0)} + Components{' '}
-                  {formatMoney(draftAllowanceTotal)} ={' '}
-                  <span className="font-medium">
-                    {formatMoney((Number(monthlyBasic) || 0) + draftAllowanceTotal)} AED/mo
-                  </span>
+                  {monthlyBasicEnabled ? (
+                    <>
+                      Basic {formatMoney(Number(monthlyBasic) || 0)} + Components{' '}
+                      {formatMoney(draftAllowanceTotal)} ={' '}
+                      <span className="font-medium">
+                        {formatMoney((Number(monthlyBasic) || 0) + draftAllowanceTotal)} AED/mo
+                      </span>
+                    </>
+                  ) : dailyRateEnabled && dailyRate ? (
+                    <span className="font-medium">Daily rate {formatMoney(Number(dailyRate) || 0)} AED</span>
+                  ) : null}
                 </p>
               ) : null}
             </div>

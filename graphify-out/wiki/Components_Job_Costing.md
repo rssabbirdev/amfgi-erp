@@ -36,9 +36,9 @@
 - [[Components Job Costing]] (52 shared connections)
 - [[Store, API, and Endpoints]] (4 shared connections)
 - [[Lib, Job Costing, and Expression Evaluator]] (3 shared connections)
-- [[HR, Components, and Lib]] (1 shared connections)
+- [[Components, HR, and Me]] (1 shared connections)
 - [[Reports, Components, and Settings]] (1 shared connections)
-- [[Lib Utils]] (1 shared connections)
+- [[Lib and Components]] (1 shared connections)
 - [[Lib Job Costing]] (1 shared connections)
 
 ## Source Files

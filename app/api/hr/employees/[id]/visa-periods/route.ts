@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db/prisma';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
+import { resolveRouteEmployeeId } from '@/lib/hr/resolveRouteEmployeeId';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
@@ -14,12 +15,13 @@ const VisaSchema = z.object({
   notes: z.string().max(5000).optional().nullable(),
 });
 
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
   if (!requirePerm(session.user, P.HR_EMPLOYEE_VIEW)) return errorResponse('Forbidden', 403);
-  const { id: employeeId } = await params;
+  const employeeId = await resolveRouteEmployeeId(req, params);
+  if (!employeeId) return errorResponse('Employee id required', 400);
 
   const emp = await prisma.employee.findFirst({ where: { id: employeeId, companyId } });
   if (!emp) return errorResponse('Employee not found', 404);
@@ -36,7 +38,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
   if (!requirePerm(session.user, P.HR_EMPLOYEE_EDIT)) return errorResponse('Forbidden', 403);
-  const { id: employeeId } = await params;
+  const employeeId = await resolveRouteEmployeeId(req, params);
+  if (!employeeId) return errorResponse('Employee id required', 400);
 
   const emp = await prisma.employee.findFirst({ where: { id: employeeId, companyId } });
   if (!emp) return errorResponse('Employee not found', 404);

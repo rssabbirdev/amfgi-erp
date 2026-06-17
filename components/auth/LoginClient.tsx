@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { signIn } from 'next-auth/react';
+import { getSession, signIn } from 'next-auth/react';
+import { resolveEmployeePortalPath } from '@/lib/auth/selfService';
 import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { X } from 'lucide-react';
@@ -179,8 +180,9 @@ export default function LoginClient() {
     if (result?.error) {
       setAuthError(resolveLoginErrorMessage('CredentialsSignin'));
     } else {
-      router.refresh();
-      router.push(callbackUrl);
+      await router.refresh();
+      const session = await getSession();
+      router.push(resolveEmployeePortalPath(callbackUrl, session?.user ?? null));
     }
   };
 

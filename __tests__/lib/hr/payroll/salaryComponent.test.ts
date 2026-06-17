@@ -4,9 +4,30 @@ import {
   buildSalaryComponentTotals,
   fixedSalaryComponentNet,
   netSalaryComponentTotal,
+  prorateSalaryComponentTotals,
+  resolvePerDayAllowance,
+  resolvePerDayComponentSplit,
+  resolveSalaryComponentDisplayTotals,
 } from '@/lib/hr/payroll/salaryComponent';
 import { calculatePayLine } from '@/lib/hr/payroll/calculatePayLine';
 import type { CompensationInput } from '@/lib/hr/payroll/types';
+
+describe('prorateSalaryComponentTotals', () => {
+  it('scales fixed earnings and deductions by the month fraction', () => {
+    const totals = buildSalaryComponentTotals(
+      [
+        { amount: 300, componentKind: 'EARNING', applicationMode: 'FIXED_MONTHLY' },
+        { amount: 100, componentKind: 'DEDUCTION', applicationMode: 'FIXED_MONTHLY' },
+      ],
+      '2026-06',
+      [0]
+    );
+    const prorated = prorateSalaryComponentTotals(totals, 12 / 26);
+    expect(prorated.fixedEarnings).toBeCloseTo((300 * 12) / 26, 2);
+    expect(prorated.fixedDeductions).toBeCloseTo((100 * 12) / 26, 2);
+    expect(prorated.attendanceEarningPerDay).toBe(totals.attendanceEarningPerDay);
+  });
+});
 
 describe('buildSalaryComponentTotals', () => {
   it('splits fixed and attendance-based earnings and deductions', () => {
@@ -34,6 +55,96 @@ describe('netSalaryComponentTotal', () => {
         { amount: 100, componentKind: 'DEDUCTION' },
       ])
     ).toBe(400);
+  });
+});
+
+describe('resolvePerDayComponentSplit', () => {
+  it('splits attendance earnings and deductions per eligible day', () => {
+    const compensation: CompensationInput = {
+      monthlyBasic: 3000,
+      monthlyAllowance: 0,
+      dailyRate: 0,
+      salaryComponents: buildSalaryComponentTotals(
+        [
+          { amount: 260, componentKind: 'EARNING', applicationMode: 'ATTENDANCE_PRESENT' },
+          { amount: 52, componentKind: 'DEDUCTION', applicationMode: 'ATTENDANCE_PRESENT' },
+        ],
+        '2026-06',
+        [0]
+      ),
+    };
+    const split = resolvePerDayComponentSplit({
+      line: {
+        workDate: '2026-06-02',
+        status: 'PRESENT',
+        leaveType: null,
+        basicHours: 9,
+        workedMinutes: 540,
+        isSunday: false,
+      },
+      compensation,
+      month: '2026-06',
+      excludedWeekdays: [0],
+    });
+    expect(split.earning).toBeCloseTo(260 / 26, 2);
+    expect(split.deduction).toBeCloseTo(52 / 26, 2);
+    expect(resolvePerDayAllowance({
+      line: {
+        workDate: '2026-06-02',
+        status: 'PRESENT',
+        leaveType: null,
+        basicHours: 9,
+        workedMinutes: 540,
+        isSunday: false,
+      },
+      compensation,
+      month: '2026-06',
+      excludedWeekdays: [0],
+    })).toBeCloseTo(208 / 26, 2);
+  });
+});
+
+describe('resolveSalaryComponentDisplayTotals', () => {
+  it('totals fixed and per-day earnings and deductions separately', () => {
+    const compensation: CompensationInput = {
+      monthlyBasic: 3000,
+      monthlyAllowance: 0,
+      dailyRate: 0,
+      salaryComponents: buildSalaryComponentTotals(
+        [
+          { amount: 300, componentKind: 'EARNING', applicationMode: 'FIXED_MONTHLY' },
+          { amount: 100, componentKind: 'DEDUCTION', applicationMode: 'FIXED_MONTHLY' },
+          { amount: 260, componentKind: 'EARNING', applicationMode: 'ATTENDANCE_PRESENT' },
+          { amount: 52, componentKind: 'DEDUCTION', applicationMode: 'ATTENDANCE_PRESENT' },
+        ],
+        '2026-06',
+        [0]
+      ),
+    };
+    const totals = resolveSalaryComponentDisplayTotals({
+      compensation,
+      lines: [
+        {
+          workDate: '2026-06-02',
+          status: 'PRESENT',
+          leaveType: null,
+          basicHours: 9,
+          workedMinutes: 540,
+          isSunday: false,
+        },
+      ],
+      month: '2026-06',
+      excludedWeekdays: [0],
+      dayRows: [
+        {
+          allowance: 208 / 26,
+          componentEarning: 260 / 26,
+          componentDeduction: 52 / 26,
+        },
+      ],
+    });
+    expect(totals.earnings).toBeCloseTo(300 + 260 / 26, 2);
+    expect(totals.deductions).toBeCloseTo(100 + 52 / 26, 2);
   });
 });
 

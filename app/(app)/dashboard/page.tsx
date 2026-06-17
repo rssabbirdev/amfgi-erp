@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { redirect } from 'next/navigation';
 
-import { isEmployeeSelfServiceUser } from '@/lib/auth/selfService';
+import { EMPLOYEE_PORTAL_HOME, isEmployeeSelfServiceUser } from '@/lib/auth/selfService';
 import { APP_NAV_ITEMS, filterVisibleNavItems, type AppNavItem } from '@/lib/navigation/appNavigation';
 import {
   WorkspaceHubHeader,
@@ -87,7 +87,7 @@ export default function DashboardPage() {
   }
 
   if (isEmployeeSelfServiceUser(session.user)) {
-    redirect('/me/profile');
+    redirect(EMPLOYEE_PORTAL_HOME);
   }
 
   if (!session.user.activeCompanyId) {

@@ -1,10 +1,11 @@
-﻿import NextAuth, { type DefaultSession, type NextAuthConfig } from 'next-auth';
+import NextAuth, { type DefaultSession, type NextAuthConfig } from 'next-auth';
 import Google      from 'next-auth/providers/google';
 import Credentials from 'next-auth/providers/credentials';
 import bcrypt      from 'bcryptjs';
 import type { Permission } from '@/lib/permissions';
 import { buildAuthCookieOptions, resolveAuthSecret, warnIfAuthMisconfigured } from '@/lib/auth/authEnv';
 import { resolvePermissionsForCompany, uniqueCompanyIdsFromAccess } from '@/lib/auth/resolvePermissions';
+import { ensureActiveCompanyForLinkedEmployee } from '@/lib/auth/selfService';
 import { convertGoogleDriveUrl } from '@/lib/utils/googleDriveUrl';
 
 warnIfAuthMisconfigured();
@@ -95,8 +96,13 @@ const config: NextAuthConfig = {
         const valid = await bcrypt.compare(credentials.password as string, user.password);
         if (!valid) return null;
 
-        const userId    = user.id;
-        const companyId = user.activeCompanyId;
+        const userId = user.id;
+        const companyId = await ensureActiveCompanyForLinkedEmployee(
+          prisma,
+          userId,
+          user.activeCompanyId,
+          user.linkedEmployeeId,
+        );
 
         // Resolve active company details
         let activeCompanySlug: string | null = null;
@@ -109,7 +115,7 @@ const config: NextAuthConfig = {
           activeCompanyName = co?.name ?? null;
         }
 
-        const permissions    = await resolvePermissions(userId, companyId);
+        const permissions = await resolvePermissions(userId, companyId);
         const allowedCompanyIds = uniqueCompanyIdsFromAccess(user.companyAccess);
 
         const profileImg = user.image?.trim() ? convertGoogleDriveUrl(user.image.trim()) : null;
@@ -152,8 +158,13 @@ const config: NextAuthConfig = {
         if (!dbUser) return '/login?error=GoogleNotRegistered';
         if (!dbUser.isActive) return '/login?error=AccountDisabled';
 
-        const userId    = dbUser.id;
-        const companyId = dbUser.activeCompanyId;
+        const userId = dbUser.id;
+        const companyId = await ensureActiveCompanyForLinkedEmployee(
+          prisma,
+          userId,
+          dbUser.activeCompanyId,
+          dbUser.linkedEmployeeId,
+        );
 
         let activeCompanySlug: string | null = null;
         let activeCompanyName: string | null = null;
@@ -165,7 +176,7 @@ const config: NextAuthConfig = {
           activeCompanyName = co?.name ?? null;
         }
 
-        const permissions       = await resolvePermissions(userId, companyId);
+        const permissions = await resolvePermissions(userId, companyId);
         const allowedCompanyIds = uniqueCompanyIdsFromAccess(dbUser.companyAccess);
 
         const profileImg = dbUser.image?.trim()

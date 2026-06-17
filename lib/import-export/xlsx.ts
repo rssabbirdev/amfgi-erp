@@ -43,6 +43,19 @@ export function parseWorkbookBuffer(buffer: ArrayBuffer, sheetName?: string) {
   return { headers, dataRows, sheetName: name };
 }
 
+export function sanitizeSheetName(name: string, used: Set<string>) {
+  const cleaned = name.replace(/[\\/?*\[\]:]/g, ' ').trim() || 'Sheet';
+  let candidate = cleaned.slice(0, 31);
+  let counter = 1;
+  while (used.has(candidate)) {
+    const suffix = ` ${counter}`;
+    candidate = `${cleaned.slice(0, Math.max(1, 31 - suffix.length))}${suffix}`;
+    counter += 1;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
 export function downloadWorkbook(
   filename: string,
   sheets: Array<{ name: string; rows: Array<Array<string | number | boolean | null>> | Record<string, unknown>[] }>

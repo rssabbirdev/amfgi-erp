@@ -19,6 +19,7 @@ export default function EmployeePortalLayout({ children }: { children: React.Rea
   const effectiveTheme = themeReady ? theme : 'dark';
 
   const tabs = [
+    { href: '/me', label: 'Home' },
     { href: '/me/profile', label: 'Profile' },
     { href: '/me/attendance', label: 'Attendance' },
     { href: '/me/leave', label: 'Leave' },
@@ -79,7 +80,8 @@ export default function EmployeePortalLayout({ children }: { children: React.Rea
         <div className="mx-auto w-full max-w-5xl px-4 pb-3 sm:px-5">
           <nav className="flex gap-2 overflow-x-auto pb-1">
             {tabs.map((tab) => {
-              const active = pathname === tab.href;
+              const active =
+                tab.href === '/me' ? pathname === '/me' : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
               return (
                 <Link
                   key={tab.href}

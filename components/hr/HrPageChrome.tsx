@@ -37,10 +37,11 @@ function labelForSegment(segment: string, previous?: string) {
     'salary-component': 'Salary components',
     'allowance-types': 'Salary components',
     'leave-types': 'Leave types',
+    'company-holidays': 'Company holidays',
     payroll: 'Payroll',
     preview: 'Preview',
     runs: 'Pay runs',
-    leave: 'Leave',
+    leave: 'Leave management',
   };
 
   const dateLabel = prettifyDateSegment(segment);

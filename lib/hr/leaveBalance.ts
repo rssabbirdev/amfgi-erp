@@ -1,8 +1,10 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
+import type { LeaveRequestType } from '@prisma/client';
+
+import { computeEmployeeLeaveEntitlement, getLeaveEntitlementConfig } from '@/lib/hr/leaveAllocation';
+import { countLeaveDaysInclusive, usesLeaveBalance } from '@/lib/hr/leaveTypes';
 
 type PrismaLike = PrismaClient | Prisma.TransactionClient;
-import { countLeaveDaysInclusive, usesLeaveBalance } from '@/lib/hr/leaveTypes';
-import type { LeaveRequestType } from '@prisma/client';
 
 export function remainingLeaveDays(balance: {
   entitlementDays: { toNumber?: () => number } | number;
@@ -15,6 +17,15 @@ export function remainingLeaveDays(balance: {
   return Math.max(0, entitlement + adjusted - used);
 }
 
+/** Full-year entitlement days from leave type rules (no employee proration). */
+export async function getAnnualEntitlementFromLeaveTypes(
+  prisma: PrismaLike,
+  companyId: string,
+): Promise<number> {
+  const config = await getLeaveEntitlementConfig(prisma, companyId);
+  return config.fullEntitlementDays;
+}
+
 export async function getOrCreateLeaveBalance(
   prisma: PrismaLike,
   companyId: string,
@@ -24,9 +35,29 @@ export async function getOrCreateLeaveBalance(
   const existing = await prisma.leaveBalance.findUnique({
     where: { companyId_employeeId_year: { companyId, employeeId, year } },
   });
-  if (existing) return existing;
+  if (existing) {
+    if (Number(existing.entitlementDays) === 0) {
+      const entitlementDays = await computeEmployeeLeaveEntitlement(
+        prisma,
+        companyId,
+        employeeId,
+        year,
+      );
+      return prisma.leaveBalance.update({
+        where: { id: existing.id },
+        data: { entitlementDays },
+      });
+    }
+    return existing;
+  }
+  const entitlementDays = await computeEmployeeLeaveEntitlement(
+    prisma,
+    companyId,
+    employeeId,
+    year,
+  );
   return prisma.leaveBalance.create({
-    data: { companyId, employeeId, year, entitlementDays: 0, usedDays: 0, adjustedDays: 0 },
+    data: { companyId, employeeId, year, entitlementDays, usedDays: 0, adjustedDays: 0 },
   });
 }
 

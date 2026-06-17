@@ -962,8 +962,14 @@ export default function DeliveryNoteCreatePage() {
   const confirmChange = () => {
     if (!changeWarningModal.pendingChange) return;
     const { type, newValue } = changeWarningModal.pendingChange;
+
+    if (type === 'date') {
+      setDate(newValue);
+      setChangeWarningModal({ open: false, pendingChange: null });
+      return;
+    }
+
     if (type === 'job') setSelectedJob(newValue);
-    if (type === 'date') setDate(newValue);
     setCustomItems([{ id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' }]);
     setCustomItemsLineNoAuto(true);
     setLines(Array.from({ length: 3 }, () => ({
@@ -2590,14 +2596,33 @@ export default function DeliveryNoteCreatePage() {
             onClick={() => setChangeWarningModal({ open: false, pendingChange: null })}
           />
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 max-w-sm rounded-xl border border-border bg-card p-6 text-card-foreground shadow-2xl">
-            <h2 className="text-lg font-semibold text-foreground mb-2">Unsaved Changes</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">
+              {changeWarningModal.pendingChange.type === 'date' ? 'Change entry date?' : 'Unsaved changes'}
+            </h2>
             <p className="text-muted-foreground text-sm mb-4">
-              You have items added. Changing the {changeWarningModal.pendingChange.type} will clear all unsaved items.
+              {changeWarningModal.pendingChange.type === 'date' ? (
+                <>
+                  You have lines on this delivery note. The entry date will change to{' '}
+                  <strong>{changeWarningModal.pendingChange.newValue}</strong>. Material lines, custom items, and notes
+                  will be kept. Budget warnings may update for the new date.
+                </>
+              ) : (
+                <>You have items added. Changing the job will clear all unsaved items.</>
+              )}
             </p>
 
             <div className="bg-amber-600/15 border border-amber-500/30 rounded-lg p-3 mb-6">
               <p className="text-xs text-amber-300">
-                ⚠️ <strong>Save first</strong> to keep your changes, or continue to discard them.
+                {changeWarningModal.pendingChange.type === 'date' ? (
+                  <>
+                    ⚠️ <strong>Entry date affects posting.</strong> Confirm only if this date is correct for dispatch or
+                    subcontract issue.
+                  </>
+                ) : (
+                  <>
+                    ⚠️ <strong>Save first</strong> to keep your changes, or continue to discard them.
+                  </>
+                )}
               </p>
             </div>
 
@@ -2612,7 +2637,7 @@ export default function DeliveryNoteCreatePage() {
                 onClick={confirmChange}
                 className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-500 text-sm font-medium transition-colors"
               >
-                Discard & Change
+                {changeWarningModal.pendingChange.type === 'date' ? 'Change date' : 'Discard & change job'}
               </button>
             </div>
           </div>

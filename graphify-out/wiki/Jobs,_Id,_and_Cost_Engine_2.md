@@ -1,24 +1,22 @@
 # Jobs, Id, and Cost Engine
 
-> 10 nodes · cohesion 0.24
+> 9 nodes · cohesion 0.25
 
 ## Key Concepts
 
-- **JobCostEnginePage()** (9 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **formatQty()** (4 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **normalizeNumber()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **formatMoney()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **formatDays()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **progressStatusLabel()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **JobExecutionScheduleEditor()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **mapJobStatusToProgressStatus()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **pricingModeLabel()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
-- **scheduleStatusLabel()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **isRecord()** (6 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **buildFormulaValuesFromConfig()** (4 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **buildValuesFromSpecifications()** (4 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **parseBudgetSchema()** (3 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **formulaValueToString()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **buildAreaFormulaValuesFromConfig()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **legacyAreaInstanceId()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **valueToFormString()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
+- **buildAreaInstancesFromSpecifications()** (2 connections) — `app/(app)/jobs/[id]/cost-engine/page.tsx`
 
 ## Relationships
 
-- [[Jobs, Id, and Cost Engine]] (10 shared connections)
-- [[Components, Stock, and Reports]] (2 shared connections)
+- [[Jobs Id]] (9 shared connections)
 
 ## Source Files
 
@@ -26,7 +24,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 34 (100%)
+- EXTRACTED: 27 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

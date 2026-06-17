@@ -1,8 +1,8 @@
 # cn()
 
-> God node · 175 connections · `lib/utils.ts`
+> God node · 182 connections · `lib/utils.ts`
 
-**Community:** [[Components, Stock, and Reports]]
+**Community:** [[Stock, Components, and Reports]]
 
 ## Connections by Relation
 
@@ -32,26 +32,26 @@
 - [[utils.ts]] `EXTRACTED`
 
 ### imports
-- [[FormulaBuilderEditor.tsx]] `EXTRACTED`
 - [[button.tsx]] `EXTRACTED`
+- [[FormulaBuilderEditor.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[ScheduleDayClient.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
 - [[input.tsx]] `EXTRACTED`
-- [[sidebar.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
+- [[sidebar.tsx]] `EXTRACTED`
 - [[card.tsx]] `EXTRACTED`
-- [[AttendanceEntryGrid.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
 - [[badge.tsx]] `EXTRACTED`
+- [[AttendanceEntryGrid.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[alert.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
 - [[page.tsx]] `EXTRACTED`
+- [[page.tsx]] `EXTRACTED`
+- [[PrintFormatSettingsPanel.tsx]] `EXTRACTED`
 - [[DispatchLineGrid.tsx]] `EXTRACTED`
-- [[GoodsReceiptLineGrid.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
-- [[page.tsx]] `EXTRACTED`
 
 ---
 

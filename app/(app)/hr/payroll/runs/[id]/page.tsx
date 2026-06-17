@@ -8,7 +8,6 @@ import toast from 'react-hot-toast';
 
 import HrPageChrome from '@/components/hr/HrPageChrome';
 import { Button } from '@/components/ui/shadcn/button';
-import { downloadPayPreviewCsv } from '@/lib/hr/payroll/exportPayPreviewCsv';
 import { readApiJson } from '@/lib/utils/readApiResponse';
 
 type PayRunLine = {
@@ -183,29 +182,6 @@ export default function PayRunDetailPage() {
               onClick={() => openPayslipPrint(run.id)}
             >
               Print all payslips
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                downloadPayPreviewCsv(
-                  run.month,
-                  run.lines.map((line) => ({
-                    employeeCode: line.employeeCode,
-                    employeeName: line.employeeName,
-                    payTypeName: line.payTypeName,
-                    payTypeCode: line.payTypeCode,
-                    approvedAttendanceRows: line.approvedAttendanceRows,
-                    draftAttendanceRows: line.draftAttendanceRows,
-                    gross: line.gross,
-                    skipped: line.skipped,
-                    skipReason: line.skipReason,
-                  }))
-                );
-                toast.success('CSV downloaded');
-              }}
-            >
-              Export CSV
             </Button>
             <Button
               size="sm"

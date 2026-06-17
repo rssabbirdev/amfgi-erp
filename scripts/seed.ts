@@ -3,7 +3,7 @@
  * Bootstraps the shared database with comprehensive test data:
  *   • Companies: AMFGI, K&M (with profiles: address, phone, email)
  *   • Company Print Templates: Delivery note + work schedule layouts ready for print builder and daily schedule printing
- *   • System roles: Admin, Employee (self-service); demo custom roles: Manager, Store Keeper
+ *   • System roles: Admin, Employee (self-service); demo custom roles: Manager, Store Keeper, HR
  *   • Users: Super Admin, AMFGI Manager, Store Keeper
  *   • Per-company: Units, Categories, Warehouses
  *   • Per-company: Materials with stock batches, logs, transactions (STOCK_IN)
@@ -11,7 +11,8 @@
  *   • Companies: externalCompanyId (SEED-AMFGI / SEED-KM) for integration playground smoke tests
  *   • Per-company: Sample dispatch entries and 3+ delivery notes (`DeliveryNote` + linked STOCK_OUT)
  *   • Delivery Notes: Structured with dynamic fields for template rendering
- *   • HR Workforce: typed employee profiles (driver, office staff, hybrid, worker)
+ *   • HR Workforce: 30 employees (driver, office, hybrid, worker) with per-employee visa, documents, compensation, leave
+ *   • HR Attendance: all employee types on 6 schedule days (Present/Absent; 8h office/hybrid, 9h driver/worker)
  *   • Employee self-service demo logins linked to seeded employees
  *   • Schedule notes + driver trip plan demo data
  *
@@ -31,9 +32,10 @@ import { randomUUID } from 'crypto';
 import { createPostgresAdapter } from '../lib/db/postgresAdapter';
 import { resolveDatabaseUrlForScripts } from '../lib/db/resolveDatabaseUrl';
 import { ensureDefaultEmployeeDocumentTypes } from '../lib/hr/defaultDocumentTypes';
-import { ensureAllSystemRoles, ensureCustomRoleFromPreset } from '../lib/auth/systemRoles';
-import { DEFAULT_EMPLOYEE_TYPE_SETTINGS } from '../lib/hr/employeeTypeSettings';
-import { buildWorkforceProfileExtension, type WorkforceEmployeeType } from '../lib/hr/workforceProfile';
+import { ensureAllSystemRoles, ensureCustomRoleFromPreset, type SystemRolePreset } from '../lib/auth/systemRoles';
+import { ROLE_PRESETS } from '../lib/permissions';
+import { type EmployeeTypeSettingsMap } from '../lib/hr/employeeTypeSettings';
+import { buildWorkforceProfileExtension, parseWorkforceProfile, type WorkforceEmployeeType } from '../lib/hr/workforceProfile';
 import { parsePartyListDateInput } from '../lib/partyListsApi';
 import { mergeStockControlSettingsIntoCompanySettings } from '../lib/stock-control/settings';
 import { buildTransactionActorFields } from '../lib/utils/auditActor';
@@ -48,6 +50,66 @@ const prisma = new PrismaClient({
 });
 
 const systemActorFields = buildTransactionActorFields(null, 'System Seed');
+
+/** Seed companies use 8h basic for office/hybrid and 9h for driver/worker (matches payroll demo). */
+const SEED_EMPLOYEE_TYPE_SETTINGS: EmployeeTypeSettingsMap = {
+  OFFICE_STAFF: {
+    basicHoursPerDay: 8,
+    dutyStart: '09:00',
+    dutyEnd: '18:00',
+    breakStart: '13:00',
+    breakEnd: '14:00',
+  },
+  HYBRID_STAFF: {
+    basicHoursPerDay: 8,
+    dutyStart: '08:00',
+    dutyEnd: '17:00',
+    breakStart: '13:00',
+    breakEnd: '14:00',
+  },
+  DRIVER: {
+    basicHoursPerDay: 9,
+    dutyStart: '07:00',
+    dutyEnd: '17:00',
+    breakStart: '12:00',
+    breakEnd: '13:00',
+  },
+  LABOUR_WORKER: {
+    basicHoursPerDay: 9,
+    dutyStart: '08:00',
+    dutyEnd: '17:00',
+    breakStart: '12:00',
+    breakEnd: '13:00',
+  },
+};
+
+function seedBasicHoursForType(employeeType: WorkforceEmployeeType): number {
+  return SEED_EMPLOYEE_TYPE_SETTINGS[employeeType].basicHoursPerDay;
+}
+
+function workforceTypeFromEmployee(profileExtension: unknown): WorkforceEmployeeType {
+  return parseWorkforceProfile(profileExtension).employeeType;
+}
+
+function addUtcDays(base: Date, days: number): Date {
+  const next = new Date(base);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function dateOnlyYmd(year: number, month: number, day: number): Date {
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+/** Demo custom roles always pick up the latest ROLE_PRESETS on re-seed. */
+async function seedDemoCustomRole(slug: string, name: string, preset: SystemRolePreset) {
+  const role = await ensureCustomRoleFromPreset(prisma, slug, name, preset);
+  return prisma.role.update({
+    where: { id: role.id },
+    data: { permissions: [...ROLE_PRESETS[preset]] },
+  });
+}
+
 const DEFAULT_OPERATIONAL_SETTINGS: Prisma.InputJsonValue = {
   inventoryValuationMethod: 'FIFO',
   currencyCode: 'AED',
@@ -1592,13 +1654,20 @@ async function seedHrWorkforceDemo(
     const employeeType = String(workforce?.employeeType ?? '').toUpperCase();
     return employeeType === 'LABOUR_WORKER' || employeeType === 'HYBRID_STAFF';
   });
+  if (!employees.length) {
+    console.log('  ! Skipped HR workforce demo (no employees)');
+    return;
+  }
+
+  await seedHrEmployeeRecords(companyId, employees, createdById);
+
   const jobs = await prisma.job.findMany({
     where: { companyId, status: 'ACTIVE' },
     orderBy: { jobNumber: 'asc' },
     take: 8,
   });
-  if (!jobs.length || !employees.length) {
-    console.log('  ! Skipped schedule/attendance demo (missing jobs/employees)');
+  if (!jobs.length) {
+    console.log('  ! Skipped schedule/attendance demo (missing jobs)');
     return;
   }
 
@@ -1660,7 +1729,7 @@ async function seedHrWorkforceDemo(
     });
 
     const groupSize = 6;
-    const assignmentMap = new Map<string, string>();
+    const assignmentMap = new Map<string, { id: string; shiftStart: string | null; shiftEnd: string | null }>();
 
     for (let g = 0; g < 5; g++) {
       const start = g * groupSize;
@@ -1709,7 +1778,25 @@ async function seedHrWorkforceDemo(
         })),
       });
       for (const emp of teamMembers) {
-        assignmentMap.set(emp.id, assignment.id);
+        assignmentMap.set(emp.id, {
+          id: assignment.id,
+          shiftStart: assignment.shiftStart,
+          shiftEnd: assignment.shiftEnd,
+        });
+      }
+      if (driver1) {
+        assignmentMap.set(driver1.id, {
+          id: assignment.id,
+          shiftStart: assignment.shiftStart,
+          shiftEnd: assignment.shiftEnd,
+        });
+      }
+      if (driver2) {
+        assignmentMap.set(driver2.id, {
+          id: assignment.id,
+          shiftStart: assignment.shiftStart,
+          shiftEnd: assignment.shiftEnd,
+        });
       }
 
       if (driver1) {
@@ -1737,106 +1824,397 @@ async function seedHrWorkforceDemo(
     }
 
     const attendanceRows: Prisma.AttendanceEntryCreateManyInput[] = [];
-    for (let i = 0; i < schedulableEmployees.length; i++) {
-      const emp = schedulableEmployees[i];
-      const assignmentId = assignmentMap.get(emp.id) ?? null;
+    for (let i = 0; i < employees.length; i++) {
+      const emp = employees[i];
+      const employeeType = workforceTypeFromEmployee(emp.profileExtension);
+      const basicHours = seedBasicHoursForType(employeeType);
+      const assignment = assignmentMap.get(emp.id) ?? null;
       const absent = (i + day) % 11 === 0;
-      const halfDay = !absent && (i + day) % 13 === 0;
-      const checkIn = absent ? null : atTime(workDate, halfDay ? '09:30' : '08:00');
-      const checkOut = absent ? null : atTime(workDate, halfDay ? '13:00' : '17:00');
+      const timing = SEED_EMPLOYEE_TYPE_SETTINGS[employeeType];
+      const checkInTime = assignment?.shiftStart ?? timing.dutyStart;
+      const checkOutTime = assignment?.shiftEnd ?? timing.dutyEnd;
+      const checkIn = absent ? null : atTime(workDate, checkInTime);
+      const checkOut = absent ? null : atTime(workDate, checkOutTime);
       attendanceRows.push({
         companyId,
         employeeId: emp.id,
         workDate,
-        workAssignmentId: assignmentId,
+        workAssignmentId: assignment?.id ?? null,
         checkInAt: checkIn,
         checkOutAt: checkOut,
-        status: absent ? 'ABSENT' : halfDay ? 'HALF_DAY' : 'PRESENT',
-        basicHours: 8,
+        status: absent ? 'ABSENT' : 'PRESENT',
+        basicHours,
         workflowStatus: 'APPROVED',
-        source: 'SCHEDULE_BOILERPLATE',
-        lateMinutes: absent ? 0 : halfDay ? 30 : 0,
-        earlyLeaveMinutes: absent ? 0 : halfDay ? 240 : 0,
-        overtimeMinutes: absent ? 0 : i % 7 === 0 ? 30 : 0,
+        source: assignment ? 'SCHEDULE_BOILERPLATE' : 'MANUAL',
+        lateMinutes: 0,
+        earlyLeaveMinutes: 0,
+        overtimeMinutes: absent ? 0 : i % 9 === 0 ? 30 : 0,
         approvedById: createdById,
         approvedAt: new Date(),
       });
     }
     await prisma.attendanceEntry.createMany({ data: attendanceRows });
-    console.log(`  • Schedule day ${day + 1}/6 published for ${emailDomain}`);
+    console.log(`  • Schedule day ${day + 1}/6 — attendance for ${attendanceRows.length} employees (${emailDomain})`);
   }
 
-  console.log('  ✓ 30 employees seeded with workforce profiles');
-  console.log('    - 6 drivers');
-  console.log('    - 6 office staff');
-  console.log('    - 6 hybrid staff');
-  console.log('    - 12 labour / worker');
+  console.log('  ✓ 30 employees with visa periods, documents, compensation, and leave balances');
+  console.log('    - 6 drivers · 6 office staff · 6 hybrid staff · 12 labour / worker');
   console.log('  ✓ 4 employee self-service logins linked to employees');
-  console.log('  ✓ 6 schedules with schedule-level notes and driver trip logs');
-  console.log('  ✓ Attendance entries generated for schedulable employees');
-
-  await seedHrPayrollFoundation(companyId, schedulableEmployees.map((e) => e.id));
+  console.log('  ✓ 6 published schedules with driver trip logs');
+  console.log('  ✓ Attendance saved for all employee types (Present / Absent only; 8h office/hybrid, 9h driver/worker)');
 }
 
-async function seedHrPayrollFoundation(companyId: string, employeeIds: string[]) {
+async function seedCompanyHolidays(companyId: string) {
+  const year = new Date().getFullYear();
+  const holidays = [
+    { date: `${year}-01-01`, name: "New Year's Day" },
+    { date: `${year}-06-05`, name: 'Eid Al Adha (sample)' },
+    { date: `${year}-06-06`, name: 'Eid Al Adha holiday (sample)' },
+    { date: `${year}-12-02`, name: 'UAE National Day' },
+    { date: `${year}-12-03`, name: 'UAE National Day holiday' },
+  ];
+
+  for (const holiday of holidays) {
+    const holidayDate = new Date(`${holiday.date}T00:00:00.000Z`);
+    await prisma.companyHoliday.upsert({
+      where: { companyId_holidayDate: { companyId, holidayDate } },
+      create: {
+        companyId,
+        holidayDate,
+        name: holiday.name,
+        isPaid: true,
+      },
+      update: {
+        name: holiday.name,
+        isPaid: true,
+      },
+    });
+  }
+}
+
+async function seedHrEmployeeRecords(
+  companyId: string,
+  employees: Array<{ id: string; employeeCode: string; profileExtension: unknown }>,
+  reviewerId: string
+) {
   const { ensureDefaultPayTypes } = await import('../lib/hr/payroll/seedPayTypes');
   const { ensureDefaultAllowanceTypes } = await import('../lib/hr/payroll/seedAllowanceTypes');
+  const { ensureLeaveTypesReady } = await import('../lib/hr/seedLeaveTypes');
+  const { resolveLeaveRequestFields } = await import('../lib/hr/resolveLeaveTypeSelection');
+  const { leaveDaysForRequest } = await import('../lib/hr/leaveBalance');
+  const { syncApprovedLeaveToScheduleAbsences } = await import('../lib/hr/syncLeaveToAttendance');
+
   await ensureDefaultPayTypes(prisma, companyId);
   await ensureDefaultAllowanceTypes(prisma, companyId);
+  await ensureLeaveTypesReady(prisma, companyId);
+  await seedCompanyHolidays(companyId);
 
-  const fixedType = await prisma.payType.findFirst({
-    where: { companyId, code: 'FIXED_MONTHLY' },
-  });
-  const dailyType = await prisma.payType.findFirst({
-    where: { companyId, code: 'DAILY_WAGE_9_10' },
-  });
-  if (fixedType && employeeIds[0]) {
-    await prisma.employeeCompensation.create({
-      data: {
-        companyId,
-        employeeId: employeeIds[0],
-        payTypeId: fixedType.id,
-        monthlyBasic: 3500,
-        effectiveFrom: new Date('2024-01-01'),
-      },
-    });
-  }
-  if (dailyType && employeeIds[10]) {
-    await prisma.employeeCompensation.create({
-      data: {
-        companyId,
-        employeeId: employeeIds[10],
-        payTypeId: dailyType.id,
-        dailyRate: 120,
-        effectiveFrom: new Date('2024-01-01'),
-      },
-    });
-  }
+  const [docTypes, payTypes, sickLeaveType, annualLeaveType, paidLeaveType] = await Promise.all([
+    prisma.employeeDocumentType.findMany({ where: { companyId, isActive: true } }),
+    prisma.payType.findMany({ where: { companyId } }),
+    prisma.leaveType.findFirst({ where: { companyId, code: 'SICK' }, select: { id: true, code: true, rules: true } }),
+    prisma.leaveType.findFirst({ where: { companyId, code: 'ANNUAL' }, select: { id: true, code: true, rules: true } }),
+    prisma.leaveType.findFirst({ where: { companyId, code: 'PAID' }, select: { id: true, code: true, rules: true } }),
+  ]);
 
+  const docTypeBySlug = new Map(docTypes.map((row) => [row.slug, row]));
+  const payTypeByCode = new Map(payTypes.map((row) => [row.code, row]));
   const year = new Date().getFullYear();
-  for (const employeeId of employeeIds.slice(0, 8)) {
+  const visaStart = dateOnlyYmd(year - 1, 1, 1);
+  const visaEnd = dateOnlyYmd(year + 1, 12, 31);
+
+  for (let index = 0; index < employees.length; index++) {
+    const employee = employees[index];
+    const workforce = parseWorkforceProfile(employee.profileExtension);
+    const employeeType = workforce.employeeType;
+    let visaPeriodId: string | null = null;
+
+    if (workforce.visaHolding !== 'NO_VISA') {
+      const visa = await prisma.visaPeriod.create({
+        data: {
+          companyId,
+          employeeId: employee.id,
+          label: `${employee.employeeCode} — ${workforce.visaHolding === 'SELF_OWN' ? 'Own visa' : 'Company visa'}`,
+          sponsorType: workforce.visaHolding === 'SELF_OWN' ? 'Self' : 'Company',
+          visaType: 'Employment',
+          startDate: visaStart,
+          endDate: visaEnd,
+          status: 'ACTIVE',
+          notes: 'Seed demo visa period',
+        },
+      });
+      visaPeriodId = visa.id;
+
+      const passportType = docTypeBySlug.get('passport');
+      const emiratesIdType = docTypeBySlug.get('emirates-id');
+      const residenceVisaType = docTypeBySlug.get('residence-visa');
+      const labourCardType = docTypeBySlug.get('labour-card');
+      const insuranceType = docTypeBySlug.get('medical-insurance');
+      const licenceType = docTypeBySlug.get('driving-licence');
+
+      const docRows: Prisma.EmployeeDocumentCreateManyInput[] = [];
+      if (passportType) {
+        docRows.push({
+          companyId,
+          employeeId: employee.id,
+          documentTypeId: passportType.id,
+          documentNumber: `P${employee.employeeCode.replace(/\D/g, '')}`,
+          issueDate: dateOnlyYmd(year - 5, 3, 15),
+          expiryDate: dateOnlyYmd(year + 4, 3, 14),
+          issuingAuthority: 'Home country',
+        });
+      }
+      if (emiratesIdType) {
+        docRows.push({
+          companyId,
+          employeeId: employee.id,
+          documentTypeId: emiratesIdType.id,
+          documentNumber: `784-${employee.employeeCode.replace(/\D/g, '').padStart(12, '0').slice(0, 12)}`,
+          issueDate: visaStart,
+          expiryDate: visaEnd,
+          issuingAuthority: 'ICA',
+        });
+      }
+      if (residenceVisaType) {
+        docRows.push({
+          companyId,
+          employeeId: employee.id,
+          visaPeriodId,
+          documentTypeId: residenceVisaType.id,
+          documentNumber: `RV-${employee.employeeCode}`,
+          issueDate: visaStart,
+          expiryDate: visaEnd,
+          issuingAuthority: 'MOHRE',
+        });
+      }
+      if (labourCardType) {
+        docRows.push({
+          companyId,
+          employeeId: employee.id,
+          visaPeriodId,
+          documentTypeId: labourCardType.id,
+          documentNumber: `LC-${employee.employeeCode}`,
+          issueDate: visaStart,
+          expiryDate: visaEnd,
+          issuingAuthority: 'MOHRE',
+        });
+      }
+      if (insuranceType) {
+        docRows.push({
+          companyId,
+          employeeId: employee.id,
+          documentTypeId: insuranceType.id,
+          documentNumber: `INS-${employee.employeeCode}`,
+          issueDate: visaStart,
+          expiryDate: visaEnd,
+          issuingAuthority: 'Daman',
+        });
+      }
+      if (employeeType === 'DRIVER' && licenceType) {
+        docRows.push({
+          companyId,
+          employeeId: employee.id,
+          documentTypeId: licenceType.id,
+          documentNumber: `DL-${employee.employeeCode}`,
+          issueDate: dateOnlyYmd(year - 2, 6, 1),
+          expiryDate: dateOnlyYmd(year + 2, 5, 30),
+          issuingAuthority: 'RTA',
+        });
+      }
+      if (docRows.length) {
+        await prisma.employeeDocument.createMany({ data: docRows });
+      }
+    }
+
+    const officePayType = payTypeByCode.get('OFFICE_CALENDAR_DEDUCT');
+    const fixedPayType = payTypeByCode.get('FIXED_MONTHLY');
+    const dailyPayType = payTypeByCode.get('DAILY_WAGE_9_10');
+    if (employeeType === 'OFFICE_STAFF' && officePayType) {
+      await prisma.employeeCompensation.create({
+        data: {
+          companyId,
+          employeeId: employee.id,
+          payTypeId: officePayType.id,
+          visaPeriodId,
+          monthlyBasic: 4200 + index * 75,
+          effectiveFrom: dateOnlyYmd(2024, 1, 1),
+        },
+      });
+    } else if (employeeType === 'HYBRID_STAFF' && fixedPayType) {
+      await prisma.employeeCompensation.create({
+        data: {
+          companyId,
+          employeeId: employee.id,
+          payTypeId: fixedPayType.id,
+          visaPeriodId,
+          monthlyBasic: 3800 + index * 60,
+          effectiveFrom: dateOnlyYmd(2024, 1, 1),
+        },
+      });
+    } else if (dailyPayType) {
+      await prisma.employeeCompensation.create({
+        data: {
+          companyId,
+          employeeId: employee.id,
+          payTypeId: dailyPayType.id,
+          visaPeriodId,
+          dailyRate: 95 + (index % 6) * 5,
+          effectiveFrom: dateOnlyYmd(2024, 1, 1),
+        },
+      });
+    }
+
     await prisma.leaveBalance.upsert({
-      where: { companyId_employeeId_year: { companyId, employeeId, year } },
-      create: { companyId, employeeId, year, entitlementDays: 30, usedDays: 0 },
+      where: { companyId_employeeId_year: { companyId, employeeId: employee.id, year } },
+      create: { companyId, employeeId: employee.id, year, entitlementDays: 30, usedDays: 0 },
       update: { entitlementDays: 30 },
     });
   }
 
-  if (employeeIds[4]) {
+  const pick = (code: string) => employees.find((row) => row.employeeCode === code);
+  const pendingSickEmployee = pick('EMP008');
+  const approvedAnnualEmployee = pick('EMP014');
+  const pendingPaidEmployee = pick('EMP020');
+  const approvedSickEmployee = pick('EMP026');
+
+  if (pendingSickEmployee && sickLeaveType) {
+    const sickFields = resolveLeaveRequestFields(sickLeaveType);
+    const start = new Date();
     await prisma.leaveRequest.create({
       data: {
         companyId,
-        employeeId: employeeIds[4],
-        leaveType: 'SICK',
-        startDate: new Date(),
-        endDate: new Date(),
+        employeeId: pendingSickEmployee.id,
+        leaveType: sickFields.leaveType,
+        leaveTypeId: sickFields.leaveTypeId,
+        deductFromBalance: sickFields.deductFromBalance,
+        startDate: start,
+        endDate: start,
         status: 'PENDING',
-        reason: 'Seed demo sick leave request',
+        reason: 'Seed demo — pending sick leave',
       },
     });
   }
 
-  console.log('  ✓ Pay types, sample compensation, leave balances, pending leave request');
+  if (approvedAnnualEmployee && annualLeaveType) {
+    const annualFields = resolveLeaveRequestFields(annualLeaveType);
+    const approvedStart = new Date();
+    const approvedEnd = addUtcDays(approvedStart, 2);
+    const approvedDays = leaveDaysForRequest(
+      annualFields.leaveType,
+      approvedStart,
+      approvedEnd,
+      annualFields.deductFromBalance
+    );
+    const approvedLeave = await prisma.leaveRequest.create({
+      data: {
+        companyId,
+        employeeId: approvedAnnualEmployee.id,
+        leaveType: annualFields.leaveType,
+        leaveTypeId: annualFields.leaveTypeId,
+        deductFromBalance: annualFields.deductFromBalance,
+        startDate: approvedStart,
+        endDate: approvedEnd,
+        status: 'APPROVED',
+        reason: 'Seed demo — approved annual leave',
+        reviewedById: reviewerId,
+        reviewedAt: new Date(),
+        reviewNote: 'Approved in seed data',
+      },
+    });
+    await syncApprovedLeaveToScheduleAbsences(prisma, approvedLeave.id);
+    if (approvedDays > 0) {
+      await prisma.leaveBalance.update({
+        where: {
+          companyId_employeeId_year: { companyId, employeeId: approvedAnnualEmployee.id, year },
+        },
+        data: { usedDays: approvedDays },
+      });
+    }
+  }
+
+  if (pendingPaidEmployee && paidLeaveType) {
+    const paidFields = resolveLeaveRequestFields(paidLeaveType);
+    const start = addUtcDays(new Date(), 7);
+    const end = addUtcDays(start, 1);
+    await prisma.leaveRequest.create({
+      data: {
+        companyId,
+        employeeId: pendingPaidEmployee.id,
+        leaveType: paidFields.leaveType,
+        leaveTypeId: paidFields.leaveTypeId,
+        deductFromBalance: paidFields.deductFromBalance,
+        startDate: start,
+        endDate: end,
+        status: 'PENDING',
+        reason: 'Seed demo — pending paid leave',
+      },
+    });
+  }
+
+  if (approvedSickEmployee && sickLeaveType) {
+    const sickFields = resolveLeaveRequestFields(sickLeaveType);
+    const start = addUtcDays(new Date(), -5);
+    const end = addUtcDays(start, 1);
+    const sickDays = leaveDaysForRequest(
+      sickFields.leaveType,
+      start,
+      end,
+      sickFields.deductFromBalance
+    );
+    await prisma.leaveRequest.create({
+      data: {
+        companyId,
+        employeeId: approvedSickEmployee.id,
+        leaveType: sickFields.leaveType,
+        leaveTypeId: sickFields.leaveTypeId,
+        deductFromBalance: sickFields.deductFromBalance,
+        startDate: start,
+        endDate: end,
+        status: 'APPROVED',
+        reason: 'Seed demo — approved sick leave',
+        reviewedById: reviewerId,
+        reviewedAt: new Date(),
+        reviewNote: 'Approved in seed data',
+      },
+    });
+    if (sickDays > 0) {
+      await prisma.leaveBalance.update({
+        where: {
+          companyId_employeeId_year: { companyId, employeeId: approvedSickEmployee.id, year },
+        },
+        data: { usedDays: sickDays },
+      });
+    }
+  }
+
+  console.log(`  • Per-employee visa, documents, compensation, and leave seeded (${employees.length} employees)`);
+}
+
+/** Delete HR workforce data in FK-safe order (payroll → leave → schedule → employees). */
+async function clearHrModuleData() {
+  await prisma.payRunLine.deleteMany({});
+  await prisma.payRun.deleteMany({});
+  await prisma.employeeAllowance.deleteMany({});
+  await prisma.employeeCompensation.deleteMany({});
+  await prisma.leaveRequest.deleteMany({});
+  await prisma.leaveBalance.deleteMany({});
+  await prisma.attendanceEntry.deleteMany({});
+  await prisma.workAssignmentMember.deleteMany({});
+  await prisma.driverRunLog.deleteMany({});
+  await prisma.scheduleAbsence.deleteMany({});
+  await prisma.workAssignment.deleteMany({});
+  await prisma.workSchedule.deleteMany({});
+  await prisma.employeeDocument.deleteMany({});
+  await prisma.employeeMobileAccessToken.deleteMany({});
+  await prisma.visaPeriod.deleteMany({});
+  await prisma.employee.deleteMany({});
+  await prisma.employeeDocumentType.deleteMany({});
+  await prisma.employeeMetaOption.deleteMany({});
+  await prisma.leaveType.deleteMany({});
+  await prisma.companyHolidayPayType.deleteMany({});
+  await prisma.companyHoliday.deleteMany({});
+  await prisma.payType.deleteMany({});
+  await prisma.allowanceType.deleteMany({});
 }
 
 async function seed() {
@@ -1851,17 +2229,7 @@ async function seed() {
   await prisma.transaction.updateMany({ data: { businessDocumentId: null } });
   await prisma.businessDocument.deleteMany({});
   await prisma.materialAssemblyComponent.deleteMany({});
-  await prisma.attendanceEntry.deleteMany({});
-  await prisma.workAssignmentMember.deleteMany({});
-  await prisma.driverRunLog.deleteMany({});
-  await prisma.scheduleAbsence.deleteMany({});
-  await prisma.workAssignment.deleteMany({});
-  await prisma.workSchedule.deleteMany({});
-  await prisma.employeeDocument.deleteMany({});
-  await prisma.visaPeriod.deleteMany({});
-  await prisma.employee.deleteMany({});
-  await prisma.employeeDocumentType.deleteMany({});
-  await prisma.employeeMobileAccessToken.deleteMany({});
+  await clearHrModuleData();
   await prisma.stockCountSessionRevision.deleteMany({});
   await prisma.stockCountSessionLine.deleteMany({});
   await prisma.stockCountSession.deleteMany({});
@@ -1925,7 +2293,7 @@ async function seed() {
         { nonWorkingWeekdays: [0] },
         { negativeEvidenceQtyThreshold: 10, negativeDecisionNoteQtyThreshold: 25 }
       ) as Prisma.InputJsonValue,
-      hrEmployeeTypeSettings: DEFAULT_EMPLOYEE_TYPE_SETTINGS as unknown as Prisma.InputJsonValue,
+      hrEmployeeTypeSettings: SEED_EMPLOYEE_TYPE_SETTINGS as unknown as Prisma.InputJsonValue,
       printTemplates: companySeedPrintTemplates as unknown as Prisma.InputJsonValue,
     }
   });
@@ -1955,7 +2323,7 @@ async function seed() {
         { nonWorkingWeekdays: [0] },
         { negativeEvidenceQtyThreshold: 10, negativeDecisionNoteQtyThreshold: 25 }
       ) as Prisma.InputJsonValue,
-      hrEmployeeTypeSettings: DEFAULT_EMPLOYEE_TYPE_SETTINGS as unknown as Prisma.InputJsonValue,
+      hrEmployeeTypeSettings: SEED_EMPLOYEE_TYPE_SETTINGS as unknown as Prisma.InputJsonValue,
       printTemplates: companySeedPrintTemplates as unknown as Prisma.InputJsonValue,
     }
   });
@@ -1977,10 +2345,12 @@ async function seed() {
   }
 
   console.log('\nCreating demo custom roles…');
-  const managerRole = await ensureCustomRoleFromPreset(prisma, 'manager', 'Manager', 'manager');
-  const skRole = await ensureCustomRoleFromPreset(prisma, 'store-keeper', 'Store Keeper', 'store_keeper');
+  const managerRole = await seedDemoCustomRole('manager', 'Manager', 'manager');
+  const skRole = await seedDemoCustomRole('store-keeper', 'Store Keeper', 'store_keeper');
+  const hrRole = await seedDemoCustomRole('hr', 'HR', 'hr');
   console.log(`  ✓ ${managerRole.name}`);
   console.log(`  ✓ ${skRole.name}`);
+  console.log(`  ✓ ${hrRole.name}`);
 
   // ── Users ───────────────────────────────────────────────────────────────────
   console.log('\nCreating users…');
@@ -2070,7 +2440,7 @@ async function seed() {
         stockType: 'Raw Material',
         externalItemName: 'FGB-MAT-300',
         currentStock: 500,
-        unitCost: 150,
+        unitCost: 6.75,
         reorderLevel: 100,
       },
       {
@@ -2082,7 +2452,7 @@ async function seed() {
         stockType: 'Raw Material',
         externalItemName: 'RES-UPE-STD',
         currentStock: 1000,
-        unitCost: 200,
+        unitCost: 9.15,
         reorderLevel: 200,
       },
       {
@@ -2094,7 +2464,7 @@ async function seed() {
         stockType: 'Consumable',
         externalItemName: 'CAT-MEKP-01',
         currentStock: 50,
-        unitCost: 500,
+        unitCost: 25,
         reorderLevel: 20,
       },
       {
@@ -2106,7 +2476,7 @@ async function seed() {
         stockType: 'Raw Material',
         externalItemName: 'GEL-WH-001',
         currentStock: 200,
-        unitCost: 350,
+        unitCost: 9,
         reorderLevel: 50,
       },
       {
@@ -2118,7 +2488,7 @@ async function seed() {
         stockType: 'Consumable',
         externalItemName: 'SOL-ACE-001',
         currentStock: 100,
-        unitCost: 100,
+        unitCost: 5.26,
         reorderLevel: 30,
       },
     ],

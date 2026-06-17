@@ -2,27 +2,67 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
 import HrPageChrome from '@/components/hr/HrPageChrome';
 import SearchSelect from '@/components/ui/SearchSelect';
-import { Badge } from '@/components/ui/shadcn/badge';
+import Modal from '@/components/ui/Modal';
 import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
-import { downloadPayPreviewCsv } from '@/lib/hr/payroll/exportPayPreviewCsv';
+import { cn } from '@/lib/utils';
+import { daysInMonth } from '@/lib/hr/payroll/calendar';
+import { downloadPayPreviewXlsx } from '@/lib/hr/payroll/exportPayPreviewXlsx';
 import { readApiJson } from '@/lib/utils/readApiResponse';
+
+type PreviewDayDetail = {
+  date: string;
+  status: string;
+  totalHours: number;
+  basicHours: number;
+  otHours: number;
+  basicHourRate: number;
+  basicHourSalary: number;
+  otHourRate: number;
+  otHourSalary: number;
+  allowance: number;
+  componentEarning?: number;
+  componentDeduction?: number;
+  totalSalary: number;
+  amount: number;
+  detail?: string;
+};
 
 type PreviewEmployee = {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
+  employeeFullName?: string;
+  employeePreferredName?: string | null;
   payTypeName: string | null;
   payTypeCode: string | null;
+  workforceRoleTypeShort?: string;
+  visaHoldingLabel?: string;
+  wpsTransferAmount?: number | null;
+  visaSponsorName?: string | null;
   gross: number;
   breakdown: Record<string, number>;
-  dayDetails?: Array<{ date: string; amount: number; detail?: string }>;
+  salaryComponentEarnings?: number;
+  salaryComponentDeductions?: number;
+  dayDetails?: PreviewDayDetail[];
+  healthCheck?: {
+    ok: boolean;
+    issues: string[];
+    basicPaid: number;
+    basicCap: number;
+    allowancePaid: number;
+    allowanceCap: number;
+    componentEarningsPaid: number;
+    componentEarningsCap: number;
+    componentDeductionsPaid: number;
+    componentDeductionsCap: number;
+  } | null;
   approvedAttendanceRows: number;
   draftAttendanceRows: number;
   skipped: boolean;
@@ -42,6 +82,16 @@ type EmployeeOption = {
   preferredName: string | null;
 };
 
+type EmployeeSummary = {
+  totalHours: number;
+  totalOt: number;
+  basicSalary: number;
+  otSalary: number;
+  allowance: number;
+  deduction: number;
+  activeDays: number;
+};
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
@@ -50,15 +100,473 @@ function formatMoney(n: number) {
   return n.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatHours(n: number) {
+  return n.toLocaleString('en-AE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function resolveDisplayFullName(row: PreviewEmployee): string {
+  return row.employeeFullName?.trim() || row.employeeName;
+}
+
+function resolveAllowanceTotal(row: PreviewEmployee): number {
+  if (row.salaryComponentEarnings != null) return row.salaryComponentEarnings;
+  if (row.healthCheck?.componentEarningsPaid != null) return row.healthCheck.componentEarningsPaid;
+  if (row.healthCheck) return row.healthCheck.allowancePaid;
+  const days = row.dayDetails ?? [];
+  return (
+    days.reduce((sum, day) => sum + (day.componentEarning ?? Math.max(0, day.allowance)), 0) +
+    (row.breakdown.salaryComponentsFixed ?? 0) +
+    (row.breakdown.salaryComponentsAttendance ?? 0)
+  );
+}
+
+function resolveDeductionTotal(row: PreviewEmployee): number {
+  if (row.salaryComponentDeductions != null) return row.salaryComponentDeductions;
+  if (row.healthCheck?.componentDeductionsPaid != null) return row.healthCheck.componentDeductionsPaid;
+  const days = row.dayDetails ?? [];
+  return days.reduce((sum, day) => sum + (day.componentDeduction ?? 0), 0);
+}
+
+function summarizeEmployeeRow(row: PreviewEmployee): EmployeeSummary {
+  const days = row.dayDetails ?? [];
+  const activeDays = days.filter((day) => day.totalHours > 0 || day.totalSalary > 0).length;
+  return {
+    totalHours: days.reduce((sum, day) => sum + day.totalHours, 0),
+    totalOt: days.reduce((sum, day) => sum + day.otHours, 0),
+    basicSalary: days.reduce((sum, day) => sum + day.basicHourSalary, 0),
+    otSalary: days.reduce((sum, day) => sum + day.otHourSalary, 0),
+    allowance: resolveAllowanceTotal(row),
+    deduction: resolveDeductionTotal(row),
+    activeDays,
+  };
+}
+
+function attendanceOutOfLabel(row: PreviewEmployee, month: string): string {
+  const monthDays = daysInMonth(month);
+  const saved = row.approvedAttendanceRows;
+  if (saved > 0) {
+    const summary = summarizeEmployeeRow(row);
+    return `${summary.activeDays} / ${saved}`;
+  }
+  return `0 / ${monthDays}`;
+}
+
 function breakdownLabel(key: string) {
   const labels: Record<string, string> = {
     monthlyBasic: 'Monthly basic',
-    deductions: 'Deductions',
+    deductions: 'Absence deductions',
     deductDays: 'Absent days deducted',
+    deductDaysInMonth: 'Deduct days in month',
+    earnedDays: 'Earned days',
+    unpaidAbsentDays: 'Unpaid absent days',
+    dailyRate: 'Daily rate',
     dailyWageTotal: 'Daily wage total',
     hourlyTotal: 'Hourly total',
+    outsideCapOt: 'Outside-cap OT',
+    holidayWorkedOt: 'Holiday worked OT',
+    excludedWeekdayOt: 'Weekly off OT',
   };
   return labels[key] ?? key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
+}
+
+const HIDDEN_BREAKDOWN_KEYS = new Set(['salaryComponentsFixed', 'salaryComponentsAttendance']);
+
+function visibleBreakdownEntries(breakdown: Record<string, number>) {
+  return Object.entries(breakdown).filter(([key]) => !HIDDEN_BREAKDOWN_KEYS.has(key));
+}
+
+function summarizeDayComponentTotals(rows: PreviewDayDetail[]) {
+  return rows.reduce(
+    (acc, day) => {
+      acc.earnings += day.componentEarning ?? Math.max(0, day.allowance);
+      acc.deductions += day.componentDeduction ?? 0;
+      acc.basicSalary += day.basicHourSalary;
+      acc.otSalary += day.otHourSalary;
+      acc.totalSalary += day.totalSalary;
+      return acc;
+    },
+    { earnings: 0, deductions: 0, basicSalary: 0, otSalary: 0, totalSalary: 0 }
+  );
+}
+
+function resolveSalaryComponentBreakdown(row: PreviewEmployee, dayRows: PreviewDayDetail[]) {
+  const dayTotals = summarizeDayComponentTotals(dayRows);
+  const totalEarnings = resolveAllowanceTotal(row);
+  const totalDeductions = resolveDeductionTotal(row);
+  return {
+    fixedEarnings: Math.max(0, totalEarnings - dayTotals.earnings),
+    fixedDeductions: Math.max(0, totalDeductions - dayTotals.deductions),
+    attendanceEarnings: dayTotals.earnings,
+    attendanceDeductions: dayTotals.deductions,
+    totalEarnings,
+    totalDeductions,
+  };
+}
+
+function HealthBadge({ health }: { health: PreviewEmployee['healthCheck'] }) {
+  if (!health) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+        health.ok
+          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+          : 'bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200'
+      )}
+      title={health.ok ? 'Payroll health check passed' : health.issues.join('; ')}
+    >
+      {health.ok ? 'OK' : 'Check'}
+    </span>
+  );
+}
+
+function PayHealthCheckPanel({
+  health,
+}: {
+  health: NonNullable<PreviewEmployee['healthCheck']>;
+}) {
+  return (
+    <div
+      className={cn(
+        'rounded-md border px-3 py-2.5 text-sm',
+        health.ok
+          ? 'border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/30'
+          : 'border-amber-200/80 bg-amber-50/70 dark:border-amber-900/50 dark:bg-amber-950/30'
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <HealthBadge health={health} />
+        <span className="text-xs text-muted-foreground">
+          Basic, earnings, and deductions should not exceed assigned monthly values.
+        </span>
+      </div>
+      <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
+        <div>
+          <dt className="text-muted-foreground">Basic paid / cap</dt>
+          <dd className="font-medium tabular-nums">
+            {formatMoney(health.basicPaid)} / {formatMoney(health.basicCap)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Allowance paid / cap</dt>
+          <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
+            {formatMoney(health.componentEarningsPaid)} / {formatMoney(health.componentEarningsCap)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Deduction paid / cap</dt>
+          <dd className="font-medium tabular-nums text-rose-700 dark:text-rose-300">
+            {formatMoney(health.componentDeductionsPaid)} / {formatMoney(health.componentDeductionsCap)}
+          </dd>
+        </div>
+      </dl>
+      {!health.ok ? (
+        <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-amber-900 dark:text-amber-200">
+          {health.issues.map((issue) => (
+            <li key={issue}>{issue}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function DayBreakdownTable({
+  rows,
+  summary,
+}: {
+  rows: PreviewDayDetail[];
+  summary: EmployeeSummary;
+}) {
+  if (rows.length === 0) {
+    return <p className="text-xs text-muted-foreground">No saved attendance rows for this month.</p>;
+  }
+
+  const dayTotals = summarizeDayComponentTotals(rows);
+
+  return (
+    <div className="overflow-x-auto rounded-md border border-border">
+      <table className="w-full min-w-[1120px] text-xs">
+        <thead>
+          <tr className="border-b bg-muted/30 text-left text-muted-foreground">
+            <th className="px-2 py-1.5">Date</th>
+            <th className="px-2 py-1.5 text-right">Total h</th>
+            <th className="px-2 py-1.5 text-right">Basic h</th>
+            <th className="px-2 py-1.5 text-right">OT h</th>
+            <th className="px-2 py-1.5 text-right">Basic salary</th>
+            <th className="px-2 py-1.5 text-right">OT rate</th>
+            <th className="px-2 py-1.5 text-right">OT salary</th>
+            <th className="px-2 py-1.5 text-right">Allowance</th>
+            <th className="px-2 py-1.5 text-right">Deduction</th>
+            <th className="px-2 py-1.5 text-right">Total</th>
+            <th className="px-2 py-1.5">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((day) => (
+            <tr key={day.date} className="border-b border-border/50">
+              <td className="px-2 py-1.5 whitespace-nowrap">{day.date}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">{formatHours(day.totalHours)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">{formatHours(day.basicHours)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">{formatHours(day.otHours)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">{formatMoney(day.basicHourSalary)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">{formatMoney(day.otHourRate)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">{formatMoney(day.otHourSalary)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums text-emerald-700 dark:text-emerald-300">
+                {formatMoney(day.componentEarning ?? Math.max(0, day.allowance))}
+              </td>
+              <td className="px-2 py-1.5 text-right tabular-nums text-rose-700 dark:text-rose-300">
+                {formatMoney(day.componentDeduction ?? 0)}
+              </td>
+              <td className="px-2 py-1.5 text-right tabular-nums font-medium">{formatMoney(day.totalSalary)}</td>
+              <td className="px-2 py-1.5 text-muted-foreground">{day.status}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t bg-muted/20 font-medium">
+            <td className="px-2 py-2">Day totals</td>
+            <td className="px-2 py-2" colSpan={3} />
+            <td className="px-2 py-2 text-right tabular-nums">{formatMoney(dayTotals.basicSalary)}</td>
+            <td className="px-2 py-2" />
+            <td className="px-2 py-2 text-right tabular-nums">{formatMoney(dayTotals.otSalary)}</td>
+            <td className="px-2 py-2 text-right tabular-nums text-emerald-700 dark:text-emerald-300">
+              {formatMoney(dayTotals.earnings)}
+            </td>
+            <td className="px-2 py-2 text-right tabular-nums text-rose-700 dark:text-rose-300">
+              {formatMoney(dayTotals.deductions)}
+            </td>
+            <td className="px-2 py-2 text-right tabular-nums">{formatMoney(dayTotals.totalSalary)}</td>
+            <td className="px-2 py-2" />
+          </tr>
+          {(summary.allowance > dayTotals.earnings || summary.deduction > dayTotals.deductions) && (
+            <tr className="border-t bg-muted/10 text-muted-foreground">
+              <td className="px-2 py-2" colSpan={11}>
+                Month allowance ({formatMoney(summary.allowance)}) and deduction ({formatMoney(summary.deduction)})
+                include fixed monthly salary components not listed per day.
+              </td>
+            </tr>
+          )}
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+function SalaryComponentBreakdownPanel({
+  row,
+  dayRows,
+}: {
+  row: PreviewEmployee;
+  dayRows: PreviewDayDetail[];
+}) {
+  const split = resolveSalaryComponentBreakdown(row, dayRows);
+  if (split.totalEarnings <= 0 && split.totalDeductions <= 0) return null;
+
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3">
+      <h3 className="mb-2 text-sm font-medium">Salary components</h3>
+      <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        {split.fixedEarnings > 0 ? (
+          <div>
+            <dt className="text-xs text-muted-foreground">Fixed earnings</dt>
+            <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
+              {formatMoney(split.fixedEarnings)}
+            </dd>
+          </div>
+        ) : null}
+        {split.fixedDeductions > 0 ? (
+          <div>
+            <dt className="text-xs text-muted-foreground">Fixed deductions</dt>
+            <dd className="font-medium tabular-nums text-rose-700 dark:text-rose-300">
+              {formatMoney(split.fixedDeductions)}
+            </dd>
+          </div>
+        ) : null}
+        {split.attendanceEarnings > 0 ? (
+          <div>
+            <dt className="text-xs text-muted-foreground">Attendance earnings</dt>
+            <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
+              {formatMoney(split.attendanceEarnings)}
+            </dd>
+          </div>
+        ) : null}
+        {split.attendanceDeductions > 0 ? (
+          <div>
+            <dt className="text-xs text-muted-foreground">Attendance deductions</dt>
+            <dd className="font-medium tabular-nums text-rose-700 dark:text-rose-300">
+              {formatMoney(split.attendanceDeductions)}
+            </dd>
+          </div>
+        ) : null}
+        <div>
+          <dt className="text-xs text-muted-foreground">Total earnings</dt>
+          <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
+            {formatMoney(split.totalEarnings)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Total deductions</dt>
+          <dd className="font-medium tabular-nums text-rose-700 dark:text-rose-300">
+            {formatMoney(split.totalDeductions)}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+function EmployeeBreakdownModal({
+  row,
+  month,
+  onClose,
+}: {
+  row: PreviewEmployee;
+  month: string;
+  onClose: () => void;
+}) {
+  const summary = summarizeEmployeeRow(row);
+  const preferred = row.employeePreferredName?.trim();
+  const dayRows = row.dayDetails ?? [];
+  const breakdownEntries = visibleBreakdownEntries(row.breakdown);
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={resolveDisplayFullName(row)}
+      description={
+        preferred
+          ? `${preferred} · ${row.employeeCode}`
+          : row.employeeCode
+      }
+      size="2xl"
+    >
+      <div className="space-y-4">
+        <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-xs text-muted-foreground">Full name</dt>
+            <dd className="font-medium">{resolveDisplayFullName(row)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Preferred name</dt>
+            <dd className="font-medium">{preferred || '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Employee code</dt>
+            <dd className="font-medium">{row.employeeCode}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Pay type</dt>
+            <dd className="font-medium">{row.payTypeName ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Workforce role</dt>
+            <dd className="font-medium">{row.workforceRoleTypeShort ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Visa holding</dt>
+            <dd className="font-medium">{row.visaHoldingLabel ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Visa sponsor</dt>
+            <dd className="font-medium">{row.visaSponsorName ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">WPS transfer</dt>
+            <dd className="font-medium tabular-nums">
+              {row.wpsTransferAmount != null ? `${formatMoney(row.wpsTransferAmount)} AED` : '—'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Month</dt>
+            <dd className="font-medium">{month}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Attendance (active / saved)</dt>
+            <dd className="font-medium">{attendanceOutOfLabel(row, month)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Gross</dt>
+            <dd className="font-medium tabular-nums">{formatMoney(row.gross)} AED</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Profile</dt>
+            <dd>
+              <Link href={`/hr/employees/${row.employeeId}`} className="font-medium text-primary hover:underline">
+                Open employee
+              </Link>
+            </dd>
+          </div>
+        </dl>
+
+        <dl className="grid gap-2 rounded-md border border-border bg-muted/20 p-3 sm:grid-cols-3 lg:grid-cols-7">
+          <div>
+            <dt className="text-xs text-muted-foreground">Total hours</dt>
+            <dd className="font-medium tabular-nums">{formatHours(summary.totalHours)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Total OT</dt>
+            <dd className="font-medium tabular-nums">{formatHours(summary.totalOt)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Basic salary</dt>
+            <dd className="font-medium tabular-nums">{formatMoney(summary.basicSalary)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">OT salary</dt>
+            <dd className="font-medium tabular-nums">{formatMoney(summary.otSalary)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Allowance</dt>
+            <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
+              {formatMoney(summary.allowance)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Deduction</dt>
+            <dd className="font-medium tabular-nums text-rose-700 dark:text-rose-300">
+              {formatMoney(summary.deduction)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Gross</dt>
+            <dd className="font-medium tabular-nums">{formatMoney(row.gross)}</dd>
+          </div>
+        </dl>
+
+        <SalaryComponentBreakdownPanel row={row} dayRows={dayRows} />
+
+        {breakdownEntries.length > 0 ? (
+          <dl className="grid gap-2 sm:grid-cols-2 md:grid-cols-4">
+            {breakdownEntries.map(([key, value]) => (
+              <div key={key}>
+                <dt className="text-xs text-muted-foreground">{breakdownLabel(key)}</dt>
+                <dd className="font-medium tabular-nums">
+                  {typeof value === 'number' && key !== 'deductDays' && key !== 'earnedDays'
+                    ? formatMoney(value)
+                    : String(value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+
+        {row.healthCheck ? <PayHealthCheckPanel health={row.healthCheck} /> : null}
+
+        <div>
+          <h3 className="mb-2 text-sm font-medium">Daily breakdown</h3>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Allowance shows earning-type salary components. Deduction shows deduction-type components.
+            Fixed monthly components appear in the salary components section and month totals row.
+          </p>
+          <DayBreakdownTable rows={dayRows} summary={summary} />
+        </div>
+      </div>
+    </Modal>
+  );
 }
 
 export default function PayrollPreviewPage() {
@@ -73,7 +581,7 @@ export default function PayrollPreviewPage() {
   const [employeeOptions, setEmployeeOptions] = useState<EmployeeOption[]>([]);
   const [preview, setPreview] = useState<PreviewPayload | null>(null);
   const [loading, setLoading] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [detailEmployee, setDetailEmployee] = useState<PreviewEmployee | null>(null);
   const [finalizedRunId, setFinalizedRunId] = useState<string | null>(null);
   const [finalizeNote, setFinalizeNote] = useState('');
   const [finalizing, setFinalizing] = useState(false);
@@ -195,7 +703,8 @@ export default function PayrollPreviewPage() {
         <div>
           <h1 className="text-lg font-semibold">Payroll preview</h1>
           <p className="text-sm text-muted-foreground">
-            Estimate monthly gross from approved attendance and active compensation. Not a finalized pay run.
+            Estimate monthly gross from saved attendance and active compensation. Double-click a row for the daily
+            breakdown.
           </p>
         </div>
         <Link
@@ -229,14 +738,14 @@ export default function PayrollPreviewPage() {
         <Button
           size="sm"
           variant="outline"
-          disabled={!preview || preview.employees.length === 0}
+          disabled={!preview || preview.employees.filter((e) => !e.skipped).length === 0}
           onClick={() => {
             if (!preview) return;
-            downloadPayPreviewCsv(preview.month, preview.employees);
-            toast.success('CSV downloaded');
+            downloadPayPreviewXlsx(preview);
+            toast.success('Excel downloaded');
           }}
         >
-          Export CSV
+          Export Excel
         </Button>
         {!finalizedRunId ? (
           <div className="min-w-[180px] flex-1 max-w-xs">
@@ -266,6 +775,14 @@ export default function PayrollPreviewPage() {
         </div>
       ) : null}
 
+      {detailEmployee && preview ? (
+        <EmployeeBreakdownModal
+          row={detailEmployee}
+          month={preview.month}
+          onClose={() => setDetailEmployee(null)}
+        />
+      ) : null}
+
       {preview ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
@@ -289,96 +806,70 @@ export default function PayrollPreviewPage() {
             </p>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-border">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[1580px] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/40 text-left text-xs uppercase text-muted-foreground">
                     <th className="px-3 py-2">Employee</th>
+                    <th className="px-3 py-2">Role</th>
+                    <th className="px-3 py-2">Visa holding</th>
+                    <th className="px-3 py-2">Visa sponsor</th>
                     <th className="px-3 py-2">Pay type</th>
-                    <th className="px-3 py-2">Approved rows</th>
-                    <th className="px-3 py-2">Draft rows</th>
+                    <th className="px-3 py-2 text-right">Attendance out of</th>
+                    <th className="px-3 py-2 text-center">Health</th>
+                    <th className="px-3 py-2 text-right">Total hour</th>
+                    <th className="px-3 py-2 text-right">Total OT</th>
+                    <th className="px-3 py-2 text-right">Basic salary</th>
+                    <th className="px-3 py-2 text-right">OT salary</th>
+                    <th className="px-3 py-2 text-right">Allowance</th>
+                    <th className="px-3 py-2 text-right">Deduction</th>
+                    <th className="px-3 py-2 text-right">WPS</th>
                     <th className="px-3 py-2 text-right">Gross</th>
-                    <th className="px-3 py-2" />
                   </tr>
                 </thead>
                 <tbody>
-                  {included.map((row) => (
-                    <Fragment key={row.employeeId}>
-                      <tr className="border-b">
-                        <td className="px-3 py-2">
-                          <Link
-                            href={`/hr/employees/${row.employeeId}`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {row.employeeName}
-                          </Link>
-                          <span className="text-muted-foreground"> ({row.employeeCode})</span>
+                  {included.map((row) => {
+                    const summary = summarizeEmployeeRow(row);
+                    return (
+                      <tr
+                        key={row.employeeId}
+                        className="cursor-pointer border-b transition-colors hover:bg-muted/30"
+                        onDoubleClick={() => setDetailEmployee(row)}
+                        title="Double-click for breakdown"
+                      >
+                        <td className="px-3 py-2 font-medium text-foreground">
+                          {resolveDisplayFullName(row)}
                         </td>
-                        <td className="px-3 py-2">{row.payTypeName ?? '—'}</td>
-                        <td className="px-3 py-2">{row.approvedAttendanceRows}</td>
-                        <td className="px-3 py-2">
-                          {row.draftAttendanceRows > 0 ? (
-                            <span className="text-amber-700">{row.draftAttendanceRows}</span>
-                          ) : (
-                            '0'
-                          )}
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {row.workforceRoleTypeShort ?? '—'}
                         </td>
-                        <td className="px-3 py-2 text-right font-medium">{formatMoney(row.gross)}</td>
-                        <td className="px-3 py-2 text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() =>
-                              setExpandedId((id) => (id === row.employeeId ? null : row.employeeId))
-                            }
-                          >
-                            {expandedId === row.employeeId ? 'Hide' : 'Breakdown'}
-                          </Button>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {row.visaHoldingLabel ?? '—'}
                         </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {row.visaSponsorName ?? '—'}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">{row.payTypeName ?? '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {attendanceOutOfLabel(row, preview.month)}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <HealthBadge health={row.healthCheck} />
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatHours(summary.totalHours)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatHours(summary.totalOt)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(summary.basicSalary)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(summary.otSalary)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(summary.allowance)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {summary.deduction ? formatMoney(summary.deduction) : formatMoney(0)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {row.wpsTransferAmount != null ? formatMoney(row.wpsTransferAmount) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right font-medium tabular-nums">{formatMoney(row.gross)}</td>
                       </tr>
-                      {expandedId === row.employeeId ? (
-                        <tr key={`${row.employeeId}-detail`} className="border-b bg-muted/20">
-                          <td colSpan={6} className="px-4 py-3">
-                            <dl className="grid gap-2 sm:grid-cols-2 md:grid-cols-4">
-                              {Object.entries(row.breakdown).map(([key, value]) => (
-                                <div key={key}>
-                                  <dt className="text-xs text-muted-foreground">{breakdownLabel(key)}</dt>
-                                  <dd className="font-medium">
-                                    {typeof value === 'number' && key !== 'deductDays'
-                                      ? formatMoney(value)
-                                      : String(value)}
-                                  </dd>
-                                </div>
-                              ))}
-                            </dl>
-                            {row.dayDetails && row.dayDetails.length > 0 ? (
-                              <div className="mt-3 overflow-x-auto rounded-md border border-border">
-                                <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="border-b bg-muted/30 text-left text-muted-foreground">
-                                      <th className="px-2 py-1.5">Date</th>
-                                      <th className="px-2 py-1.5 text-right">Amount (AED)</th>
-                                      <th className="px-2 py-1.5">Detail</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {row.dayDetails.map((day) => (
-                                      <tr key={day.date} className="border-b border-border/50">
-                                        <td className="px-2 py-1.5">{day.date}</td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums">
-                                          {formatMoney(day.amount)}
-                                        </td>
-                                        <td className="px-2 py-1.5 text-muted-foreground">{day.detail ?? '—'}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -390,10 +881,7 @@ export default function PayrollPreviewPage() {
               <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
                 {skipped.map((row) => (
                   <li key={row.employeeId}>
-                    <Link href={`/hr/employees/${row.employeeId}`} className="text-primary hover:underline">
-                      {row.employeeName}
-                    </Link>{' '}
-                    ({row.employeeCode}) — {row.skipReason}
+                    {resolveDisplayFullName(row)} ({row.employeeCode}) — {row.skipReason}
                   </li>
                 ))}
               </ul>
@@ -401,11 +889,7 @@ export default function PayrollPreviewPage() {
           ) : null}
 
           <div className="text-xs text-muted-foreground">
-            Only attendance rows with workflow status{' '}
-            <Badge variant="outline" className="align-middle">
-              APPROVED
-            </Badge>{' '}
-            are included. Draft rows are listed as a warning and do not affect gross.
+            Payroll combines saved attendance with approved leave from Leave management for the month.
           </div>
         </div>
       ) : null}

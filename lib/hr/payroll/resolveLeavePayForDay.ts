@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 
 import { parseLeaveTypeRules, payPercentForLeaveDay } from '@/lib/hr/leaveTypeRules';
+import { fetchApprovedLeaveDayRowsForEntitlement } from '@/lib/hr/payroll/approvedLeaveForPayroll';
 
 type LeaveDayRow = {
   workDate: Date;
@@ -26,29 +27,6 @@ export function countLeaveDaysInEntitlementWindow(
   }).length;
 }
 
-export async function fetchLeaveDayRowsForEntitlement(
-  prisma: PrismaClient,
-  companyId: string,
-  employeeId: string,
-  workDateYmd: string,
-  entitlementDays: number
-): Promise<LeaveDayRow[]> {
-  const end = new Date(`${workDateYmd}T12:00:00Z`);
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - (entitlementDays - 1));
-
-  return prisma.attendanceEntry.findMany({
-    where: {
-      companyId,
-      employeeId,
-      workDate: { gte: start, lte: end },
-      leaveTypeId: { not: null },
-    },
-    select: { workDate: true, leaveTypeId: true },
-    orderBy: { workDate: 'asc' },
-  });
-}
-
 export async function resolveLeavePayPercentForDay(
   prisma: PrismaClient,
   params: {
@@ -64,13 +42,13 @@ export async function resolveLeavePayPercentForDay(
     return rules.countsAsPaidLeave ? 100 : 0;
   }
   const entitlementDays = rules.entitlementDays ?? 365;
-  const priorRows = await fetchLeaveDayRowsForEntitlement(
-    prisma,
-    params.companyId,
-    params.employeeId,
-    params.workDateYmd,
-    entitlementDays
-  );
+  const priorRows = await fetchApprovedLeaveDayRowsForEntitlement(prisma, {
+    companyId: params.companyId,
+    employeeId: params.employeeId,
+    leaveTypeId: params.leaveTypeId,
+    workDateYmd: params.workDateYmd,
+    entitlementDays,
+  });
   const dayIndex = countLeaveDaysInEntitlementWindow(
     priorRows,
     params.leaveTypeId,

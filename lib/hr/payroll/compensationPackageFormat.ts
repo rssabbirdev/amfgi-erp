@@ -44,6 +44,10 @@ export function formatPackageForApi(pkg: CompensationPackageRow, previous?: Comp
   const prevBasic = previous?.monthlyBasic != null ? Number(previous.monthlyBasic) : null;
   const daily = pkg.dailyRate != null ? Number(pkg.dailyRate) : null;
   const prevDaily = previous?.dailyRate != null ? Number(previous.dailyRate) : null;
+  const wpsTransfer =
+    pkg.wpsTransferAmount != null ? Number(pkg.wpsTransferAmount) : null;
+  const prevWpsTransfer =
+    previous?.wpsTransferAmount != null ? Number(previous.wpsTransferAmount) : null;
 
   const changes: CompensationChangeLine[] = [];
 
@@ -62,6 +66,17 @@ export function formatPackageForApi(pkg: CompensationPackageRow, previous?: Comp
         previous: prevDaily,
         current: daily,
         delta: daily != null && prevDaily != null ? daily - prevDaily : null,
+      });
+    }
+    if (wpsTransfer !== prevWpsTransfer) {
+      changes.push({
+        label: 'WPS transfer amount',
+        previous: prevWpsTransfer,
+        current: wpsTransfer,
+        delta:
+          wpsTransfer != null && prevWpsTransfer != null
+            ? wpsTransfer - prevWpsTransfer
+            : null,
       });
     }
     if (totalAllowance !== prevTotalAllowance) {
@@ -111,6 +126,7 @@ export function formatPackageForApi(pkg: CompensationPackageRow, previous?: Comp
       : null,
     monthlyBasic: basic,
     dailyRate: daily,
+    wpsTransferAmount: wpsTransfer,
     totalAllowance,
     totalMonthly: (basic ?? 0) + totalAllowance,
     effectiveFrom: pkg.effectiveFrom.toISOString().slice(0, 10),

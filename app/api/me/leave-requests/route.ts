@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db/prisma';
 import { dateFromYmd, ymdFromInput } from '@/lib/hr/workDate';
 import { loadLeaveTypeForRequest, resolveLeaveRequestFields } from '@/lib/hr/resolveLeaveTypeSelection';
+import { isLeaveTypeHiddenFromEmployeePortal, parseLeaveTypeRules } from '@/lib/hr/leaveTypeRules';
 import { ensureLeaveTypesReady } from '@/lib/hr/seedLeaveTypes';
 import { getPortalEmployeeForSession } from '@/lib/hr/linkedEmployee';
 import { assertSufficientLeaveBalance, leaveDaysForRequest } from '@/lib/hr/leaveBalance';
@@ -25,6 +26,7 @@ export async function GET() {
     where: { companyId: emp.companyId, employeeId: emp.id },
     include: {
       leaveTypeRef: { select: { id: true, name: true, code: true } },
+      reviewedBy: { select: { id: true, name: true } },
     },
     orderBy: { submittedAt: 'desc' },
     take: 100,
@@ -57,6 +59,9 @@ export async function POST(req: Request) {
   await ensureLeaveTypesReady(prisma, emp.companyId);
   const leaveType = await loadLeaveTypeForRequest(prisma, emp.companyId, parsed.data.leaveTypeId);
   if (!leaveType) return errorResponse('Leave type not found', 404);
+  if (isLeaveTypeHiddenFromEmployeePortal(parseLeaveTypeRules(leaveType.rules))) {
+    return errorResponse('This leave type is not available for employee requests', 403);
+  }
 
   const resolved = resolveLeaveRequestFields(leaveType);
   const daysNeeded = leaveDaysForRequest(

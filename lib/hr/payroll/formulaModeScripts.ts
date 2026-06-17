@@ -4,10 +4,10 @@ export const FORMULA_MODE_SCRIPTS: Record<PayCalculationMode, string> = {
   MONTHLY_FIXED: `# Fixed monthly
 gross = monthly_basic`,
 
-  MONTHLY_CALENDAR_DEDUCT: `# Office — deduct unpaid absent days
-daily_rate = monthly_basic / days_in_month
-deduction = absent_days * daily_rate
-gross = monthly_basic - deduction`,
+  MONTHLY_CALENDAR_DEDUCT: `# Office — pay per attendance day
+daily_rate = monthly_basic / denom_days
+gross = sum(present + paid leave + paid holiday rows) * daily_rate
+gross = min(gross, monthly_basic)`,
 
   DAILY_WAGE: `# Daily wage with OT as % of basic hourly rate
 day_basic_rate = daily_rate / basic_hours

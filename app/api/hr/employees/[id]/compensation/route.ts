@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db/prisma';
 import { P } from '@/lib/permissions';
-import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
+import { requireCompanySession, requirePerm, hasPerm } from '@/lib/hr/requireCompanySession';
+import { resolveRouteEmployeeId } from '@/lib/hr/resolveRouteEmployeeId';
 import {
   createCompensationPackage,
   listCompensationPackages,
@@ -17,6 +18,7 @@ const CreateSchema = z.object({
   payTypeId: z.string().min(1),
   monthlyBasic: z.number().min(0).optional().nullable(),
   dailyRate: z.number().min(0).optional().nullable(),
+  wpsTransferAmount: z.number().min(0).optional().nullable(),
   effectiveFrom: z.string().min(1),
   effectiveTo: z.string().optional().nullable(),
   visaPeriodId: z.string().optional().nullable(),
@@ -24,18 +26,31 @@ const CreateSchema = z.object({
   allowances: z.array(AllowanceLineSchema).optional().default([]),
 });
 
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
-  const { companyId } = ctx;
-  if (!requirePerm(ctx.session.user, P.HR_PAYROLL_COMPENSATION)) return errorResponse('Forbidden', 403);
-  const { id: employeeId } = await params;
+  const { companyId, session } = ctx;
+  if (
+    !hasPerm(session.user, P.HR_PAYROLL_COMPENSATION) &&
+    !hasPerm(session.user, P.HR_PAYROLL_SETTINGS)
+  ) {
+    return errorResponse('Forbidden', 403);
+  }
+  const employeeId = await resolveRouteEmployeeId(req, params);
+  if (!employeeId) return errorResponse('Employee id required', 400);
 
   const emp = await prisma.employee.findFirst({ where: { id: employeeId, companyId } });
   if (!emp) return errorResponse('Employee not found', 404);
 
-  const packages = await listCompensationPackages(companyId, employeeId);
-  return successResponse(packages);
+  try {
+    const packages = await listCompensationPackages(companyId, employeeId);
+    return successResponse(packages);
+  } catch (error) {
+    return errorResponse(
+      error instanceof Error ? error.message : 'Failed to load compensation history',
+      500
+    );
+  }
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -43,7 +58,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!ctx.ok) return ctx.response;
   const { companyId } = ctx;
   if (!requirePerm(ctx.session.user, P.HR_PAYROLL_COMPENSATION)) return errorResponse('Forbidden', 403);
-  const { id: employeeId } = await params;
+  const employeeId = await resolveRouteEmployeeId(req, params);
+  if (!employeeId) return errorResponse('Employee id required', 400);
 
   const emp = await prisma.employee.findFirst({ where: { id: employeeId, companyId } });
   if (!emp) return errorResponse('Employee not found', 404);
@@ -59,6 +75,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       payTypeId: parsed.data.payTypeId,
       monthlyBasic: parsed.data.monthlyBasic ?? null,
       dailyRate: parsed.data.dailyRate ?? null,
+      wpsTransferAmount: parsed.data.wpsTransferAmount ?? null,
       effectiveFrom: parsed.data.effectiveFrom,
       effectiveTo: parsed.data.effectiveTo ?? null,
       visaPeriodId: parsed.data.visaPeriodId ?? null,

@@ -9,7 +9,6 @@
 - **StockValuationResponse** (1 connections) — `store/api/endpoints/reports.ts`
 - **ConsumptionData** (1 connections) — `store/api/endpoints/reports.ts`
 - **ConsumptionResponse** (1 connections) — `store/api/endpoints/reports.ts`
-- **ProductionByJobRow** (1 connections) — `store/api/endpoints/reports.ts`
 - **InventoryByWarehouseWarehouseCol** (1 connections) — `store/api/endpoints/reports.ts`
 - **InventoryByWarehouseRow** (1 connections) — `store/api/endpoints/reports.ts`
 - **InventoryByWarehouseResponse** (1 connections) — `store/api/endpoints/reports.ts`
@@ -29,6 +28,7 @@
 - **StockAdjustmentsResponse** (1 connections) — `store/api/endpoints/reports.ts`
 - **StockCountSessionReportRow** (1 connections) — `store/api/endpoints/reports.ts`
 - **StockCountSessionMaterialReportRow** (1 connections) — `store/api/endpoints/reports.ts`
+- **StockCountSessionWarehouseReportRow** (1 connections) — `store/api/endpoints/reports.ts`
 - *... and 7 more nodes in this community*
 
 ## Relationships

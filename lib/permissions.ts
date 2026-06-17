@@ -83,6 +83,8 @@ export const P = {
   HR_SETTINGS_DOC_TYPES: 'hr.settings.document_types',
   HR_LEAVE_VIEW: 'hr.leave.view',
   HR_LEAVE_APPROVE: 'hr.leave.approve',
+  HR_LEAVE_EDIT: 'hr.leave.edit',
+  HR_LEAVE_DELETE: 'hr.leave.delete',
   HR_PAYROLL_SETTINGS: 'hr.payroll.settings',
   HR_PAYROLL_COMPENSATION: 'hr.payroll.compensation',
 
@@ -126,7 +128,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.HR_SCHEDULE_VIEW, P.HR_SCHEDULE_EDIT, P.HR_SCHEDULE_PUBLISH,
     P.HR_ATTENDANCE_VIEW, P.HR_ATTENDANCE_EDIT, P.HR_ATTENDANCE_APPROVE,
     P.HR_SETTINGS_DOC_TYPES,
-    P.HR_LEAVE_VIEW, P.HR_LEAVE_APPROVE,
+    P.HR_LEAVE_VIEW, P.HR_LEAVE_APPROVE, P.HR_LEAVE_EDIT, P.HR_LEAVE_DELETE,
     P.HR_PAYROLL_SETTINGS, P.HR_PAYROLL_COMPENSATION,
     P.STOCK_JOB_BUDGET_VIEW,
     P.STOCK_JOB_BUDGET_EDIT,
@@ -170,6 +172,8 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.HR_SETTINGS_DOC_TYPES,
     P.HR_LEAVE_VIEW,
     P.HR_LEAVE_APPROVE,
+    P.HR_LEAVE_EDIT,
+    P.HR_LEAVE_DELETE,
     P.HR_PAYROLL_SETTINGS,
     P.HR_PAYROLL_COMPENSATION,
   ],
@@ -348,6 +352,8 @@ export const PERMISSION_GROUPS: Array<{
     perms: [
       { key: P.HR_LEAVE_VIEW, label: 'View leave requests' },
       { key: P.HR_LEAVE_APPROVE, label: 'Approve / reject leave' },
+      { key: P.HR_LEAVE_EDIT, label: 'Edit leave requests' },
+      { key: P.HR_LEAVE_DELETE, label: 'Delete / cancel leave' },
     ],
   },
   {

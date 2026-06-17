@@ -1,11 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import toast from 'react-hot-toast';
 
-import { Button } from '@/components/ui/shadcn/button';
+import { Badge } from '@/components/ui/shadcn/badge';
+import { Button, buttonVariants } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
 import { readApiJson } from '@/lib/utils/readApiResponse';
+import { cn } from '@/lib/utils';
 
 type LeaveTypeOption = { id: string; name: string; code: string; isActive?: boolean };
 
@@ -18,15 +21,32 @@ type LeaveRow = {
   status: string;
   reason: string | null;
   submittedAt: string;
+  reviewNote: string | null;
+  reviewedAt: string | null;
   leaveTypeRef?: { id: string; name: string; code: string } | null;
+  reviewedBy?: { id: string; name: string | null } | null;
 };
+
+type BalanceData = {
+  year: number;
+  entitlementDays: number;
+  usedDays: number;
+  adjustedDays: number;
+  remainingDays: number;
+};
+
+function statusTone(status: string) {
+  if (status === 'APPROVED') return 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300';
+  if (status === 'PENDING') return 'bg-amber-500/10 text-amber-800 dark:text-amber-300';
+  if (status === 'REJECTED') return 'bg-red-500/10 text-red-800 dark:text-red-300';
+  return 'bg-slate-500/10 text-slate-600 dark:text-slate-300';
+}
 
 export default function MeLeavePage() {
   const [rows, setRows] = useState<LeaveRow[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([]);
-  const [balance, setBalance] = useState<{ remainingDays: number; entitlementDays: number; usedDays: number } | null>(
-    null
-  );
+  const [balance, setBalance] = useState<BalanceData | null>(null);
+  const [balanceYear, setBalanceYear] = useState(new Date().getFullYear());
   const [leaveTypeId, setLeaveTypeId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -36,21 +56,21 @@ export default function MeLeavePage() {
   const load = useCallback(async () => {
     const [reqRes, balRes, typesRes] = await Promise.all([
       fetch('/api/me/leave-requests', { cache: 'no-store' }),
-      fetch(`/api/me/leave-balance?year=${new Date().getFullYear()}`, { cache: 'no-store' }),
+      fetch(`/api/me/leave-balance?year=${balanceYear}`, { cache: 'no-store' }),
       fetch('/api/me/leave-types', { cache: 'no-store' }),
     ]);
     const reqJson = await readApiJson<LeaveRow[]>(reqRes);
-    const balJson = await readApiJson(balRes);
+    const balJson = await readApiJson<BalanceData>(balRes);
     const typesJson = await readApiJson<LeaveTypeOption[]>(typesRes);
     if (reqRes.ok && reqJson?.success) setRows(reqJson.data as LeaveRow[]);
-    if (balRes.ok && balJson?.success) setBalance(balJson.data as typeof balance);
+    if (balRes.ok && balJson?.success) setBalance(balJson.data as BalanceData);
     if (typesRes.ok && typesJson?.success) {
       const types = (typesJson.data ?? []) as LeaveTypeOption[];
       const active = types.filter((t) => t.isActive !== false);
       setLeaveTypes(active);
       setLeaveTypeId((prev) => prev || active[0]?.id || '');
     }
-  }, []);
+  }, [balanceYear]);
 
   useEffect(() => {
     void load();
@@ -105,23 +125,40 @@ export default function MeLeavePage() {
     leaveTypes.find((t) => t.id === row.leaveTypeId)?.name ??
     row.leaveType.replace(/_/g, ' ');
 
+  const pendingCount = rows.filter((row) => row.status === 'PENDING').length;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Leave requests</h1>
-        <p className="text-sm text-muted-foreground">
-          Submit leave using types configured by HR (sick, annual, paid, unpaid, etc.).
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Leave requests</h1>
+          <p className="text-sm text-muted-foreground">
+            Submit requests and track HR decisions. Daily attendance during leave is recorded separately on the day sheet.
+          </p>
+        </div>
+        <Link href="/me" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          Dashboard
+        </Link>
       </div>
 
       {balance ? (
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm">
-          <p className="font-medium text-emerald-800 dark:text-emerald-300">
-            Annual leave balance ({new Date().getFullYear()})
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-medium text-emerald-800 dark:text-emerald-300">Annual leave balance</p>
+            <Input
+              type="number"
+              className="h-8 w-24"
+              value={balanceYear}
+              onChange={(e) => setBalanceYear(Number(e.target.value))}
+            />
+          </div>
           <p className="mt-1 tabular-nums">
-            {balance.remainingDays} remaining · {balance.usedDays} used · {balance.entitlementDays} entitled
+            {balance.remainingDays} remaining · {balance.usedDays} used (approved) · {balance.entitlementDays} entitled
+            {balance.adjustedDays ? ` · ${balance.adjustedDays} adjusted` : ''}
           </p>
+          {pendingCount > 0 ? (
+            <p className="mt-2 text-amber-700 dark:text-amber-300">{pendingCount} request(s) awaiting HR review</p>
+          ) : null}
         </div>
       ) : null}
 
@@ -164,13 +201,23 @@ export default function MeLeavePage() {
         ) : (
           rows.map((row) => (
             <div key={row.id} className="rounded-xl border border-border p-3 text-sm">
-              <div className="flex justify-between gap-2">
+              <div className="flex flex-wrap justify-between gap-2">
                 <span className="font-medium">
                   {leaveLabel(row)} · {String(row.startDate).slice(0, 10)}
+                  {String(row.endDate).slice(0, 10) !== String(row.startDate).slice(0, 10)
+                    ? ` → ${String(row.endDate).slice(0, 10)}`
+                    : ''}
                 </span>
-                <span className="text-muted-foreground">{row.status}</span>
+                <Badge className={cn('font-medium', statusTone(row.status))}>{row.status}</Badge>
               </div>
               {row.reason ? <p className="mt-1 text-muted-foreground">{row.reason}</p> : null}
+              {row.reviewNote ? (
+                <p className="mt-2 rounded-lg bg-muted/50 p-2 text-muted-foreground">
+                  HR response: {row.reviewNote}
+                  {row.reviewedBy?.name ? ` · ${row.reviewedBy.name}` : ''}
+                  {row.reviewedAt ? ` · ${new Date(row.reviewedAt).toLocaleDateString()}` : ''}
+                </p>
+              ) : null}
               {row.status === 'PENDING' ? (
                 <Button size="sm" variant="outline" className="mt-2" onClick={() => void cancel(row.id)}>
                   Cancel

@@ -14,6 +14,7 @@ function mockPackage(overrides: Partial<CompensationPackageRow> = {}): Compensat
     monthlyBasic: 3000 as never,
     monthlyAllowance: null,
     dailyRate: null,
+    wpsTransferAmount: null,
     effectiveFrom: new Date('2026-01-01'),
     effectiveTo: null,
     notes: null,
@@ -52,5 +53,14 @@ describe('compensationPackages', () => {
     const formatted = formatPackageForApi(current, previous);
     const basicChange = formatted.changes.find((c) => c.label === 'Monthly basic');
     expect(basicChange?.delta).toBe(500);
+  });
+
+  it('includes wps transfer amount and tracks changes', () => {
+    const current = mockPackage({ wpsTransferAmount: 2800 as never });
+    const previous = mockPackage({ wpsTransferAmount: 2500 as never });
+    const formatted = formatPackageForApi(current, previous);
+    expect(formatted.wpsTransferAmount).toBe(2800);
+    const wpsChange = formatted.changes.find((c) => c.label === 'WPS transfer amount');
+    expect(wpsChange?.delta).toBe(300);
   });
 });

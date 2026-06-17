@@ -22,17 +22,21 @@ export const PAY_MODE_FORMULA_DEFINITIONS: PayModeFormulaDefinition[] = [
   },
   {
     mode: 'MONTHLY_CALENDAR_DEDUCT',
-    label: 'Office — calendar deduct',
+    label: 'Fixed monthly',
     compensationInputs: ['monthly_basic'],
-    configParameters: [],
+    configParameters: [
+      { key: 'deductDenominator', label: 'Divide monthly basic by', defaultValue: undefined },
+      { key: 'excludedWeekdays', label: 'Weekly off-days', defaultValue: 0 },
+    ],
     formulaLines: [
-      'daily_rate = monthly_basic ÷ days_in_month',
-      'deduction = absent_days × daily_rate',
-      'gross = monthly_basic − deduction',
+      'daily_rate = monthly_basic ÷ working days in month',
+      'gross = Σ daily_rate for each present / paid leave / paid holiday attendance row',
+      'gross is capped at monthly_basic',
     ],
     attendanceRules: [
-      'Only status = ABSENT deducts pay.',
-      'Paid leave (annual, sick, etc.) does not deduct.',
+      'Pay accrues only for days with saved attendance (or merged leave / holiday).',
+      'Present, paid leave, and paid holidays earn daily_rate.',
+      'Unpaid absent days earn nothing.',
     ],
   },
   {
@@ -108,6 +112,14 @@ export function describePayTypeRow(config: Record<string, unknown>) {
   }
   if (fields.mode === 'HOURLY_SPLIT' || fields.mode === 'CUSTOM') {
     parameters.push(`Excluded: ${formatExcludedWeekdaysLabel(fields.excludedWeekdays)}`);
+  }
+  if (fields.mode === 'MONTHLY_CALENDAR_DEDUCT') {
+    const denom =
+      fields.deductDenominator === 'CALENDAR_DAYS' ? 'all calendar days' : 'working days';
+    parameters.push(`Divide by: ${denom}`);
+    if (fields.deductDenominator !== 'CALENDAR_DAYS') {
+      parameters.push(`Weekly off: ${formatExcludedWeekdaysLabel(fields.excludedWeekdays)}`);
+    }
   }
   if (fields.mode === 'CUSTOM' && fields.formulaScript) {
     return {

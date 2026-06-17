@@ -1,5 +1,6 @@
 import { dedupeAllowancesByType } from '@/lib/hr/payroll/allowanceTotals';
 import { denomDaysExcludingWeekdays, roundMoney } from '@/lib/hr/payroll/calendar';
+import { isPayrollHolidayLine } from '@/lib/hr/payroll/holidayPayLine';
 import type { CompensationInput, PayLineInput } from '@/lib/hr/payroll/types';
 import type { EmployeeAllowanceItem } from '@/lib/hr/payroll/resolveEmployeeAllowances';
 
@@ -18,6 +19,38 @@ export type SalaryComponentTotals = {
   attendanceEarningPerDay: number;
   attendanceDeductionPerDay: number;
 };
+
+export function prorateSalaryComponentTotals(
+  totals: SalaryComponentTotals,
+  factor: number
+): SalaryComponentTotals {
+  if (factor >= 1) return totals;
+  if (factor <= 0) {
+    return {
+      fixedEarnings: 0,
+      fixedDeductions: 0,
+      attendanceEarningPerDay: totals.attendanceEarningPerDay,
+      attendanceDeductionPerDay: totals.attendanceDeductionPerDay,
+    };
+  }
+  return {
+    fixedEarnings: roundMoney(totals.fixedEarnings * factor),
+    fixedDeductions: roundMoney(totals.fixedDeductions * factor),
+    attendanceEarningPerDay: totals.attendanceEarningPerDay,
+    attendanceDeductionPerDay: totals.attendanceDeductionPerDay,
+  };
+}
+
+export function compensationWithProratedFixedMonthly(
+  compensation: CompensationInput,
+  factor: number | undefined
+): CompensationInput {
+  if (factor == null || factor >= 1 || !compensation.salaryComponents) return compensation;
+  return {
+    ...compensation,
+    salaryComponents: prorateSalaryComponentTotals(compensation.salaryComponents, factor),
+  };
+}
 
 export function buildSalaryComponentTotals(
   items: SalaryComponentItem[],
@@ -56,6 +89,97 @@ export function countPresentDays(lines: PayLineInput[]): number {
   return lines.filter((line) => line.status === 'PRESENT').length;
 }
 
+/** Days that earn per-day attendance allowance (present, half day, paid holiday). */
+export function countAllowanceDays(lines: PayLineInput[]): number {
+  return lines.filter(
+    (line) =>
+      line.status === 'PRESENT' ||
+      line.status === 'HALF_DAY' ||
+      isPayrollHolidayLine(line)
+  ).length;
+}
+
+export function resolvePerDayComponentSplit(params: {
+  line: PayLineInput;
+  compensation: CompensationInput;
+  month: string;
+  excludedWeekdays: number[];
+}): { earning: number; deduction: number } {
+  const { line, compensation, month, excludedWeekdays } = params;
+  const earnsAllowance =
+    line.status === 'PRESENT' ||
+    line.status === 'HALF_DAY' ||
+    isPayrollHolidayLine(line);
+  if (!earnsAllowance) return { earning: 0, deduction: 0 };
+
+  const comps = compensation.salaryComponents;
+  const denom = denomDaysExcludingWeekdays(month, excludedWeekdays);
+  let earning = 0;
+  let deduction = 0;
+
+  if (!comps && compensation.monthlyAllowance > 0 && denom > 0) {
+    earning += compensation.monthlyAllowance / denom;
+  }
+  if (comps) {
+    earning += comps.attendanceEarningPerDay;
+    deduction += comps.attendanceDeductionPerDay;
+  }
+
+  return {
+    earning: roundMoney(earning),
+    deduction: roundMoney(deduction),
+  };
+}
+
+export function resolvePerDayAllowance(params: {
+  line: PayLineInput;
+  compensation: CompensationInput;
+  month: string;
+  excludedWeekdays: number[];
+}): number {
+  const { earning, deduction } = resolvePerDayComponentSplit(params);
+  return roundMoney(earning - deduction);
+}
+
+export function resolveSalaryComponentDisplayTotals(params: {
+  compensation: CompensationInput;
+  lines: PayLineInput[];
+  month: string;
+  excludedWeekdays: number[];
+  dayRows: Array<{ componentEarning?: number; componentDeduction?: number; allowance: number }>;
+}): { earnings: number; deductions: number } {
+  const { compensation, lines, month, excludedWeekdays, dayRows } = params;
+  const comps = compensation.salaryComponents;
+
+  if (!comps) {
+    const earnings = roundMoney(
+      dayRows.reduce((sum, day) => sum + (day.componentEarning ?? Math.max(0, day.allowance)), 0)
+    );
+    return { earnings, deductions: 0 };
+  }
+
+  const hasSplitOnDays = dayRows.some(
+    (day) => (day.componentEarning ?? 0) > 0 || (day.componentDeduction ?? 0) > 0
+  );
+  const allowanceDays = countAllowanceDays(lines);
+
+  if (hasSplitOnDays) {
+    return {
+      earnings: roundMoney(
+        comps.fixedEarnings + dayRows.reduce((sum, day) => sum + (day.componentEarning ?? 0), 0)
+      ),
+      deductions: roundMoney(
+        comps.fixedDeductions + dayRows.reduce((sum, day) => sum + (day.componentDeduction ?? 0), 0)
+      ),
+    };
+  }
+
+  return {
+    earnings: roundMoney(comps.fixedEarnings + allowanceDays * comps.attendanceEarningPerDay),
+    deductions: roundMoney(comps.fixedDeductions + allowanceDays * comps.attendanceDeductionPerDay),
+  };
+}
+
 export function netSignedComponentAmount(
   amount: number,
   componentKind: SalaryComponentKind
@@ -90,18 +214,22 @@ export function applySalaryComponentsToGross(params: {
   compensation: CompensationInput;
   lines: PayLineInput[];
   breakdown: Record<string, number>;
+  /** When true, per-day attendance allowance is already on day rows — only fixed monthly components are added here. */
+  attendanceOnDayRows?: boolean;
 }): number {
   const totals = params.compensation.salaryComponents;
   if (!totals) return params.gross;
 
-  const presentDays = countPresentDays(params.lines);
+  const presentDays = countAllowanceDays(params.lines);
   const fixedNet = fixedSalaryComponentNet(totals);
   const attendanceNet = attendanceSalaryComponentNet(totals, presentDays);
 
   if (fixedNet !== 0) params.breakdown.salaryComponentsFixed = fixedNet;
-  if (attendanceNet !== 0) params.breakdown.salaryComponentsAttendance = attendanceNet;
+  if (!params.attendanceOnDayRows && attendanceNet !== 0) {
+    params.breakdown.salaryComponentsAttendance = attendanceNet;
+  }
 
-  return roundMoney(params.gross + fixedNet + attendanceNet);
+  return roundMoney(params.gross + fixedNet + (params.attendanceOnDayRows ? 0 : attendanceNet));
 }
 
 export function buildCompensationInputFromAllowances(

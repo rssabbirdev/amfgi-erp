@@ -1,5 +1,5 @@
-﻿import { redirect } from 'next/navigation';
+import MeDashboardPage from '@/components/me/MeDashboardPage';
 
-export default function MeIndexPage() {
-  redirect('/me/profile');
+export default function MeHomePage() {
+  return <MeDashboardPage />;
 }

@@ -102,7 +102,7 @@ export default function PayFormulaLivePreview({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         month,
-        config: { mode: 'MONTHLY_FIXED' },
+        config: { mode: 'MONTHLY_CALENDAR_DEDUCT' },
         source: 'employee',
         employeeId,
       }),

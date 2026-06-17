@@ -130,21 +130,21 @@ export const SIDEBAR_NAV_ENTRIES: SidebarNavEntry[] = [
 		],
 		children: [
 			{
-				href: '/hr/employees',
-				label: 'Employees',
-				perm: 'hr.employee.view',
-			},
-			{
 				href: '/hr/schedule',
-				label: 'Schedule Planning',
+				label: 'Schedule planning',
 				perm: 'hr.schedule.view',
 			},
 			{
 				href: '/hr/attendance',
-				label: 'Attendance Management',
+				label: 'Attendance management',
 				perm: 'hr.attendance.view',
 			},
-			{ href: '/hr/leave', label: 'Leave', perm: 'hr.leave.view' },
+			{ href: '/hr/leave', label: 'Leave management', perm: 'hr.leave.view' },
+			{
+				href: '/hr/employees',
+				label: 'Employees',
+				perm: 'hr.employee.view',
+			},
 			{
 				href: '/hr/payroll/preview',
 				label: 'Payroll preview',

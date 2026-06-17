@@ -22,6 +22,7 @@ export type CreateCompensationPackageInput = {
   payTypeId: string;
   monthlyBasic?: number | null;
   dailyRate?: number | null;
+  wpsTransferAmount?: number | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
   visaPeriodId?: string | null;
@@ -102,11 +103,34 @@ export async function createCompensationPackage(
         monthlyBasic: input.monthlyBasic ?? null,
         monthlyAllowance: null,
         dailyRate: input.dailyRate ?? null,
+        wpsTransferAmount: input.wpsTransferAmount ?? null,
         effectiveFrom,
         effectiveTo,
         notes: input.notes?.trim() || null,
       },
     });
+
+    const supersededSameDate = await tx.employeeCompensation.findMany({
+      where: {
+        companyId: input.companyId,
+        employeeId: input.employeeId,
+        effectiveFrom,
+        id: { not: compensation.id },
+      },
+      select: { id: true },
+    });
+    if (supersededSameDate.length > 0) {
+      const closeDate = dayBefore(effectiveFrom);
+      const supersededIds = supersededSameDate.map((row) => row.id);
+      await tx.employeeCompensation.updateMany({
+        where: { id: { in: supersededIds } },
+        data: { effectiveTo: closeDate },
+      });
+      await tx.employeeAllowance.updateMany({
+        where: { companyId: input.companyId, employeeCompensationId: { in: supersededIds } },
+        data: { effectiveTo: closeDate },
+      });
+    }
 
     if (filteredAllowances.length > 0) {
       await tx.employeeAllowance.createMany({
@@ -133,7 +157,7 @@ export async function listCompensationPackages(companyId: string, employeeId: st
   const rows = await prisma.employeeCompensation.findMany({
     where: { companyId, employeeId },
     include: packageInclude,
-    orderBy: { effectiveFrom: 'desc' },
+    orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
   });
 
   return rows.map((row, index) => formatPackageForApi(row, rows[index + 1] ?? null));

@@ -101,6 +101,53 @@ export async function fetchAllowancesForCompensationPackage(
   return fetchEmployeeAllowancesForMonth(companyId, employeeId, month);
 }
 
+export async function fetchAllowancesForCompensationPackageIds(
+  companyId: string,
+  compensationIds: string[],
+  month: string
+): Promise<Map<string, EmployeeAllowanceItem[]>> {
+  const map = new Map<string, EmployeeAllowanceItem[]>();
+  if (compensationIds.length === 0) return map;
+
+  const { start: monthStart } = monthBounds(month);
+  const monthEnd = monthEndDate(month);
+
+  const rows = await prisma.employeeAllowance.findMany({
+    where: {
+      companyId,
+      employeeCompensationId: { in: compensationIds },
+      allowanceType: { isActive: true },
+    },
+    include: {
+      allowanceType: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          isActive: true,
+          componentKind: true,
+          applicationMode: true,
+        },
+      },
+    },
+    orderBy: [{ employeeCompensationId: 'asc' }, { allowanceType: { sortOrder: 'asc' } }],
+  });
+
+  for (const row of rows) {
+    if (!row.employeeCompensationId) continue;
+    if (!overlapsMonth(row.effectiveFrom, row.effectiveTo, monthStart, monthEnd)) continue;
+    const list = map.get(row.employeeCompensationId) ?? [];
+    list.push(mapAllowanceRow(row));
+    map.set(row.employeeCompensationId, list);
+  }
+
+  for (const id of compensationIds) {
+    if (!map.has(id)) map.set(id, []);
+  }
+
+  return map;
+}
+
 export async function fetchAllowancesByCompensationIdsForMonth(
   companyId: string,
   compensations: Array<{ id: string; employeeId: string; effectiveFrom: Date; effectiveTo: Date | null }>,

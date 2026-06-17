@@ -6,15 +6,30 @@ export const LeavePayTierSchema = z.object({
   payPercent: z.number().min(0).max(100),
 });
 
+export const LeaveAllocationBasisSchema = z.enum(['HIRE_DATE', 'OLDEST_VISA_OR_HIRE']);
+export type LeaveAllocationBasis = z.infer<typeof LeaveAllocationBasisSchema>;
+
+export const LEAVE_ALLOCATION_BASIS_OPTIONS: Array<{ value: LeaveAllocationBasis; label: string }> = [
+  { value: 'HIRE_DATE', label: 'Hire date' },
+  {
+    value: 'OLDEST_VISA_OR_HIRE',
+    label: 'Oldest company visa start (if company-provided visa, else hire date)',
+  },
+];
+
 export const LeaveTypeRulesSchema = z.object({
   /** Rolling entitlement window in days (e.g. 90 for UAE sick leave). */
   entitlementDays: z.number().int().min(1).optional(),
+  /** Calendar-year entitlement proration anchor (annual leave). */
+  allocationBasis: LeaveAllocationBasisSchema.optional(),
   /** Paid tiers apply only after probation is complete. */
   requiresProbationComplete: z.boolean().optional(),
   /** When true, payroll treats this as paid leave (no calendar deduction). */
   countsAsPaidLeave: z.boolean().optional(),
   /** Deduct usage from employee leave balance (annual leave). */
   deductFromBalance: z.boolean().optional(),
+  /** When true, employees cannot select this type in the self-service portal. */
+  hideFromEmployeePortal: z.boolean().optional(),
   /** Tiered pay within the entitlement period (day 1 = first day of this leave type in period). */
   payTiers: z.array(LeavePayTierSchema).optional(),
 });
@@ -45,6 +60,7 @@ export const UAE_SICK_LEAVE_RULES: LeaveTypeRules = {
 
 export const DEFAULT_ANNUAL_LEAVE_RULES: LeaveTypeRules = {
   entitlementDays: 30,
+  allocationBasis: 'OLDEST_VISA_OR_HIRE',
   countsAsPaidLeave: true,
   deductFromBalance: true,
   payTiers: [{ fromDay: 1, toDay: 365, payPercent: 100 }],
@@ -57,6 +73,7 @@ export const DEFAULT_PAID_LEAVE_RULES: LeaveTypeRules = {
 
 export const DEFAULT_UNPAID_LEAVE_RULES: LeaveTypeRules = {
   countsAsPaidLeave: false,
+  hideFromEmployeePortal: true,
   payTiers: [{ fromDay: 1, toDay: 365, payPercent: 0 }],
 };
 
@@ -81,8 +98,14 @@ export function payPercentForLeaveDay(rules: LeaveTypeRules, dayIndex: number): 
 export function summarizeLeaveRules(rules: LeaveTypeRules): string {
   const parts: string[] = [];
   if (rules.entitlementDays) parts.push(`${rules.entitlementDays}-day entitlement`);
+  if (rules.allocationBasis === 'OLDEST_VISA_OR_HIRE') {
+    parts.push('alloc: oldest visa or hire');
+  } else if (rules.allocationBasis === 'HIRE_DATE') {
+    parts.push('alloc: hire date');
+  }
   if (rules.requiresProbationComplete) parts.push('after probation');
   if (rules.deductFromBalance) parts.push('deducts balance');
+  if (rules.hideFromEmployeePortal) parts.push('hidden from portal');
   if (rules.payTiers?.length) {
     const tierText = rules.payTiers
       .map((t) => `days ${t.fromDay}–${t.toDay}: ${t.payPercent}%`)
@@ -121,7 +144,7 @@ export function resolveAttendanceFromLeaveType(leaveType: LeaveTypeRecord | null
   };
   const legacyLeaveType = legacyMap[code] ?? (isPaidLeaveFromRules(rules) ? 'EMERGENCY' : null);
   return {
-    status: isPaidLeaveFromRules(rules) ? 'LEAVE' : 'ABSENT',
+    status: 'ABSENT',
     legacyLeaveType,
   };
 }
@@ -139,4 +162,12 @@ export function legacyLeaveRequestTypeFromCode(
 
 export function deductFromBalanceFromRules(rules: LeaveTypeRules): boolean {
   return rules.deductFromBalance === true;
+}
+
+export function isLeaveTypeHiddenFromEmployeePortal(rules: LeaveTypeRules): boolean {
+  return rules.hideFromEmployeePortal === true;
+}
+
+export function filterLeaveTypesForEmployeePortal<T extends { rules: unknown }>(rows: T[]): T[] {
+  return rows.filter((row) => !isLeaveTypeHiddenFromEmployeePortal(parseLeaveTypeRules(row.rules)));
 }

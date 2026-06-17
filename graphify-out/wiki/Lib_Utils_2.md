@@ -1,52 +1,59 @@
 # Lib Utils
 
-> 29 nodes · cohesion 0.11
+> 26 nodes · cohesion 0.16
 
 ## Key Concepts
 
-- **receiptLineMetadata.ts** (14 connections) — `lib/utils/receiptLineMetadata.ts`
-- **receiptHeaderMetadata.ts** (12 connections) — `lib/utils/receiptHeaderMetadata.ts`
-- **receiptHeaderMetadata.test.ts** (10 connections) — `__tests__/unit/receiptHeaderMetadata.test.ts`
-- **receiptLineMetadata.test.ts** (10 connections) — `__tests__/unit/receiptLineMetadata.test.ts`
-- **parseReceiptHeaderMetadata()** (7 connections) — `lib/utils/receiptHeaderMetadata.ts`
-- **parseReceiptLineMetadata()** (7 connections) — `lib/utils/receiptLineMetadata.ts`
-- **resolveReceiptBillAmount()** (5 connections) — `lib/utils/receiptHeaderMetadata.ts`
-- **buildStockBatchReceiptHeaderMeta()** (5 connections) — `lib/utils/receiptHeaderMetadata.ts`
-- **buildStockBatchReceiptLineMeta()** (4 connections) — `lib/utils/receiptLineMetadata.ts`
-- **parseReceiptLineMetadataFromNotes()** (4 connections) — `lib/utils/receiptLineMetadata.ts`
-- **stripReceiptLineMetadata()** (4 connections) — `lib/utils/receiptLineMetadata.ts`
-- **normalizeOptionalString()** (3 connections) — `lib/utils/receiptHeaderMetadata.ts`
-- **normalizeOptionalNumber()** (3 connections) — `lib/utils/receiptHeaderMetadata.ts`
-- **mergeStockBatchReceiptMeta()** (3 connections) — `lib/utils/receiptHeaderMetadata.ts`
-- **parseMarkerNumber()** (3 connections) — `lib/utils/receiptLineMetadata.ts`
-- **appendReceiptLineMetadata()** (3 connections) — `lib/utils/receiptLineMetadata.ts`
-- **readReceiptLineFromMeta()** (2 connections) — `lib/utils/receiptLineMetadata.ts`
-- **ReceiptHeaderMetadata** (1 connections) — `lib/utils/receiptHeaderMetadata.ts`
-- **EMPTY_HEADER** (1 connections) — `lib/utils/receiptHeaderMetadata.ts`
-- **ReceiptLineDisplayMetadata** (1 connections) — `lib/utils/receiptLineMetadata.ts`
-- **StockBatchReceiptLineMetaInput** (1 connections) — `lib/utils/receiptLineMetadata.ts`
-- **EMPTY_METADATA** (1 connections) — `lib/utils/receiptLineMetadata.ts`
-- **headerMeta** (1 connections) — `__tests__/unit/receiptHeaderMetadata.test.ts`
-- **parsed** (1 connections) — `__tests__/unit/receiptHeaderMetadata.test.ts`
-- **merged** (1 connections) — `__tests__/unit/receiptHeaderMetadata.test.ts`
-- *... and 4 more nodes in this community*
+- **canvasLayout.ts** (23 connections) — `lib/utils/canvasLayout.ts`
+- **CanvasPreview.tsx** (22 connections) — `components/print-builder/CanvasPreview.tsx`
+- **documentDefaults.ts** (14 connections) — `lib/utils/documentDefaults.ts`
+- **seed-print-templates.ts** (12 connections) — `scripts/seed-print-templates.ts`
+- **contentWidthMm()** (10 connections) — `lib/utils/canvasLayout.ts`
+- **DocumentRenderer()** (9 connections) — `components/print-builder/DocumentRenderer.tsx`
+- **contentHeightMm()** (8 connections) — `lib/utils/canvasLayout.ts`
+- **getPageDimensionsMm()** (7 connections) — `lib/utils/canvasLayout.ts`
+- **buildCanvasRectsFromSections()** (6 connections) — `lib/utils/canvasLayout.ts`
+- **createWorkScheduleTemplateDraft()** (6 connections) — `lib/utils/documentDefaults.ts`
+- **CanvasPreview()** (5 connections) — `components/print-builder/CanvasPreview.tsx`
+- **marginBleedBox()** (4 connections) — `lib/utils/canvasLayout.ts`
+- **estimateSectionHeightMm()** (4 connections) — `lib/utils/canvasLayout.ts`
+- **ensureCanvasRects()** (4 connections) — `lib/utils/canvasLayout.ts`
+- **clampRectToContent()** (4 connections) — `lib/utils/canvasLayout.ts`
+- **snapCanvasRect()** (4 connections) — `lib/utils/canvasLayout.ts`
+- **resolveCanvasRectsForSections()** (3 connections) — `lib/utils/canvasLayout.ts`
+- **ptToMm()** (2 connections) — `lib/utils/canvasLayout.ts`
+- **DEFAULT_DELIVERY_NOTE** (2 connections) — `lib/utils/documentDefaults.ts`
+- **CanvasPreviewProps** (1 connections) — `components/print-builder/CanvasPreview.tsx`
+- **SectionBounds** (1 connections) — `components/print-builder/CanvasPreview.tsx`
+- **Interaction** (1 connections) — `components/print-builder/CanvasPreview.tsx`
+- **DEFAULT_DELIVERY_NOTE_SECTIONS** (1 connections) — `lib/utils/documentDefaults.ts`
+- **DEFAULT_TEMPLATES** (1 connections) — `lib/utils/documentDefaults.ts`
+- **seedBannerImage()** (1 connections) — `scripts/seed-print-templates.ts`
+- *... and 1 more nodes in this community*
 
 ## Relationships
 
-- [[API Reports, Jobs, and Materials]] (10 shared connections)
-- [[Lib Dispatch Entry Revision, Utils, and Db]] (6 shared connections)
-- [[API HR, Stock, and Transactions]] (3 shared connections)
+- [[Components Print Builder]] (24 shared connections)
+- [[Lib Utils and Types]] (7 shared connections)
+- [[Lib Types]] (6 shared connections)
+- [[Lib Utils, Print, and Types]] (5 shared connections)
+- [[Stock, Settings, and Components]] (4 shared connections)
+- [[Components and Lib]] (3 shared connections)
+- [[Lib, Scripts, and API]] (3 shared connections)
+- [[Lib Utils and Delivery Note Number]] (1 shared connections)
+- [[Scripts Seed]] (1 shared connections)
 
 ## Source Files
 
-- `__tests__/unit/receiptHeaderMetadata.test.ts`
-- `__tests__/unit/receiptLineMetadata.test.ts`
-- `lib/utils/receiptHeaderMetadata.ts`
-- `lib/utils/receiptLineMetadata.ts`
+- `components/print-builder/CanvasPreview.tsx`
+- `components/print-builder/DocumentRenderer.tsx`
+- `lib/utils/canvasLayout.ts`
+- `lib/utils/documentDefaults.ts`
+- `scripts/seed-print-templates.ts`
 
 ## Audit Trail
 
-- EXTRACTED: 111 (100%)
+- EXTRACTED: 156 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

@@ -28,7 +28,7 @@ export interface AttendanceGridDraftRow {
   employeeId: string;
   workAssignmentId: string;
   jobNumber: string;
-  status: 'PRESENT' | 'ABSENT' | 'LEAVE' | 'HALF_DAY' | 'MISSING_PUNCH';
+  status: 'PRESENT' | 'ABSENT';
   leaveTypeId?: string | null;
   /** Snapshotted basic duty hours for this day (from row or type settings at create). */
   basicHours?: number;
@@ -65,12 +65,16 @@ interface AttendanceEntryGridProps {
   assignmentsById: Map<string, AttendanceGridAssignmentMeta>;
   assignmentOptions: AssignmentOption[];
   leaveTypes: LeaveTypeOption[];
+  /** Approved leave from leave management for this date (preview only). */
+  leavePreviewByEmployeeId?: Record<string, string>;
   canEdit: boolean;
   emptyMessage: string;
   /** Left side of the day-sheet chrome row (search, scope, add employee). */
   filters?: ReactNode;
   /** Shown to the right of the “Day sheet” label (e.g. assigned / worked stats). */
   chromeStats?: ReactNode;
+  /** Optional block rendered below grid rows (e.g. employees on leave). */
+  tableFooter?: ReactNode;
   onUpdateRow: (employeeId: string, patch: Partial<AttendanceGridDraftRow>) => void;
   onAssignmentChange: (employeeId: string, assignmentId: string) => void;
 }
@@ -80,7 +84,6 @@ const ATTENDANCE_GRID_PREFERENCE_KEY = 'hr-attendance-create-line-grid';
 const STATUS_OPTIONS: Array<{ value: AttendanceGridDraftRow['status']; label: string }> = [
   { value: 'PRESENT', label: 'Present' },
   { value: 'ABSENT', label: 'Absent' },
-  { value: 'LEAVE', label: 'On leave' },
 ];
 
 type AttendanceGridColumnKey =
@@ -98,6 +101,7 @@ type AttendanceGridColumnKey =
   | 'totalHr'
   | 'overtime'
   | 'status'
+  | 'leave'
   | 'remarks';
 
 const DEFAULT_GRID_COLUMNS: LineGridColumnConfig[] = [
@@ -114,7 +118,8 @@ const DEFAULT_GRID_COLUMNS: LineGridColumnConfig[] = [
   { key: 'basicHr', label: 'Basic hr', visible: true, width: 96, minWidth: 72, maxWidth: 140 },
   { key: 'totalHr', label: 'Total hr', visible: true, width: 96, minWidth: 72, maxWidth: 140 },
   { key: 'overtime', label: 'Overtime', visible: true, width: 96, minWidth: 72, maxWidth: 140 },
-  { key: 'status', label: 'Status', visible: true, width: 148, minWidth: 120, maxWidth: 220 },
+  { key: 'status', label: 'Status', visible: true, width: 112, minWidth: 96, maxWidth: 160 },
+  { key: 'leave', label: 'Leave', visible: true, width: 148, minWidth: 120, maxWidth: 220 },
   { key: 'remarks', label: 'Remarks', visible: true, width: 180, minWidth: 120, maxWidth: 320 },
 ];
 
@@ -421,10 +426,12 @@ export default function AttendanceEntryGrid({
   assignmentsById,
   assignmentOptions,
   leaveTypes,
+  leavePreviewByEmployeeId = {},
   canEdit,
   emptyMessage,
   filters,
   chromeStats,
+  tableFooter,
   onUpdateRow,
   onAssignmentChange,
 }: AttendanceEntryGridProps) {
@@ -773,52 +780,47 @@ export default function AttendanceEntryGrid({
         );
       case 'status': {
         const unpaidLeaveTypeId = defaultUnpaidLeaveTypeId(leaveTypes);
-        const leaveTypeName = leaveTypes.find((t) => t.id === draft.leaveTypeId)?.name;
-        const statusValue =
-          draft.status === 'LEAVE' ? 'LEAVE' : draft.status === 'ABSENT' ? 'ABSENT' : 'PRESENT';
-        const statusOptions =
-          draft.status === 'LEAVE'
-            ? STATUS_OPTIONS
-            : STATUS_OPTIONS.filter((opt) => opt.value !== 'LEAVE');
 
         return (
-          <div key={columnKey} className={cn(cellClassName, 'flex flex-col gap-0.5 py-1')}>
+          <div key={columnKey} className={cn(cellClassName, 'py-1')}>
             <select
-              value={statusValue}
+              value={draft.status}
               onChange={(e) => {
                 const next = e.target.value as AttendanceGridDraftRow['status'];
                 if (next === 'PRESENT') {
-                  onUpdateRow(draft.employeeId, { status: 'PRESENT', leaveTypeId: null });
-                  return;
-                }
-                if (next === 'ABSENT') {
                   onUpdateRow(draft.employeeId, {
-                    status: 'ABSENT',
-                    leaveTypeId: unpaidLeaveTypeId,
-                    leaveRequestId: null,
-                    attendanceSource: null,
+                    status: 'PRESENT',
+                    leaveTypeId: null,
                   });
                   return;
                 }
                 onUpdateRow(draft.employeeId, {
-                  status: 'LEAVE',
-                  leaveTypeId: draft.leaveTypeId,
+                  status: 'ABSENT',
+                  leaveTypeId: unpaidLeaveTypeId,
                 });
               }}
               disabled={!canEdit}
               className={cn(FLAT_INPUT_CLASS, 'text-xs')}
             >
-              {statusOptions.map((opt) => (
+              {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
               ))}
             </select>
-            {draft.status === 'LEAVE' ? (
-              <span className="px-0.5 text-[10px] text-muted-foreground">
-                {leaveTypeName ?? 'Leave'} · via leave management
-              </span>
-            ) : null}
+          </div>
+        );
+      }
+      case 'leave': {
+        const previewLabel = leavePreviewByEmployeeId[draft.employeeId];
+
+        return (
+          <div key={columnKey} className={cn(cellClassName, 'py-1.5 text-xs text-muted-foreground')}>
+            {previewLabel ? (
+              <span title="From approved leave in Leave management">{previewLabel}</span>
+            ) : (
+              <span className="text-foreground/40">—</span>
+            )}
           </div>
         );
       }
@@ -975,6 +977,7 @@ export default function AttendanceEntryGrid({
 							);
 						})
 					)}
+					{tableFooter}
 				</div>
 			</div>
 		</div>

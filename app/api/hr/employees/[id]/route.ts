@@ -5,6 +5,7 @@ import { provisionEmployeeUser } from '@/lib/hr/provisionEmployeeUser';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
+import { mergeProfileExtensionForStatusChange } from '@/lib/hr/employeeLeavePeriod';
 import { z } from 'zod';
 
 const PatchSchema = z.object({
@@ -103,8 +104,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (d.photoUrl !== undefined) data.photoUrl = d.photoUrl?.trim() || null;
     if (d.portalEnabled !== undefined) data.portalEnabled = d.portalEnabled;
     if (d.adminNotes !== undefined) data.adminNotes = d.adminNotes?.trim() || null;
-    if (d.profileExtension !== undefined)
-      data.profileExtension = d.profileExtension === null ? Prisma.JsonNull : (d.profileExtension as Prisma.InputJsonValue);
+    if (d.profileExtension !== undefined || (d.status !== undefined && d.status !== existing.status)) {
+      const merged = mergeProfileExtensionForStatusChange(
+        existing.profileExtension,
+        d.profileExtension,
+        existing.status,
+        d.status ?? existing.status
+      );
+      data.profileExtension = merged as Prisma.InputJsonValue;
+    }
 
     const shouldTryProvision =
       d.provisionLogin !== false && (d.provisionNow === true || (d.email !== undefined && Boolean(d.email)));

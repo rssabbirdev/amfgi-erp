@@ -1,4 +1,5 @@
 import type { AttendanceGridDraftRow } from '@/components/hr/AttendanceEntryGrid';
+import { isStoredLeaveStatus } from '@/lib/hr/attendanceLeavePay';
 import { isPaidLeaveFromRules, parseLeaveTypeRules } from '@/lib/hr/leaveTypeRules';
 
 export type LeaveTypeOption = {
@@ -11,13 +12,6 @@ export type LeaveTypeOption = {
 
 type ApiAttendanceStatus = AttendanceGridDraftRow['status'] | 'LEAVE' | 'HALF_DAY' | 'MISSING_PUNCH';
 
-const LEGACY_ENUM_TO_CODE: Record<string, string> = {
-  ANNUAL: 'ANNUAL',
-  SICK: 'SICK',
-  EMERGENCY: 'PAID',
-  ONE_DAY: 'PAID',
-};
-
 export function findUnpaidLeaveTypeId(leaveTypes: LeaveTypeOption[]): string | null {
   return leaveTypes.find((t) => t.code.toUpperCase() === 'UNPAID')?.id ?? null;
 }
@@ -26,52 +20,47 @@ export function defaultUnpaidLeaveTypeId(leaveTypes: LeaveTypeOption[]): string 
   return findUnpaidLeaveTypeId(leaveTypes) ?? leaveTypes.find((t) => t.isActive !== false)?.id ?? null;
 }
 
+/** Prefer annual / balance-deducting leave type for employees on leave. */
+export function defaultAnnualLeaveTypeId(leaveTypes: LeaveTypeOption[]): string | null {
+  const annual = leaveTypes.find((t) => t.code.toUpperCase() === 'ANNUAL' && t.isActive !== false);
+  if (annual) return annual.id;
+  const balanceType = leaveTypes.find((t) => parseLeaveTypeRules(t.rules).deductFromBalance === true);
+  if (balanceType) return balanceType.id;
+  const paid = leaveTypes.find((t) => isPaidLeaveTypeOption(t));
+  return paid?.id ?? null;
+}
+
 export function isPaidLeaveTypeOption(leaveType: LeaveTypeOption): boolean {
   if (leaveType.code.toUpperCase() === 'UNPAID') return false;
   return isPaidLeaveFromRules(parseLeaveTypeRules(leaveType.rules));
 }
 
-export function resolveLeaveTypeIdFromStored(
-  leaveTypeId: string | null | undefined,
-  legacyLeaveType: string | null | undefined,
-  leaveTypes: LeaveTypeOption[]
-): string | null {
-  if (leaveTypeId) return leaveTypeId;
-  if (legacyLeaveType) {
-    const code = LEGACY_ENUM_TO_CODE[legacyLeaveType] ?? 'PAID';
-    return leaveTypes.find((t) => t.code.toUpperCase() === code)?.id ?? defaultUnpaidLeaveTypeId(leaveTypes);
-  }
-  return defaultUnpaidLeaveTypeId(leaveTypes);
-}
-
-/** Map stored attendance to day-sheet UI (Present / Absent unpaid / On leave from leave management). */
+/** Attendance sheet status only — leave is previewed separately from leave management. */
 export function normalizeDraftStatusFromApi(
   status: ApiAttendanceStatus,
-  leaveTypeId: string | null | undefined,
-  legacyLeaveType: string | null | undefined,
   leaveTypes: LeaveTypeOption[]
 ): Pick<AttendanceGridDraftRow, 'status' | 'leaveTypeId'> {
-  if (status === 'LEAVE') {
-    return {
-      status: 'LEAVE',
-      leaveTypeId: resolveLeaveTypeIdFromStored(leaveTypeId, legacyLeaveType, leaveTypes),
-    };
+  if (status === 'HALF_DAY' || status === 'MISSING_PUNCH' || status === 'PRESENT') {
+    return { status: 'PRESENT', leaveTypeId: null };
   }
-  if (status === 'ABSENT') {
-    return {
-      status: 'ABSENT',
-      leaveTypeId: defaultUnpaidLeaveTypeId(leaveTypes),
-    };
-  }
-  return { status: 'PRESENT', leaveTypeId: null };
+
+  return {
+    status: 'ABSENT',
+    leaveTypeId: defaultUnpaidLeaveTypeId(leaveTypes),
+  };
 }
 
 export function isDraftNonWorking(draft: Pick<AttendanceGridDraftRow, 'status'>): boolean {
-  return draft.status === 'ABSENT' || draft.status === 'LEAVE';
+  return draft.status === 'ABSENT';
 }
 
+/** @deprecated Leave is no longer stored on attendance drafts. */
 export function isLeaveManagedDraft(
-  draft: Pick<AttendanceGridDraftRow, 'status' | 'leaveRequestId' | 'attendanceSource'>
+  _draft: Pick<AttendanceGridDraftRow, 'leaveRequestId' | 'attendanceSource'>
 ): boolean {
-  return draft.status === 'LEAVE' || Boolean(draft.leaveRequestId) || draft.attendanceSource === 'LEAVE_REQUEST';
+  return false;
+}
+
+export function isLegacyStoredLeaveStatus(status: ApiAttendanceStatus): boolean {
+  return isStoredLeaveStatus(status);
 }
