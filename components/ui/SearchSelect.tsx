@@ -42,6 +42,8 @@ interface SearchSelectProps<T extends { id: string; label: string; searchText?: 
   loading?: boolean;
   /** When true, arrow keys move grid focus instead of opening the suggestion list. */
   passThroughArrowKeys?: boolean;
+  /** Called after a value is chosen (click, Enter, or Tab on a suggestion). */
+  onAfterSelect?: (itemId: string) => void;
   /** Shown at the bottom of the empty-results panel (e.g. create-new action). */
   emptyAction?: {
     label?: string | ((query: string) => string);
@@ -75,6 +77,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     serverFiltered = false,
     loading = false,
     passThroughArrowKeys = false,
+    onAfterSelect,
     emptyAction,
   } = props;
 
@@ -166,6 +169,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     }
     setIsOpen(false);
     setHighlightedIdx(0);
+    onAfterSelect?.(itemId);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,6 +208,12 @@ export default function SearchSelect<T extends { id: string; label: string; sear
       case 'Enter':
         e.preventDefault();
         if (filteredItems[highlightedIdx]) {
+          handleSelect(filteredItems[highlightedIdx].id);
+        }
+        break;
+      case 'Tab':
+        if (filteredItems[highlightedIdx]) {
+          e.preventDefault();
           handleSelect(filteredItems[highlightedIdx].id);
         }
         break;

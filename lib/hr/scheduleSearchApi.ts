@@ -19,6 +19,7 @@ export type ScheduleEmployeeRow = {
 export type ScheduleJobRow = {
   id: string;
   jobNumber: string;
+  status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED' | string | null;
   customerName?: string | null;
   description?: string | null;
   projectDetails?: string | null;
@@ -37,6 +38,7 @@ export function normalizeScheduleJobRow(row: ScheduleJobRowInput): ScheduleJobRo
   return {
     ...row,
     customerName: String(row.customerName ?? row.customer?.name ?? '').trim() || null,
+    status: row.status ?? null,
   };
 }
 
@@ -77,15 +79,17 @@ export function jobToSearchItem(job: ScheduleJobRow): ScheduleSearchItem & {
   lpoNumber: string;
   companyName: string;
   siteName: string;
+  status: string;
 } {
   const quotationNumber = String(job.quotationNumber ?? '').trim();
   const lpoNumber = String(job.lpoNumber ?? '').trim();
   const companyName = String(job.customerName ?? '').trim();
   const siteName = String(job.site ?? '').trim();
+  const status = String(job.status ?? 'ACTIVE').trim() || 'ACTIVE';
   return {
     id: job.id,
     label: job.jobNumber,
-    searchText: [quotationNumber, lpoNumber, companyName, siteName, job.projectDetails ?? '', job.description ?? '']
+    searchText: [job.jobNumber, quotationNumber, lpoNumber, companyName, siteName, job.projectDetails ?? '', job.description ?? '']
       .map((value) => String(value).trim())
       .filter(Boolean)
       .join(' '),
@@ -93,6 +97,7 @@ export function jobToSearchItem(job: ScheduleJobRow): ScheduleSearchItem & {
     lpoNumber,
     companyName,
     siteName,
+    status,
   };
 }
 
@@ -175,6 +180,19 @@ export async function fetchJobById(id: string): Promise<ScheduleJobRow | null> {
   const res = await fetch(`/api/jobs/${encodeURIComponent(id)}`, { cache: 'no-store' });
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.success) return null;
+  return normalizeScheduleJobRow(json.data as ScheduleJobRowInput);
+}
+
+export async function activateJobApi(id: string): Promise<ScheduleJobRow> {
+  const res = await fetch(`/api/jobs/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'ACTIVE' }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.success) {
+    throw new Error(String(json?.error ?? 'Failed to activate job'));
+  }
   return normalizeScheduleJobRow(json.data as ScheduleJobRowInput);
 }
 

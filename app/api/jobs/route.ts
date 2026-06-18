@@ -165,10 +165,12 @@ function buildJobListWhere(
   if (opts.search) {
     where.OR = [
       { jobNumber: { contains: opts.search, mode: 'insensitive' } },
-      { description: { contains: opts.search, mode: 'insensitive' } },
+      { quotationNumber: { contains: opts.search, mode: 'insensitive' } },
+      { lpoNumber: { contains: opts.search, mode: 'insensitive' } },
       { site: { contains: opts.search, mode: 'insensitive' } },
-      { projectName: { contains: opts.search, mode: 'insensitive' } },
       { customer: { name: { contains: opts.search, mode: 'insensitive' } } },
+      { description: { contains: opts.search, mode: 'insensitive' } },
+      { projectName: { contains: opts.search, mode: 'insensitive' } },
     ];
   }
 

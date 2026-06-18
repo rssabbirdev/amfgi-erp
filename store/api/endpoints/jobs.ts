@@ -1024,6 +1024,14 @@ export const jobsApi = appApi.injectEndpoints({
         { type: 'Job', id },
         { type: 'Job', id: 'LIST' },
       ],
+      async onQueryStarted(_arg, { queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          notifyJobLiveUpdate({ action: 'updated' });
+        } catch {
+          /* mutation failed — skip live notify */
+        }
+      },
     }),
 
     deleteJob: builder.mutation<{ deleted: boolean }, string>({
