@@ -53,7 +53,7 @@ import {
   type WorkSchedulePrintPayload,
 } from '@/lib/utils/printTemplateSession';
 import toast from 'react-hot-toast';
-import { Copy, GripVertical, Redo2, Trash2, Undo2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, GripVertical, Redo2, Trash2, Undo2 } from 'lucide-react';
 
 const GUEST_DRIVER_ROW_PREFIX = 'guest:';
 
@@ -693,6 +693,7 @@ export default function HrScheduleDayPage() {
   const [updateJob] = useUpdateJobMutation();
   const [draggingWorker, setDraggingWorker] = useState<WorkerDragTarget | null>(null);
   const [draggingSubTeam, setDraggingSubTeam] = useState<SubTeamDragTarget | null>(null);
+  const [draggingTeamColumn, setDraggingTeamColumn] = useState<number | null>(null);
 
   const isSA = session?.user?.isSuperAdmin ?? false;
   const perms = (session?.user?.permissions ?? []) as string[];
@@ -1554,6 +1555,29 @@ export default function HrScheduleDayPage() {
   };
 
   const removeColumn = (idx: number) => applyDrafts((d) => d.filter((_, i) => i !== idx));
+
+  const reorderTeamColumns = (fromIndex: number, toIndex: number) =>
+    applyDrafts((rows) => {
+      const reordered = moveArrayItem(rows, fromIndex, toIndex);
+      return reordered.map((row, index) => ({
+        ...row,
+        columnIndex: index + 1,
+      }));
+    });
+
+  const moveTeamColumn = (colIdx: number, direction: -1 | 1) => {
+    const toIndex = colIdx + direction;
+    if (toIndex < 0 || toIndex >= draftsRef.current.length) return;
+    reorderTeamColumns(colIdx, toIndex);
+  };
+
+  const handleTeamColumnDrop = (targetColIdx: number) => {
+    if (draggingTeamColumn == null || dis) return;
+    if (draggingTeamColumn !== targetColIdx) {
+      reorderTeamColumns(draggingTeamColumn, targetColIdx);
+    }
+    setDraggingTeamColumn(null);
+  };
 
   const addDriverTripRow = (driverEmployeeId: string) => {
     if (!driverEmployeeId || isGuestDriverRowKey(driverEmployeeId)) return;
@@ -2626,7 +2650,6 @@ export default function HrScheduleDayPage() {
             placeholder="Job no, company, LPO, quotation, site…"
             disabled={fieldDisabled}
             minCharactersToSearch={0}
-            openOnFocus
             inputProps={scheduleSearchInputProps(getGridNavProps(NAV_ROW.job, colIdx + 1))}
             renderItem={(item, isHighlighted) => (
               <div className="space-y-0.5">
@@ -3283,17 +3306,57 @@ export default function HrScheduleDayPage() {
 											) : null}
 											{drafts.map((d, ci) => (
 												<th
-													key={ci}
+													key={`team-header-${ci}-${d.columnIndex}`}
 													scope='col'
-													className={teamHeaderCls()}
+													className={cn(
+														teamHeaderCls(),
+														draggingTeamColumn === ci && 'ring-2 ring-primary/30'
+													)}
+													onDragOver={(e) => e.preventDefault()}
+													onDrop={() => handleTeamColumnDrop(ci)}
 												>
 													<div className='flex items-center justify-between gap-2'>
-														<Badge
-															variant='secondary'
-															className='shrink-0'
-														>
-															Team {d.columnIndex}
-														</Badge>
+														<div className='flex min-w-0 items-center gap-1'>
+															{canEdit && !locked ? (
+																<>
+																	<ScheduleDragHandle
+																		label='team column'
+																		onDragStart={() => setDraggingTeamColumn(ci)}
+																		onDragEnd={() => setDraggingTeamColumn(null)}
+																	/>
+																	<Button
+																		type='button'
+																		variant='ghost'
+																		size='icon'
+																		className='h-7 w-7'
+																		disabled={ci === 0}
+																		onClick={() => moveTeamColumn(ci, -1)}
+																		title='Move team left'
+																		aria-label='Move team left'
+																	>
+																		<ChevronLeft className='h-4 w-4' />
+																	</Button>
+																	<Button
+																		type='button'
+																		variant='ghost'
+																		size='icon'
+																		className='h-7 w-7'
+																		disabled={ci === drafts.length - 1}
+																		onClick={() => moveTeamColumn(ci, 1)}
+																		title='Move team right'
+																		aria-label='Move team right'
+																	>
+																		<ChevronRight className='h-4 w-4' />
+																	</Button>
+																</>
+															) : null}
+															<Badge
+																variant='secondary'
+																className='shrink-0'
+															>
+																Team {d.columnIndex}
+															</Badge>
+														</div>
 														{canEdit && !locked ? (
 															<div className='flex shrink-0 items-center gap-0.5'>
 																<Button
