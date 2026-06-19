@@ -9,7 +9,7 @@ export type ScheduleWorkerPoolEmployee = {
 
 export function ScheduleWorkerPoolCard({ employee }: { employee: ScheduleWorkerPoolEmployee }) {
   return (
-    <div className="rounded-md border border-border bg-background px-2 py-2">
+    <div className="rounded border border-border bg-background px-1.5 py-1">
       <p className="truncate text-xs font-semibold text-foreground">
         {employee.preferredName || employee.fullName}
       </p>

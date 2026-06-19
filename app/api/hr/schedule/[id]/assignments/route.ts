@@ -8,7 +8,8 @@ import { z } from 'zod';
 const MemberSchema = z.object({
   employeeId: z.string().min(1),
   role: z.enum(['WORKER', 'HELPER', 'TEAM_LEADER']).default('WORKER'),
-  slot: z.number().int().min(0).max(99).optional(),
+  // 1–99 = flat team rows; 1000+ = encoded sub-team slots ((subTeamIndex + 1) * 1000 + memberIndex)
+  slot: z.number().int().min(0).max(99999).optional(),
 });
 
 const AssignmentSchema = z.object({

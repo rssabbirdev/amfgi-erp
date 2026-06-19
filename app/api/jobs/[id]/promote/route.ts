@@ -40,7 +40,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       companyId: session.user.activeCompanyId,
       channel: 'jobs',
       entity: 'job',
-      action: 'promoted',
+      action: 'updated',
     });
     publishLiveUpdate({
       companyId: session.user.activeCompanyId,

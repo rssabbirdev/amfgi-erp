@@ -84,7 +84,7 @@ export default function HrPageChrome({ children }: { children: React.ReactNode }
   const breadcrumbs = buildBreadcrumbs(pathname);
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
+    <div className="flex w-full min-w-0 flex-col gap-2">
       {/* <nav className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
         {breadcrumbs.map((crumb, index) => {
           const isLast = index === breadcrumbs.length - 1;

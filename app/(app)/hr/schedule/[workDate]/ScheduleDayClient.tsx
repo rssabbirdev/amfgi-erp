@@ -42,6 +42,13 @@ import {
   scheduleJobPickerParams,
   scheduleJobToSearchItem,
 } from '@/lib/hr/scheduleJobPicker';
+import {
+  clearLegacyScheduleViewPrefsLocalStorage,
+  defaultScheduleViewPrefs,
+  normalizeScheduleViewPrefs,
+  readLegacyScheduleViewPrefsFromLocalStorage,
+  type ScheduleRowSettings,
+} from '@/lib/hr/scheduleViewPrefs';
 import { useJobLiveUpdate } from '@/lib/jobs/jobLiveUpdate';
 import { jobsApi } from '@/store/api/endpoints/jobs';
 import { useAppDispatch, useAppSelector, useGetJobsPageQuery, useUpdateJobMutation } from '@/store/hooks';
@@ -53,7 +60,7 @@ import {
   type WorkSchedulePrintPayload,
 } from '@/lib/utils/printTemplateSession';
 import toast from 'react-hot-toast';
-import { ChevronLeft, ChevronRight, Copy, GripVertical, Redo2, Trash2, Undo2 } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, GripVertical, Redo2, Rows3, Trash2, Undo2 } from 'lucide-react';
 
 const GUEST_DRIVER_ROW_PREFIX = 'guest:';
 
@@ -225,11 +232,13 @@ function ScheduleDragHandle({
   disabled,
   onDragStart,
   onDragEnd,
+  className,
 }: {
   label: string;
   disabled?: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
+  className?: string;
 }) {
   if (disabled) return null;
   return (
@@ -241,25 +250,37 @@ function ScheduleDragHandle({
         onDragStart();
       }}
       onDragEnd={onDragEnd}
-      className="inline-flex h-8 w-7 shrink-0 cursor-grab items-center justify-center rounded-md border border-border bg-muted/50 text-muted-foreground transition hover:bg-muted active:cursor-grabbing"
+      className={cn(
+        'inline-flex h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded border border-border bg-muted/50 text-muted-foreground transition hover:bg-muted active:cursor-grabbing',
+        className,
+      )}
       title={`Drag to reorder ${label}`}
       aria-label={`Drag to reorder ${label}`}
     >
-      <GripVertical className="h-4 w-4" />
+      <GripVertical className="h-3.5 w-3.5" />
     </button>
   );
 }
 
-const TEAM_COLUMN_CLASS = 'min-w-[20rem] w-[20rem] max-w-[20rem] align-top overflow-hidden';
+const TEAM_COLUMN_CLASS = 'min-w-[18rem] w-[18rem] max-w-[18rem] align-top overflow-hidden';
 const STICKY_ROW_LABEL_CLASS =
-  'sticky left-0 z-20 min-w-[8rem] w-[8rem] border-r border-border bg-muted px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground shadow-[4px_0_6px_-4px_rgba(0,0,0,0.12)]';
+  'sticky left-0 z-20 min-w-[7rem] w-[7rem] border-r border-border bg-muted px-2 py-1 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground shadow-[4px_0_6px_-4px_rgba(0,0,0,0.12)]';
 
-/** In-grid controls — matches shadcn Input sizing. */
+/** In-grid controls — compact sizing for dense schedule grid. */
 const SCHEDULE_GRID_FLAT_INPUT =
-  'flex h-9 w-full min-w-0 rounded-md border border-border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+  'flex h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 const SCHEDULE_GRID_SEARCH_INPUT =
-  '!h-8 !rounded-md !border !border-border !bg-background !px-2 !text-sm focus-visible:!ring-2 focus-visible:!ring-ring min-w-0';
+  '!h-7 !rounded !border !border-border !bg-background !px-1.5 !text-xs focus-visible:!ring-2 focus-visible:!ring-ring min-w-0';
+
+const SUB_TEAM_LABEL_INPUT_CLS =
+  'border-violet-300/70 bg-violet-50 font-medium text-violet-950 placeholder:text-violet-400 focus-visible:ring-violet-400/40 dark:border-violet-700/60 dark:bg-violet-950/50 dark:text-violet-50 dark:placeholder:text-violet-500';
+
+const SUB_TEAM_DRAG_HANDLE_CLS =
+  'border-violet-300/70 bg-violet-100/80 text-violet-700 hover:bg-violet-200/80 dark:border-violet-700/60 dark:bg-violet-950/60 dark:text-violet-300 dark:hover:bg-violet-900/70';
+
+const SUB_TEAM_DELETE_BTN_CLS =
+  'text-violet-600 hover:bg-violet-100 hover:text-destructive dark:text-violet-400 dark:hover:bg-violet-950/60 dark:hover:text-destructive';
 
 function scheduleSearchInputProps(navProps?: Record<string, unknown>) {
   const nav = (navProps ?? {}) as { className?: string };
@@ -318,15 +339,22 @@ async function readApiEnvelope<T = Record<string, unknown>>(response: Response):
 
 function nextSubTeamLabel(index: number): string {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  if (index < letters.length) return `Sub-team ${letters[index]}`;
-  return `Sub-team ${index + 1}`;
+  if (index < letters.length) return `Team ${letters[index]}`;
+  return `Team ${index + 1}`;
 }
 
-function createEmptySubTeam(index: number): subTeamDraft {
+const MIN_WORKER_SLOTS = 2;
+const WORKER_NAV_SUB_STRIDE = 1000;
+
+function encodePersistedMemberSlot(subTeamIndex: number, memberIndex: number): number {
+  return (subTeamIndex + 1) * WORKER_NAV_SUB_STRIDE + memberIndex;
+}
+
+function createEmptySubTeam(index: number, withMinSlots = true): subTeamDraft {
   return {
     id: crypto.randomUUID(),
     label: nextSubTeamLabel(index),
-    members: normalizeWorkerMemberList([]),
+    members: withMinSlots ? normalizeWorkerMemberList([]) : [],
   };
 }
 
@@ -337,8 +365,6 @@ function normalizeMemberList(members: MemberRow[]): MemberRow[] {
     slot: index + 1,
   }));
 }
-
-const MIN_WORKER_SLOTS = 2;
 
 function normalizeWorkerMemberList(members: MemberRow[]): MemberRow[] {
   const rows: MemberRow[] = members.map((member, index) => ({
@@ -367,6 +393,49 @@ function normalizeWorkerMemberList(members: MemberRow[]): MemberRow[] {
 
 function extractSubTeamsFromMembers(members: MemberRow[]): { splitMode: boolean; members: MemberRow[]; subTeams: subTeamDraft[] } {
   const ordered = [...members].sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0));
+  const encodedMembers = ordered.filter((member) => (member.slot ?? 0) >= WORKER_NAV_SUB_STRIDE);
+
+  if (encodedMembers.length > 0) {
+    const subTeamMap = new Map<number, MemberRow[]>();
+    for (const member of ordered) {
+      const slot = member.slot ?? 0;
+      if (slot < WORKER_NAV_SUB_STRIDE) continue;
+      const subTeamIndex = Math.floor(slot / WORKER_NAV_SUB_STRIDE) - 1;
+      const memberIndex = slot % WORKER_NAV_SUB_STRIDE;
+      if (subTeamIndex < 0) continue;
+      const rows = subTeamMap.get(subTeamIndex) ?? [];
+      rows[memberIndex] = {
+        employeeId: member.employeeId,
+        role:
+          memberIndex === 0 && member.employeeId
+            ? member.role === 'HELPER'
+              ? 'HELPER'
+              : 'TEAM_LEADER'
+            : member.role === 'HELPER' && member.employeeId
+              ? 'HELPER'
+              : 'WORKER',
+        slot: memberIndex + 1,
+      };
+      subTeamMap.set(subTeamIndex, rows);
+    }
+
+    const subTeams = [...subTeamMap.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([index, rows]) => ({
+        id: crypto.randomUUID(),
+        label: nextSubTeamLabel(index),
+        members: normalizeMemberList(rows.filter(Boolean)),
+      }));
+
+    if (subTeams.length > 0) {
+      return {
+        splitMode: true,
+        members: [],
+        subTeams,
+      };
+    }
+  }
+
   const leaderMembers = ordered.filter((member) => member.role === 'TEAM_LEADER');
 
   // Single-team schedules also persist the first assigned person as TEAM_LEADER.
@@ -389,18 +458,27 @@ function extractSubTeamsFromMembers(members: MemberRow[]): { splitMode: boolean;
 
   for (const member of ordered) {
     if (member.role === 'TEAM_LEADER') {
-      currentSubTeam = createEmptySubTeam(subTeams.length);
+      currentSubTeam = {
+        id: crypto.randomUUID(),
+        label: nextSubTeamLabel(subTeams.length),
+        members: [
+          {
+            employeeId: member.employeeId,
+            role: 'TEAM_LEADER',
+            slot: 1,
+          },
+        ],
+      };
       subTeams.push(currentSubTeam);
-      currentSubTeam.members.push({
-        employeeId: member.employeeId,
-        role: 'TEAM_LEADER',
-        slot: currentSubTeam.members.length + 1,
-      });
       continue;
     }
 
     if (!currentSubTeam) {
-      currentSubTeam = createEmptySubTeam(subTeams.length);
+      currentSubTeam = {
+        id: crypto.randomUUID(),
+        label: nextSubTeamLabel(subTeams.length),
+        members: [],
+      };
       subTeams.push(currentSubTeam);
     }
     currentSubTeam.members.push({
@@ -560,16 +638,29 @@ function parseJobExpertise(job: JobOpt | undefined): string[] {
   return [...bag];
 }
 
-const FIELD_ROWS: { key: string; label: string }[] = [
+const SCHEDULE_TABLE_ROW_DEFS: { key: string; label: string }[] = [
   { key: 'locationType', label: 'Location' },
   { key: 'job', label: 'Job number' },
   { key: 'jobCompany', label: 'Customer' },
-  { key: 'workProcessDetails', label: 'Work process details' },
+  { key: 'siteName', label: 'Site name' },
+  { key: 'workProcessDetails', label: 'Work details' },
   { key: 'projectType', label: 'Project type' },
-  { key: 'projectQtyArea', label: 'Project qty / area' },
-  { key: 'dutyRange', label: 'Duty in / duty out' },
-  { key: 'breakRange', label: 'Break out / break in' },
+  { key: 'projectQtyArea', label: 'Qty / area' },
+  { key: 'dutyRange', label: 'Duty in / out' },
+  { key: 'breakRange', label: 'Break out / in' },
+  { key: 'workers', label: 'Workers' },
+  { key: 'workerCount', label: 'Assigned workers' },
+  { key: 'suggestedWorkers', label: 'Suggested workers' },
+  { key: 'targetQty', label: 'Target Qty' },
+  { key: 'driver1EmployeeId', label: 'Driver 1' },
+  { key: 'driver2EmployeeId', label: 'Driver 2' },
+  { key: 'remarks', label: 'Remarks' },
 ];
+
+const SCHEDULE_TABLE_ROW_LABELS = Object.fromEntries(
+  SCHEDULE_TABLE_ROW_DEFS.map((row) => [row.key, row.label]),
+) as Record<string, string>;
+
 const NAV_ROW = {
   locationType: 0,
   job: 1,
@@ -582,8 +673,6 @@ const NAV_ROW = {
   workers: 8,
   remarks: 9,
 } as const;
-
-const WORKER_NAV_SUB_STRIDE = 1000;
 
 function encodeWorkerNavSub(subTeamIndex: number, memberIndex: number): number {
   return subTeamIndex * WORKER_NAV_SUB_STRIDE + memberIndex;
@@ -598,60 +687,121 @@ function getWorkerFieldNavSubs(draft: AsgDraft): number[] {
   );
 }
 
-const DRAFT_STORAGE_PREFIX = 'hr-schedule-draft:';
-const VIEW_PREFS_STORAGE_KEY = 'hr-schedule-view-prefs';
+type ScheduleDriverTripRow = {
+  rowKey: string;
+  driverEmployeeId: string | null;
+  guestDriverName: string | null;
+  routeText: string;
+  sequence: number;
+};
 
-function readStoredScheduleViewPrefs() {
-  if (typeof window === 'undefined') {
-    return {
-      showWorkerRail: true,
-      showRowLabels: true,
-      viewScale: 1,
-      useLightGridTheme: false,
-    };
-  }
-  try {
-    const raw = window.localStorage.getItem(VIEW_PREFS_STORAGE_KEY);
-    if (!raw) {
+function findInvalidSplitTeamDraft(drafts: AsgDraft[]) {
+  return drafts.find(
+    (draft) => draft.splitMode && draft.subTeams.some((subTeam) => !subTeam.members.some((member) => member.employeeId)),
+  );
+}
+
+function buildAssignmentsPutBody(
+  drafts: AsgDraft[],
+  scheduleInfo: string,
+  getJob: (id: string) => JobOpt | undefined,
+) {
+  return {
+    notes: scheduleInfo || null,
+    assignments: drafts.map((d) => {
+      const job = getJob(d.jobId);
+      const resolvedWorkProcess = resolveWorkProcessDetails(d.workProcessDetails, job);
+      const parsedTargetQty = Number.parseFloat(String(d.targetQty ?? '').trim());
+      const nonSplitMembers = normalizeMemberList(d.members.filter((member) => member.employeeId));
+      const splitMembers = d.subTeams.flatMap((subTeam, subTeamIndex) => {
+        const people = normalizeMemberList(subTeam.members.filter((member) => member.employeeId));
+        return people.map((member, memberIndex) => ({
+          employeeId: member.employeeId,
+          role: memberIndex === 0 ? ('TEAM_LEADER' as const) : member.role === 'HELPER' ? ('HELPER' as const) : ('WORKER' as const),
+          slot: encodePersistedMemberSlot(subTeamIndex, memberIndex),
+        }));
+      });
+      const memberPayload = d.splitMode
+        ? splitMembers
+        : nonSplitMembers.map((member, index) => ({
+            employeeId: member.employeeId,
+            role: index === 0 ? ('TEAM_LEADER' as const) : member.role === 'HELPER' ? ('HELPER' as const) : ('WORKER' as const),
+            slot: index + 1,
+          }));
+      const teamLeaderEmployeeId = memberPayload.find((member) => member.role === 'TEAM_LEADER')?.employeeId ?? null;
       return {
-        showWorkerRail: true,
-        showRowLabels: true,
-        viewScale: 1,
-        useLightGridTheme: false,
+        columnIndex: d.columnIndex,
+        label: d.label,
+        locationType: d.locationType,
+        jobId: d.jobId || null,
+        factoryCode: d.locationType === 'FACTORY' ? d.factoryCode || null : null,
+        factoryLabel: d.locationType === 'FACTORY' ? d.factoryCode || null : null,
+        jobNumberSnapshot: d.jobNumberSnapshot || null,
+        clientNameSnapshot: d.locationType === 'SITE_JOB' ? String(job?.customerName ?? '').trim() || null : null,
+        projectDetailsSnapshot: d.locationType === 'SITE_JOB' ? resolvedWorkProcess || null : null,
+        teamLeaderEmployeeId,
+        driver1EmployeeId: d.driver1EmployeeId || null,
+        driver2EmployeeId: d.driver2EmployeeId || null,
+        shiftStart: d.dutyStart || null,
+        shiftEnd: d.dutyEnd || null,
+        breakWindow: d.breakStart && d.breakEnd ? `${d.breakStart} - ${d.breakEnd}` : null,
+        targetQty: Number.isFinite(parsedTargetQty) ? parsedTargetQty : null,
+        remarks: d.remarks || null,
+        members: memberPayload,
       };
-    }
-    const parsed = JSON.parse(raw) as {
-      showWorkerRail?: boolean;
-      showRowLabels?: boolean;
-      viewScale?: number;
-      useLightGridTheme?: boolean;
-    };
-    return {
-      showWorkerRail: typeof parsed.showWorkerRail === 'boolean' ? parsed.showWorkerRail : true,
-      showRowLabels: typeof parsed.showRowLabels === 'boolean' ? parsed.showRowLabels : true,
-      viewScale:
-        typeof parsed.viewScale === 'number' && parsed.viewScale >= 0.8 && parsed.viewScale <= 1.35
-          ? parsed.viewScale
-          : 1,
-      useLightGridTheme: typeof parsed.useLightGridTheme === 'boolean' ? parsed.useLightGridTheme : false,
-    };
-  } catch {
-    return {
-      showWorkerRail: true,
-      showRowLabels: true,
-      viewScale: 1,
-      useLightGridTheme: false,
-    };
-  }
+    }),
+  };
+}
+
+function buildDriverLogsPutBody(driverTripRows: ScheduleDriverTripRow[]) {
+  return {
+    logs: driverTripRows
+      .map((log, index) => {
+        const routeText = log.routeText.trim();
+        const guestName = log.guestDriverName?.trim();
+        if (guestName) {
+          return { guestDriverName: guestName, routeText, sequence: index };
+        }
+        if (!log.driverEmployeeId) return null;
+        return { driverEmployeeId: log.driverEmployeeId, routeText, sequence: index };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null),
+  };
+}
+
+function schedulePersistenceFingerprint(
+  drafts: AsgDraft[],
+  scheduleInfo: string,
+  driverTripRows: ScheduleDriverTripRow[],
+) {
+  return JSON.stringify({ drafts, scheduleInfo, driverTripRows });
+}
+
+function applyScheduleViewPrefs(
+  prefs: ReturnType<typeof defaultScheduleViewPrefs>,
+  setters: {
+    setShowWorkerRail: (value: boolean) => void;
+    setShowRowLabels: (value: boolean) => void;
+    setViewScale: (value: number) => void;
+    setUseLightGridTheme: (value: boolean) => void;
+    setRowSettings: (value: ScheduleRowSettings) => void;
+  },
+) {
+  setters.setShowWorkerRail(prefs.showWorkerRail);
+  setters.setShowRowLabels(prefs.showRowLabels);
+  setters.setViewScale(prefs.viewScale);
+  setters.setUseLightGridTheme(prefs.useLightGridTheme);
+  setters.setRowSettings(prefs.rowSettings);
 }
 
 export default function HrScheduleDayPage() {
   const params = useParams();
   const workDate = String(params.workDate ?? '');
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const [schedule, setSchedule] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [employeeById, setEmployeeById] = useState<Map<string, EmployeeProfile>>(() => new Map());
   const [jobById, setJobById] = useState<Map<string, JobOpt>>(() => new Map());
   const [labourTypeTiming, setLabourTypeTiming] = useState<EmployeeTypeTimingSetting | null>(null);
@@ -672,14 +822,24 @@ export default function HrScheduleDayPage() {
   });
   const [selectedDriverToAdd, setSelectedDriverToAdd] = useState('');
   const [guestDriverNameInput, setGuestDriverNameInput] = useState('');
-  const [showWorkerRail, setShowWorkerRail] = useState(() => readStoredScheduleViewPrefs().showWorkerRail);
-  const [showRowLabels, setShowRowLabels] = useState(() => readStoredScheduleViewPrefs().showRowLabels);
-  const [viewScale, setViewScale] = useState(() => readStoredScheduleViewPrefs().viewScale);
-  const [useLightGridTheme, setUseLightGridTheme] = useState(() => readStoredScheduleViewPrefs().useLightGridTheme);
+  const defaultViewPrefs = defaultScheduleViewPrefs();
+  const [showWorkerRail, setShowWorkerRail] = useState(defaultViewPrefs.showWorkerRail);
+  const [showRowLabels, setShowRowLabels] = useState(defaultViewPrefs.showRowLabels);
+  const [viewScale, setViewScale] = useState(defaultViewPrefs.viewScale);
+  const [useLightGridTheme, setUseLightGridTheme] = useState(defaultViewPrefs.useLightGridTheme);
+  const [rowSettings, setRowSettings] = useState<ScheduleRowSettings>(defaultViewPrefs.rowSettings);
+  const [viewPrefsLoaded, setViewPrefsLoaded] = useState(false);
+  const skipViewPrefsSaveRef = useRef(true);
+  const viewPrefsCompanyRef = useRef<string | null>(null);
+  const [rowSettingsOpen, setRowSettingsOpen] = useState(false);
+  const lastPersistedFingerprintRef = useRef<string | null>(null);
+  const persistInFlightRef = useRef(false);
+  const persistQueuedRef = useRef(false);
+  const skipScheduleRemapRef = useRef(false);
+  const autoSaveStatusTimerRef = useRef<number | null>(null);
   const [undoStack, setUndoStack] = useState<AsgDraft[][]>([]);
   const [redoStack, setRedoStack] = useState<AsgDraft[][]>([]);
   const suspendHistoryRef = useRef(false);
-  const restoredDraftRef = useRef(false);
   const draftsRef = useRef<AsgDraft[]>([]);
   const teamBoardBodyRef = useRef<HTMLDivElement>(null);
   const [workerRailMaxHeight, setWorkerRailMaxHeight] = useState<number | null>(null);
@@ -706,13 +866,12 @@ export default function HrScheduleDayPage() {
   const status = schedule && typeof schedule === 'object' ? String((schedule as { status?: string }).status ?? '') : '';
   const locked = status === 'LOCKED';
   const dis = !canEdit || locked;
-  const draftStorageKey = useMemo(() => `${DRAFT_STORAGE_PREFIX}${workDate}`, [workDate]);
   const canZoomOut = viewScale > 0.8;
   const canZoomIn = viewScale < 1.35;
   const scheduleRowLabelCls = STICKY_ROW_LABEL_CLASS;
   const scheduleRowCls = 'border-b border-border transition-colors hover:bg-muted/40';
   const gridFlatInputCls = SCHEDULE_GRID_FLAT_INPUT;
-  const gridTextareaCls = cn(SCHEDULE_GRID_FLAT_INPUT, 'min-h-20 resize-y py-2');
+  const gridTextareaCls = cn(SCHEDULE_GRID_FLAT_INPUT, 'min-h-14 resize-y py-1');
   const scheduleStatusTag = (() => {
     if (!status) {
       return { label: 'No schedule', className: 'border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100' };
@@ -739,20 +898,144 @@ export default function HrScheduleDayPage() {
   }, [workDate]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        VIEW_PREFS_STORAGE_KEY,
-        JSON.stringify({
-          showWorkerRail,
-          showRowLabels,
-          viewScale,
-          useLightGridTheme,
-        })
-      );
-    } catch {
-      // ignore storage quota / availability issues
+    if (sessionStatus !== 'authenticated' || !session?.user?.activeCompanyId) {
+      return;
     }
-  }, [showWorkerRail, showRowLabels, viewScale, useLightGridTheme]);
+
+    const companyId = session.user.activeCompanyId;
+    const controller = new AbortController();
+
+    void (async () => {
+      try {
+        const response = await fetch('/api/me/hr-schedule-view-prefs', {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error('Failed to load schedule view preferences');
+        }
+
+        const payload = (await response.json()) as { data?: unknown };
+        if (controller.signal.aborted) return;
+
+        let prefs = payload.data == null ? null : normalizeScheduleViewPrefs(payload.data);
+        if (!prefs) {
+          const legacy = readLegacyScheduleViewPrefsFromLocalStorage();
+          if (legacy) {
+            prefs = legacy;
+            clearLegacyScheduleViewPrefsLocalStorage();
+            void fetch('/api/me/hr-schedule-view-prefs', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(legacy),
+            }).catch(() => undefined);
+          }
+        }
+
+        if (prefs) {
+          applyScheduleViewPrefs(prefs, {
+            setShowWorkerRail,
+            setShowRowLabels,
+            setViewScale,
+            setUseLightGridTheme,
+            setRowSettings,
+          });
+        }
+
+        viewPrefsCompanyRef.current = companyId;
+        skipViewPrefsSaveRef.current = true;
+        setViewPrefsLoaded(true);
+      } catch {
+        if (controller.signal.aborted) return;
+        const legacy = readLegacyScheduleViewPrefsFromLocalStorage();
+        if (legacy) {
+          applyScheduleViewPrefs(legacy, {
+            setShowWorkerRail,
+            setShowRowLabels,
+            setViewScale,
+            setUseLightGridTheme,
+            setRowSettings,
+          });
+        }
+        viewPrefsCompanyRef.current = companyId;
+        skipViewPrefsSaveRef.current = true;
+        setViewPrefsLoaded(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [session?.user?.activeCompanyId, sessionStatus]);
+
+  useEffect(() => {
+    if (!viewPrefsLoaded || sessionStatus !== 'authenticated' || !session?.user?.activeCompanyId) {
+      return;
+    }
+    if (viewPrefsCompanyRef.current !== session.user.activeCompanyId) {
+      return;
+    }
+    if (skipViewPrefsSaveRef.current) {
+      skipViewPrefsSaveRef.current = false;
+      return;
+    }
+
+    const controller = new AbortController();
+    const payload = normalizeScheduleViewPrefs({
+      showWorkerRail,
+      showRowLabels,
+      viewScale,
+      useLightGridTheme,
+      rowSettings,
+    });
+
+    const timeoutId = window.setTimeout(() => {
+      void fetch('/api/me/hr-schedule-view-prefs', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      }).catch(() => undefined);
+    }, 400);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    rowSettings,
+    session?.user?.activeCompanyId,
+    sessionStatus,
+    showRowLabels,
+    showWorkerRail,
+    useLightGridTheme,
+    viewPrefsLoaded,
+    viewScale,
+  ]);
+
+  const visibleScheduleRowKeys = useMemo(
+    () => rowSettings.order.filter((key) => !rowSettings.hidden.includes(key)),
+    [rowSettings],
+  );
+
+  const toggleScheduleRowVisibility = useCallback((rowKey: string) => {
+    setRowSettings((current) => {
+      const hidden = current.hidden.includes(rowKey)
+        ? current.hidden.filter((key) => key !== rowKey)
+        : [...current.hidden, rowKey];
+      return { ...current, hidden };
+    });
+  }, []);
+
+  const moveScheduleRowSetting = useCallback((index: number, delta: -1 | 1) => {
+    setRowSettings((current) => {
+      const nextIndex = index + delta;
+      if (nextIndex < 0 || nextIndex >= current.order.length) return current;
+      return { ...current, order: moveArrayItem(current.order, index, nextIndex) };
+    });
+  }, []);
+
+  const resetScheduleRowSettings = useCallback(() => {
+    setRowSettings(defaultScheduleViewPrefs().rowSettings);
+  }, []);
 
   useEffect(() => {
     draftsRef.current = drafts;
@@ -786,7 +1069,7 @@ export default function HrScheduleDayPage() {
         return {
           row: scheduleRowCls,
           label: scheduleRowLabelCls,
-          cell: 'p-2',
+          cell: 'px-1.5 py-1',
         };
       }
 
@@ -796,6 +1079,7 @@ export default function HrScheduleDayPage() {
         rowKey === 'locationType' ||
         rowKey === 'job' ||
         rowKey === 'jobCompany' ||
+        rowKey === 'siteName' ||
         rowKey === 'workProcessDetails' ||
         rowKey === 'projectType' ||
         rowKey === 'projectQtyArea' ||
@@ -804,39 +1088,39 @@ export default function HrScheduleDayPage() {
         return {
           row: shared.row,
           label: themedLabel('!bg-sky-100 text-sky-900 dark:!bg-sky-950 dark:text-sky-100'),
-          cell: 'bg-sky-500/5 p-2',
+          cell: 'bg-sky-500/5 px-1.5 py-1',
         };
       }
       if (rowKey === 'dutyRange' || rowKey === 'breakRange') {
         return {
           row: shared.row,
           label: themedLabel('!bg-emerald-100 text-emerald-900 dark:!bg-emerald-950 dark:text-emerald-100'),
-          cell: 'bg-emerald-500/5 p-2',
+          cell: 'bg-emerald-500/5 px-1.5 py-1',
         };
       }
       if (rowKey === 'workers' || rowKey === 'suggestedWorkers') {
         return {
           row: shared.row,
           label: themedLabel('!bg-amber-100 text-amber-950 dark:!bg-amber-950 dark:text-amber-100'),
-          cell: 'bg-amber-500/5 p-2',
+          cell: 'bg-amber-500/5 px-1.5 py-1',
         };
       }
       if (rowKey === 'workerCount') {
         return {
           row: shared.row,
           label: themedLabel('!bg-orange-100 text-orange-950 dark:!bg-orange-950 dark:text-orange-100'),
-          cell: 'bg-orange-500/5 p-2',
+          cell: 'bg-orange-500/5 px-1.5 py-1',
         };
       }
       if (rowKey === 'driver1EmployeeId' || rowKey === 'driver2EmployeeId') {
         return {
           row: shared.row,
           label: themedLabel('!bg-rose-100 text-rose-900 dark:!bg-rose-950 dark:text-rose-100'),
-          cell: 'bg-rose-500/5 p-2',
+          cell: 'bg-rose-500/5 px-1.5 py-1',
         };
       }
       if (rowKey === 'remarks') {
-        return { row: shared.row, label: scheduleRowLabelCls, cell: 'bg-muted/30 p-2' };
+        return { row: shared.row, label: scheduleRowLabelCls, cell: 'bg-muted/30 px-1.5 py-1' };
       }
       return { row: shared.row, label: scheduleRowLabelCls, cell: 'p-2' };
     },
@@ -854,7 +1138,7 @@ export default function HrScheduleDayPage() {
   const teamHeaderCls = () =>
     cn(
       TEAM_COLUMN_CLASS,
-      'sticky top-0 z-20 border-b border-border bg-muted px-3 py-3 text-left align-top',
+      'sticky top-0 z-20 border-b border-border bg-muted px-2 py-1.5 text-left align-top',
     );
 
   const mergeEmployees = useCallback((rows: ScheduleEmployeeRow[] | EmployeeProfile[]) => {
@@ -1064,6 +1348,10 @@ export default function HrScheduleDayPage() {
 
   useEffect(() => {
     queueMicrotask(() => {
+      if (skipScheduleRemapRef.current) {
+        skipScheduleRemapRef.current = false;
+        return;
+      }
       if (schedule && typeof schedule === 'object' && 'id' in schedule) mapFromApi(schedule as Record<string, unknown>);
       else {
         suspendHistoryRef.current = true;
@@ -1078,45 +1366,13 @@ export default function HrScheduleDayPage() {
     });
   }, [schedule, mapFromApi]);
 
-  useEffect(() => {
-    restoredDraftRef.current = false;
-  }, [draftStorageKey]);
+  const scheduleId =
+    schedule && typeof schedule === 'object' && 'id' in schedule ? String((schedule as { id: string }).id) : '';
 
   useEffect(() => {
-    if (!schedule || restoredDraftRef.current || dis) return;
-    try {
-      const raw = localStorage.getItem(draftStorageKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { drafts?: Array<Partial<AsgDraft>>; savedAt?: string };
-      if (!Array.isArray(parsed?.drafts)) return;
-      restoredDraftRef.current = true;
-      queueMicrotask(() => {
-        suspendHistoryRef.current = true;
-        setDrafts((parsed.drafts ?? []).map((draft, index) => normalizeDraft(draft, index)));
-        setUndoStack([]);
-        setRedoStack([]);
-        suspendHistoryRef.current = false;
-      });
-      toast.success(`Recovered local draft${parsed.savedAt ? ` (${new Date(parsed.savedAt).toLocaleTimeString()})` : ''}`);
-    } catch {
-      // ignore invalid localStorage payload
-    }
-  }, [schedule, dis, draftStorageKey]);
-
-  useEffect(() => {
-    if (!schedule || dis) return;
-    try {
-      localStorage.setItem(
-        draftStorageKey,
-        JSON.stringify({
-          drafts,
-          savedAt: new Date().toISOString(),
-        })
-      );
-    } catch {
-      // ignore storage quota / availability issues
-    }
-  }, [drafts, schedule, dis, draftStorageKey]);
+    lastPersistedFingerprintRef.current = null;
+    setAutoSaveStatus('idle');
+  }, [workDate, scheduleId]);
 
   const driverLogVersion =
     schedule && typeof schedule === 'object' && 'id' in schedule
@@ -1359,140 +1615,150 @@ export default function HrScheduleDayPage() {
     else { toast.success('Schedule created'); await loadSchedule(); }
   };
 
-  const saveAssignments = async () => {
-    if (!schedule || !('id' in schedule)) return;
-    const invalidSplitTeam = drafts.find((draft) =>
-      draft.splitMode && draft.subTeams.some((subTeam) => !subTeam.members.some((member) => member.employeeId))
-    );
-    if (invalidSplitTeam) {
-      toast.error(`${invalidSplitTeam.label} has an empty sub-team.`);
-      return;
-    }
-    setSaving(true);
-    const sid = String((schedule as { id: string }).id);
-    const uniqueJobUpdates = new Map<string, string>();
-    for (const draft of drafts) {
-      if (!draft.jobId || draft.locationType !== 'SITE_JOB') continue;
-      const job = getJob(draft.jobId);
-      const resolvedWorkProcess = resolveWorkProcessDetails(draft.workProcessDetails, job);
-      const currentSaved = String(job?.description ?? '').trim();
-      if (resolvedWorkProcess !== currentSaved) {
-        uniqueJobUpdates.set(draft.jobId, resolvedWorkProcess);
+  const persistScheduleToServer = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!schedule || !('id' in schedule) || dis) return false;
+
+      const invalidSplitTeam = findInvalidSplitTeamDraft(drafts);
+      if (invalidSplitTeam) {
+        if (!options?.silent) {
+          toast.error(`${invalidSplitTeam.label} has an empty sub-team.`);
+        }
+        return false;
       }
-    }
 
-    if (uniqueJobUpdates.size > 0) {
-      const jobUpdateResults = await Promise.all(
-        [...uniqueJobUpdates.entries()].map(async ([jobId, projectDetails]) => {
-          const response = await fetch(`/api/jobs/${jobId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ description: projectDetails }),
-          });
-          const json = await response.json().catch(() => null);
-          return { ok: response.ok && json?.success, error: json?.error as string | undefined };
-        })
-      );
-
-      const failed = jobUpdateResults.find((result) => !result.ok);
-      if (failed) {
-        setSaving(false);
-        toast.error(failed.error ?? 'Could not update work process details on the job.');
-        return;
+      if (persistInFlightRef.current) {
+        persistQueuedRef.current = true;
+        return false;
       }
-    }
 
-    const body = {
-      notes: scheduleInfo || null,
-      assignments: drafts.map((d) => {
-        const job = getJob(d.jobId);
-        const resolvedWorkProcess = resolveWorkProcessDetails(d.workProcessDetails, job);
-        const parsedTargetQty = Number.parseFloat(String(d.targetQty ?? '').trim());
-        const nonSplitMembers = normalizeMemberList(d.members.filter((member) => member.employeeId));
-        const splitMembers = d.subTeams.flatMap((subTeam) => {
-          const people = normalizeMemberList(subTeam.members.filter((member) => member.employeeId));
-          return people.map((member, index) => ({
-            employeeId: member.employeeId,
-            role: index === 0 ? ('TEAM_LEADER' as const) : member.role === 'HELPER' ? ('HELPER' as const) : ('WORKER' as const),
-            slot: 0,
-          }));
+      const saveFingerprint = schedulePersistenceFingerprint(drafts, scheduleInfo, driverTripRows);
+      persistInFlightRef.current = true;
+      if (!options?.silent) setSaving(true);
+      else setAutoSaveStatus('saving');
+
+      const sid = String((schedule as { id: string }).id);
+
+      try {
+        const uniqueJobUpdates = new Map<string, string>();
+        for (const draft of drafts) {
+          if (!draft.jobId || draft.locationType !== 'SITE_JOB') continue;
+          const job = getJob(draft.jobId);
+          const resolvedWorkProcess = resolveWorkProcessDetails(draft.workProcessDetails, job);
+          const currentSaved = String(job?.description ?? '').trim();
+          if (resolvedWorkProcess !== currentSaved) {
+            uniqueJobUpdates.set(draft.jobId, resolvedWorkProcess);
+          }
+        }
+
+        if (uniqueJobUpdates.size > 0) {
+          const jobUpdateResults = await Promise.all(
+            [...uniqueJobUpdates.entries()].map(async ([jobId, projectDetails]) => {
+              const response = await fetch(`/api/jobs/${jobId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ description: projectDetails }),
+              });
+              const json = await response.json().catch(() => null);
+              return { ok: response.ok && json?.success, error: json?.error as string | undefined };
+            }),
+          );
+
+          const failed = jobUpdateResults.find((result) => !result.ok);
+          if (failed) {
+            if (!options?.silent) toast.error(failed.error ?? 'Could not update work process details on the job.');
+            else setAutoSaveStatus('error');
+            return false;
+          }
+        }
+
+        const body = buildAssignmentsPutBody(drafts, scheduleInfo, getJob);
+        const res = await fetch(`/api/hr/schedule/${sid}/assignments`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
         });
-        const memberPayload = d.splitMode
-          ? splitMembers.map((member, index) => ({ ...member, slot: index + 1 }))
-          : nonSplitMembers.map((member, index) => ({
-              employeeId: member.employeeId,
-              role: index === 0 ? ('TEAM_LEADER' as const) : member.role === 'HELPER' ? ('HELPER' as const) : ('WORKER' as const),
-              slot: index + 1,
-            }));
-        const teamLeaderEmployeeId = memberPayload.find((member) => member.role === 'TEAM_LEADER')?.employeeId ?? null;
-        return {
-          columnIndex: d.columnIndex,
-          label: d.label,
-          locationType: d.locationType,
-          jobId: d.jobId || null,
-          factoryCode: d.locationType === 'FACTORY' ? d.factoryCode || null : null,
-          factoryLabel: d.locationType === 'FACTORY' ? d.factoryCode || null : null,
-          jobNumberSnapshot: d.jobNumberSnapshot || null,
-          clientNameSnapshot: d.locationType === 'SITE_JOB' ? String(job?.customerName ?? '').trim() || null : null,
-          projectDetailsSnapshot: d.locationType === 'SITE_JOB' ? resolvedWorkProcess || null : null,
-          teamLeaderEmployeeId,
-          driver1EmployeeId: d.driver1EmployeeId || null,
-          driver2EmployeeId: d.driver2EmployeeId || null,
-          shiftStart: d.dutyStart || null,
-          shiftEnd: d.dutyEnd || null,
-          breakWindow: d.breakStart && d.breakEnd ? `${d.breakStart} - ${d.breakEnd}` : null,
-          targetQty: Number.isFinite(parsedTargetQty) ? parsedTargetQty : null,
-          remarks: d.remarks || null,
-          members: memberPayload,
-        };
-      }),
-    };
-    const res = await fetch(`/api/hr/schedule/${sid}/assignments`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const json = await readApiEnvelope<{ success?: boolean; error?: string; data?: Record<string, unknown> }>(res);
-    if (!res.ok || !json?.success) {
-      setSaving(false);
-      toast.error(json?.error ?? 'Save failed');
+        const json = await readApiEnvelope<{ success?: boolean; error?: string; data?: Record<string, unknown> }>(res);
+        if (!res.ok || !json?.success) {
+          if (!options?.silent) toast.error(json?.error ?? 'Save failed');
+          else setAutoSaveStatus('error');
+          return false;
+        }
+
+        const driverRes = await fetch(`/api/hr/schedule/${sid}/driver-logs`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildDriverLogsPutBody(driverTripRows)),
+        });
+        const driverJson = await readApiEnvelope<{ success?: boolean; error?: string; data?: unknown }>(driverRes);
+        if (!driverRes.ok || !driverJson?.success) {
+          if (!options?.silent) toast.error(driverJson?.error ?? 'Driver trip save failed');
+          else setAutoSaveStatus('error');
+          return false;
+        }
+
+        lastPersistedFingerprintRef.current = saveFingerprint;
+        const savedLogs = (driverJson.data ?? []) as ScheduleDriverLogRecord[];
+        skipScheduleRemapRef.current = true;
+        setSchedule((prev) =>
+          prev && typeof prev === 'object'
+            ? { ...(prev as Record<string, unknown>), driverLogs: savedLogs }
+            : prev,
+        );
+        syncDriverTripStateFromLogs(savedLogs, driverLogVersion, false);
+
+        if (!options?.silent) {
+          toast.success('Saved');
+        } else {
+          setAutoSaveStatus('saved');
+          if (autoSaveStatusTimerRef.current != null) {
+            window.clearTimeout(autoSaveStatusTimerRef.current);
+          }
+          autoSaveStatusTimerRef.current = window.setTimeout(() => {
+            setAutoSaveStatus('idle');
+            autoSaveStatusTimerRef.current = null;
+          }, 2500);
+        }
+        return true;
+      } finally {
+        persistInFlightRef.current = false;
+        if (!options?.silent) setSaving(false);
+        if (persistQueuedRef.current) {
+          persistQueuedRef.current = false;
+          void persistScheduleToServer({ silent: true });
+        }
+      }
+    },
+    [
+      dis,
+      drafts,
+      driverLogVersion,
+      driverTripRows,
+      getJob,
+      schedule,
+      scheduleInfo,
+      syncDriverTripStateFromLogs,
+    ],
+  );
+
+  const saveAssignments = () => void persistScheduleToServer({ silent: false });
+
+  useEffect(() => {
+    if (!schedule || dis || loading) return;
+
+    const fingerprint = schedulePersistenceFingerprint(drafts, scheduleInfo, driverTripRows);
+    if (lastPersistedFingerprintRef.current === null) {
+      lastPersistedFingerprintRef.current = fingerprint;
       return;
     }
+    if (lastPersistedFingerprintRef.current === fingerprint) return;
 
-    const driverRes = await fetch(`/api/hr/schedule/${sid}/driver-logs`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        logs: driverTripRows
-          .map((log, index) => {
-            const routeText = log.routeText.trim();
-            const guestName = log.guestDriverName?.trim();
-            if (guestName) {
-              return { guestDriverName: guestName, routeText, sequence: index };
-            }
-            if (!log.driverEmployeeId) return null;
-            return { driverEmployeeId: log.driverEmployeeId, routeText, sequence: index };
-          })
-          .filter((row): row is NonNullable<typeof row> => row !== null),
-      }),
-    });
-    const driverJson = await readApiEnvelope<{ success?: boolean; error?: string; data?: unknown }>(driverRes);
-    setSaving(false);
-    if (!driverRes.ok || !driverJson?.success) {
-      toast.error(driverJson?.error ?? 'Driver trip save failed');
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      void persistScheduleToServer({ silent: true });
+    }, 1200);
 
-    toast.success('Saved');
-    localStorage.removeItem(draftStorageKey);
-    restoredDraftRef.current = false;
-    const savedLogs = (driverJson.data ?? []) as ScheduleDriverLogRecord[];
-    setSchedule({
-      ...(json.data as Record<string, unknown>),
-      driverLogs: savedLogs,
-    });
-    syncDriverTripStateFromLogs(savedLogs, driverLogVersion, false);
-  };
+    return () => window.clearTimeout(timeoutId);
+  }, [dis, drafts, driverTripRows, loading, persistScheduleToServer, schedule, scheduleInfo]);
 
   const publish = async () => {
     if (!schedule || !('id' in schedule)) return;
@@ -2595,14 +2861,14 @@ export default function HrScheduleDayPage() {
   
   if (!canView) {
     return (
-      <div className="flex w-full min-w-0 flex-col gap-5">
+      <div className="flex w-full min-w-0 flex-col gap-3">
         <p className="text-sm text-muted-foreground">You do not have permission to view HR schedules.</p>
       </div>
     );
   }
   if (loading) {
     return (
-      <div className="flex w-full min-w-0 flex-col gap-5">
+      <div className="flex w-full min-w-0 flex-col gap-3">
         <div className="h-20 animate-pulse rounded-lg border border-border bg-muted/30" />
         <div className="h-112 animate-pulse rounded-lg border border-border bg-muted/30" />
       </div>
@@ -2625,7 +2891,7 @@ export default function HrScheduleDayPage() {
             title={dis ? undefined : `Switch to ${isFactory ? 'Site' : 'Factory'}`}
             onClick={() => upd(colIdx, { locationType: nextType })}
             className={cn(
-              'h-full w-full rounded-md border px-2 py-1.5 text-xs font-semibold transition-colors',
+              'h-full w-full rounded border px-1.5 py-1 text-xs font-semibold transition-colors',
               isFactory
                 ? 'border-amber-500/40 bg-amber-500/20 text-amber-950 hover:bg-amber-500/30 dark:text-amber-50'
                 : 'border-sky-600/40 bg-sky-500/15 text-sky-950 hover:bg-sky-500/25 dark:text-sky-100',
@@ -2676,21 +2942,33 @@ export default function HrScheduleDayPage() {
         const job = getJob(d.jobId);
         const customerName = String(job?.customerName ?? '').trim();
         return (
-          <div className="flex min-h-4 items-center px-2 py-1">
+          <div className="flex min-h-4 items-center px-1 py-0.5">
             <span className="truncate text-xs text-foreground/90" title={customerName || undefined}>
               {customerName || '—'}
             </span>
           </div>
         );
       }
+      case 'siteName': {
+        const job = getJob(d.jobId);
+        const siteName =
+          d.locationType === 'SITE_JOB' ? String(job?.site ?? '').trim() : '';
+        return (
+          <div className="flex min-h-4 items-center px-1 py-0.5">
+            <span className="truncate text-xs text-foreground/90" title={siteName || undefined}>
+              {siteName || '—'}
+            </span>
+          </div>
+        );
+      }
       case 'workProcessDetails': {
         return (
-          <div className="space-y-1 px-2 py-1.5">
+          <div className="space-y-0.5 px-1 py-0.5">
             <textarea
               value={d.workProcessDetails}
               onChange={(e) => upd(colIdx, { workProcessDetails: e.target.value })}
               disabled={fieldDisabled}
-              rows={2}
+              rows={1}
               placeholder="Enter work process details..."
               className={gridTextareaCls}
               {...getGridNavProps(NAV_ROW.workProcess, colIdx + 1)}
@@ -2706,7 +2984,7 @@ export default function HrScheduleDayPage() {
             ? String(job?.projectType ?? '').trim()
             : String(job?.projectQtyArea ?? '').trim();
         return (
-          <div className="flex min-h-4 items-center px-2 py-1">
+          <div className="flex min-h-4 items-center px-1 py-0.5">
             <span className="truncate text-xs text-foreground/90" title={value || undefined}>
               {value || '—'}
             </span>
@@ -2719,7 +2997,7 @@ export default function HrScheduleDayPage() {
             value={d.targetQty}
             onChange={(e) => upd(colIdx, { targetQty: e.target.value })}
             disabled={fieldDisabled}
-            rows={2}
+            rows={1}
             placeholder="Enter target qty..."
             className={gridTextareaCls}
             {...getGridNavProps(NAV_ROW.targetQty, colIdx + 1)}
@@ -2746,7 +3024,7 @@ export default function HrScheduleDayPage() {
       }
       case 'dutyRange':
         return (
-          <div className="space-y-1 px-2 py-1.5">
+          <div className="space-y-0.5 px-1 py-0.5">
             <div className="grid grid-cols-2 gap-1">
               <div>
                 <p className="mb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">Duty in</p>
@@ -2773,7 +3051,7 @@ export default function HrScheduleDayPage() {
         );
       case 'breakRange':
         return (
-          <div className="grid grid-cols-2 gap-1 px-2 py-1.5">
+          <div className="grid grid-cols-2 gap-0.5 px-1 py-0.5">
             <div>
               <p className="mb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">Break out</p>
               <TimeEntryInput
@@ -2813,11 +3091,11 @@ export default function HrScheduleDayPage() {
   };
 
   const renderWorkersCell = (draft: AsgDraft, colIdx: number) => {
-    const blockCls = 'rounded-lg border border-border bg-muted/30 p-2';
+    const blockCls = 'rounded border border-border bg-muted/30 p-1';
     const fieldDisabled = dis;
 
     return (
-      <div className="min-w-0 space-y-2">
+      <div className="min-w-0 space-y-1">
         {!dis && (
           <div className="flex flex-wrap items-center gap-1">
             <Button type="button" variant="outline" size="sm" onClick={() => toggleSplitMode(colIdx)}>
@@ -2878,14 +3156,14 @@ export default function HrScheduleDayPage() {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
                         onClick={() => removeFlatMember(colIdx, memberIndex)}
                         aria-label="Remove worker row"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     ) : (
-                      <span className="h-8 w-8 shrink-0" aria-hidden />
+                      <span className="h-7 w-7 shrink-0" aria-hidden />
                     )}
                   </div>
                 </div>
@@ -2893,7 +3171,7 @@ export default function HrScheduleDayPage() {
             })}
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {draft.subTeams.length === 0 && (
               <p className="text-[11px] text-muted-foreground">Add a sub-team to start splitting this team.</p>
             )}
@@ -2910,10 +3188,11 @@ export default function HrScheduleDayPage() {
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => handleSubTeamDrop(subTeamDragTarget)}
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <ScheduleDragHandle
                     label="sub-team"
                     disabled={fieldDisabled}
+                    className={SUB_TEAM_DRAG_HANDLE_CLS}
                     onDragStart={() => setDraggingSubTeam(subTeamDragTarget)}
                     onDragEnd={() => setDraggingSubTeam(null)}
                   />
@@ -2921,7 +3200,7 @@ export default function HrScheduleDayPage() {
                     value={subTeam.label}
                     onChange={(e) => updateSubTeamMeta(colIdx, subTeamIndex, { label: e.target.value })}
                     disabled={fieldDisabled}
-                    className={cn(gridFlatInputCls, 'min-w-0 flex-1')}
+                    className={cn(gridFlatInputCls, SUB_TEAM_LABEL_INPUT_CLS, 'min-w-0 flex-1')}
                     placeholder={nextSubTeamLabel(subTeamIndex)}
                   />
                   {!dis && (
@@ -2929,15 +3208,15 @@ export default function HrScheduleDayPage() {
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      className={cn('h-7 w-7 shrink-0', SUB_TEAM_DELETE_BTN_CLS)}
                       onClick={() => removeSubTeam(colIdx, subTeamIndex)}
                       aria-label="Remove sub-team"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
                 </div>
-                <div className="mt-1.5 space-y-1">
+                <div className="mt-1 space-y-0.5">
                   {subTeam.members.map((member, memberIndex) => {
                     const isMulti = member.employeeId ? multiAssigned.has(member.employeeId) : false;
                     const workerNavSub = encodeWorkerNavSub(subTeamIndex, memberIndex);
@@ -2996,14 +3275,14 @@ export default function HrScheduleDayPage() {
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
                               onClick={() => removeSubTeamMember(colIdx, subTeamIndex, memberIndex)}
                               aria-label="Remove worker row"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           ) : (
-                            <span className="h-8 w-8 shrink-0" aria-hidden />
+                            <span className="h-7 w-7 shrink-0" aria-hidden />
                           )}
                         </div>
                       </div>
@@ -3019,18 +3298,99 @@ export default function HrScheduleDayPage() {
     );
   };
 
+  const renderScheduleTableRow = (rowKey: string) => {
+      const theme = getRowThemeClasses(rowKey);
+      const label = SCHEDULE_TABLE_ROW_LABELS[rowKey] ?? rowKey;
+
+      if (rowKey === 'workers') {
+        return (
+          <tr key={rowKey} className={theme.row}>
+            {showRowLabels ? <th className={theme.label}>{label}</th> : null}
+            {drafts.map((d, ci) => (
+              <td key={ci} className={plannerCellCls(rowKey)}>
+                <div className='relative min-h-14 min-w-0'>{renderWorkersCell(d, ci)}</div>
+              </td>
+            ))}
+          </tr>
+        );
+      }
+
+      if (rowKey === 'workerCount') {
+        return (
+          <tr key={rowKey} className={theme.row}>
+            {showRowLabels ? <th className={theme.label}>{label}</th> : null}
+            {drafts.map((d, ci) => (
+              <td key={ci} className={plannerCellCls(rowKey)}>
+                <div className='inline-flex min-w-12 items-center justify-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-foreground'>
+                  {getDraftWorkerCount(d)}
+                </div>
+              </td>
+            ))}
+          </tr>
+        );
+      }
+
+      if (rowKey === 'suggestedWorkers') {
+        return (
+          <tr key={rowKey} className={theme.row}>
+            {showRowLabels ? <th className={theme.label}>{label}</th> : null}
+            {drafts.map((d, ci) => {
+              const job = getJob(d.jobId);
+              const required = parseJobExpertise(job);
+              const suggestions = suggestedWorkersByColumn.get(ci) ?? [];
+              return (
+                <td key={ci} className={plannerCellCls(rowKey)}>
+                  {required.length === 0 ? (
+                    <p className='text-[11px] text-muted-foreground'>No job expertise configured yet.</p>
+                  ) : suggestions.length === 0 ? (
+                    <p className='text-[11px] text-muted-foreground'>No matching workers available.</p>
+                  ) : (
+                    <div className='flex flex-wrap gap-1'>
+                      {suggestions.slice(0, 8).map((w) => (
+                        <button
+                          key={w.id}
+                          type='button'
+                          disabled={dis}
+                          onClick={() => addWorkerToTeam(ci, w.id)}
+                          className='rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-800 hover:bg-emerald-500/20 disabled:opacity-60 dark:text-emerald-300'
+                          title={w.workforce.expertises.join(', ')}
+                        >
+                          {w.preferredName || w.fullName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+        );
+      }
+
+      return (
+        <tr key={rowKey} className={theme.row}>
+          {showRowLabels ? <th className={theme.label}>{label}</th> : null}
+          {drafts.map((d, ci) => (
+            <td key={ci} className={plannerCellCls(rowKey)}>
+              <div className='min-w-0'>{renderCell(d, ci, rowKey)}</div>
+            </td>
+          ))}
+        </tr>
+      );
+  };
+
   return (
-		<div className='flex w-full min-w-0 flex-col gap-5'>
-			<header className='flex w-full min-w-0 flex-col gap-4 border-b border-border pb-4 lg:flex-row lg:items-start lg:justify-between'>
-				<div className='min-w-0 space-y-1'>
-					<p className='text-xs font-medium uppercase tracking-wide text-muted-foreground'>
+		<div className='flex w-full min-w-0 flex-col gap-3'>
+			<header className='flex w-full min-w-0 flex-col gap-2 border-b border-border pb-2 lg:flex-row lg:items-start lg:justify-between'>
+				<div className='min-w-0 space-y-0.5'>
+					<p className='text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
 						HR planning
 					</p>
-					<h1 className='text-xl font-semibold tracking-tight text-foreground'>
+					<h1 className='text-lg font-semibold tracking-tight text-foreground'>
 						Day schedule · {workDateLabel}
 					</h1>
 					{schedule ? (
-						<p className='text-sm text-muted-foreground'>
+						<p className='text-xs text-muted-foreground'>
 							{scheduleSummary.groups} teams ·{' '}
 							{scheduleSummary.workers} workers ·{' '}
 							{scheduleSummary.groupsWithTiming} with timing
@@ -3062,7 +3422,7 @@ export default function HrScheduleDayPage() {
 								}
 								className={cn(
 									SCHEDULE_GRID_FLAT_INPUT,
-									'h-9 w-auto min-w-40',
+									'h-7 w-auto min-w-36',
 								)}
 								aria-label='Copy schedule from date'
 							>
@@ -3089,15 +3449,24 @@ export default function HrScheduleDayPage() {
 						</>
 					) : null}
 					{schedule && canEdit && !locked ? (
-						<Button
-							type='button'
-							size='sm'
-							variant='secondary'
-							onClick={saveAssignments}
-							disabled={saving}
-						>
-							{saving ? 'Saving…' : 'Save schedule'}
-						</Button>
+						<>
+							{autoSaveStatus === 'saving' || saving ? (
+								<span className='text-xs text-muted-foreground'>Saving…</span>
+							) : autoSaveStatus === 'saved' ? (
+								<span className='text-xs text-emerald-600 dark:text-emerald-400'>All changes saved</span>
+							) : autoSaveStatus === 'error' ? (
+								<span className='text-xs text-destructive'>Save failed — use Save now</span>
+							) : null}
+							<Button
+								type='button'
+								size='sm'
+								variant='secondary'
+								onClick={saveAssignments}
+								disabled={saving}
+							>
+								{saving ? 'Saving…' : 'Save now'}
+							</Button>
+						</>
 					) : null}
 					{schedule && canPub && status === 'DRAFT' ? (
 						<Button type='button' size='sm' onClick={publish}>
@@ -3125,19 +3494,19 @@ export default function HrScheduleDayPage() {
 				<>
 					<div
 						className={cn(
-							'grid gap-5',
+							'grid gap-3',
 							showWorkerRail
 								? 'xl:grid-cols-[1fr_12rem] xl:items-stretch'
 								: 'grid-cols-1',
 						)}
 					>
 						<section className='overflow-hidden rounded-lg border border-border bg-card shadow-sm'>
-							<div className='flex flex-col gap-3 border-b border-border px-5 py-4 lg:flex-row lg:items-center lg:justify-between'>
-								<div className='min-w-0 space-y-1'>
-									<h2 className='text-lg font-semibold text-foreground'>
+							<div className='flex flex-col gap-2 border-b border-border px-3 py-2 lg:flex-row lg:items-center lg:justify-between'>
+								<div className='min-w-0 space-y-0.5'>
+									<h2 className='text-base font-semibold text-foreground'>
 										Team board
 									</h2>
-									<p className='text-sm text-muted-foreground'>
+									<p className='text-xs text-muted-foreground'>
 										{drafts.length} team
 										{drafts.length === 1 ? '' : 's'} —
 										scroll horizontally to view all columns
@@ -3153,6 +3522,15 @@ export default function HrScheduleDayPage() {
 											Add team
 										</Button>
 									) : null}
+									<Button
+										type='button'
+										variant='outline'
+										size='sm'
+										onClick={() => setRowSettingsOpen(true)}
+									>
+										<Rows3 className='mr-1.5 h-3.5 w-3.5' />
+										Rows
+									</Button>
 									<Button
 										type='button'
 										variant='outline'
@@ -3289,7 +3667,7 @@ export default function HrScheduleDayPage() {
 								style={{ zoom: viewScale } as CSSProperties}
 							>
 								<table
-									className={`border-collapse text-sm ${drafts.length <= 0 ? 'min-w-full' : 'w-max'}`}
+									className={`border-collapse text-xs ${drafts.length <= 0 ? 'min-w-full' : 'w-max'}`}
 								>
 									<thead className='border-b border-border bg-muted'>
 										<tr>
@@ -3403,7 +3781,7 @@ export default function HrScheduleDayPage() {
 													colSpan={
 														showRowLabels ? 1 : 1
 													}
-													className='px-6 py-12 text-center text-sm text-muted-foreground'
+													className='px-4 py-8 text-center text-xs text-muted-foreground'
 												>
 													<p className='text-sm font-semibold text-foreground'>
 														No teams on the board
@@ -3418,7 +3796,7 @@ export default function HrScheduleDayPage() {
 														<Button
 															type='button'
 															size='sm'
-															className='mt-4'
+															className='mt-2'
 															onClick={addColumn}
 														>
 															+ Add first team
@@ -3428,353 +3806,7 @@ export default function HrScheduleDayPage() {
 											</tr>
 										) : (
 											<>
-												{FIELD_ROWS.map((f) => (
-													<tr
-														key={f.key}
-														className={
-															getRowThemeClasses(
-																f.key,
-															).row
-														}
-													>
-														{showRowLabels && (
-															<th
-																className={
-																	getRowThemeClasses(
-																		f.key,
-																	).label
-																}
-															>
-																{f.label}
-															</th>
-														)}
-														{drafts.map((d, ci) => (
-															<td
-																key={ci}
-																className={plannerCellCls(
-																	f.key,
-																)}
-															>
-																<div className='min-w-0'>
-																	{renderCell(
-																		d,
-																		ci,
-																		f.key,
-																	)}
-																</div>
-															</td>
-														))}
-													</tr>
-												))}
-
-												<tr
-													className={
-														getRowThemeClasses(
-															'workers',
-														).row
-													}
-												>
-													{showRowLabels && (
-														<th
-															className={
-																getRowThemeClasses(
-																	'workers',
-																).label
-															}
-														>
-															Workers
-														</th>
-													)}
-													{drafts.map((d, ci) => (
-														<td
-															key={ci}
-															className={plannerCellCls(
-																'workers',
-															)}
-														>
-															<div className='relative min-h-20 min-w-0'>
-																{renderWorkersCell(
-																	d,
-																	ci,
-																)}
-															</div>
-														</td>
-													))}
-												</tr>
-
-												<tr
-													className={
-														getRowThemeClasses(
-															'workerCount',
-														).row
-													}
-												>
-													{showRowLabels && (
-														<th
-															className={
-																getRowThemeClasses(
-																	'workerCount',
-																).label
-															}
-														>
-															Assigned workers
-														</th>
-													)}
-													{drafts.map((d, ci) => (
-														<td
-															key={ci}
-															className={plannerCellCls(
-																'workerCount',
-															)}
-														>
-															<div className='inline-flex min-w-12 items-center justify-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-foreground'>
-																{getDraftWorkerCount(
-																	d,
-																)}
-															</div>
-														</td>
-													))}
-												</tr>
-
-												<tr
-													className={
-														getRowThemeClasses(
-															'suggestedWorkers',
-														).row
-													}
-												>
-													{showRowLabels && (
-														<th
-															className={
-																getRowThemeClasses(
-																	'suggestedWorkers',
-																).label
-															}
-														>
-															Suggested workers
-														</th>
-													)}
-													{drafts.map((d, ci) => {
-														const job = getJob(
-															d.jobId,
-														);
-														const required =
-															parseJobExpertise(
-																job,
-															);
-														const suggestions =
-															suggestedWorkersByColumn.get(
-																ci,
-															) ?? [];
-														return (
-															<td
-																key={ci}
-																className={plannerCellCls(
-																	'suggestedWorkers',
-																)}
-															>
-																{required.length ===
-																0 ? (
-																	<p className='text-[11px] text-muted-foreground'>
-																		No job
-																		expertise
-																		configured
-																		yet.
-																	</p>
-																) : suggestions.length ===
-																  0 ? (
-																	<p className='text-[11px] text-muted-foreground'>
-																		No
-																		matching
-																		workers
-																		available.
-																	</p>
-																) : (
-																	<div className='flex flex-wrap gap-1'>
-																		{suggestions
-																			.slice(
-																				0,
-																				8,
-																			)
-																			.map(
-																				(
-																					w,
-																				) => (
-																					<button
-																						key={
-																							w.id
-																						}
-																						type='button'
-																						disabled={
-																							dis
-																						}
-																						onClick={() =>
-																							addWorkerToTeam(
-																								ci,
-																								w.id,
-																							)
-																						}
-																						className='rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-800 hover:bg-emerald-500/20 disabled:opacity-60 dark:text-emerald-300'
-																						title={w.workforce.expertises.join(
-																							', ',
-																						)}
-																					>
-																						{w.preferredName ||
-																							w.fullName}
-																					</button>
-																				),
-																			)}
-																	</div>
-																)}
-															</td>
-														);
-													})}
-												</tr>
-
-												<tr
-													className={
-														getRowThemeClasses(
-															'targetQty',
-														).row
-													}
-												>
-													{showRowLabels && (
-														<th
-															className={
-																getRowThemeClasses(
-																	'targetQty',
-																).label
-															}
-														>
-															Target Qty
-														</th>
-													)}
-													{drafts.map((d, ci) => (
-														<td
-															key={ci}
-															className={plannerCellCls(
-																'targetQty',
-															)}
-														>
-															<div className='min-w-0'>
-																{renderCell(
-																	d,
-																	ci,
-																	'targetQty',
-																)}
-															</div>
-														</td>
-													))}
-												</tr>
-
-												<tr
-													className={
-														getRowThemeClasses(
-															'driver1EmployeeId',
-														).row
-													}
-												>
-													{showRowLabels && (
-														<th
-															className={
-																getRowThemeClasses(
-																	'driver1EmployeeId',
-																).label
-															}
-														>
-															Driver 1
-														</th>
-													)}
-													{drafts.map((d, ci) => (
-														<td
-															key={ci}
-															className={plannerCellCls(
-																'driver1EmployeeId',
-															)}
-														>
-															<div className='min-w-0'>
-																{renderCell(
-																	d,
-																	ci,
-																	'driver1EmployeeId',
-																)}
-															</div>
-														</td>
-													))}
-												</tr>
-
-												<tr
-													className={
-														getRowThemeClasses(
-															'driver2EmployeeId',
-														).row
-													}
-												>
-													{showRowLabels && (
-														<th
-															className={
-																getRowThemeClasses(
-																	'driver2EmployeeId',
-																).label
-															}
-														>
-															Driver 2
-														</th>
-													)}
-													{drafts.map((d, ci) => (
-														<td
-															key={ci}
-															className={plannerCellCls(
-																'driver2EmployeeId',
-															)}
-														>
-															<div className='min-w-0'>
-																{renderCell(
-																	d,
-																	ci,
-																	'driver2EmployeeId',
-																)}
-															</div>
-														</td>
-													))}
-												</tr>
-
-												{/* Remarks row */}
-												<tr
-													className={
-														getRowThemeClasses(
-															'remarks',
-														).row
-													}
-												>
-													{showRowLabels && (
-														<th
-															className={
-																getRowThemeClasses(
-																	'remarks',
-																).label
-															}
-														>
-															Remarks
-														</th>
-													)}
-													{drafts.map((d, ci) => (
-														<td
-															key={ci}
-															className={plannerCellCls(
-																'remarks',
-															)}
-														>
-															<div className='min-w-0'>
-																{renderCell(
-																	d,
-																	ci,
-																	'remarks',
-																)}
-															</div>
-														</td>
-													))}
-												</tr>
+												{visibleScheduleRowKeys.map((rowKey) => renderScheduleTableRow(rowKey))}
 											</>
 										)}
 									</tbody>
@@ -3784,15 +3816,15 @@ export default function HrScheduleDayPage() {
 
 						{showWorkerRail ? (
 							<Card
-								className='flex min-h-screen flex-col overflow-hidden xl:sticky xl:top-4'
+								className='flex min-h-screen flex-col overflow-hidden xl:sticky xl:top-2'
 								style={
 									workerRailMaxHeight != null
 										? { maxHeight: workerRailMaxHeight }
 										: undefined
 								}
 							>
-								<CardHeader className='shrink-0 space-y-1 pb-2'>
-									<CardTitle className='text-base'>
+								<CardHeader className='shrink-0 space-y-0.5 px-3 py-2 pb-1'>
+									<CardTitle className='text-sm'>
 										Worker pool
 									</CardTitle>
 									<CardDescription>
@@ -3800,15 +3832,15 @@ export default function HrScheduleDayPage() {
 									</CardDescription>
 								</CardHeader>
 								<CardContent className='flex min-h-0 flex-1 flex-col gap-0 overflow-hidden p-0 pt-0'>
-									<div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-4'>
-										<div className='flex flex-col gap-2'>
+									<div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2'>
+										<div className='flex flex-col gap-1'>
 											{workerPool.length === 0 ? (
-												<p className='text-sm text-muted-foreground'>
+												<p className='text-xs text-muted-foreground'>
 													No active workers loaded.
 												</p>
 											) : unassignedWorkers.length ===
 											  0 ? (
-												<p className='text-sm text-muted-foreground'>
+												<p className='text-xs text-muted-foreground'>
 													All workers are assigned to
 													teams.
 												</p>
@@ -3824,11 +3856,11 @@ export default function HrScheduleDayPage() {
 									</div>
 
 									{multiAssigned.size > 0 ? (
-										<div className='shrink-0 border-t border-border bg-muted/30 px-6 py-3'>
+										<div className='shrink-0 border-t border-border bg-muted/30 px-3 py-2'>
 											<p className='text-xs font-medium text-amber-800 dark:text-amber-200'>
 												Multi-assigned
 											</p>
-											<div className='mt-2 flex flex-wrap gap-1'>
+											<div className='mt-1 flex flex-wrap gap-1'>
 												{[...multiAssigned].map(
 													(id) => (
 														<Badge
@@ -3852,39 +3884,39 @@ export default function HrScheduleDayPage() {
 					</div>
 
 					<section className='w-full overflow-hidden rounded-lg border border-border bg-card shadow-sm'>
-						<div className='border-b border-border px-5 py-4'>
-							<h2 className='text-lg font-semibold text-foreground'>
+						<div className='border-b border-border px-3 py-2'>
+							<h2 className='text-base font-semibold text-foreground'>
 								Schedule notes
 							</h2>
-							<p className='mt-1 text-sm text-muted-foreground'>
+							<p className='mt-0.5 text-xs text-muted-foreground'>
 								Shared note for the whole day (separate from
 								team remarks).
 							</p>
 						</div>
-						<div className='px-5 py-4'>
+						<div className='px-3 py-2'>
 							<textarea
 								value={scheduleInfo}
 								onChange={(e) =>
 									setScheduleInfo(e.target.value)
 								}
 								disabled={dis}
-								rows={3}
+								rows={2}
 								placeholder='General notes for this schedule…'
 								className={cn(
 									SCHEDULE_GRID_FLAT_INPUT,
-									'min-h-24 w-full resize-y py-2',
+									'min-h-16 w-full resize-y py-1',
 								)}
 							/>
 						</div>
 					</section>
 
 					<section className='relative z-0 w-full overflow-visible rounded-lg border border-border bg-card shadow-sm'>
-						<div className='flex flex-col gap-4 border-b border-border px-5 py-4 lg:flex-row lg:items-end lg:justify-between'>
-							<div className='min-w-0 space-y-1'>
-								<h2 className='text-lg font-semibold text-foreground'>
+						<div className='flex flex-col gap-2 border-b border-border px-3 py-2 lg:flex-row lg:items-end lg:justify-between'>
+							<div className='min-w-0 space-y-0.5'>
+								<h2 className='text-base font-semibold text-foreground'>
 									Driver trips
 								</h2>
-								<p className='text-sm text-muted-foreground'>
+								<p className='text-xs text-muted-foreground'>
 									All active drivers are listed below. Add
 									route notes, extra drivers, or guest drivers
 									(rental / hire).
@@ -3985,7 +4017,7 @@ export default function HrScheduleDayPage() {
 										<TableRow>
 											<TableCell
 												colSpan={3}
-												className='py-8 text-center text-muted-foreground'
+												className='py-4 text-center text-xs text-muted-foreground'
 											>
 												{driverPool.length === 0
 													? 'No active drivers loaded.'
@@ -4111,6 +4143,78 @@ export default function HrScheduleDayPage() {
 					</section>
 				</>
 			) : null}
+
+			<Modal
+				isOpen={rowSettingsOpen}
+				onClose={() => setRowSettingsOpen(false)}
+				title="Schedule row settings"
+				description="Check rows to show them on the team board. Use arrows to reorder. Saved to your account for this company."
+				size="sm"
+				actions={
+					<>
+						<Button type="button" variant="outline" onClick={resetScheduleRowSettings}>
+							Reset defaults
+						</Button>
+						<Button type="button" onClick={() => setRowSettingsOpen(false)}>
+							Done
+						</Button>
+					</>
+				}
+			>
+				<div className="max-h-[min(60vh,28rem)] space-y-1 overflow-y-auto pr-1">
+					{rowSettings.order.map((rowKey, index) => {
+						const visible = !rowSettings.hidden.includes(rowKey);
+						return (
+							<div
+								key={rowKey}
+								className={cn(
+									'flex items-center gap-1 rounded-md border border-border px-1.5 py-1',
+									!visible && 'bg-muted/40',
+								)}
+							>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7 shrink-0"
+									disabled={index === 0}
+									onClick={() => moveScheduleRowSetting(index, -1)}
+									aria-label={`Move ${SCHEDULE_TABLE_ROW_LABELS[rowKey]} up`}
+								>
+									<ChevronUp className="h-4 w-4" />
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7 shrink-0"
+									disabled={index === rowSettings.order.length - 1}
+									onClick={() => moveScheduleRowSetting(index, 1)}
+									aria-label={`Move ${SCHEDULE_TABLE_ROW_LABELS[rowKey]} down`}
+								>
+									<ChevronDown className="h-4 w-4" />
+								</Button>
+								<label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+									<input
+										type="checkbox"
+										checked={visible}
+										onChange={() => toggleScheduleRowVisibility(rowKey)}
+										className="h-4 w-4 shrink-0 rounded border-border"
+									/>
+									<span
+										className={cn(
+											'truncate text-sm text-foreground',
+											!visible && 'text-muted-foreground',
+										)}
+									>
+										{SCHEDULE_TABLE_ROW_LABELS[rowKey] ?? rowKey}
+									</span>
+								</label>
+							</div>
+						);
+					})}
+				</div>
+			</Modal>
 
 			<CreateEmployeeModal
 				isOpen={Boolean(pendingWorkerCreate)}
