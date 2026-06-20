@@ -40,7 +40,7 @@ interface SearchSelectProps<T extends { id: string; label: string; searchText?: 
   /** When true, `items` are already filtered (e.g. server search); skip client fuzzy match. */
   serverFiltered?: boolean;
   loading?: boolean;
-  /** When true, arrow keys move grid focus instead of opening the suggestion list. */
+  /** When true, ↑/↓ move grid focus while closed; while open, ↑/↓ navigate suggestions. */
   passThroughArrowKeys?: boolean;
   /** Called after a value is chosen (click, Enter, or Tab on a suggestion). */
   onAfterSelect?: (itemId: string) => void;
@@ -121,6 +121,13 @@ export default function SearchSelect<T extends { id: string; label: string; sear
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    dropdownRef.current
+      ?.querySelector<HTMLElement>('[data-suggestion-highlighted="true"]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [highlightedIdx, isOpen]);
+
   const updateDropdownPosition = useCallback(() => {
     if (!inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
@@ -184,17 +191,16 @@ export default function SearchSelect<T extends { id: string; label: string; sear
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (passThroughArrowKeys && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-      if (isOpen) setIsOpen(false);
+    const isVerticalArrow = e.key === 'ArrowUp' || e.key === 'ArrowDown';
+
+    if (passThroughArrowKeys && !isOpen && isVerticalArrow) {
       return;
     }
 
-    if (!passThroughArrowKeys && !isOpen && filteredItems.length > 0) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        setIsOpen(true);
-        return;
-      }
+    if (!passThroughArrowKeys && !isOpen && filteredItems.length > 0 && isVerticalArrow) {
+      e.preventDefault();
+      setIsOpen(true);
+      return;
     }
 
     if (!isOpen) return;
@@ -203,12 +209,14 @@ export default function SearchSelect<T extends { id: string; label: string; sear
       case 'ArrowDown':
         e.preventDefault();
         setHighlightedIdx((prev) =>
-          prev < filteredItems.length - 1 ? prev + 1 : prev
+          prev < filteredItems.length - 1 ? prev + 1 : 0
         );
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setHighlightedIdx((prev) => (prev > 0 ? prev - 1 : 0));
+        setHighlightedIdx((prev) =>
+          prev > 0 ? prev - 1 : Math.max(0, filteredItems.length - 1)
+        );
         break;
       case 'Enter':
         e.preventDefault();
@@ -299,7 +307,6 @@ export default function SearchSelect<T extends { id: string; label: string; sear
           {...inputProps}
           ref={inputRef}
           type="text"
-          data-pass-through-arrows={passThroughArrowKeys ? 'true' : undefined}
           value={displayedValue}
           onChange={(e) => {
             handleInputChange(e);
@@ -376,6 +383,7 @@ export default function SearchSelect<T extends { id: string; label: string; sear
                 <button
                   key={item.id}
                   type="button"
+                  data-suggestion-highlighted={idx === highlightedIdx ? 'true' : undefined}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     ignoreBlurRef.current = true;

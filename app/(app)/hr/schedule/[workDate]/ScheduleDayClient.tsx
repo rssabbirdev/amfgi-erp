@@ -387,7 +387,7 @@ function nextSubTeamLabel(index: number): string {
   return `Team ${index + 1}`;
 }
 
-const MIN_WORKER_SLOTS = 2;
+const MIN_WORKER_SLOTS = 1;
 const WORKER_NAV_SUB_STRIDE = 1000;
 
 function encodePersistedMemberSlot(subTeamIndex: number, memberIndex: number): number {
@@ -773,6 +773,15 @@ function getWorkerFieldNavSubs(draft: AsgDraft): number[] {
   );
 }
 
+function draftHasAssignedWorkers(draft: AsgDraft): boolean {
+  if (draft.splitMode) {
+    return draft.subTeams.some((subTeam) =>
+      subTeam.members.some((member) => Boolean(member.employeeId)),
+    );
+  }
+  return draft.members.some((member) => Boolean(member.employeeId));
+}
+
 function resolveWorkerNavSubForColumn(
   targetDraft: AsgDraft | undefined,
   sourceDraft: AsgDraft | undefined,
@@ -780,6 +789,9 @@ function resolveWorkerNavSubForColumn(
 ): number {
   const targetSubs = targetDraft ? getWorkerFieldNavSubs(targetDraft) : [];
   if (targetSubs.length === 0) return 0;
+  if (targetDraft && !draftHasAssignedWorkers(targetDraft)) {
+    return targetSubs[0];
+  }
   const sourceSubs = sourceDraft ? getWorkerFieldNavSubs(sourceDraft) : [];
   const sourceIndex = sourceSubs.indexOf(sourceSub);
   if (sourceIndex < 0) return targetSubs[targetSubs.length - 1];
@@ -3308,10 +3320,7 @@ export default function HrScheduleDayPage() {
     (e: ReactKeyboardEvent<HTMLElement>) => {
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       const target = e.currentTarget as HTMLElement;
-      if (
-        target.getAttribute('aria-expanded') === 'true' &&
-        target.getAttribute('data-pass-through-arrows') !== 'true'
-      ) return;
+      if (target.getAttribute('aria-expanded') === 'true') return;
 
       const rowKey = target.dataset.navRowKey ?? '';
       const col = Number(target.dataset.navCol ?? '-1');
