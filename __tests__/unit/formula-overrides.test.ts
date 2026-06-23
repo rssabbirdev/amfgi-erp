@@ -1,7 +1,11 @@
 import { buildJobItemEstimate } from '@/lib/job-costing/formulaEngine';
 import type { FormulaConfig, JobItemSpecifications, MaterialPricingSnapshot } from '@/lib/job-costing/types';
 
-function estimateMaterialQuantity(formulaConfig: FormulaConfig, specifications: JobItemSpecifications) {
+function estimateMaterialQuantity(
+  formulaConfig: FormulaConfig,
+  specifications: JobItemSpecifications,
+  specificationSchema?: unknown
+) {
   const result = buildJobItemEstimate({
     jobId: 'job-1',
     jobNumber: 'JOB-1',
@@ -13,6 +17,7 @@ function estimateMaterialQuantity(formulaConfig: FormulaConfig, specifications: 
       name: 'Formula',
       fabricationType: 'Test',
       formulaConfig,
+      specificationSchema,
     },
     jobItem: {
       id: 'item-1',
@@ -125,6 +130,30 @@ describe('dynamic formula areas', () => {
             ],
           },
         },
+      }
+    );
+
+    expect(quantity).toBe(30);
+  });
+
+  it('reads repeatable area metadata from specification schema when formula config lost it', () => {
+    const quantity = estimateMaterialQuantity(
+      {
+        ...dynamicFormula,
+        areas: dynamicFormula.areas.map((area) => ({ ...area, dynamic: undefined })),
+      },
+      {
+        areas: {
+          panel: {
+            instances: [
+              { id: 'panel-1', label: 'Panel 1', measurements: { sqm: 10 } },
+              { id: 'panel-2', label: 'Panel 2', measurements: { sqm: 5 } },
+            ],
+          },
+        },
+      },
+      {
+        areas: [{ key: 'panel', label: 'Panel', dynamic: true, fields: [] }],
       }
     );
 

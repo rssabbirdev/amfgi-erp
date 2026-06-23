@@ -410,6 +410,7 @@ export async function calculateJobCostEngine(params: {
             id: item.formulaLibrary.id,
             name: item.formulaLibrary.name,
             fabricationType: item.formulaLibrary.fabricationType,
+            specificationSchema: item.formulaLibrary.specificationSchema,
             formulaConfig: {
               ...(item.formulaLibrary.formulaConfig as FormulaConfig),
               defaultMaterialSelections: mergeDefaultMaterialSelections(

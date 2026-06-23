@@ -37,6 +37,9 @@ import {
   RuleRows,
   type FormulaEditorRequest,
 } from '@/components/job-costing/formula-builder/sections';
+import { AreaEngineTable } from '@/components/job-costing/AreaEngineTable';
+import { GlobalFormulaValuesTable } from '@/components/job-costing/GlobalFormulaValuesTable';
+import { JobLevelInputsTable } from '@/components/job-costing/JobLevelInputsTable';
 import {
   FIELD_TYPES,
   type AreaRule,
@@ -48,17 +51,16 @@ import {
   type PlaygroundValues,
   buildFormulaConstantTokens,
   buildAreaFormulaValueTokens,
-  buildPlaygroundBaseValues,
   buildPlaygroundNumericValues,
   buildPlaygroundPreview,
-  buildAreaFormulaOverrideMap,
-  buildGlobalFormulaOverrideMap,
-  addScopedAreaPlaygroundValues,
-  applyResolvedFormulaFields,
+  hydratePlaygroundDynamicAreas,
+  migrateAreaPlaygroundValuesToDynamic,
+  formatAreaExpressionOutputPreview,
+  formatAreaMaterialRuleOutputPreview,
+  formatAreaLaborRuleOutputPreview,
+  formatPossibleFormulaOutput,
   evaluatePlaygroundExpression,
-  formatAutoSaveLabel,
   formatPreviewQty,
-  getFormulaDraftStorageKey,
   parsePlaygroundValue,
   getExpressionInsertRange,
   getExpressionTokenQuery,
@@ -69,8 +71,12 @@ import {
   newFormulaConstant,
   normalizeFormulaKey,
   normalizeSlugInput,
+  getStoredFormulaConstants,
+  mergeGlobalFieldsWithFormulaConstants,
+  isStoredGlobalField,
   renameFormulaReferences,
   reorderItemsById,
+  resolveGlobalFieldFormValue,
   slugify,
   uid,
 } from '@/components/job-costing/formula-builder/shared';
@@ -152,6 +158,22 @@ function parseField(value: unknown): DynamicField | null {
     inputType: FIELD_TYPES.includes(value.inputType as FieldType) ? (value.inputType as FieldType) : 'number',
     unit: typeof value.unit === 'string' ? value.unit : '',
     defaultMaterialId: typeof value.defaultMaterialId === 'string' ? value.defaultMaterialId : '',
+    defaultValue:
+      typeof value.defaultValue === 'string'
+        ? value.defaultValue
+        : typeof value.defaultValue === 'number'
+          ? String(value.defaultValue)
+          : typeof value.defaultValue === 'boolean'
+            ? String(value.defaultValue)
+            : '',
+    storedValue:
+      typeof value.storedValue === 'string'
+        ? value.storedValue
+        : typeof value.value === 'string'
+          ? value.value
+          : typeof value.value === 'number'
+            ? String(value.value)
+            : '',
     required: typeof value.required === 'boolean' ? value.required : true,
     scope: undefined,
   };
@@ -332,8 +354,8 @@ function parseFormula(row?: FormulaLibrary | null): BuilderState {
     slug: row?.slug ?? '',
     fabricationType: row?.fabricationType ?? '',
     description: row?.description ?? '',
-    globalFields,
-    formulaConstants,
+    globalFields: mergeGlobalFieldsWithFormulaConstants(globalFields, formulaConstants),
+    formulaConstants: [],
     areas: areas.length > 0 ? areas : [newArea()],
   };
 }
@@ -423,7 +445,7 @@ function duplicateAreaDefinition(areas: AreaRule[], sourceArea: AreaRule): AreaR
 }
 
 function buildPayload(form: BuilderState, playgroundValues: PlaygroundValues) {
-  const constants = form.formulaConstants
+  const constants = getStoredFormulaConstants(form.globalFields)
     .filter((field) => field.key.trim() && field.label.trim() && field.value.trim())
     .map((field) => ({
       key: field.key.trim(),
@@ -444,6 +466,8 @@ function buildPayload(form: BuilderState, playgroundValues: PlaygroundValues) {
         inputType: field.inputType,
         unit: field.unit.trim() || undefined,
         defaultMaterialId: field.inputType === 'material' && field.defaultMaterialId?.trim() ? field.defaultMaterialId.trim() : undefined,
+        defaultValue: field.inputType !== 'material' && !isStoredGlobalField(field) && field.defaultValue?.trim() ? field.defaultValue.trim() : undefined,
+        storedValue: isStoredGlobalField(field) && field.storedValue?.trim() ? field.storedValue.trim() : undefined,
         required: field.required,
       })),
     areas: form.areas
@@ -461,6 +485,8 @@ function buildPayload(form: BuilderState, playgroundValues: PlaygroundValues) {
             label: field.label.trim(),
             inputType: field.inputType,
             unit: field.unit.trim() || undefined,
+            defaultMaterialId: field.inputType === 'material' && field.defaultMaterialId?.trim() ? field.defaultMaterialId.trim() : undefined,
+            defaultValue: field.inputType !== 'material' && field.defaultValue?.trim() ? field.defaultValue.trim() : undefined,
             required: field.required,
           })),
         formulaValues: area.formulaValues
@@ -560,8 +586,11 @@ function createGlobalFieldDraft(inputType: FieldType): DynamicField {
   return {
     ...newField(),
     inputType,
-    unit: inputType === 'material' ? '' : '',
+    unit: '',
     defaultMaterialId: '',
+    defaultValue: '',
+    storedValue: inputType === 'stored' ? '' : undefined,
+    required: inputType !== 'stored',
   };
 }
 
@@ -570,13 +599,6 @@ function insertFormulaSnippet(value: string, snippet: string) {
   if (!trimmed) return snippet;
   const needsLineBreak = !trimmed.endsWith('\n');
   return `${value}${needsLineBreak ? '\n' : ''}${snippet}`;
-}
-
-function formatPossibleFormulaOutput(value: unknown) {
-  if (typeof value === 'number') return formatPreviewQty(value);
-  if (typeof value === 'boolean') return value ? 'true' : 'false';
-  if (typeof value === 'string') return value || '--';
-  return '--';
 }
 
 function createFormulaConstantDraft(): FormulaConstantField {
@@ -668,9 +690,6 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
   const [foundationCollapsed, setFoundationCollapsed] = useState(false);
   const [formulaConstantsCollapsed, setFormulaConstantsCollapsed] = useState(false);
   const [jobInputsCollapsed, setJobInputsCollapsed] = useState(false);
-  const [draggingAreaId, setDraggingAreaId] = useState<string | null>(null);
-  const [autoSaveState, setAutoSaveState] = useState<'idle' | 'draft' | 'saving' | 'saved' | 'error'>('idle');
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [formulaEditor, setFormulaEditor] = useState<FormulaEditorRequest | null>(null);
   const [formulaEditorSearch, setFormulaEditorSearch] = useState('');
   const [formulaEditorCursor, setFormulaEditorCursor] = useState(0);
@@ -685,7 +704,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
   const [undoStack, setUndoStack] = useState<BuilderState[]>([]);
   const [redoStack, setRedoStack] = useState<BuilderState[]>([]);
   const form = draft ?? initialForm;
-  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const storedFormulaConstants = useMemo(() => getStoredFormulaConstants(form.globalFields), [form.globalFields]);
   const hydratedPlaygroundFormulaIdRef = useRef<string | null>(null);
   const saveInFlightRef = useRef(false);
   const formulaJsonFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -717,7 +736,6 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
   };
 
   const saving = creating || updating;
-  const storageKey = useMemo(() => getFormulaDraftStorageKey(activeFormulaId), [activeFormulaId]);
   const payload = useMemo(() => buildPayload(form, playgroundValues), [form, playgroundValues]);
   const playgroundPreview = useMemo(
     () => buildPlaygroundPreview(form, playgroundValues, materials),
@@ -829,16 +847,6 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
       field.unit.toLowerCase().includes(query)
     );
   }, [form.globalFields, globalFieldSearch]);
-  const filteredFormulaConstants = useMemo(() => {
-    const query = formulaConstantSearch.trim().toLowerCase();
-    if (!query) return form.formulaConstants;
-    return form.formulaConstants.filter((field) =>
-      field.label.toLowerCase().includes(query) ||
-      field.key.toLowerCase().includes(query) ||
-      field.value.toLowerCase().includes(query) ||
-      field.unit.toLowerCase().includes(query)
-    );
-  }, [form.formulaConstants, formulaConstantSearch]);
 
   const existingSlugSet = useMemo(
     () => new Set(formulaLibrary.filter((item) => item.id !== activeFormulaId).map((item) => item.slug)),
@@ -931,37 +939,11 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     }
   };
 
-  const buildAreaResolvedPreviewValues = (areaId: string) => {
-    const resolvedValues = buildPlaygroundBaseValues(form, playgroundValues);
-    addScopedAreaPlaygroundValues(resolvedValues, form.areas, playgroundValues);
-    const area = form.areas.find((item) => item.id === areaId);
-    if (!area) return null;
-    for (const field of area.fields ?? []) {
-      const fieldKey = field.key.trim();
-      if (!fieldKey) continue;
-      const rawValue = playgroundValues[`area.${area.id}.${field.key}`] ?? '';
-      resolvedValues[`area.${fieldKey}`] = parsePlaygroundValue(rawValue, field.inputType);
-    }
-    applyResolvedFormulaFields(
-      resolvedValues,
-      form.formulaConstants,
-      'formula.',
-      buildGlobalFormulaOverrideMap(form.formulaConstants, playgroundValues)
-    );
-    applyResolvedFormulaFields(
-      resolvedValues,
-      area.formulaValues ?? [],
-      'area.formula.',
-      buildAreaFormulaOverrideMap(area.id, area.formulaValues ?? [], playgroundValues)
-    );
-    return { area, resolvedValues };
-  };
-
   const resolveAreaFormulaOutputPreview = (areaId: string, expression: string) => {
     try {
-      const previewState = buildAreaResolvedPreviewValues(areaId);
-      if (!previewState) return '--';
-      return formatPossibleFormulaOutput(evaluatePlaygroundExpression(expression || '0', previewState.resolvedValues));
+      const area = form.areas.find((item) => item.id === areaId);
+      if (!area) return '--';
+      return formatAreaExpressionOutputPreview(form, playgroundValues, area, expression);
     } catch {
       return 'Unable to resolve with current playground values';
     }
@@ -969,26 +951,28 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
 
   const resolveAreaMaterialRuleOutputPreview = (areaId: string, rule: AreaRule['materials'][number]) => {
     try {
-      const previewState = buildAreaResolvedPreviewValues(areaId);
-      if (!previewState) return '--';
-      const { resolvedValues } = previewState;
-      const quantity = Number(evaluatePlaygroundExpression(rule.quantityExpression || '0', resolvedValues));
-      const wastePercent = Number(parsePlaygroundValue(rule.wastePercent || '0', 'percent'));
-      const finalQuantity = quantity * (1 + wastePercent / 100);
+      const area = form.areas.find((item) => item.id === areaId);
+      if (!area) return '--';
       const selectedMaterialId =
         rule.materialSource === 'global'
-          ? playgroundValues[`global.${rule.materialSelectorKey}`] ||
-            form.globalFields.find((field) => field.key === rule.materialSelectorKey)?.defaultMaterialId ||
-            ''
+          ? resolveGlobalFieldFormValue(
+              form.globalFields.find((field) => field.key === rule.materialSelectorKey) ?? {
+                inputType: 'material',
+                defaultMaterialId: '',
+              },
+              playgroundValues[`global.${rule.materialSelectorKey}`]
+            )
           : rule.materialId;
       const selectedMaterial = selectedMaterialId
         ? materials.find((material) => material.id === selectedMaterialId)
         : null;
-      const unitSuffix = selectedMaterial?.unit?.trim() ? ` ${selectedMaterial.unit.trim()}` : '';
-      const parts = [`Qty ${formatPreviewQty(quantity)}${unitSuffix}`];
-      if (wastePercent) parts.push(`Final ${formatPreviewQty(finalQuantity)}${unitSuffix}`);
-      if (wastePercent) parts.push(`Waste ${formatPreviewQty(wastePercent)}%`);
-      return parts.join(' • ');
+      return formatAreaMaterialRuleOutputPreview(
+        form,
+        playgroundValues,
+        area,
+        rule,
+        selectedMaterial?.unit
+      );
     } catch {
       return 'Unable to resolve with current playground values';
     }
@@ -996,21 +980,9 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
 
   const resolveAreaLaborRuleOutputPreview = (areaId: string, rule: AreaRule['labor'][number]) => {
     try {
-      const previewState = buildAreaResolvedPreviewValues(areaId);
-      if (!previewState) return '--';
-      const { resolvedValues } = previewState;
-      const quantity = Number(evaluatePlaygroundExpression(rule.quantityExpression || '0', resolvedValues));
-      const crew = Number(
-        evaluatePlaygroundExpression(rule.crewSizeExpression.trim() ? rule.crewSizeExpression : '1', resolvedValues)
-      );
-      const productivity = Number(
-        evaluatePlaygroundExpression(rule.productivityPerWorkerPerDay.trim() ? rule.productivityPerWorkerPerDay : '0', resolvedValues)
-      );
-      const parts = [`Qty ${formatPreviewQty(quantity)}`, `Crew ${formatPreviewQty(crew)}`, `Prod ${formatPreviewQty(productivity)}/day`];
-      if (crew > 0 && productivity > 0) {
-        parts.push(`Days ${formatPreviewQty(quantity / (crew * productivity))}`);
-      }
-      return parts.join(' • ');
+      const area = form.areas.find((item) => item.id === areaId);
+      if (!area) return '--';
+      return formatAreaLaborRuleOutputPreview(form, playgroundValues, area, rule);
     } catch {
       return 'Unable to resolve with current playground values';
     }
@@ -1182,12 +1154,19 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
 
   const saveGlobalFieldEditor = () => {
     if (!globalFieldEditor) return;
+    const isStored = isStoredGlobalField(globalFieldEditor.draft);
     const draftField = {
       ...globalFieldEditor.draft,
       key: normalizeFormulaKey(globalFieldEditor.draft.key),
       label: globalFieldEditor.draft.label.trim(),
       unit: globalFieldEditor.draft.unit.trim(),
       defaultMaterialId: globalFieldEditor.draft.inputType === 'material' ? (globalFieldEditor.draft.defaultMaterialId ?? '').trim() : '',
+      defaultValue:
+        !isStored && globalFieldEditor.draft.inputType !== 'material'
+          ? (globalFieldEditor.draft.defaultValue ?? '').trim()
+          : '',
+      storedValue: isStored ? (globalFieldEditor.draft.storedValue ?? '').trim() : undefined,
+      required: isStored ? false : globalFieldEditor.draft.required,
     };
     if (!draftField.label) {
       toast.error('Input label is required');
@@ -1195,6 +1174,10 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     }
     if (!draftField.key) {
       toast.error('Input key is required');
+      return;
+    }
+    if (isStored && !draftField.storedValue) {
+      toast.error('Formula or fixed value is required');
       return;
     }
 
@@ -1211,14 +1194,20 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
         ...current,
         globalFields: [...current.globalFields, draftField],
       }));
-      toast.success('Job input added');
+      toast.success(isStored ? 'Stored value added' : 'Job input added');
     } else {
       const previousKey = globalFieldEditor.initialDraft.key.trim();
-      setFormState((current) => ({
-        ...current,
-        globalFields: current.globalFields.map((field) => (field.id === draftField.id ? draftField : field)),
-      }));
-      if (previousKey && previousKey !== draftField.key) {
+      setFormState((current) => {
+        const renamed =
+          isStored && previousKey && previousKey !== draftField.key
+            ? renameFormulaReferences(current, previousKey, draftField.key)
+            : current;
+        return {
+          ...renamed,
+          globalFields: renamed.globalFields.map((field) => (field.id === draftField.id ? draftField : field)),
+        };
+      });
+      if (!isStored && previousKey && previousKey !== draftField.key) {
         setPlaygroundValues((current) => {
           const previousValue = current[`global.${previousKey}`];
           if (previousValue === undefined) return current;
@@ -1228,7 +1217,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
           return next;
         });
       }
-      toast.success('Job input updated');
+      toast.success(isStored ? 'Stored value updated' : 'Job input updated');
     }
     closeGlobalFieldEditor();
   };
@@ -1290,6 +1279,8 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
       label: areaFieldEditor.draft.label.trim(),
       key: normalizeFormulaKey(areaFieldEditor.draft.key),
       unit: areaFieldEditor.draft.unit.trim(),
+      defaultMaterialId: areaFieldEditor.draft.inputType === 'material' ? (areaFieldEditor.draft.defaultMaterialId ?? '').trim() : '',
+      defaultValue: areaFieldEditor.draft.inputType !== 'material' ? (areaFieldEditor.draft.defaultValue ?? '').trim() : '',
     };
     if (!draftField.label) {
       toast.error('Area input label is required');
@@ -1509,7 +1500,6 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
       setDraft(nextDraft);
       setPlaygroundValues(parsePlaygroundValues(importedFormula));
       setSlugEdited(true);
-      setAutoSaveState('draft');
       toast.success('Formula JSON imported. Review and save to apply it.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not import formula JSON');
@@ -1522,16 +1512,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
       const restored = await restoreFormulaVersion({ id: activeFormulaId, versionId: version.id }).unwrap();
       const nextDraft = parseFormula(restored);
       applyRestoredFormState(nextDraft);
-      if (typeof window !== 'undefined') {
-        const savedAt = new Date().toISOString();
-        window.localStorage.setItem(
-          getFormulaDraftStorageKey(activeFormulaId),
-          JSON.stringify({ form: nextDraft, slugEdited: true, savedAt })
-        );
-      }
       setVersionHistoryOpen(false);
-      setAutoSaveState('saved');
-      setLastSavedAt(new Date().toISOString());
       toast.success(`Restored version ${version.versionNumber}`);
     } catch (error) {
       const message =
@@ -1547,6 +1528,8 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
 
   useEffect(() => {
     setActiveFormulaId(formulaId);
+    setDraft(null);
+    setSlugEdited(false);
     setUndoStack([]);
     setRedoStack([]);
     if (!formulaId) {
@@ -1561,45 +1544,6 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     setPlaygroundValues(initialPlaygroundValues);
     hydratedPlaygroundFormulaIdRef.current = formula.id;
   }, [activeFormulaId, formula, initialPlaygroundValues]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (hydratedDraftKeyRef.current === storageKey) return;
-
-    const raw = window.localStorage.getItem(storageKey);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as { form?: BuilderState; slugEdited?: boolean; savedAt?: string };
-        if (parsed.form) {
-          setDraft(parsed.form);
-          setUndoStack([]);
-          setRedoStack([]);
-        }
-        if (typeof parsed.slugEdited === 'boolean') setSlugEdited(parsed.slugEdited);
-        if (typeof parsed.savedAt === 'string') setLastSavedAt(parsed.savedAt);
-      } catch {
-        window.localStorage.removeItem(storageKey);
-      }
-    } else if (draft == null) {
-      setDraft(null);
-      setSlugEdited(false);
-      setLastSavedAt(null);
-      setUndoStack([]);
-      setRedoStack([]);
-    }
-
-    hydratedDraftKeyRef.current = storageKey;
-  }, [draft, storageKey]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (hydratedDraftKeyRef.current !== storageKey) return;
-
-    const savedAt = new Date().toISOString();
-    window.localStorage.setItem(storageKey, JSON.stringify({ form, slugEdited, savedAt }));
-    setLastSavedAt(savedAt);
-    setAutoSaveState((current) => (current === 'saving' ? current : 'draft'));
-  }, [form, slugEdited, storageKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1643,38 +1587,20 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
 
     try {
       saveInFlightRef.current = true;
-      setAutoSaveState('saving');
       if (activeFormulaId) {
         const updated = await updateFormula({ id: activeFormulaId, data: { ...saveBody, saveMode: mode } }).unwrap();
         const nextDraft = parseFormula(updated);
         setDraft(nextDraft);
-        if (typeof window !== 'undefined') {
-          const savedAt = new Date().toISOString();
-          window.localStorage.setItem(
-            getFormulaDraftStorageKey(activeFormulaId),
-            JSON.stringify({ form: nextDraft, slugEdited: true, savedAt })
-          );
-        }
         if (mode === 'manual') toast.success('Formula saved');
       } else {
         const created = await createFormula({ ...saveBody, saveMode: mode }).unwrap();
         const nextDraft = parseFormula(created);
-        const nextStorageKey = getFormulaDraftStorageKey(created.id);
-        if (typeof window !== 'undefined') {
-          const savedAt = new Date().toISOString();
-          window.localStorage.setItem(nextStorageKey, JSON.stringify({ form: nextDraft, slugEdited: true, savedAt }));
-          window.localStorage.removeItem(getFormulaDraftStorageKey(undefined));
-        }
-        hydratedDraftKeyRef.current = nextStorageKey;
         setActiveFormulaId(created.id);
         setDraft(nextDraft);
         setSlugEdited(true);
         router.replace(`/stock/job-budget/formulas/${created.id}/edit`);
         if (mode === 'manual') toast.success('Formula created');
       }
-      const savedAt = new Date().toISOString();
-      setLastSavedAt(savedAt);
-      setAutoSaveState('saved');
     } catch (error) {
       const message =
         typeof error === 'object' &&
@@ -1683,7 +1609,6 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
         typeof (error as { data?: { error?: unknown } }).data?.error === 'string'
           ? (error as { data: { error: string } }).data.error
           : 'Failed to save formula';
-      setAutoSaveState('error');
       if (mode === 'manual') toast.error(message);
     } finally {
       saveInFlightRef.current = false;
@@ -1741,9 +1666,6 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
             className="hidden"
             onChange={(event) => void importFormulaJson(event)}
           />
-          <Badge variant={autoSaveState === 'error' ? 'destructive' : autoSaveState === 'saved' ? 'secondary' : 'outline'}>
-            {formatAutoSaveLabel(autoSaveState, lastSavedAt)}
-          </Badge>
           <Link href="/stock/job-budget/formulas" className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}>
             Back to formulas
           </Link>
@@ -1934,144 +1856,13 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
               ) : null}
             </Card>
 
-            <div className="rounded-[1.75rem] border border-cyan-200 bg-white/95 p-5 shadow-sm dark:border-cyan-500/20 dark:bg-slate-950/80">
-              <div className="flex flex-col gap-2 border-b border-cyan-100 pb-4 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300">Global keys and formulas</p>
-                  <h2 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">Stored formula values</h2>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Save fixed rates here once and reuse them inside expressions as <span className="font-mono">formula.key</span>.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <p className="max-w-md text-sm text-slate-500 dark:text-slate-400">Keep shared keys compact, then expand when you need to add or edit reusable formula-side values.</p>
-                  <Button size="sm" variant="secondary" onClick={() => setFormulaConstantsCollapsed((current) => !current)}>
-                    {formulaConstantsCollapsed ? 'Expand' : 'Collapse'}
-                  </Button>
-                </div>
-              </div>
-              {!formulaConstantsCollapsed ? (
-              <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3 dark:border-cyan-500/20 dark:bg-cyan-500/10">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">Stored values</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">{form.formulaConstants.length}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    value={formulaConstantSearch}
-                    onChange={(event) => setFormulaConstantSearch(event.target.value)}
-                    placeholder="Search values"
-                    className="w-full rounded-xl border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-cyan-300 dark:border-cyan-500/20 dark:bg-slate-950 dark:text-white sm:w-52"
-                  />
-                  <Button size="sm" variant="secondary" onClick={openFormulaConstantCreate}>
-                    Add value
-                  </Button>
-                </div>
-              </div>
-              ) : null}
-
-              {!formulaConstantsCollapsed ? (
-              <div className="mt-4 space-y-3">
-                {form.formulaConstants.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/70 px-4 py-5 text-sm text-slate-500 dark:border-cyan-500/20 dark:bg-cyan-500/5 dark:text-slate-400">
-                    Add resin use rate, fiber use rate, catalyst factor, overlap factor, or any other fixed formula-side value here.
-                  </div>
-                ) : filteredFormulaConstants.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/70 px-4 py-5 text-sm text-slate-500 dark:border-cyan-500/20 dark:bg-cyan-500/5 dark:text-slate-400">
-                    No stored values match this search.
-                  </div>
-                ) : (
-                  <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                    {filteredFormulaConstants.map((field) => {
-                      const index = form.formulaConstants.findIndex((item) => item.id === field.id);
-                      return (
-                        <div
-                          key={field.id}
-                          className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{field.label || 'Untitled value'}</p>
-                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                Possible output: {resolveGlobalFormulaOutputPreview(field.value || '0')}
-                              </p>
-                            </div>
-                            <span className="shrink-0 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-300">
-                              {field.unit || 'no unit'}
-                            </span>
-                          </div>
-                          <div className="mt-4 space-y-3">
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Key</p>
-                              <p className="mt-1 truncate font-mono text-xs text-cyan-700 dark:text-cyan-300">{field.key ? `formula.${field.key}` : 'formula.key'}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Formula / Value</p>
-                              <p className="mt-1 line-clamp-3 break-all font-mono text-xs text-slate-600 dark:text-slate-300">{field.value || '--'}</p>
-                            </div>
-                          </div>
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <Button size="sm" variant="secondary" onClick={() => openFormulaConstantEdit(field)}>
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => duplicateFormulaConstant(field)}>
-                              Duplicate
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={index === 0}
-                              onClick={() =>
-                                setFormState((current) => ({
-                                  ...current,
-                                  formulaConstants: reorderItemsById(current.formulaConstants, field.id, current.formulaConstants[index - 1]?.id ?? field.id),
-                                }))
-                              }
-                            >
-                              Up
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={index === form.formulaConstants.length - 1}
-                              onClick={() =>
-                                setFormState((current) => ({
-                                  ...current,
-                                  formulaConstants: reorderItemsById(current.formulaConstants, field.id, current.formulaConstants[index + 1]?.id ?? field.id),
-                                }))
-                              }
-                            >
-                              Down
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                setFormState((current) => ({
-                                  ...current,
-                                  formulaConstants: current.formulaConstants.filter((item) => item.id !== field.id),
-                                }))
-                              }
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              ) : null}
-            </div>
-
             <div className="rounded-[1.75rem] border border-teal-200 bg-white/95 p-5 shadow-sm dark:border-teal-500/20 dark:bg-slate-950/80">
               <div className="flex flex-col gap-2 border-b border-teal-100 pb-4 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-700 dark:text-teal-300">Job-level inputs</p>
-                  <h2 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">Material choices and consumption rates</h2>
+                  <h2 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">Measurements, materials, and stored values</h2>
                   <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                    Add material dropdowns for brand-sensitive items, then add numeric inputs for rates such as kg per sqm.
+                    Add user inputs for job data, or stored formula values (fixed numbers or expressions) referenced as <span className="font-mono">formula.key</span>.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2095,106 +1886,81 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                   <Button size="sm" variant="secondary" onClick={() => openGlobalFieldCreate('number')}>
                     Add rate/input
                   </Button>
+                  <Button size="sm" variant="secondary" onClick={() => openGlobalFieldCreate('stored')}>
+                    Add stored value
+                  </Button>
                 </div>
                 ) : null}
               {!jobInputsCollapsed ? (
                 <div className="mt-4">
                   {form.globalFields.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-teal-200 bg-teal-50/70 px-4 py-6 text-sm text-slate-500 dark:border-teal-500/20 dark:bg-teal-500/5 dark:text-slate-400">
-                      No job-level inputs yet. Add material dropdowns for brand choices or rate/input fields for numeric job data.
+                      No job-level inputs yet. Add material dropdowns, numeric inputs, or stored formula values.
                     </div>
                   ) : filteredGlobalFields.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-teal-200 bg-teal-50/70 px-4 py-6 text-sm text-slate-500 dark:border-teal-500/20 dark:bg-teal-500/5 dark:text-slate-400">
                       No job-level inputs match this search.
                     </div>
                   ) : (
-                    <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                      {filteredGlobalFields.map((field) => {
-                        const index = form.globalFields.findIndex((item) => item.id === field.id);
-                        return (
-                          <div
-                            key={field.id}
-                            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{field.label || 'Untitled input'}</p>
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                  {field.inputType === 'material' ? 'Stores selected material for job costing' : 'Used in formulas as a job-level input'}
-                                </p>
-                              </div>
-                              <span className="shrink-0 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-700 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-teal-300">
-                                {field.inputType === 'material' ? 'material' : field.inputType}
-                              </span>
-                            </div>
-                            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Key</p>
-                                <p className="mt-1 truncate font-mono text-xs text-sky-700 dark:text-sky-300">{field.key ? `specs.global.${field.key}` : 'specs.global.key'}</p>
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Unit</p>
-                                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{field.unit || '--'}</p>
-                              </div>
-                              {field.inputType === 'material' ? (
-                                <div className="min-w-0 sm:col-span-2">
-                                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Default material</p>
-                                  <p className="mt-1 truncate text-xs text-slate-600 dark:text-slate-300">
-                                    {materials.find((material) => material.id === field.defaultMaterialId)?.name || 'No default material'}
-                                  </p>
-                                </div>
-                              ) : null}
-                            </div>
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              <Button size="sm" variant="secondary" onClick={() => openGlobalFieldEdit(field)}>
-                                Edit
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => duplicateGlobalField(field)}>
-                                Duplicate
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={index === 0}
-                                onClick={() =>
-                                  setFormState((current) => ({
-                                    ...current,
-                                    globalFields: reorderItemsById(current.globalFields, field.id, current.globalFields[index - 1]?.id ?? field.id),
-                                  }))
-                                }
-                              >
-                                Up
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={index === form.globalFields.length - 1}
-                                onClick={() =>
-                                  setFormState((current) => ({
-                                    ...current,
-                                    globalFields: reorderItemsById(current.globalFields, field.id, current.globalFields[index + 1]?.id ?? field.id),
-                                  }))
-                                }
-                              >
-                                Down
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  setFormState((current) => ({
-                                    ...current,
-                                    globalFields: current.globalFields.filter((item) => item.id !== field.id),
-                                  }))
-                                }
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <JobLevelInputsTable
+                      tone="teal"
+                      mode="builder"
+                      fields={filteredGlobalFields.map((field) => ({
+                        id: field.id,
+                        label: field.label || 'Untitled input',
+                        key: field.key,
+                        inputType: field.inputType,
+                        unit: field.unit,
+                        defaultMaterialId: field.defaultMaterialId,
+                        defaultMaterialName: materials.find((material) => material.id === field.defaultMaterialId)?.name,
+                        defaultValue: field.defaultValue,
+                        storedValue: field.storedValue,
+                      }))}
+                      builderActions={{
+                        onEdit: (id) => {
+                          const field = form.globalFields.find((item) => item.id === id);
+                          if (field) openGlobalFieldEdit(field);
+                        },
+                        onDuplicate: (id) => {
+                          const field = form.globalFields.find((item) => item.id === id);
+                          if (field) duplicateGlobalField(field);
+                        },
+                        onMoveUp: (id) =>
+                          setFormState((current) => {
+                            const index = current.globalFields.findIndex((item) => item.id === id);
+                            return {
+                              ...current,
+                              globalFields: reorderItemsById(
+                                current.globalFields,
+                                id,
+                                current.globalFields[index - 1]?.id ?? id,
+                              ),
+                            };
+                          }),
+                        onMoveDown: (id) =>
+                          setFormState((current) => {
+                            const index = current.globalFields.findIndex((item) => item.id === id);
+                            return {
+                              ...current,
+                              globalFields: reorderItemsById(
+                                current.globalFields,
+                                id,
+                                current.globalFields[index + 1]?.id ?? id,
+                              ),
+                            };
+                          }),
+                        onRemove: (id) =>
+                          setFormState((current) => ({
+                            ...current,
+                            globalFields: current.globalFields.filter((item) => item.id !== id),
+                          })),
+                        canMoveUp: (id) => form.globalFields.findIndex((item) => item.id === id) > 0,
+                        canMoveDown: (id) => {
+                          const index = form.globalFields.findIndex((item) => item.id === id);
+                          return index >= 0 && index < form.globalFields.length - 1;
+                        },
+                      }}
+                    />
                   )}
                 </div>
                 ) : null}
@@ -2214,333 +1980,231 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                 </Button>
               </div>
 
-              <div className="mt-5 space-y-5">
-                {form.areas.map((area, areaIndex) => {
-                  const collapsed = Boolean(collapsedAreaIds[area.id]);
-                  const areaTitle = `${areaIndex + 1}.${area.label.trim() || area.key.trim() || 'Area'} - ${area.key.trim() || 'new-area'}`;
-
-                  return (
-                    <div
-                      key={area.id}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => {
-                        if (!draggingAreaId || draggingAreaId === area.id) return;
-                        setFormState((current) => ({
-                          ...current,
-                          areas: reorderItemsById(current.areas, draggingAreaId, area.id),
-                        }));
-                        setDraggingAreaId(null);
-                      }}
-                      className={`overflow-visible rounded-3xl border bg-slate-50 shadow-sm transition ${
-                        draggingAreaId === area.id
-                          ? 'border-emerald-300 ring-2 ring-emerald-500/20 dark:border-emerald-500/40'
-                          : 'border-slate-200 dark:border-slate-700'
-                      } dark:bg-slate-900/45`}
-                    >
-                      <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-950/70 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className={`${collapsed ? '' : 'mb-3'} rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900`}>
-                            <span className="block truncate text-sm font-semibold text-slate-950 dark:text-white">{areaTitle}</span>
-                            <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">
-                              {area.fields.length} inputs, {area.materials.length} material rules, {area.labor.length} labor rules
-                            </span>
-                          </div>
-
-                          {!collapsed ? (
-                            <div className="flex gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-sm font-semibold text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-200">
-                                {areaIndex + 1}
-                              </div>
-                              <div className="grid flex-1 gap-3 md:grid-cols-2">
-                                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                                  Area display name
-                                  <input
-                                    value={area.label}
-                                    placeholder="Walls"
-                                    onChange={(event) => updateArea(area.id, { label: event.target.value })}
-                                    className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-normal text-slate-900 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
-                                  />
-                                </label>
-                                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                                  Area token key
-                                  <input
-                                    value={area.key}
-                                    placeholder="walls"
-                                    onChange={(event) => updateArea(area.id, { key: normalizeFormulaKey(event.target.value) })}
-                                    className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 font-mono text-sm font-normal text-slate-900 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
-                                  />
-                                </label>
-                                <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:border-slate-700 dark:bg-slate-900">
-                                  <span>
-                                    Repeatable area
-                                    <span className="mt-1 block text-[11px] font-normal normal-case tracking-normal text-slate-500 dark:text-slate-400">
-                                      Budget users can add multiple rows with the same fields.
-                                    </span>
-                                  </span>
-                                  <button
-                                    type="button"
-                                    role="switch"
-                                    aria-checked={area.dynamic}
-                                    onClick={() => updateArea(area.id, { dynamic: !area.dynamic })}
-                                    className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition ${
-                                      area.dynamic ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
-                                    }`}
-                                  >
-                                    <span
-                                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                                        area.dynamic ? 'translate-x-6' : 'translate-x-1'
-                                      }`}
-                                    />
-                                  </button>
-                                </label>
-                              </div>
+              <div className="mt-5">
+                <AreaEngineTable
+                  areas={form.areas.map((area) => ({
+                    id: area.id,
+                    label: area.label,
+                    key: area.key,
+                    dynamic: area.dynamic,
+                    fieldCount: area.fields.length,
+                    materialCount: area.materials.length,
+                    laborCount: area.labor.length,
+                  }))}
+                  collapsedAreaIds={collapsedAreaIds}
+                  onToggleCollapsed={toggleAreaCollapse}
+                  onLabelChange={(id, label) => updateArea(id, { label })}
+                  onKeyChange={(id, key) => updateArea(id, { key: normalizeFormulaKey(key) })}
+                  onDynamicChange={(id, dynamic) => {
+                    const area = form.areas.find((item) => item.id === id);
+                    if (!area) return;
+                    updateArea(id, { dynamic });
+                    if (dynamic) {
+                      setPlaygroundValues((current) =>
+                        migrateAreaPlaygroundValuesToDynamic({ ...area, dynamic: true }, current)
+                      );
+                    }
+                  }}
+                  rowActions={{
+                    onDuplicate: (id) => {
+                      const areaIndex = form.areas.findIndex((item) => item.id === id);
+                      const area = form.areas[areaIndex];
+                      if (!area || areaIndex < 0) return;
+                      setFormState((current) => ({
+                        ...current,
+                        areas: [
+                          ...current.areas.slice(0, areaIndex + 1),
+                          duplicateAreaDefinition(current.areas, area),
+                          ...current.areas.slice(areaIndex + 1),
+                        ],
+                      }));
+                    },
+                    onMoveUp: (id) =>
+                      setFormState((current) => ({
+                        ...current,
+                        areas: reorderItemsById(
+                          current.areas,
+                          id,
+                          current.areas[current.areas.findIndex((item) => item.id === id) - 1]?.id ?? id,
+                        ),
+                      })),
+                    onMoveDown: (id) =>
+                      setFormState((current) => ({
+                        ...current,
+                        areas: reorderItemsById(
+                          current.areas,
+                          id,
+                          current.areas[current.areas.findIndex((item) => item.id === id) + 1]?.id ?? id,
+                        ),
+                      })),
+                    onRemove: (id) =>
+                      setFormState((current) => ({
+                        ...current,
+                        areas: current.areas.filter((item) => item.id !== id),
+                      })),
+                    canMoveUp: (id) => form.areas.findIndex((item) => item.id === id) > 0,
+                    canMoveDown: (id) => {
+                      const index = form.areas.findIndex((item) => item.id === id);
+                      return index >= 0 && index < form.areas.length - 1;
+                    },
+                  }}
+                  renderAreaDetail={(areaId) => {
+                    const area = form.areas.find((item) => item.id === areaId);
+                    if (!area) return null;
+                    return (
+                      <div className="space-y-5">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Area inputs</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                Inside this area, every input is available through tokens like area.total_sqm.
+                              </p>
                             </div>
-                          ) : null}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button size="sm" variant="secondary" onClick={() => toggleAreaCollapse(area.id)}>
-                            {collapsed ? 'Expand' : 'Collapse'}
-                          </Button>
-                          {!collapsed ? (
-                          <>
-                            <button
-                              type="button"
-                              draggable
-                              onDragStart={() => setDraggingAreaId(area.id)}
-                              onDragEnd={() => setDraggingAreaId(null)}
-                              className="inline-flex cursor-grab items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 transition hover:border-emerald-200 hover:bg-emerald-50 active:cursor-grabbing dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10"
-                            >
-                              <span className="text-sm leading-none">::</span>
-                              <span>Move</span>
-                            </button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() =>
-                                setFormState((current) => ({
-                                  ...current,
-                                  areas: [
-                                    ...current.areas.slice(0, areaIndex + 1),
-                                    duplicateAreaDefinition(current.areas, area),
-                                    ...current.areas.slice(areaIndex + 1),
-                                  ],
-                                }))
-                              }
-                            >
-                              Duplicate area
+                            <Button size="sm" variant="secondary" onClick={() => openAreaFieldCreate(area)}>
+                              Add area input
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setFormState((current) => ({ ...current, areas: current.areas.filter((item) => item.id !== area.id) }))}
-                            >
-                              Remove area
-                            </Button>
-                          </>
-                          ) : null}
+                          </div>
+                          {area.fields.length === 0 ? (
+                            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/45">
+                              No area inputs yet. Add any area-specific numeric inputs here.
+                            </div>
+                          ) : (
+                            <JobLevelInputsTable
+                              tone="default"
+                              mode="builder"
+                              formatKeyToken={(key) => (key ? `area.${key}` : 'area.field_key')}
+                              fields={area.fields.map((field) => ({
+                                id: field.id,
+                                label: field.label || 'Untitled area input',
+                                key: field.key,
+                                inputType: field.inputType,
+                                unit: field.unit,
+                                defaultValue: field.defaultValue,
+                              }))}
+                              builderActions={{
+                                onEdit: (fieldId) => {
+                                  const field = area.fields.find((item) => item.id === fieldId);
+                                  if (field) openAreaFieldEdit(area, field);
+                                },
+                                onDuplicate: (fieldId) => {
+                                  const field = area.fields.find((item) => item.id === fieldId);
+                                  if (field) duplicateAreaField(area, field);
+                                },
+                                onMoveUp: (fieldId) => {
+                                  const index = area.fields.findIndex((item) => item.id === fieldId);
+                                  updateArea(area.id, {
+                                    fields: reorderItemsById(area.fields, fieldId, area.fields[index - 1]?.id ?? fieldId),
+                                  });
+                                },
+                                onMoveDown: (fieldId) => {
+                                  const index = area.fields.findIndex((item) => item.id === fieldId);
+                                  updateArea(area.id, {
+                                    fields: reorderItemsById(area.fields, fieldId, area.fields[index + 1]?.id ?? fieldId),
+                                  });
+                                },
+                                onRemove: (fieldId) =>
+                                  updateArea(area.id, { fields: area.fields.filter((item) => item.id !== fieldId) }),
+                                canMoveUp: (fieldId) => area.fields.findIndex((item) => item.id === fieldId) > 0,
+                                canMoveDown: (fieldId) => {
+                                  const index = area.fields.findIndex((item) => item.id === fieldId);
+                                  return index >= 0 && index < area.fields.length - 1;
+                                },
+                              }}
+                            />
+                          )}
                         </div>
+
+                        <div className="rounded-2xl border border-cyan-200 bg-white p-4 dark:border-cyan-500/20 dark:bg-slate-950/70">
+                          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">
+                                Area scoped rates and values
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                Store formula-only rates for this area as <span className="font-mono">area.formula.key</span>.
+                              </p>
+                            </div>
+                            <Button size="sm" variant="secondary" onClick={() => openAreaFormulaValueCreate(area)}>
+                              Add area value
+                            </Button>
+                          </div>
+                          {area.formulaValues.length === 0 ? (
+                            <div className="rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/60 px-4 py-6 text-sm text-slate-500 dark:border-cyan-500/20 dark:bg-cyan-500/5">
+                              No area-only values yet. Add resin rate, overlap factor, or other stored expressions for this area.
+                            </div>
+                          ) : (
+                            <GlobalFormulaValuesTable
+                              tone="builder"
+                              mode="builder"
+                              formatKeyToken={(key) => (key ? `area.formula.${key}` : 'area.formula.key')}
+                              rows={area.formulaValues.map((field) => ({
+                                id: field.id,
+                                label: field.label || 'Untitled area value',
+                                key: field.key,
+                                value: field.value || '0',
+                                unit: field.unit,
+                                preview: resolveAreaFormulaOutputPreview(area.id, field.value || '0'),
+                              }))}
+                              builderActions={{
+                                onEdit: (fieldId) => {
+                                  const field = area.formulaValues.find((item) => item.id === fieldId);
+                                  if (field) openAreaFormulaValueEdit(area, field);
+                                },
+                                onDuplicate: (fieldId) => {
+                                  const field = area.formulaValues.find((item) => item.id === fieldId);
+                                  if (field) duplicateAreaFormulaValue(area, field);
+                                },
+                                onMoveUp: (fieldId) => {
+                                  const index = area.formulaValues.findIndex((item) => item.id === fieldId);
+                                  updateArea(area.id, {
+                                    formulaValues: reorderItemsById(
+                                      area.formulaValues,
+                                      fieldId,
+                                      area.formulaValues[index - 1]?.id ?? fieldId,
+                                    ),
+                                  });
+                                },
+                                onMoveDown: (fieldId) => {
+                                  const index = area.formulaValues.findIndex((item) => item.id === fieldId);
+                                  updateArea(area.id, {
+                                    formulaValues: reorderItemsById(
+                                      area.formulaValues,
+                                      fieldId,
+                                      area.formulaValues[index + 1]?.id ?? fieldId,
+                                    ),
+                                  });
+                                },
+                                onRemove: (fieldId) =>
+                                  updateArea(area.id, {
+                                    formulaValues: area.formulaValues.filter((item) => item.id !== fieldId),
+                                  }),
+                                canMoveUp: (fieldId) => area.formulaValues.findIndex((item) => item.id === fieldId) > 0,
+                                canMoveDown: (fieldId) => {
+                                  const index = area.formulaValues.findIndex((item) => item.id === fieldId);
+                                  return index >= 0 && index < area.formulaValues.length - 1;
+                                },
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        <RuleRows
+                          area={area}
+                          materials={materials}
+                          globalFields={form.globalFields}
+                          formulaConstants={storedFormulaConstants}
+                          globalMaterialFields={form.globalFields.filter((field) => field.inputType === 'material')}
+                          onMaterialsChange={(materialsNext) => updateArea(area.id, { materials: materialsNext })}
+                          onLaborChange={(laborNext) => updateArea(area.id, { labor: laborNext })}
+                          resolveMaterialPreview={(rule) => resolveAreaMaterialRuleOutputPreview(area.id, rule)}
+                          resolveLaborPreview={(rule) => resolveAreaLaborRuleOutputPreview(area.id, rule)}
+                          onRequestFormulaEditor={openFormulaEditor}
+                        />
                       </div>
-
-                      {!collapsed ? (
-                        <div className="space-y-5 p-4">
-                          <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/70">
-                            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Area inputs</p>
-                                <p className="mt-1 text-xs text-slate-500">Inside this area, every input is available through a single token pattern like area.total_sqm.</p>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                <Button size="sm" variant="secondary" onClick={() => openAreaFieldCreate(area)}>
-                                  Add area input
-                                </Button>
-                              </div>
-                            </div>
-                            {area.fields.length === 0 ? (
-                              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/45">
-                                No area inputs yet. Add any area-specific numeric inputs here.
-                              </div>
-                            ) : (
-                              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                                {area.fields.map((field, fieldIndex) => {
-                                  const token = `area.${field.key || 'field_key'}`;
-                                  return (
-                                    <div
-                                      key={field.id}
-                                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70"
-                                    >
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                          <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{field.label || 'Untitled area input'}</p>
-                                          <p className="mt-1 truncate font-mono text-xs text-sky-700 dark:text-sky-300">{token}</p>
-                                        </div>
-                                        <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                                          {field.inputType}
-                                        </span>
-                                      </div>
-                                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                        <div className="min-w-0">
-                                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Key</p>
-                                          <p className="mt-1 truncate font-mono text-xs text-slate-600 dark:text-slate-300">{field.key || '--'}</p>
-                                        </div>
-                                        <div className="min-w-0">
-                                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Unit</p>
-                                          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{field.unit || '--'}</p>
-                                        </div>
-                                      </div>
-                                      <div className="mt-4 flex flex-wrap gap-2">
-                                        <Button size="sm" variant="secondary" onClick={() => openAreaFieldEdit(area, field)}>
-                                          Edit
-                                        </Button>
-                                        <Button size="sm" variant="ghost" onClick={() => duplicateAreaField(area, field)}>
-                                          Duplicate
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          disabled={fieldIndex === 0}
-                                          onClick={() =>
-                                            updateArea(area.id, {
-                                              fields: reorderItemsById(area.fields, field.id, area.fields[fieldIndex - 1]?.id ?? field.id),
-                                            })
-                                          }
-                                        >
-                                          Up
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          disabled={fieldIndex === area.fields.length - 1}
-                                          onClick={() =>
-                                            updateArea(area.id, {
-                                              fields: reorderItemsById(area.fields, field.id, area.fields[fieldIndex + 1]?.id ?? field.id),
-                                            })
-                                          }
-                                        >
-                                          Down
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => updateArea(area.id, { fields: area.fields.filter((item) => item.id !== field.id) })}
-                                        >
-                                          Remove
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="rounded-2xl border border-cyan-200 bg-white p-4 dark:border-cyan-500/20 dark:bg-slate-950/70">
-                            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">Area scoped rates and values</p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  Store formula-only rates for this area. These can only be used inside this area as <span className="font-mono">area.formula.key</span>.
-                                </p>
-                              </div>
-                              <Button size="sm" variant="secondary" onClick={() => openAreaFormulaValueCreate(area)}>
-                                Add area value
-                              </Button>
-                            </div>
-                            {area.formulaValues.length === 0 ? (
-                              <div className="mt-4 rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/60 px-4 py-6 text-sm text-slate-500 dark:border-cyan-500/20 dark:bg-cyan-500/5">
-                                No area-only values yet. Add resin rate, overlap factor, coverage rate, or other stored expressions that belong only to this area.
-                              </div>
-                            ) : (
-                              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                                {area.formulaValues.map((field, fieldIndex) => (
-                                  <div
-                                    key={field.id}
-                                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70"
-                                  >
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{field.label || 'Untitled area value'}</p>
-                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                          Possible output: {resolveAreaFormulaOutputPreview(area.id, field.value || '0')}
-                                        </p>
-                                      </div>
-                                      <span className="shrink-0 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-300">
-                                        {field.unit || 'no unit'}
-                                      </span>
-                                    </div>
-                                    <div className="mt-4 space-y-3">
-                                      <div className="min-w-0">
-                                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Key</p>
-                                        <p className="mt-1 truncate font-mono text-xs text-cyan-700 dark:text-cyan-300">{field.key ? `area.formula.${field.key}` : 'area.formula.key'}</p>
-                                      </div>
-                                      <div className="min-w-0">
-                                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Formula / Value</p>
-                                        <p className="mt-1 line-clamp-3 break-all font-mono text-xs text-slate-600 dark:text-slate-300">{field.value || '--'}</p>
-                                      </div>
-                                    </div>
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                      <Button size="sm" variant="secondary" onClick={() => openAreaFormulaValueEdit(area, field)}>
-                                        Edit
-                                      </Button>
-                                      <Button size="sm" variant="ghost" onClick={() => duplicateAreaFormulaValue(area, field)}>
-                                        Duplicate
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        disabled={fieldIndex === 0}
-                                        onClick={() =>
-                                          updateArea(area.id, {
-                                            formulaValues: reorderItemsById(area.formulaValues, field.id, area.formulaValues[fieldIndex - 1]?.id ?? field.id),
-                                          })
-                                        }
-                                      >
-                                        Up
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        disabled={fieldIndex === area.formulaValues.length - 1}
-                                        onClick={() =>
-                                          updateArea(area.id, {
-                                            formulaValues: reorderItemsById(area.formulaValues, field.id, area.formulaValues[fieldIndex + 1]?.id ?? field.id),
-                                          })
-                                        }
-                                      >
-                                        Down
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() =>
-                                          updateArea(area.id, { formulaValues: area.formulaValues.filter((item) => item.id !== field.id) })
-                                        }
-                                      >
-                                        Remove
-                                      </Button>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          <RuleRows
-                            area={area}
-                            materials={materials}
-                            globalFields={form.globalFields}
-                            formulaConstants={form.formulaConstants}
-                            globalMaterialFields={form.globalFields.filter((field) => field.inputType === 'material')}
-                            onMaterialsChange={(materialsNext) => updateArea(area.id, { materials: materialsNext })}
-                            onLaborChange={(laborNext) => updateArea(area.id, { labor: laborNext })}
-                            resolveMaterialPreview={(rule) => resolveAreaMaterialRuleOutputPreview(area.id, rule)}
-                            resolveLaborPreview={(rule) => resolveAreaLaborRuleOutputPreview(area.id, rule)}
-                            onRequestFormulaEditor={openFormulaEditor}
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                    );
+                  }}
+                />
               </div>
             </div>
         </div>
@@ -2549,7 +2213,10 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
       <div className="fixed bottom-5 right-5 z-30 flex flex-col gap-2 sm:flex-row">
         <button
           type="button"
-          onClick={() => setPlaygroundOpen(true)}
+          onClick={() => {
+            setPlaygroundValues((current) => hydratePlaygroundDynamicAreas(form, current));
+            setPlaygroundOpen(true);
+          }}
           className="rounded-2xl border border-sky-300 bg-sky-700 px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-sky-950/20 transition hover:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 dark:border-sky-400/30 dark:bg-sky-400 dark:text-slate-950 dark:hover:bg-sky-300"
         >
           Test playground-
@@ -2577,172 +2244,6 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
           </pre>
         </div>
       </Modal>
-
-      {formulaConstantEditor ? (
-        <div className="fixed inset-x-0 bottom-0 top-14 z-40">
-          <button
-            ref={formulaConstantBackdropRef}
-            type="button"
-            aria-label="Close stored value editor"
-            onClick={attemptCloseFormulaConstantEditor}
-            className="drawer-backdrop-enter absolute inset-0 bg-slate-950/35 backdrop-blur-sm transition-opacity duration-200"
-          />
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-2xl">
-            <div ref={formulaConstantPanelRef} className="drawer-panel-enter ml-auto flex h-full w-full flex-col border-l border-slate-200 bg-white/98 shadow-2xl shadow-slate-950/25 backdrop-blur-sm transition-all duration-200 dark:border-slate-800 dark:bg-slate-950/98">
-              <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">Stored value editor</p>
-                    <h3 className="mt-1 text-lg font-semibold text-slate-950 dark:text-white">
-                      {formulaConstantEditor.mode === 'create' ? 'Add stored formula value' : 'Edit stored formula value'}
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      Keep the page compact. Edit the full key, formula, and unit here, then return to the summary list.
-                    </p>
-                  </div>
-                  <Button size="sm" variant="secondary" onClick={attemptCloseFormulaConstantEditor}>
-                    Close
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-5">
-                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Value label
-                  <input
-                    value={formulaConstantEditor.draft.label}
-                    onChange={(event) =>
-                      setFormulaConstantEditor((current) => {
-                        if (!current) return current;
-                        const previousLabel = current.draft.label;
-                        const nextLabel = event.target.value;
-                        const shouldSyncKey =
-                          !current.draft.key.trim() || normalizeFormulaKey(current.draft.key) === normalizeFormulaKey(previousLabel);
-                        return {
-                          ...current,
-                          draft: {
-                            ...current.draft,
-                            label: nextLabel,
-                            key: shouldSyncKey ? normalizeFormulaKey(nextLabel) : current.draft.key,
-                          },
-                        };
-                      })
-                    }
-                    placeholder="Resin use rate"
-                    className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-300 focus:bg-white focus:ring-2 focus:ring-cyan-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
-                  />
-                </label>
-
-                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Value key
-                  <input
-                    value={formulaConstantEditor.draft.key}
-                    onChange={(event) =>
-                      setFormulaConstantEditor((current) => (
-                        current
-                          ? {
-                              ...current,
-                              draft: {
-                                ...current.draft,
-                                key: normalizeFormulaKey(event.target.value),
-                              },
-                            }
-                          : current
-                      ))
-                    }
-                    placeholder="resin_use_rate"
-                    className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-900 outline-none transition focus:border-cyan-300 focus:bg-white focus:ring-2 focus:ring-cyan-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
-                  />
-                  <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    Used in formulas as <span className="font-mono text-cyan-700 dark:text-cyan-300">formula.{formulaConstantEditor.draft.key || 'key'}</span>
-                  </p>
-                </label>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Formula or fixed value</p>
-                  <ExpressionInput
-                    value={formulaConstantEditor.draft.value}
-                    onChange={(value) =>
-                      setFormulaConstantEditor((current) => (
-                        current
-                          ? {
-                              ...current,
-                              draft: {
-                                ...current.draft,
-                                value,
-                              },
-                            }
-                          : current
-                      ))
-                    }
-                    tokens={buildFormulaConstantTokens(form.globalFields, form.formulaConstants, form.areas, formulaConstantEditor.draft.id)}
-                    placeholder="0.85 or specs.global.base_rate * 1.08"
-                    className="focus:border-cyan-300 dark:focus:border-cyan-400"
-                    title={`${formulaConstantEditor.draft.label || formulaConstantEditor.draft.key || 'Stored value'} formula`}
-                    description="Stored formula values are reusable everywhere in the budget formula as formula.key."
-                    resolvePreview={resolveGlobalFormulaOutputPreview}
-                    previewLabel="Possible output with current playground"
-                    onRequestEditor={openFormulaEditor}
-                  />
-                </div>
-
-                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Unit
-                  <input
-                    value={formulaConstantEditor.draft.unit}
-                    onChange={(event) =>
-                      setFormulaConstantEditor((current) => (
-                        current
-                          ? {
-                              ...current,
-                              draft: {
-                                ...current.draft,
-                                unit: event.target.value,
-                              },
-                            }
-                          : current
-                      ))
-                    }
-                    placeholder="kg/sqm"
-                    className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-300 focus:bg-white focus:ring-2 focus:ring-cyan-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
-                  />
-                </label>
-
-                <div className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-4 text-sm text-slate-600 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-slate-300">
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">Preview</p>
-                  <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Label</p>
-                      <p className="mt-1 font-semibold">{formulaConstantEditor.draft.label || 'Untitled value'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Unit</p>
-                      <p className="mt-1">{formulaConstantEditor.draft.unit || '--'}</p>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Resolved use value</p>
-                      <p className="mt-1 font-mono text-cyan-700 dark:text-cyan-300">
-                        {formulaConstantEditor.draft.key ? String(resolvedPlaygroundValues[`formula.${formulaConstantEditor.draft.key}`] ?? 0) : '0'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-200 px-5 py-4 dark:border-slate-800">
-                <div className="flex items-center justify-end gap-2">
-                  <Button variant="secondary" onClick={closeFormulaConstantEditor}>
-                    Cancel
-                  </Button>
-                  <Button onClick={saveFormulaConstantEditor}>
-                    {formulaConstantEditor.mode === 'create' ? 'Add value' : 'Save value'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {areaFieldEditor ? (
         <div className="fixed inset-x-0 bottom-0 top-14 z-40">
@@ -2834,6 +2335,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                                 ...current.draft,
                                 inputType: event.target.value as FieldType,
                                 defaultMaterialId: event.target.value === 'material' ? current.draft.defaultMaterialId : '',
+                                defaultValue: event.target.value === 'material' ? '' : current.draft.defaultValue,
                               },
                             }
                           : current
@@ -2870,6 +2372,60 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                     className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
                   />
                 </label>
+
+                {areaFieldEditor.draft.inputType === 'boolean' ? (
+                  <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={areaFieldEditor.draft.defaultValue === 'true'}
+                      onChange={(event) =>
+                        setAreaFieldEditor((current) =>
+                          current
+                            ? {
+                                ...current,
+                                draft: {
+                                  ...current.draft,
+                                  defaultValue: event.target.checked ? 'true' : 'false',
+                                },
+                              }
+                            : current
+                        )
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-slate-600 focus:ring-slate-500/20"
+                    />
+                    <span>
+                      <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Default value</span>
+                      <span className="mt-1 block text-sm">Checked by default on new budget lines</span>
+                    </span>
+                  </label>
+                ) : (
+                  <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Default value
+                    <input
+                      type={['number', 'percent', 'length', 'area', 'volume', 'count'].includes(areaFieldEditor.draft.inputType) ? 'number' : 'text'}
+                      inputMode={['number', 'percent', 'length', 'area', 'volume', 'count'].includes(areaFieldEditor.draft.inputType) ? 'decimal' : undefined}
+                      value={areaFieldEditor.draft.defaultValue ?? ''}
+                      onChange={(event) =>
+                        setAreaFieldEditor((current) =>
+                          current
+                            ? {
+                                ...current,
+                                draft: {
+                                  ...current.draft,
+                                  defaultValue: event.target.value,
+                                },
+                              }
+                            : current
+                        )
+                      }
+                      placeholder={areaFieldEditor.draft.inputType === 'percent' ? '10' : '0'}
+                      className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
+                    />
+                    <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      Used automatically when the job leaves this area input blank.
+                    </p>
+                  </label>
+                )}
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
                   <p className="font-semibold text-slate-900 dark:text-slate-100">Preview token</p>
@@ -2993,11 +2549,11 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                       form.areas.find((item) => item.id === areaFormulaValueEditor.areaId)
                         ? buildAreaFormulaValueTokens(
                             form.globalFields,
-                            form.formulaConstants,
+                            storedFormulaConstants,
                             form.areas.find((item) => item.id === areaFormulaValueEditor.areaId)!,
                             areaFormulaValueEditor.draft.id
                           )
-                        : buildFormulaConstantTokens(form.globalFields, form.formulaConstants, form.areas)
+                        : buildFormulaConstantTokens(form.globalFields, storedFormulaConstants, form.areas)
                     }
                     placeholder="0.05 or area.total_sqm * 0.02"
                     className="focus:border-cyan-300 dark:focus:border-cyan-400"
@@ -3123,7 +2679,12 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                     className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-900 outline-none transition focus:border-teal-300 focus:bg-white focus:ring-2 focus:ring-teal-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
                   />
                   <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    Used in formulas as <span className="font-mono text-sky-700 dark:text-sky-300">specs.global.{globalFieldEditor.draft.key || 'key'}</span>
+                    Used in formulas as{' '}
+                    <span className="font-mono text-sky-700 dark:text-sky-300">
+                      {isStoredGlobalField(globalFieldEditor.draft)
+                        ? `formula.${globalFieldEditor.draft.key || 'key'}`
+                        : `specs.global.${globalFieldEditor.draft.key || 'key'}`}
+                    </span>
                   </p>
                 </label>
 
@@ -3132,23 +2693,32 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                   <select
                     value={globalFieldEditor.draft.inputType}
                     onChange={(event) =>
-                      setGlobalFieldEditor((current) => (
-                        current
-                          ? {
-                              ...current,
-                              draft: {
-                                ...current.draft,
-                                inputType: event.target.value as FieldType,
-                              },
-                            }
-                          : current
-                      ))
+                      setGlobalFieldEditor((current) => {
+                        if (!current) return current;
+                        const nextType = event.target.value as FieldType;
+                        const isStored = nextType === 'stored';
+                        return {
+                          ...current,
+                          draft: {
+                            ...current.draft,
+                            inputType: nextType,
+                            defaultMaterialId: nextType === 'material' ? current.draft.defaultMaterialId : '',
+                            defaultValue: nextType === 'material' || isStored ? '' : current.draft.defaultValue,
+                            storedValue: isStored ? (current.draft.storedValue ?? '') : undefined,
+                            required: isStored ? false : current.draft.required,
+                          },
+                        };
+                      })
                     }
                     className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-teal-300 focus:bg-white focus:ring-2 focus:ring-teal-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
                   >
                     {FIELD_TYPES.map((type) => (
                       <option key={type} value={type}>
-                        {type === 'material' ? 'material dropdown' : type}
+                        {type === 'material'
+                          ? 'material dropdown'
+                          : type === 'stored'
+                            ? 'stored value (formula / fixed)'
+                            : type}
                       </option>
                     ))}
                   </select>
@@ -3175,6 +2745,98 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                     className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-teal-300 focus:bg-white focus:ring-2 focus:ring-teal-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
                   />
                 </label>
+
+                {isStoredGlobalField(globalFieldEditor.draft) ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Formula or fixed value</p>
+                    <ExpressionInput
+                      value={globalFieldEditor.draft.storedValue ?? ''}
+                      onChange={(value) =>
+                        setGlobalFieldEditor((current) =>
+                          current
+                            ? {
+                                ...current,
+                                draft: {
+                                  ...current.draft,
+                                  storedValue: value,
+                                },
+                              }
+                            : current
+                        )
+                      }
+                      tokens={buildFormulaConstantTokens(
+                        form.globalFields,
+                        storedFormulaConstants,
+                        form.areas,
+                        globalFieldEditor.draft.id
+                      )}
+                      placeholder="0.85 or specs.global.base_rate * 1.08"
+                      className="focus:border-teal-300 dark:focus:border-teal-400"
+                      title={`${globalFieldEditor.draft.label || globalFieldEditor.draft.key || 'Stored value'} formula`}
+                      description="Stored values are reusable in expressions as formula.key. Budget lines use them by default."
+                      resolvePreview={resolveGlobalFormulaOutputPreview}
+                      previewLabel="Possible output with current playground"
+                      onRequestEditor={openFormulaEditor}
+                    />
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Budget lines use this value by default. Users can override per job when needed.
+                    </p>
+                  </div>
+                ) : globalFieldEditor.draft.inputType !== 'material' ? (
+                  globalFieldEditor.draft.inputType === 'boolean' ? (
+                    <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={globalFieldEditor.draft.defaultValue === 'true'}
+                        onChange={(event) =>
+                          setGlobalFieldEditor((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  draft: {
+                                    ...current.draft,
+                                    defaultValue: event.target.checked ? 'true' : 'false',
+                                  },
+                                }
+                              : current
+                          )
+                        }
+                        className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500/20"
+                      />
+                      <span>
+                        <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Default value</span>
+                        <span className="mt-1 block text-sm">Checked by default on new budget lines</span>
+                      </span>
+                    </label>
+                  ) : (
+                    <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Default value
+                      <input
+                        type={['number', 'percent', 'length', 'area', 'volume', 'count'].includes(globalFieldEditor.draft.inputType) ? 'number' : 'text'}
+                        inputMode={['number', 'percent', 'length', 'area', 'volume', 'count'].includes(globalFieldEditor.draft.inputType) ? 'decimal' : undefined}
+                        value={globalFieldEditor.draft.defaultValue ?? ''}
+                        onChange={(event) =>
+                          setGlobalFieldEditor((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  draft: {
+                                    ...current.draft,
+                                    defaultValue: event.target.value,
+                                  },
+                                }
+                              : current
+                          )
+                        }
+                        placeholder={globalFieldEditor.draft.inputType === 'percent' ? '10' : '0'}
+                        className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-teal-300 focus:bg-white focus:ring-2 focus:ring-teal-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-950"
+                      />
+                      <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        Used automatically when the job leaves this input blank.
+                      </p>
+                    </label>
+                  )
+                ) : null}
 
                 {globalFieldEditor.draft.inputType === 'material' ? (
                   <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -3229,6 +2891,11 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                         <p className="mt-1">
                           {materials.find((material) => material.id === globalFieldEditor.draft.defaultMaterialId)?.name || 'No default material'}
                         </p>
+                      </div>
+                    ) : globalFieldEditor.draft.defaultValue?.trim() ? (
+                      <div className="sm:col-span-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Default value</p>
+                        <p className="mt-1">{globalFieldEditor.draft.defaultValue}</p>
                       </div>
                     ) : null}
                     <div className="sm:col-span-2">

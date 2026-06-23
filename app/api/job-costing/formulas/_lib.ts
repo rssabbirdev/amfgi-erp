@@ -31,6 +31,7 @@ export const FormulaConfigSchema = z.object({
       z.object({
         key: z.string().min(1).max(80),
         label: z.string().min(1).max(120),
+        dynamic: z.boolean().optional(),
         measurementsPath: z.string().optional(),
         variables: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
         materials: z.array(FormulaMaterialRuleSchema),

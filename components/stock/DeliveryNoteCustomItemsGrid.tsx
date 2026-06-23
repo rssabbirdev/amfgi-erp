@@ -91,12 +91,7 @@ export default function DeliveryNoteCustomItemsGrid({
           ))}
         </div>
 
-        {items.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            No custom items yet. Click &quot;+ Add row&quot; below to start.
-          </div>
-        ) : (
-          items.map((item, index) => (
+        {items.map((item, index) => (
             <div
               key={item.id}
               className="grid items-start border-b border-border hover:bg-muted/40"
@@ -163,16 +158,14 @@ export default function DeliveryNoteCustomItemsGrid({
                 <button
                   type="button"
                   onClick={() => onRemoveItem(item.id)}
-                  disabled={items.length === 1}
-                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
+                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
                   title="Remove row"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
-          ))
-        )}
+          ))}
       </div>
     </div>
   );

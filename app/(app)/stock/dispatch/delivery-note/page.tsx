@@ -85,6 +85,64 @@ interface Line {
   originalWarehouseId?: string;
 }
 
+const MIN_VISIBLE_ROWS = 5;
+const MIN_EMPTY_ROWS = 3;
+const MIN_VISIBLE_CUSTOM_ITEM_ROWS = 5;
+const MIN_EMPTY_CUSTOM_ITEM_ROWS = 3;
+
+function emptyLine(jobId = ''): Line {
+  return {
+    id: generateId(),
+    jobId,
+    materialId: '',
+    dispatchQty: '',
+    returnQty: '',
+    quantityUomId: '',
+    warehouseId: '',
+  };
+}
+
+function isLineEmpty(line: Line) {
+  return (
+    !line.materialId &&
+    !line.dispatchQty &&
+    !line.returnQty &&
+    !line.quantityUomId &&
+    !line.warehouseId &&
+    !(line.receiveQty?.trim()) &&
+    !(line.targetWarehouseId?.trim())
+  );
+}
+
+function normalizeLines(lines: Line[], jobId = '') {
+  const nonEmptyLines = lines.filter((line) => !isLineEmpty(line));
+  const requiredEmptyRows = Math.max(MIN_EMPTY_ROWS, MIN_VISIBLE_ROWS - nonEmptyLines.length);
+  return [...nonEmptyLines, ...Array.from({ length: requiredEmptyRows }, () => emptyLine(jobId))];
+}
+
+function emptyCustomItem(): DeliveryNoteCustomItem {
+  return { id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' };
+}
+
+function isCustomItemEmpty(item: DeliveryNoteCustomItem, lineNoAuto = true) {
+  if (item.name.trim() || item.description.trim() || item.unit.trim() || item.qty.trim()) {
+    return false;
+  }
+  if (!lineNoAuto && item.lineNo.trim()) {
+    return false;
+  }
+  return true;
+}
+
+function normalizeCustomItems(items: DeliveryNoteCustomItem[], lineNoAuto = true) {
+  const nonEmptyItems = items.filter((item) => !isCustomItemEmpty(item, lineNoAuto));
+  const requiredEmptyRows = Math.max(
+    MIN_EMPTY_CUSTOM_ITEM_ROWS,
+    MIN_VISIBLE_CUSTOM_ITEM_ROWS - nonEmptyItems.length
+  );
+  return [...nonEmptyItems, ...Array.from({ length: requiredEmptyRows }, () => emptyCustomItem())];
+}
+
 function getWarehouseBaseStock(material: Material | undefined, warehouseId: string) {
   if (!material || !warehouseId) return 0;
   return material.materialWarehouseStocks?.find((stock) => stock.warehouseId === warehouseId)?.currentStock ?? 0;
@@ -182,9 +240,9 @@ export default function DeliveryNoteCreatePage() {
   const [notes, setNotes] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
   const [skipMaterialDispatch, setSkipMaterialDispatch] = useState(false);
-  const [customItems, setCustomItems] = useState<DeliveryNoteCustomItem[]>([
-    { id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' },
-  ]);
+  const [customItems, setCustomItems] = useState<DeliveryNoteCustomItem[]>(() =>
+    normalizeCustomItems([], true)
+  );
   const [customItemsLineNoAuto, setCustomItemsLineNoAuto] = useState(true);
   const [deliveryType, setDeliveryType] = useState<'DISPATCH' | 'SUBCONTRACT'>('DISPATCH');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
@@ -202,35 +260,7 @@ export default function DeliveryNoteCreatePage() {
     confirmText: string;
     loading: boolean;
   }>({ open: false, step: 1, confirmText: '', loading: false });
-  const [lines, setLines] = useState<Line[]>(() => [
-    {
-      id: generateId(),
-      jobId: '',
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-      warehouseId: '',
-    },
-    {
-      id: generateId(),
-      jobId: '',
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-      warehouseId: '',
-    },
-    {
-      id: generateId(),
-      jobId: '',
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-      warehouseId: '',
-    },
-  ]);
+  const [lines, setLines] = useState<Line[]>(() => normalizeLines([], ''));
   const [submitting, setSubmitting] = useState(false);
   const [budgetWarning, setBudgetWarning] = useState<DispatchBudgetWarningResult | null>(null);
   const [budgetWarningValidatedForKey, setBudgetWarningValidatedForKey] = useState<string | null>(null);
@@ -608,16 +638,7 @@ export default function DeliveryNoteCreatePage() {
     if (appliedDeliveryNoteLoadKeyRef.current === loadKey) return;
     appliedDeliveryNoteLoadKeyRef.current = loadKey;
 
-    const emptyLineTemplate = (): Line[] =>
-      Array.from({ length: 3 }, () => ({
-        id: generateId(),
-        jobId: '',
-        materialId: '',
-        dispatchQty: '',
-        returnQty: '',
-        quantityUomId: '',
-        warehouseId: '',
-      }));
+    const emptyLineTemplate = (): Line[] => normalizeLines([], '');
 
     const loadFromDeliveryNoteRecord = async (dnId: string, opts: { duplicate: boolean }) => {
       setIsLoadingEdit(true);
@@ -730,30 +751,36 @@ export default function DeliveryNoteCreatePage() {
             }))
           : [];
         const loadedCustomItems =
-          rows.length > 0 ? rows : [{ id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' }];
-        setCustomItems(loadedCustomItems);
-        setCustomItemsLineNoAuto(inferCustomItemsLineNoAuto(loadedCustomItems));
+          rows.length > 0 ? rows : [];
+        const loadedLineNoAuto = inferCustomItemsLineNoAuto(
+          loadedCustomItems.length > 0 ? loadedCustomItems : [{ id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' }]
+        );
+        setCustomItemsLineNoAuto(loadedLineNoAuto);
+        setCustomItems(normalizeCustomItems(loadedCustomItems, loadedLineNoAuto));
 
         setSkipMaterialDispatch(Boolean(d.materialDispatchSkipped));
 
         if (d.deliveryType === 'SUBCONTRACT' && d.materialLines && d.materialLines.length > 0) {
           setLines(
-            d.materialLines.map((line) => ({
-              id: generateId(),
-              jobId: '',
-              materialId: line.materialId,
-              dispatchQty: String(line.issuedQty),
-              returnQty: '',
-              quantityUomId: line.quantityUomId ?? '',
-              warehouseId: line.sourceWarehouseId,
-              targetWarehouseId: line.targetWarehouseId ?? d.targetWarehouseId ?? '',
-              materialLineId: line.id,
-              issuedQty: line.issuedQty,
-              receivedQty: line.receivedQty,
-              outstandingQty: line.outstandingQty,
-              receiveQty: '',
-              receiveDestWarehouseId: line.sourceWarehouseId,
-            }))
+            normalizeLines(
+              d.materialLines.map((line) => ({
+                id: generateId(),
+                jobId: '',
+                materialId: line.materialId,
+                dispatchQty: String(line.issuedQty),
+                returnQty: '',
+                quantityUomId: line.quantityUomId ?? '',
+                warehouseId: line.sourceWarehouseId,
+                targetWarehouseId: line.targetWarehouseId ?? d.targetWarehouseId ?? '',
+                materialLineId: line.id,
+                issuedQty: line.issuedQty,
+                receivedQty: line.receivedQty,
+                outstandingQty: line.outstandingQty,
+                receiveQty: '',
+                receiveDestWarehouseId: line.sourceWarehouseId,
+              })),
+              ''
+            )
           );
         } else if (!d.materialDispatchSkipped && d.transactionIds && d.transactionIds.length > 0) {
           const txnResults = await Promise.all(
@@ -776,19 +803,22 @@ export default function DeliveryNoteCreatePage() {
           }
           if (validTxns.length > 0) {
             setLines(
-              validTxns
-                .filter((txn) => txn.material)
-                .map((txn) => ({
-                  id: generateId(),
-                  jobId: canonicalJobId,
-                  materialId: txn.material!.id,
-                  dispatchQty: String(txn.quantity),
-                  returnQty: '',
-                  quantityUomId: txn.quantityUomId ?? '',
-                  warehouseId: txn.warehouseId ?? '',
-                  originalDispatchQty: txn.quantity,
-                  originalWarehouseId: txn.warehouseId ?? '',
-                }))
+              normalizeLines(
+                validTxns
+                  .filter((txn) => txn.material)
+                  .map((txn) => ({
+                    id: generateId(),
+                    jobId: canonicalJobId,
+                    materialId: txn.material!.id,
+                    dispatchQty: String(txn.quantity),
+                    returnQty: '',
+                    quantityUomId: txn.quantityUomId ?? '',
+                    warehouseId: txn.warehouseId ?? '',
+                    originalDispatchQty: txn.quantity,
+                    originalWarehouseId: txn.warehouseId ?? '',
+                  })),
+                canonicalJobId
+              )
             );
           } else {
             setLines(emptyLineTemplate());
@@ -899,8 +929,13 @@ export default function DeliveryNoteCreatePage() {
 
             // Parse custom items from notes
             const customItemsParsed = parseCustomItems(txn.notes || '');
-            setCustomItems(customItemsParsed);
-            setCustomItemsLineNoAuto(inferCustomItemsLineNoAuto(customItemsParsed));
+            const parsedLineNoAuto = inferCustomItemsLineNoAuto(
+              customItemsParsed.length > 0
+                ? customItemsParsed
+                : [{ id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' }]
+            );
+            setCustomItemsLineNoAuto(parsedLineNoAuto);
+            setCustomItems(normalizeCustomItems(customItemsParsed, parsedLineNoAuto));
             setOverrideReason(parseOverrideReason(txn.notes || ''));
 
             // Extract base notes (without delivery note headers)
@@ -916,19 +951,24 @@ export default function DeliveryNoteCreatePage() {
 
             // Load the transaction's material(s)
             if (txn.material && txn.quantity) {
-              setLines([
-                {
-                  id: generateId(),
-                  jobId: canonicalJobId,
-                  materialId: txn.material.id,
-                  dispatchQty: txn.quantity.toString(),
-                  returnQty: '',
-                  quantityUomId: '',
-                  warehouseId: txn.warehouseId ?? '',
-                  originalDispatchQty: txn.quantity,
-                  originalWarehouseId: txn.warehouseId ?? '',
-                },
-              ]);
+              setLines(
+                normalizeLines(
+                  [
+                    {
+                      id: generateId(),
+                      jobId: canonicalJobId,
+                      materialId: txn.material.id,
+                      dispatchQty: txn.quantity.toString(),
+                      returnQty: '',
+                      quantityUomId: '',
+                      warehouseId: txn.warehouseId ?? '',
+                      originalDispatchQty: txn.quantity,
+                      originalWarehouseId: txn.warehouseId ?? '',
+                    },
+                  ],
+                  canonicalJobId
+                )
+              );
             }
 
             if (isDuplicating) {
@@ -1076,30 +1116,22 @@ export default function DeliveryNoteCreatePage() {
     }
 
     if (type === 'job') setSelectedJob(newValue);
-    setCustomItems([{ id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' }]);
     setCustomItemsLineNoAuto(true);
-    setLines(Array.from({ length: 3 }, () => ({
-      id: generateId(),
-      jobId: '',
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-      warehouseId: '',
-    })));
+    setCustomItems(normalizeCustomItems([], true));
+    setLines(normalizeLines([], ''));
     setNotes('');
     setSkipMaterialDispatch(false);
     setChangeWarningModal({ open: false, pendingChange: null });
   };
 
+  const lineJobId = isSubcontract ? referenceJobId : selectedJob;
+
   const addCustomItem = () => {
-    setCustomItems([...customItems, { id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' }]);
+    setCustomItems((prev) => normalizeCustomItems([...prev, emptyCustomItem()], customItemsLineNoAuto));
   };
 
   const removeCustomItem = (id: string) => {
-    if (customItems.length > 1) {
-      setCustomItems(customItems.filter(item => item.id !== id));
-    }
+    setCustomItems((prev) => normalizeCustomItems(prev.filter((item) => item.id !== id), customItemsLineNoAuto));
   };
 
   const duplicateCustomItem = (id: string) => {
@@ -1108,7 +1140,10 @@ export default function DeliveryNoteCreatePage() {
       if (idx < 0) return prev;
       const source = prev[idx];
       const clone = { ...source, id: generateId() };
-      return [...prev.slice(0, idx + 1), clone, ...prev.slice(idx + 1)];
+      return normalizeCustomItems(
+        [...prev.slice(0, idx + 1), clone, ...prev.slice(idx + 1)],
+        customItemsLineNoAuto
+      );
     });
   };
 
@@ -1117,38 +1152,33 @@ export default function DeliveryNoteCreatePage() {
     field: keyof Omit<DeliveryNoteCustomItem, 'id'>,
     value: string
   ) => {
-    setCustomItems(customItems.map(item =>
-      item.id === id ? { ...item, [field]: value } : item
-    ));
+    setCustomItems((prev) =>
+      normalizeCustomItems(
+        prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+        customItemsLineNoAuto
+      )
+    );
   };
 
   const handleCustomItemsLineNoAutoChange = (auto: boolean) => {
     if (!auto) {
       setCustomItems((prev) =>
-        prev.map((item, idx) => ({
-          ...item,
-          lineNo: item.lineNo.trim() || String(idx + 1),
-        }))
+        normalizeCustomItems(
+          prev.map((item, idx) => ({
+            ...item,
+            lineNo: item.lineNo.trim() || String(idx + 1),
+          })),
+          false
+        )
       );
+    } else {
+      setCustomItems((prev) => normalizeCustomItems(prev, true));
     }
     setCustomItemsLineNoAuto(auto);
   };
 
   const addLine = () => {
-    setLines((prev) => [
-      ...prev,
-      {
-        id: generateId(),
-        jobId: selectedJob,
-        materialId: '',
-        dispatchQty: '',
-        returnQty: '',
-        quantityUomId: '',
-        warehouseId: isSubcontract ? sourceWarehouseId : '',
-        targetWarehouseId: isSubcontract ? targetWarehouseId : undefined,
-        receiveDestWarehouseId: isSubcontract ? sourceWarehouseId : undefined,
-      },
-    ]);
+    setLines((prev) => normalizeLines([...prev, emptyLine(lineJobId)], lineJobId));
   };
 
   const reloadSubcontractLines = async () => {
@@ -1175,22 +1205,25 @@ export default function DeliveryNoteCreatePage() {
     setTransitStatus(d.transitStatus ?? null);
     if (d.materialLines?.length) {
       setLines(
-        d.materialLines.map((line) => ({
-          id: generateId(),
-          jobId: '',
-          materialId: line.materialId,
-          dispatchQty: String(line.issuedQty),
-          returnQty: '',
-          quantityUomId: line.quantityUomId ?? '',
-          warehouseId: line.sourceWarehouseId,
-          targetWarehouseId: line.targetWarehouseId ?? '',
-          materialLineId: line.id,
-          issuedQty: line.issuedQty,
-          receivedQty: line.receivedQty,
-          outstandingQty: line.outstandingQty,
-          receiveQty: '',
-          receiveDestWarehouseId: line.sourceWarehouseId,
-        }))
+        normalizeLines(
+          d.materialLines.map((line) => ({
+            id: generateId(),
+            jobId: '',
+            materialId: line.materialId,
+            dispatchQty: String(line.issuedQty),
+            returnQty: '',
+            quantityUomId: line.quantityUomId ?? '',
+            warehouseId: line.sourceWarehouseId,
+            targetWarehouseId: line.targetWarehouseId ?? '',
+            materialLineId: line.id,
+            issuedQty: line.issuedQty,
+            receivedQty: line.receivedQty,
+            outstandingQty: line.outstandingQty,
+            receiveQty: '',
+            receiveDestWarehouseId: line.sourceWarehouseId,
+          })),
+          ''
+        )
       );
     }
   };
@@ -1238,41 +1271,44 @@ export default function DeliveryNoteCreatePage() {
   };
 
   const removeLine = (id: string) => {
-    setLines((prev) => prev.filter((l) => l.id !== id));
+    setLines((prev) => normalizeLines(prev.filter((l) => l.id !== id), lineJobId));
   };
 
   const updateLine = (id: string, field: keyof Line, value: string) => {
     setLines((prev) =>
-      prev.map((l) => {
-        if (l.id !== id) return l;
-        if (field === 'materialId') {
-          if (!value.trim()) {
+      normalizeLines(
+        prev.map((l) => {
+          if (l.id !== id) return l;
+          if (field === 'materialId') {
+            if (!value.trim()) {
+              return {
+                ...l,
+                materialId: '',
+                dispatchQty: '',
+                returnQty: '',
+                quantityUomId: '',
+                warehouseId: '',
+                targetWarehouseId: '',
+              };
+            }
+            const defaultWarehouse = materials.find((m) => m.id === value)?.warehouseId ?? '';
             return {
               ...l,
-              materialId: '',
-              dispatchQty: '',
-              returnQty: '',
+              materialId: value,
               quantityUomId: '',
-              warehouseId: '',
-              targetWarehouseId: '',
+              warehouseId: l.warehouseId || sourceWarehouseId || defaultWarehouse,
+              targetWarehouseId: l.targetWarehouseId || targetWarehouseId || '',
+              receiveDestWarehouseId:
+                l.receiveDestWarehouseId || l.warehouseId || sourceWarehouseId || defaultWarehouse,
             };
           }
-          const defaultWarehouse = materials.find((m) => m.id === value)?.warehouseId ?? '';
-          return {
-            ...l,
-            materialId: value,
-            quantityUomId: '',
-            warehouseId: l.warehouseId || sourceWarehouseId || defaultWarehouse,
-            targetWarehouseId: l.targetWarehouseId || targetWarehouseId || '',
-            receiveDestWarehouseId:
-              l.receiveDestWarehouseId || l.warehouseId || sourceWarehouseId || defaultWarehouse,
-          };
-        }
-        if (field === 'warehouseId' && isSubcontract && !l.receiveDestWarehouseId) {
-          return { ...l, [field]: value, receiveDestWarehouseId: value };
-        }
-        return { ...l, [field]: value };
-      })
+          if (field === 'warehouseId' && isSubcontract && !l.receiveDestWarehouseId) {
+            return { ...l, [field]: value, receiveDestWarehouseId: value };
+          }
+          return { ...l, [field]: value };
+        }),
+        lineJobId
+      )
     );
   };
 
@@ -1643,16 +1679,8 @@ export default function DeliveryNoteCreatePage() {
       setReferenceJobId('');
       setTransitStatus(null);
       setCustomItemsLineNoAuto(true);
-      setCustomItems([{ id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' }]);
-      setLines(Array.from({ length: 3 }, () => ({
-        id: generateId(),
-        jobId: '',
-        materialId: '',
-        dispatchQty: '',
-        returnQty: '',
-        quantityUomId: '',
-        warehouseId: '',
-      })));
+      setCustomItems(normalizeCustomItems([], true));
+      setLines(normalizeLines([], ''));
       setEditingTransactionId(null);
       setEditingTransactionIds([]);
       setEditingDeliveryNoteId(null);
@@ -1677,7 +1705,7 @@ export default function DeliveryNoteCreatePage() {
 
   if (isLoadingEdit) {
     return (
-      <div className="flex w-full min-w-0 flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+      <div className="flex w-full min-w-0 flex-col items-center justify-center py-8 text-sm text-muted-foreground">
         Loading delivery note…
       </div>
     );
@@ -1764,16 +1792,8 @@ export default function DeliveryNoteCreatePage() {
       id: generateId(),
     }));
 
-    setCustomItems(newCustomItems.length > 0 ? newCustomItems : [{ id: generateId(), lineNo: '', name: '', description: '', unit: '', qty: '' }]);
-    setLines(newLines.length > 0 ? newLines : Array.from({ length: 3 }, () => ({
-      id: generateId(),
-      jobId: '',
-      materialId: '',
-      dispatchQty: '',
-      returnQty: '',
-      quantityUomId: '',
-      warehouseId: '',
-    })));
+    setCustomItems(normalizeCustomItems(newCustomItems, customItemsLineNoAuto));
+    setLines(normalizeLines(newLines, lineJobId));
 
     // Clear editing state immediately so save creates a new entry instead of updating
     setEditingTransactionId(null);
@@ -1795,17 +1815,19 @@ export default function DeliveryNoteCreatePage() {
   };
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-5 overflow-x-hidden">
-      <header className="flex w-full min-w-0 flex-col gap-4 border-b border-border pb-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0 space-y-1">
-          <Link
-            href="/stock/dispatch"
-            className="text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
-          >
-            ← Dispatch
-          </Link>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">{pageTitle}</h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">{pageDescription}</p>
+    <div className="flex w-full min-w-0 flex-col gap-2 overflow-x-hidden">
+      <header className="flex w-full min-w-0 flex-col gap-2 border-b border-border pb-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            <Link
+              href="/stock/dispatch"
+              className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
+            >
+              ← Dispatch
+            </Link>
+            <h1 className="text-lg font-semibold tracking-tight text-foreground">{pageTitle}</h1>
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">{pageDescription}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           {budgetWarningLoading ? (
@@ -1859,47 +1881,37 @@ export default function DeliveryNoteCreatePage() {
         className="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
       >
         {budgetWarningAppliesToCurrentLines && budgetWarning ? (
-          <div className="border-b border-amber-500/30 bg-amber-500/10 p-4">
-            <p className="text-sm font-medium text-foreground">
+          <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <p className="text-xs font-medium text-foreground">
               Budget warning: this delivery may exceed the variation job material budget.
             </p>
-            <div className="mt-3 space-y-2">
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
               {budgetWarning.rows.slice(0, 4).map((row) => (
-                <div key={row.materialId} className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
+                <div key={row.materialId} className="rounded border border-border bg-muted/40 px-2 py-1 text-[11px] text-foreground">
                   <span className="font-semibold">{row.materialName}</span>
                   {' · '}
-                  projected {row.projectedIssuedBaseQuantity.toFixed(3)} {row.baseUnit}
-                  {' vs budget '}
-                  {row.estimatedBaseQuantity.toFixed(3)} {row.baseUnit}
-                  {row.quantityOverrun > 0.0005 ? ` · over by ${row.quantityOverrun.toFixed(3)} ${row.baseUnit}` : ''}
+                  {row.projectedIssuedBaseQuantity.toFixed(3)} / {row.estimatedBaseQuantity.toFixed(3)} {row.baseUnit}
+                  {row.quantityOverrun > 0.0005 ? ` · +${row.quantityOverrun.toFixed(3)}` : ''}
                 </div>
               ))}
               {budgetWarning.warningCount > 4 && (
-                <p className="text-xs text-muted-foreground">+{budgetWarning.warningCount - 4} more material warning(s)</p>
+                <span className="self-center text-[11px] text-muted-foreground">+{budgetWarning.warningCount - 4} more</span>
               )}
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Enter an override reason below if this extra issue is intentional.
-            </p>
           </div>
         ) : null}
 
         {overrideSignals.negativeStockLineCount > 0 && (
-          <div className="border-b border-destructive/40 bg-destructive/10 p-4">
-            <p className="text-sm font-medium text-destructive">
-              Override required: {overrideSignals.negativeStockLineCount} line(s) exceed available warehouse FIFO stock on a negative-consumption material.
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Saving will be blocked unless you capture the reason for this stock exception.
+          <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-2">
+            <p className="text-xs font-medium text-destructive">
+              Override required: {overrideSignals.negativeStockLineCount} line(s) exceed available warehouse FIFO stock.
             </p>
           </div>
         )}
 
-        <div className="border-b border-border bg-muted/30 px-4 py-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Delivery type
-          </p>
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-muted/30 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Type</span>
             {DELIVERY_TYPE_OPTIONS.map((option) => (
               <button
                 key={option.id}
@@ -1913,7 +1925,7 @@ export default function DeliveryNoteCreatePage() {
                   setDeliveryType(option.id);
                 }}
                 className={cn(
-                  'rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                  'rounded border px-2.5 py-1 text-xs font-medium transition-colors',
                   deliveryType === option.id
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border bg-background text-muted-foreground hover:bg-muted'
@@ -1923,57 +1935,56 @@ export default function DeliveryNoteCreatePage() {
               </button>
             ))}
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/20 px-4 py-2.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground">Custom items only</p>
-            <p className="text-xs text-muted-foreground">
-              Skip material dispatch — delivery note for printing only (no stock movement)
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 text-right">
+              <p className="text-xs font-medium text-foreground">Custom items only</p>
               {materialRowsHaveData && !skipMaterialDispatch ? (
-                <span className="mt-1 block text-amber-700 dark:text-amber-200">
-                  Turning this on will clear any material lines above.
-                </span>
-              ) : null}
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={skipMaterialDispatch}
-            onClick={() => {
-              const next = !skipMaterialDispatch;
-              if (next) {
-                setLines((prev) =>
-                  prev.map((line) => ({
-                    ...line,
-                    materialId: '',
-                    dispatchQty: '',
-                    returnQty: '',
-                    quantityUomId: '',
-                    warehouseId: '',
-                    originalDispatchQty: undefined,
-                    originalWarehouseId: undefined,
-                  }))
-                );
-              }
-              setSkipMaterialDispatch(next);
-            }}
-            className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ease-in-out focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background ${
-              skipMaterialDispatch ? 'bg-primary' : 'bg-muted'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                skipMaterialDispatch ? 'translate-x-5' : 'translate-x-0'
+                <p className="text-[10px] text-amber-700 dark:text-amber-200">Clears material lines</p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">No stock movement</p>
+              )}
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={skipMaterialDispatch}
+              onClick={() => {
+                const next = !skipMaterialDispatch;
+                if (next) {
+                  setLines((prev) =>
+                    normalizeLines(
+                      prev.map((line) => ({
+                        ...line,
+                        materialId: '',
+                        dispatchQty: '',
+                        returnQty: '',
+                        quantityUomId: '',
+                        warehouseId: '',
+                        originalDispatchQty: undefined,
+                        originalWarehouseId: undefined,
+                      })),
+                      lineJobId
+                    )
+                  );
+                }
+                setSkipMaterialDispatch(next);
+              }}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ease-in-out focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background ${
+                skipMaterialDispatch ? 'bg-primary' : 'bg-muted'
               }`}
-            />
-          </button>
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  skipMaterialDispatch ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
         </div>
 
         {/* Job / subcontract header */}
-        <div className="border-b border-border p-5 space-y-5">
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="border-b border-border p-3 space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {!isSubcontract ? (
               <>
                 <div>
@@ -2065,7 +2076,7 @@ export default function DeliveryNoteCreatePage() {
               </>
             )}
             <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Delivery date
               </label>
               <input
@@ -2073,11 +2084,11 @@ export default function DeliveryNoteCreatePage() {
                 required
                 value={date}
                 onChange={(e) => handleDateChange(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm font-bold text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-bold text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Delivery note number
               </label>
               <input
@@ -2094,12 +2105,12 @@ export default function DeliveryNoteCreatePage() {
                 placeholder={deliveryNoteNumber == null ? 'Loading…' : undefined}
                 {...withBlockInputWheelChange({
                   className: cn(
-                    'w-full rounded-md border border-border px-3 py-2.5 font-mono text-sm font-bold text-red-600 shadow-sm focus:outline-none focus:ring-2 focus:ring-ring dark:text-red-400',
+                    'w-full rounded-md border border-border px-2.5 py-1.5 font-mono text-sm font-bold text-red-600 shadow-sm focus:outline-none focus:ring-2 focus:ring-ring dark:text-red-400',
                     deliveryNoteNumberOverride ? 'bg-background' : 'cursor-default bg-muted/40'
                   ),
                 })}
               />
-              <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <label className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
                 <input
                   type="checkbox"
                   checked={deliveryNoteNumberOverride}
@@ -2122,15 +2133,10 @@ export default function DeliveryNoteCreatePage() {
                 />
                 Override auto number
               </label>
-              {!deliveryNoteNumberOverride ? (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Auto-assigned from last delivery note + 1 on save
-                </p>
-              ) : null}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {isSubcontract ? (
               <>
                 <div>
@@ -2152,124 +2158,44 @@ export default function DeliveryNoteCreatePage() {
                   />
                 </div>
                 <div className="sm:col-span-2 lg:col-span-4">
-                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     Supplier contact person
                   </label>
-                  <div className="space-y-2">
-                    <SearchSelect
-                      key={supplierId || 'no-supplier'}
-                      value={selectedContactId}
-                      onChange={setSelectedContactId}
-                      allowClearButton={false}
-                      placeholder={
-                        supplierId
-                          ? supplierContactOptions.length > 0
-                            ? 'Search supplier contact by name / phone / email'
-                            : 'No contacts found on this supplier'
-                          : 'Select a supplier first'
-                      }
-                      disabled={!supplierId || supplierContactOptions.length === 0}
-                      items={supplierContactOptions.map((opt) => ({
-                        id: opt.id,
-                        label: opt.label,
-                        searchText: opt.searchText,
-                      }))}
-                      renderItem={(item) => {
-                        const full = supplierContactOptions.find((x) => x.id === item.id);
-                        return (
-                          <div className="flex flex-col">
-                            <span className="font-medium">{item.label}</span>
-                            {(full?.phone || full?.email) && (
-                              <span className="text-xs text-muted-foreground">
-                                {[full.phone, full.email].filter(Boolean).join(' · ')}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      }}
-                    />
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[11px] text-muted-foreground">
-                        Primary supplier contact stays on the supplier record; this selection is for this delivery note only.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAddContactModal((prev) => ({
-                            ...prev,
-                            open: true,
-                            name: '',
-                            number: '',
-                            email: '',
-                            designation: '',
-                            label: '',
-                            saving: false,
-                          }))
+                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-2">
+                    <div className="min-w-0 flex-1">
+                      <SearchSelect
+                        key={supplierId || 'no-supplier'}
+                        value={selectedContactId}
+                        onChange={setSelectedContactId}
+                        allowClearButton={false}
+                        placeholder={
+                          supplierId
+                            ? supplierContactOptions.length > 0
+                              ? 'Search supplier contact…'
+                              : 'No contacts on supplier'
+                            : 'Select supplier first'
                         }
-                        disabled={!supplierId}
-                        className="rounded-md border border-blue-500/40 bg-blue-500/10 px-2.5 py-1 text-xs text-blue-300 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        + Add Contact
-                      </button>
+                        disabled={!supplierId || supplierContactOptions.length === 0}
+                        items={supplierContactOptions.map((opt) => ({
+                          id: opt.id,
+                          label: opt.label,
+                          searchText: opt.searchText,
+                        }))}
+                        renderItem={(item) => {
+                          const full = supplierContactOptions.find((x) => x.id === item.id);
+                          return (
+                            <div className="flex flex-col">
+                              <span className="font-medium">{item.label}</span>
+                              {(full?.phone || full?.email) && (
+                                <span className="text-xs text-muted-foreground">
+                                  {[full.phone, full.email].filter(Boolean).join(' · ')}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        }}
+                      />
                     </div>
-                    {selectedSupplierContactOption ? (
-                      <div className="space-y-1 rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                        <p className="text-sm font-semibold text-foreground">
-                          {selectedSupplierContactOption.name}
-                        </p>
-                        {selectedSupplierContactOption.phone ? (
-                          <p>{selectedSupplierContactOption.phone}</p>
-                        ) : null}
-                        {selectedSupplierContactOption.email ? (
-                          <p className="break-all text-muted-foreground">{selectedSupplierContactOption.email}</p>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="sm:col-span-2 lg:col-span-4">
-                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Contact Person
-                </label>
-                <div className="space-y-2">
-                  <SearchSelect
-                    key={selectedJob || 'no-job'}
-                    value={selectedContactId}
-                    onChange={setSelectedContactId}
-                    allowClearButton={false}
-                    placeholder={
-                      selectedJob
-                        ? jobContactOptions.length > 0
-                          ? 'Search contact by name / phone / email / designation'
-                          : 'No contacts found on this job'
-                        : 'Select a job first'
-                    }
-                    disabled={!selectedJob || jobContactOptions.length === 0}
-                    items={jobContactOptions.map((opt) => ({
-                      id: opt.id,
-                      label: opt.label,
-                      searchText: opt.searchText,
-                    }))}
-                    renderItem={(item) => {
-                      const full = jobContactOptions.find((x) => x.id === item.id);
-                      return (
-                        <div className="flex flex-col">
-                          <span className="font-medium">{item.label}</span>
-                          {(full?.phone || full?.email) && (
-                            <span className="text-xs text-muted-foreground">
-                              {[full.phone, full.email].filter(Boolean).join(' · ')}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    }}
-                  />
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[11px] text-muted-foreground">
-                      Can&apos;t find contact? Add under this job.
-                    </p>
                     <button
                       type="button"
                       onClick={() =>
@@ -2284,23 +2210,91 @@ export default function DeliveryNoteCreatePage() {
                           saving: false,
                         }))
                       }
-                      disabled={!selectedJob}
-                      className="rounded-md border border-blue-500/40 bg-blue-500/10 px-2.5 py-1 text-xs text-blue-300 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!supplierId}
+                      className="shrink-0 rounded border border-blue-500/40 bg-blue-500/10 px-2 py-1.5 text-[11px] text-blue-300 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      + Add Contact
+                      + Contact
                     </button>
+                    {selectedSupplierContactOption ? (
+                      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded border border-border bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground sm:max-w-xs">
+                        <span className="font-semibold text-foreground">{selectedSupplierContactOption.name}</span>
+                        {selectedSupplierContactOption.phone ? <span>{selectedSupplierContactOption.phone}</span> : null}
+                        {selectedSupplierContactOption.email ? (
+                          <span className="truncate">{selectedSupplierContactOption.email}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
+                </div>
+              </>
+            ) : (
+              <div className="sm:col-span-2 lg:col-span-4">
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Contact person
+                </label>
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-2">
+                  <div className="min-w-0 flex-1">
+                    <SearchSelect
+                      key={selectedJob || 'no-job'}
+                      value={selectedContactId}
+                      onChange={setSelectedContactId}
+                      allowClearButton={false}
+                      placeholder={
+                        selectedJob
+                          ? jobContactOptions.length > 0
+                            ? 'Search contact…'
+                            : 'No contacts on job'
+                          : 'Select job first'
+                      }
+                      disabled={!selectedJob || jobContactOptions.length === 0}
+                      items={jobContactOptions.map((opt) => ({
+                        id: opt.id,
+                        label: opt.label,
+                        searchText: opt.searchText,
+                      }))}
+                      renderItem={(item) => {
+                        const full = jobContactOptions.find((x) => x.id === item.id);
+                        return (
+                          <div className="flex flex-col">
+                            <span className="font-medium">{item.label}</span>
+                            {(full?.phone || full?.email) && (
+                              <span className="text-xs text-muted-foreground">
+                                {[full.phone, full.email].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAddContactModal((prev) => ({
+                        ...prev,
+                        open: true,
+                        name: '',
+                        number: '',
+                        email: '',
+                        designation: '',
+                        label: '',
+                        saving: false,
+                      }))
+                    }
+                    disabled={!selectedJob}
+                    className="shrink-0 rounded border border-blue-500/40 bg-blue-500/10 px-2 py-1.5 text-[11px] text-blue-300 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    + Contact
+                  </button>
                   {selectedContactOption ? (
-                    <div className="space-y-1 rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                      <p className="text-sm font-semibold text-foreground">{selectedContactOption.name}</p>
+                    <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded border border-border bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground sm:max-w-xs">
+                      <span className="font-semibold text-foreground">{selectedContactOption.name}</span>
                       {(selectedContactOption.designation || selectedContactOption.contactLabel) && (
-                        <p className="text-muted-foreground">
-                          {selectedContactOption.designation || selectedContactOption.contactLabel}
-                        </p>
+                        <span>{selectedContactOption.designation || selectedContactOption.contactLabel}</span>
                       )}
-                      {selectedContactOption.phone ? <p>{selectedContactOption.phone}</p> : null}
+                      {selectedContactOption.phone ? <span>{selectedContactOption.phone}</span> : null}
                       {selectedContactOption.email ? (
-                        <p className="break-all text-muted-foreground">{selectedContactOption.email}</p>
+                        <span className="truncate">{selectedContactOption.email}</span>
                       ) : null}
                     </div>
                   ) : null}
@@ -2310,31 +2304,31 @@ export default function DeliveryNoteCreatePage() {
           </div>
         </div>
 
-        {/* Notes & override (side by side on md+) */}
-        <div className="border-b border-border p-5">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+        {/* Notes & override */}
+        <div className="border-b border-border px-3 py-2">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             <div className="min-w-0">
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Notes
               </label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Optional general notes"
-                rows={3}
-                className="w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                rows={2}
+                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div className="min-w-0">
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Override reason
               </label>
               <textarea
                 value={overrideReason}
                 onChange={(e) => setOverrideReason(e.target.value)}
                 placeholder={overrideSignals.requiresReason ? 'Required for this delivery note' : 'Only needed for exceptions'}
-                rows={3}
-                className={`w-full rounded-md border px-3 py-2.5 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring ${
+                rows={2}
+                className={`w-full rounded-md border px-2.5 py-1.5 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring ${
                   overrideSignals.requiresReason
                     ? 'border-amber-500/50 bg-amber-500/10'
                     : 'border-border bg-background'
@@ -2347,26 +2341,24 @@ export default function DeliveryNoteCreatePage() {
         {/* Materials Section — same Excel-style grid as /stock/dispatch/entry */}
         {!skipMaterialDispatch && (
           <div className="border-b border-border">
-            <div className="border-b border-border bg-muted/40 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {isSubcontract ? 'Materials to send' : 'Materials for Dispatch'}
-                </h3>
-                {isSubcontract && transitStatus ? (
-                  <Badge variant="outline" className="text-[10px] uppercase">
-                    {transitStatus.replace(/_/g, ' ')}
-                  </Badge>
-                ) : null}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-3 py-1.5">
+              <h3 className="text-xs font-semibold text-foreground">
+                {isSubcontract ? 'Materials to send' : 'Materials for dispatch'}
+              </h3>
+              {isSubcontract && transitStatus ? (
+                <Badge variant="outline" className="text-[9px] uppercase">
+                  {transitStatus.replace(/_/g, ' ')}
+                </Badge>
+              ) : null}
+              <span className="text-[10px] text-muted-foreground">
                 {isSubcontract
-                  ? 'Set source and transit per line (or use header defaults). Receive qty in the same grid after issue.'
-                  : 'Add materials to be dispatched. This section affects inventory (same Excel-style grid as dispatch entry).'}
-              </p>
+                  ? 'Source/transit per line · receive in grid after issue'
+                  : 'Affects inventory'}
+              </span>
               {subcontractMaterialsReadOnly ? (
-                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                  Issue columns are locked after receive has started. Enter receive qty below and use Receive.
-                </p>
+                <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                  Issue locked after receive started
+                </span>
               ) : null}
             </div>
             <DispatchLineGrid
@@ -2388,7 +2380,7 @@ export default function DeliveryNoteCreatePage() {
               persistScope="delivery-note"
               budgetWarningMaterialIds={isSubcontract ? undefined : budgetWarningMaterialIds}
             />
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border bg-card px-4 py-3">
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border bg-card px-3 py-1.5">
               {showSubcontractReceive ? (
                 <>
                   <Button
@@ -2424,25 +2416,18 @@ export default function DeliveryNoteCreatePage() {
 
         {/* Custom Items Section */}
         <div className="border-b border-border bg-primary/5">
-          <div className="border-b border-border bg-primary/10 px-4 py-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Custom items (for printing)</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Lines appear on the printed delivery note only — no stock movement.
-                </p>
-              </div>
-              {deliveryNoteNumber != null ? (
-                <span className="rounded-full border border-red-500/30 bg-background/80 px-3 py-1 font-mono text-xs font-bold text-red-600 dark:text-red-400">
-                  {deliveryNoteNumber}
-                </span>
-              ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-primary/10 px-3 py-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-xs font-semibold text-foreground">Custom items (for printing)</h3>
+              <span className="text-[10px] text-muted-foreground">No stock movement</span>
             </div>
+            {deliveryNoteNumber != null ? (
+              <span className="rounded border border-red-500/30 bg-background/80 px-2 py-0.5 font-mono text-[11px] font-bold text-red-600 dark:text-red-400">
+                #{deliveryNoteNumber}
+              </span>
+            ) : null}
           </div>
-          <div className="border-b border-border bg-primary/5 px-0">
-            <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Excel view</div>
-            </div>
+          <div className="border-b border-border bg-primary/5">
             <DeliveryNoteCustomItemsGrid
               items={customItems}
               lineNoAuto={customItemsLineNoAuto}
@@ -2452,7 +2437,7 @@ export default function DeliveryNoteCreatePage() {
               onRemoveItem={removeCustomItem}
             />
           </div>
-          <div className="flex justify-end border-t border-border bg-primary/5 px-4 py-3">
+          <div className="flex justify-end border-t border-border bg-primary/5 px-3 py-1.5">
             <Button type="button" variant="outline" size="sm" onClick={addCustomItem}>
               + Add row
             </Button>
@@ -2462,42 +2447,39 @@ export default function DeliveryNoteCreatePage() {
         {/* Signed Copy Upload — Edit mode only */}
         {editingTransactionId && (
           <div className="border border-border border-b-0 bg-card">
-            <div className="border-b border-border bg-muted/30 p-4">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                Signed Copy
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">Upload the signed physical copy (stored in Google Drive)</p>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-3 py-1.5">
+              <div>
+                <h3 className="text-xs font-semibold text-foreground">Signed copy</h3>
+                <p className="text-[10px] text-muted-foreground">Upload signed physical copy (Google Drive)</p>
+              </div>
             </div>
-            <div className="p-6">
+            <div className="p-3">
               {signedCopyUrl ? (
-                <div className="flex items-center justify-between bg-green-900/20 border border-green-500/50 rounded-lg p-4 mb-4">
-                  <div className="flex items-center gap-3">
-                    <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                <div className="mb-2 flex items-center justify-between rounded border border-green-500/50 bg-green-900/20 p-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <svg className="h-4 w-4 shrink-0 text-green-400" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <div>
-                      <p className="text-sm font-medium text-green-300">Signed copy uploaded</p>
-                      <a href={signedCopyUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-green-400 hover:text-green-300 underline">
-                        View in Google Drive →
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-green-300">Uploaded</p>
+                      <a href={signedCopyUrl} target="_blank" rel="noopener noreferrer" className="truncate text-[10px] text-green-400 hover:text-green-300 underline">
+                        View in Drive →
                       </a>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setSignedCopyUrl(null)}
-                    className="text-green-400 hover:text-green-300 p-1"
+                    className="p-1 text-green-400 hover:text-green-300"
                     disabled={uploadingSignedCopy}
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div>
                   <label className="block">
                     <input
                       type="file"
@@ -2537,7 +2519,7 @@ export default function DeliveryNoteCreatePage() {
                       className="sr-only"
                       id="signed-copy-input"
                     />
-                    <div className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-muted-foreground/40 hover:bg-muted/40 transition-colors"
+                    <div className="cursor-pointer rounded border-2 border-dashed border-border p-4 text-center transition-colors hover:border-muted-foreground/40 hover:bg-muted/40"
                          onDragOver={(e) => {
                            e.preventDefault();
                            e.currentTarget.classList.add('border-primary', 'bg-primary/10');
@@ -2557,15 +2539,13 @@ export default function DeliveryNoteCreatePage() {
                              input.dispatchEvent(new Event('change', { bubbles: true }));
                            }
                          }}>
-                      <svg className="mx-auto h-12 w-12 text-muted-foreground mb-2" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                      <svg className="mx-auto mb-1 h-8 w-8 text-muted-foreground" stroke="currentColor" fill="none" viewBox="0 0 48 48">
                         <path d="M28 8H12a4 4 0 00-4 4v20a4 4 0 004 4h24a4 4 0 004-4V20m-8-8l-6.586-6.586A2 2 0 0028.172 2H28a2 2 0 00-2 2v6a2 2 0 002 2h6zm-4 6H12m0 8h16m-6 6H12" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
-                      <p className="text-sm font-medium text-foreground mb-1">
-                        {uploadingSignedCopy ? 'Uploading...' : 'Click to upload or drag and drop'}
+                      <p className="text-xs font-medium text-foreground">
+                        {uploadingSignedCopy ? 'Uploading…' : 'Click or drag to upload'}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        Images (JPEG, PNG, WebP) or PDF, max 20 MB
-                      </p>
+                      <p className="text-[10px] text-muted-foreground">JPEG, PNG, WebP or PDF · max 20 MB</p>
                     </div>
                   </label>
                 </div>

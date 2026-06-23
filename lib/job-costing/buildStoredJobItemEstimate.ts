@@ -50,6 +50,7 @@ type StoredJobItemEstimateArgs = {
     name: string;
     fabricationType: string;
     formulaConfig: FormulaConfig;
+    specificationSchema?: unknown;
   } | null;
   materialCatalog: Map<string, { id: string; name: string; unit: string }>;
   materialPricing: Map<string, MaterialPricingSnapshot>;

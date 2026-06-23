@@ -4,6 +4,9 @@ import { useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/shadcn/button';
 import SearchSelect from '@/components/ui/SearchSelect';
+import { DynamicAreaInstanceTable } from '@/components/job-costing/DynamicAreaInstanceTable';
+import { GlobalFormulaValuesTable } from '@/components/job-costing/GlobalFormulaValuesTable';
+import { JobLevelInputsTable } from '@/components/job-costing/JobLevelInputsTable';
 import type { Material } from '@/store/api/endpoints/materials';
 import {
   FIELD_TYPES,
@@ -16,20 +19,31 @@ import {
   type LaborRule,
   type MaterialRule,
   type PlaygroundValues,
+  addPlaygroundAreaInstance,
   buildAreaFormulaValueTokens,
   buildFormulaTokens,
   describeFieldType,
   describeLaborRule,
   describeMaterialRule,
+  duplicatePlaygroundAreaInstance,
   formatPreviewMoney,
   formatPreviewQty,
   getAreaFormulaOverrideKey,
   getGlobalFormulaOverrideKey,
   getTokenChipClasses,
+  isStoredGlobalField,
   newLaborRule,
   newMaterialRule,
+  parsePlaygroundAreaInstances,
+  playgroundInstanceValueKey,
+  removePlaygroundAreaInstance,
+  updatePlaygroundAreaInstanceLabel,
   normalizeFormulaKey,
   reorderItemsById,
+  resolveGlobalFieldFormValue,
+  resolveAreaFieldFormValue,
+  formatAreaMaterialRuleOutputPreview,
+  formatAreaLaborRuleOutputPreview,
   tokenizeExpressionDisplay,
 } from './shared';
 
@@ -323,8 +337,9 @@ export function FormulaPlayground({
     onChange({ ...values, [key]: checked ? 'true' : 'false' });
   };
   const [showOverrideInputs, setShowOverrideInputs] = useState(false);
+  const hasStoredGlobalFields = form.globalFields.some(isStoredGlobalField);
   const hasOverrideInputs =
-    form.formulaConstants.length > 0 ||
+    hasStoredGlobalFields ||
     form.areas.some((area) => area.formulaValues.length > 0);
 
   return (
@@ -334,153 +349,146 @@ export function FormulaPlayground({
           <div>
             <h3 className="text-base font-semibold text-slate-950 dark:text-white">Job-level test inputs</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Fill this like a real job budget. Material dropdowns use current material unit cost for this preview.
+              User inputs and stored formula values. Stored values use formula defaults unless you override them.
             </p>
           </div>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-right dark:border-emerald-500/20 dark:bg-emerald-500/10">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Preview total</p>
-            <p className="mt-1 text-lg font-semibold text-emerald-900 dark:text-emerald-100">{formatPreviewMoney(preview.totalCost)}</p>
+          <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+            {hasOverrideInputs ? (
+              <Button type="button" size="sm" variant="secondary" onClick={() => setShowOverrideInputs((current) => !current)}>
+                {showOverrideInputs ? 'Hide overrides' : 'Show overrides'}
+              </Button>
+            ) : null}
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-right dark:border-emerald-500/20 dark:bg-emerald-500/10">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Preview total</p>
+              <p className="mt-1 text-lg font-semibold text-emerald-900 dark:text-emerald-100">{formatPreviewMoney(preview.totalCost)}</p>
+            </div>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {form.globalFields.map((field) => (
-            <label key={field.id} className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              {field.label || field.key || 'Job input'}
-              {field.inputType === 'material' ? (
-                <div className="mt-1.5">
-                  <SearchSelect
-                    items={materials.map((material) => ({
-                      id: material.id,
-                      label: material.name,
-                      searchText: `${material.name} ${material.unit} ${formatPreviewMoney(Number(material.unitCost ?? 0))}`,
-                    }))}
-                    value={values[`global.${field.key}`] ?? field.defaultMaterialId ?? ''}
-                    onChange={(id) => setValue(`global.${field.key}`, id)}
-                    placeholder="Select material"
-                    openOnFocus
-                    dropdownInPortal
-                    clearOnEmptyInput
-                    inputProps={{
-                      className:
-                        'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-slate-900 outline-none focus:border-sky-300 dark:border-slate-700 dark:bg-slate-950 dark:text-white',
-                    }}
-                  />
-                </div>
-              ) : field.inputType === 'boolean' ? (
-                <div className="mt-1.5 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-3 dark:border-slate-700 dark:bg-slate-950">
-                  <div>
-                    <p className="text-sm font-medium normal-case tracking-normal text-slate-900 dark:text-white">
-                      {(values[`global.${field.key}`] ?? 'false') === 'true' ? 'Yes' : 'No'}
-                    </p>
-                    <p className="mt-0.5 text-[11px] font-normal normal-case tracking-normal text-slate-500 dark:text-slate-400">
-                      Boolean input
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={(values[`global.${field.key}`] ?? 'false') === 'true'}
-                    onClick={() => setBooleanValue(`global.${field.key}`, (values[`global.${field.key}`] ?? 'false') !== 'true')}
-                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
-                      (values[`global.${field.key}`] ?? 'false') === 'true'
-                        ? 'bg-emerald-500'
-                        : 'bg-slate-300 dark:bg-slate-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                        (values[`global.${field.key}`] ?? 'false') === 'true' ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-1.5 flex overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-sky-300 dark:border-slate-700 dark:bg-slate-950">
-                  <input
-                    type={['number', 'percent', 'length', 'area', 'volume', 'count'].includes(field.inputType) ? 'number' : 'text'}
-                    inputMode={['number', 'percent', 'length', 'area', 'volume', 'count'].includes(field.inputType) ? 'decimal' : undefined}
-                    value={values[`global.${field.key}`] ?? ''}
-                    onChange={(event) => setValue(`global.${field.key}`, event.target.value)}
-                    className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none dark:text-white"
-                  />
-                  {field.unit ? (
-                    <span className="border-l border-slate-200 px-3 py-2.5 text-sm font-medium normal-case tracking-normal text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                      {field.unit}
-                    </span>
-                  ) : null}
-                </div>
-              )}
-            </label>
-          ))}
+        <div className="mt-4">
           {form.globalFields.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-500 dark:border-slate-700">
               No job-level inputs configured yet.
             </div>
-          ) : null}
+          ) : (
+            <JobLevelInputsTable
+              tone="playground"
+              mode="entry"
+              showOverrideColumn={showOverrideInputs}
+              fields={form.globalFields.map((field) => ({
+                id: field.id,
+                label: field.label || field.key || 'Job input',
+                key: field.key,
+                inputType: field.inputType,
+                unit: field.unit,
+                defaultMaterialId: field.defaultMaterialId,
+                defaultValue: field.defaultValue,
+                storedValue: field.storedValue,
+              }))}
+              materials={materials}
+              materialSearchText={(material) =>
+                `${material.name} ${material.unit} ${formatPreviewMoney(Number(material.unitCost ?? 0))}`
+              }
+              getValue={(key) => {
+                const field = form.globalFields.find((item) => item.key === key);
+                if (!field) return '';
+                if (isStoredGlobalField(field)) return field.storedValue ?? '';
+                return resolveGlobalFieldFormValue(field, values[`global.${key}`]);
+              }}
+              onValueChange={(key, value) => setValue(`global.${key}`, value)}
+              getOverrideValue={(key) => values[getGlobalFormulaOverrideKey(key)] ?? ''}
+              onOverrideChange={(key, value) => setValue(getGlobalFormulaOverrideKey(key), value)}
+            />
+          )}
         </div>
       </section>
-
-      {hasOverrideInputs ? (
-        <section className="flex flex-col gap-3 rounded-2xl border border-cyan-200 bg-white p-4 dark:border-cyan-500/20 dark:bg-slate-950">
-          <div>
-            <h3 className="text-base font-semibold text-slate-950 dark:text-white">Override stored values</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Show override inputs only when this playground needs temporary values different from the formula defaults.
-            </p>
-          </div>
-          <div>
-            <Button type="button" size="sm" variant="secondary" onClick={() => setShowOverrideInputs((current) => !current)}>
-              {showOverrideInputs ? 'Hide override input boxes' : 'View override input boxes'}
-            </Button>
-          </div>
-        </section>
-      ) : null}
-
-      {form.formulaConstants.length > 0 ? (
-        <section className="rounded-2xl border border-cyan-200 bg-cyan-50/70 p-4 dark:border-cyan-500/20 dark:bg-cyan-500/10">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-base font-semibold text-slate-950 dark:text-white">Stored formula values</h3>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                These fixed values come from the formula sidebar and are always available as <span className="font-mono">formula.key</span>.
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {form.formulaConstants.map((field) => (
-              <div key={field.id} className="rounded-2xl border border-cyan-100 bg-white px-4 py-3 dark:border-cyan-500/20 dark:bg-slate-950/70">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-950 dark:text-white">{field.label || field.key || 'Stored value'}</p>
-                    <p className="mt-1 font-mono text-[11px] text-cyan-700 dark:text-cyan-300">{field.key ? `formula.${field.key}` : 'formula.key'}</p>
-                  </div>
-                  <p className="text-right text-sm font-semibold text-slate-950 dark:text-white">
-                    {field.value || '0'} {field.unit || ''}
-                  </p>
-                </div>
-                {showOverrideInputs ? (
-                  <label className="mt-3 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    Override for this playground
-                    <input
-                      type="text"
-                      value={values[getGlobalFormulaOverrideKey(field.key)] ?? ''}
-                      onChange={(event) => setValue(getGlobalFormulaOverrideKey(field.key), event.target.value)}
-                      placeholder="Leave blank for default"
-                      className="mt-1.5 w-full rounded-xl border border-cyan-100 bg-cyan-50/40 px-3 py-2 font-mono text-sm font-normal normal-case tracking-normal text-slate-900 outline-none focus:border-cyan-300 dark:border-cyan-500/20 dark:bg-slate-900 dark:text-white"
-                    />
-                  </label>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       <section className="space-y-3">
         {form.areas.map((area) => (
           <div key={area.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950">
             <h3 className="text-base font-semibold text-slate-950 dark:text-white">{area.label || area.key || 'Area'}</h3>
+            {area.dynamic ? (
+              <div className="mt-3">
+                <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+                  Repeatable area — add one row per measurement set. Preview totals combine every row.
+                </p>
+                <DynamicAreaInstanceTable
+                  areaLabel={area.label || area.key || 'Area'}
+                  fields={(area.fields ?? []).map((field) => ({
+                    key: field.key,
+                    label: field.label || field.key || 'Input',
+                    inputType: field.inputType,
+                    unit: field.unit,
+                    defaultMaterialId: field.defaultMaterialId,
+                    defaultValue: field.defaultValue,
+                  }))}
+                  instances={parsePlaygroundAreaInstances(area, values)}
+                  materials={materials}
+                  tone="playground"
+                  getValue={(instanceId, fieldKey) => {
+                    const field = area.fields.find((item) => item.key === fieldKey);
+                    if (!field) return '';
+                    return resolveAreaFieldFormValue(
+                      field,
+                      values[playgroundInstanceValueKey(area.key.trim(), instanceId, fieldKey)]
+                    );
+                  }}
+                  onValueChange={(instanceId, fieldKey, value) =>
+                    setValue(playgroundInstanceValueKey(area.key.trim(), instanceId, fieldKey), value)
+                  }
+                  onInstanceLabelChange={(instanceId, label) =>
+                    onChange(updatePlaygroundAreaInstanceLabel(area, values, instanceId, label))
+                  }
+                  onAddInstance={() => onChange(addPlaygroundAreaInstance(area, values))}
+                  onDuplicateInstance={(instanceId) =>
+                    onChange(duplicatePlaygroundAreaInstance(area, values, instanceId))
+                  }
+                  onRemoveInstance={(instanceId) =>
+                    onChange(removePlaygroundAreaInstance(area, values, instanceId))
+                  }
+                />
+                {area.materials.length > 0 || area.labor.length > 0 ? (
+                  <div className="mt-4 space-y-2 rounded-xl border border-teal-100 bg-teal-50/50 p-3 dark:border-teal-500/20 dark:bg-teal-500/10">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal-800 dark:text-teal-200">
+                      Possible output (all rows combined)
+                    </p>
+                    {area.materials.map((rule) => {
+                      const selectedMaterialId =
+                        rule.materialSource === 'global'
+                          ? resolveGlobalFieldFormValue(
+                              form.globalFields.find((field) => field.key === rule.materialSelectorKey) ?? {
+                                inputType: 'material',
+                                defaultMaterialId: '',
+                              },
+                              values[`global.${rule.materialSelectorKey}`]
+                            )
+                          : rule.materialId;
+                      const selectedMaterial = selectedMaterialId
+                        ? materials.find((material) => material.id === selectedMaterialId)
+                        : null;
+                      return (
+                        <p key={rule.id} className="text-xs text-slate-600 dark:text-slate-300">
+                          <span className="font-medium text-slate-900 dark:text-slate-100">
+                            {selectedMaterial?.name || describeMaterialRule(rule)}
+                          </span>
+                          {' — '}
+                          {formatAreaMaterialRuleOutputPreview(form, values, area, rule, selectedMaterial?.unit)}
+                        </p>
+                      );
+                    })}
+                    {area.labor.map((rule) => (
+                      <p key={rule.id} className="text-xs text-slate-600 dark:text-slate-300">
+                        <span className="font-medium text-slate-900 dark:text-slate-100">
+                          {rule.expertiseName || 'Labor rule'}
+                        </span>
+                        {' — '}
+                        {formatAreaLaborRuleOutputPreview(form, values, area, rule)}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               {area.fields.map((field) => (
                 <label key={field.id} className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -489,7 +497,7 @@ export function FormulaPlayground({
                     <div className="mt-1.5 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-900">
                       <div>
                         <p className="text-sm font-medium normal-case tracking-normal text-slate-900 dark:text-white">
-                          {(values[`area.${area.id}.${field.key}`] ?? 'false') === 'true' ? 'Yes' : 'No'}
+                          {(resolveAreaFieldFormValue(field, values[`area.${area.id}.${field.key}`]) || 'false') === 'true' ? 'Yes' : 'No'}
                         </p>
                         <p className="mt-0.5 text-[11px] font-normal normal-case tracking-normal text-slate-500 dark:text-slate-400">
                           Boolean input
@@ -498,17 +506,17 @@ export function FormulaPlayground({
                       <button
                         type="button"
                         role="switch"
-                        aria-checked={(values[`area.${area.id}.${field.key}`] ?? 'false') === 'true'}
-                        onClick={() => setBooleanValue(`area.${area.id}.${field.key}`, (values[`area.${area.id}.${field.key}`] ?? 'false') !== 'true')}
+                        aria-checked={(resolveAreaFieldFormValue(field, values[`area.${area.id}.${field.key}`]) || 'false') === 'true'}
+                        onClick={() => setBooleanValue(`area.${area.id}.${field.key}`, resolveAreaFieldFormValue(field, values[`area.${area.id}.${field.key}`]) !== 'true')}
                         className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
-                          (values[`area.${area.id}.${field.key}`] ?? 'false') === 'true'
+                          (resolveAreaFieldFormValue(field, values[`area.${area.id}.${field.key}`]) || 'false') === 'true'
                             ? 'bg-emerald-500'
                             : 'bg-slate-300 dark:bg-slate-700'
                         }`}
                       >
                         <span
                           className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                            (values[`area.${area.id}.${field.key}`] ?? 'false') === 'true' ? 'translate-x-6' : 'translate-x-1'
+                            (resolveAreaFieldFormValue(field, values[`area.${area.id}.${field.key}`]) || 'false') === 'true' ? 'translate-x-6' : 'translate-x-1'
                           }`}
                         />
                       </button>
@@ -518,7 +526,7 @@ export function FormulaPlayground({
                       <input
                         type={['number', 'percent', 'length', 'area', 'volume', 'count'].includes(field.inputType) ? 'number' : 'text'}
                         inputMode={['number', 'percent', 'length', 'area', 'volume', 'count'].includes(field.inputType) ? 'decimal' : undefined}
-                        value={values[`area.${area.id}.${field.key}`] ?? ''}
+                        value={resolveAreaFieldFormValue(field, values[`area.${area.id}.${field.key}`])}
                         onChange={(event) => setValue(`area.${area.id}.${field.key}`, event.target.value)}
                         className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none dark:text-white"
                       />
@@ -535,6 +543,7 @@ export function FormulaPlayground({
                 <p className="text-sm text-slate-500 dark:text-slate-400">No area inputs configured for this section.</p>
               ) : null}
             </div>
+            )}
             {showOverrideInputs && area.formulaValues.length > 0 ? (
               <div className="mt-4 rounded-2xl border border-cyan-100 bg-cyan-50/50 p-3 dark:border-cyan-500/20 dark:bg-cyan-500/10">
                 <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">

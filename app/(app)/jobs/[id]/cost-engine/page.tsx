@@ -11,6 +11,15 @@ import { cn } from '@/lib/utils';
 import Modal from '@/components/ui/Modal';
 import SearchSelect from '@/components/ui/SearchSelect';
 import Spinner from '@/components/ui/Spinner';
+import { DynamicAreaInstanceTable } from '@/components/job-costing/DynamicAreaInstanceTable';
+import { GlobalFormulaValuesTable } from '@/components/job-costing/GlobalFormulaValuesTable';
+import { JobLevelInputsTable } from '@/components/job-costing/JobLevelInputsTable';
+import {
+  coerceFieldDefaultValue,
+  isStoredGlobalField,
+  resolveGlobalFieldFormValue,
+  resolveAreaFieldFormValue,
+} from '@/components/job-costing/formula-builder/shared';
 import {
   useAddJobItemMutation,
   useAddJobItemProgressEntryMutation,
@@ -61,6 +70,8 @@ type BudgetField = {
   storage?: 'measurement' | 'variable';
   required?: boolean;
   defaultMaterialId?: string;
+  defaultValue?: string;
+  storedValue?: string;
 };
 
 type BudgetFormulaValue = {
@@ -466,6 +477,37 @@ function buildAreaFormulaValuesFromConfig(
   return Array.from(values.values());
 }
 
+function mergeStoredFormulaValuesIntoGlobalFields(
+  globalFields: BudgetField[],
+  formulaValues: BudgetFormulaValue[]
+): BudgetField[] {
+  const userFields = globalFields.filter((field) => !isStoredGlobalField(field));
+  const storedByKey = new Map<string, BudgetField>();
+  for (const field of globalFields.filter(isStoredGlobalField)) {
+    const key = field.key.trim();
+    if (!key) continue;
+    storedByKey.set(key, {
+      ...field,
+      inputType: 'stored',
+      storedValue: field.storedValue ?? '',
+      required: false,
+    });
+  }
+  for (const field of formulaValues) {
+    const key = field.key.trim();
+    if (!key || storedByKey.has(key)) continue;
+    storedByKey.set(key, {
+      key,
+      label: field.label,
+      inputType: 'stored',
+      unit: field.unit,
+      storedValue: field.value || '0',
+      required: false,
+    });
+  }
+  return [...userFields, ...Array.from(storedByKey.values())];
+}
+
 function parseBudgetSchema(formula?: FormulaLibrary | null): BudgetSchema {
   const schema = isRecord(formula?.specificationSchema) ? formula.specificationSchema : {};
   const config = isRecord(formula?.formulaConfig) ? formula.formulaConfig : {};
@@ -484,6 +526,11 @@ function parseBudgetSchema(formula?: FormulaLibrary | null): BudgetSchema {
             typeof field.defaultMaterialId === 'string'
               ? field.defaultMaterialId
               : (typeof defaultMaterialSelections[field.key] === 'string' ? String(defaultMaterialSelections[field.key]) : undefined),
+          defaultValue: coerceFieldDefaultValue(field.defaultValue),
+          storedValue:
+            field.inputType === 'stored'
+              ? (coerceFieldDefaultValue(field.storedValue) ?? coerceFieldDefaultValue(field.value) ?? '')
+              : undefined,
         }];
       })
     : [];
@@ -500,6 +547,8 @@ function parseBudgetSchema(formula?: FormulaLibrary | null): BudgetSchema {
                 unit: typeof field.unit === 'string' ? field.unit : undefined,
                 storage: field.storage === 'variable' ? 'variable' : 'measurement',
                 required: typeof field.required === 'boolean' ? field.required : true,
+                defaultMaterialId: typeof field.defaultMaterialId === 'string' ? field.defaultMaterialId : undefined,
+                defaultValue: coerceFieldDefaultValue(field.defaultValue),
               }];
             })
           : [];
@@ -507,32 +556,99 @@ function parseBudgetSchema(formula?: FormulaLibrary | null): BudgetSchema {
         return [{
           key: area.key,
           label: area.label,
-          dynamic: area.dynamic === true,
+          dynamic: area.dynamic === true || configArea?.dynamic === true,
           fields,
           formulaValues: buildAreaFormulaValuesFromConfig(area, configArea),
         }];
       })
     : [];
-  return { globalFields, formulaValues: buildFormulaValuesFromConfig(config), areas };
+  const formulaValues = buildFormulaValuesFromConfig(config);
+  const mergedGlobalFields = mergeStoredFormulaValuesIntoGlobalFields(globalFields, formulaValues);
+  return { globalFields: mergedGlobalFields, formulaValues: [], areas };
 }
 
-function buildInitialBudgetValues(schema: BudgetSchema) {
+function buildInitialBudgetValues(
+  schema: BudgetSchema,
+  areaInstances: Record<string, BudgetAreaInstance[]> = {}
+) {
   const values: Record<string, string> = {};
   for (const field of schema.globalFields) {
-    values[`global.${field.key}`] = field.inputType === 'material' ? (field.defaultMaterialId ?? '') : '';
+    if (isStoredGlobalField(field)) {
+      values[`formulaOverride.global.${field.key}`] = '';
+      continue;
+    }
+    values[`global.${field.key}`] = resolveGlobalFieldFormValue(
+      {
+        inputType: field.inputType ?? 'number',
+        defaultMaterialId: field.defaultMaterialId,
+        defaultValue: field.defaultValue,
+      },
+      ''
+    );
   }
   for (const field of schema.formulaValues) {
     values[`formulaOverride.global.${field.key}`] = '';
   }
   for (const area of schema.areas) {
-    for (const field of area.fields) {
-      values[`area.${area.key}.${field.key}`] = '';
+    if (area.dynamic) {
+      for (const instance of areaInstances[area.key] ?? []) {
+        for (const field of area.fields) {
+          values[areaInstanceValueKey(area.key, instance.id, field.key)] = resolveAreaFieldFormValue(
+            {
+              inputType: field.inputType ?? 'number',
+              defaultMaterialId: field.defaultMaterialId,
+              defaultValue: field.defaultValue,
+            },
+            ''
+          );
+        }
+      }
+    } else {
+      for (const field of area.fields) {
+        values[`area.${area.key}.${field.key}`] = resolveAreaFieldFormValue(
+          {
+            inputType: field.inputType ?? 'number',
+            defaultMaterialId: field.defaultMaterialId,
+            defaultValue: field.defaultValue,
+          },
+          ''
+        );
+      }
     }
     for (const field of area.formulaValues) {
       values[`formulaOverride.area.${area.key}.${field.key}`] = '';
     }
   }
   return values;
+}
+
+function mergeMissingBudgetFormDefaults(
+  schema: BudgetSchema,
+  values: Record<string, string>,
+  areaInstances: Record<string, BudgetAreaInstance[]>
+) {
+  const nextAreaInstances = { ...areaInstances };
+  let instancesChanged = false;
+  for (const area of schema.areas) {
+    if (area.dynamic && !(nextAreaInstances[area.key]?.length ?? 0)) {
+      nextAreaInstances[area.key] = [createBudgetAreaInstance(area, 0)];
+      instancesChanged = true;
+    }
+  }
+  const seedValues = buildInitialBudgetValues(schema, nextAreaInstances);
+  const nextValues = { ...values };
+  let valuesChanged = false;
+  for (const [key, seed] of Object.entries(seedValues)) {
+    if (!(key in nextValues)) {
+      nextValues[key] = seed;
+      valuesChanged = true;
+    }
+  }
+  return {
+    values: nextValues,
+    areaInstances: nextAreaInstances,
+    changed: valuesChanged || instancesChanged,
+  };
 }
 
 function createBudgetAreaInstance(area: BudgetArea, index: number): BudgetAreaInstance {
@@ -567,7 +683,7 @@ function buildTrackableSourceOptions(
   areaInstances: Record<string, BudgetAreaInstance[]>
 ): TrackableSourceOption[] {
   const globalOptions = schema.globalFields
-    .filter((field) => numericField(field.inputType))
+    .filter((field) => !isStoredGlobalField(field) && numericField(field.inputType))
     .map((field) => ({
       key: `global.${field.key}`,
       label: field.label,
@@ -636,15 +752,22 @@ function buildSpecifications(
   areaInstances: Record<string, BudgetAreaInstance[]>
 ) {
   const global = Object.fromEntries(
-    schema.globalFields.map((field) => [
-      field.key,
-      parseInputValue(
-        field.inputType === 'material'
-          ? (values[`global.${field.key}`] ?? field.defaultMaterialId ?? '')
-          : (values[`global.${field.key}`] ?? ''),
-        field.inputType
-      ),
-    ])
+    schema.globalFields
+      .filter((field) => !isStoredGlobalField(field))
+      .map((field) => [
+        field.key,
+        parseInputValue(
+          resolveGlobalFieldFormValue(
+            {
+              inputType: field.inputType ?? 'number',
+              defaultMaterialId: field.defaultMaterialId,
+              defaultValue: field.defaultValue,
+            },
+            values[`global.${field.key}`]
+          ),
+          field.inputType
+        ),
+      ])
   );
 
   const areas = Object.fromEntries(
@@ -659,7 +782,7 @@ function buildSpecifications(
               for (const field of area.fields) {
                 const target: Record<string, unknown> = field.storage === 'variable' ? variables : measurements;
                 target[field.key] = parseInputValue(
-                  values[areaInstanceValueKey(area.key, instance.id, field.key)] ?? '',
+                  resolveAreaFieldFormValue(field, values[areaInstanceValueKey(area.key, instance.id, field.key)]),
                   field.inputType
                 );
               }
@@ -677,7 +800,10 @@ function buildSpecifications(
       const variables: Record<string, unknown> = {};
       for (const field of area.fields) {
         const target: Record<string, unknown> = field.storage === 'variable' ? variables : measurements;
-        target[field.key] = parseInputValue(values[`area.${area.key}.${field.key}`] ?? '', field.inputType);
+        target[field.key] = parseInputValue(
+          resolveAreaFieldFormValue(field, values[`area.${area.key}.${field.key}`]),
+          field.inputType
+        );
       }
       return [
         area.key,
@@ -690,10 +816,12 @@ function buildSpecifications(
   );
 
   const globalFormulaOverrides = Object.fromEntries(
-    schema.formulaValues.flatMap((field) => {
-      const rawValue = values[`formulaOverride.global.${field.key}`]?.trim();
-      return rawValue ? [[field.key, parseFormulaOverrideValue(rawValue)]] : [];
-    })
+    schema.globalFields
+      .filter(isStoredGlobalField)
+      .flatMap((field) => {
+        const rawValue = values[`formulaOverride.global.${field.key}`]?.trim();
+        return rawValue ? [[field.key, parseFormulaOverrideValue(rawValue)]] : [];
+      })
   );
   const areaFormulaOverrides = Object.fromEntries(
     schema.areas.flatMap((area) => {
@@ -733,8 +861,19 @@ function buildValuesFromSpecifications(schema: BudgetSchema, specifications: unk
   const values: Record<string, string> = {};
 
   for (const field of schema.globalFields) {
+    if (isStoredGlobalField(field)) {
+      values[`formulaOverride.global.${field.key}`] = valueToFormString(globalFormulaOverrides[field.key]);
+      continue;
+    }
     const raw = valueToFormString(global[field.key]);
-    values[`global.${field.key}`] = field.inputType === 'material' ? (raw || field.defaultMaterialId || '') : raw;
+    values[`global.${field.key}`] = resolveGlobalFieldFormValue(
+      {
+        inputType: field.inputType ?? 'number',
+        defaultMaterialId: field.defaultMaterialId,
+        defaultValue: field.defaultValue,
+      },
+      raw
+    );
   }
   for (const field of schema.formulaValues) {
     values[`formulaOverride.global.${field.key}`] = valueToFormString(globalFormulaOverrides[field.key]);
@@ -759,7 +898,8 @@ function buildValuesFromSpecifications(schema: BudgetSchema, specifications: unk
         const variables = isRecord(rawInstance.variables) ? rawInstance.variables : {};
         for (const field of area.fields) {
           const source = field.storage === 'variable' ? variables : measurements;
-          values[areaInstanceValueKey(area.key, instanceId, field.key)] = valueToFormString(source[field.key]);
+          const raw = valueToFormString(source[field.key]);
+          values[areaInstanceValueKey(area.key, instanceId, field.key)] = resolveAreaFieldFormValue(field, raw);
         }
       });
       continue;
@@ -771,7 +911,8 @@ function buildValuesFromSpecifications(schema: BudgetSchema, specifications: unk
 
     for (const field of area.fields) {
       const source = field.storage === 'variable' ? variables : measurements;
-      values[`area.${area.key}.${field.key}`] = valueToFormString(source[field.key]);
+      const raw = valueToFormString(source[field.key]);
+      values[`area.${area.key}.${field.key}`] = resolveAreaFieldFormValue(field, raw);
     }
     for (const field of area.formulaValues) {
       values[`formulaOverride.area.${area.key}.${field.key}`] = valueToFormString(areaOverrides[field.key]);
@@ -896,8 +1037,16 @@ function emptyBudgetForm(budgetMode: BudgetMode = 'formula'): BudgetItemForm {
 function isEmptyBudgetValue(field: BudgetField, value: string | undefined) {
   if (field.inputType === 'boolean') return false;
   if (numericField(field.inputType)) return false;
-  if (field.inputType === 'material') return !(value ?? field.defaultMaterialId ?? '').trim();
-  return !(value ?? '').trim();
+  const resolved = resolveGlobalFieldFormValue(
+    {
+      inputType: field.inputType ?? 'text',
+      defaultMaterialId: field.defaultMaterialId,
+      defaultValue: field.defaultValue,
+    },
+    value
+  );
+  if (field.inputType === 'material') return !resolved.trim();
+  return !resolved.trim();
 }
 
 interface JobCostEnginePageProps {
@@ -1014,10 +1163,35 @@ export default function JobCostEnginePage({ embeddedTab, hiddenTabs }: JobCostEn
     () => (isManualBudgetForm ? { globalFields: [], formulaValues: [], areas: [] } : parseBudgetSchema(selectedFormula)),
     [isManualBudgetForm, selectedFormula]
   );
+
+  useEffect(() => {
+    if (!showBudgetItemModal || editingBudgetItemId || isManualBudgetForm || !budgetForm.formulaLibraryId || !selectedFormula) {
+      return;
+    }
+    const merged = mergeMissingBudgetFormDefaults(selectedSchema, budgetForm.values, budgetForm.areaInstances);
+    if (!merged.changed) return;
+    setBudgetForm((current) => ({
+      ...current,
+      values: merged.values,
+      areaInstances: merged.areaInstances,
+    }));
+  }, [
+    showBudgetItemModal,
+    editingBudgetItemId,
+    isManualBudgetForm,
+    budgetForm.formulaLibraryId,
+    budgetForm.values,
+    budgetForm.areaInstances,
+    selectedFormula,
+    selectedSchema,
+  ]);
+
   const hasBudgetFormulaOverrides = useMemo(
-    () =>
-      selectedSchema.formulaValues.length > 0 ||
-      selectedSchema.areas.some((area) => area.formulaValues.length > 0),
+    () => selectedSchema.areas.some((area) => area.formulaValues.length > 0),
+    [selectedSchema]
+  );
+  const hasStoredGlobalBudgetFields = useMemo(
+    () => selectedSchema.globalFields.some(isStoredGlobalField),
     [selectedSchema]
   );
   const trackableSourceOptions = useMemo(
@@ -1456,8 +1630,13 @@ export default function JobCostEnginePage({ embeddedTab, hiddenTabs }: JobCostEn
     setBudgetForm((current) => {
       const currentInstances = current.areaInstances[area.key] ?? [];
       const instance = createBudgetAreaInstance(area, currentInstances.length);
+      const nextValues = { ...current.values };
+      for (const field of area.fields) {
+        nextValues[areaInstanceValueKey(area.key, instance.id, field.key)] = resolveAreaFieldFormValue(field, '');
+      }
       return {
         ...current,
+        values: nextValues,
         areaInstances: {
           ...current.areaInstances,
           [area.key]: [...currentInstances, instance],
@@ -1612,7 +1791,10 @@ export default function JobCostEnginePage({ embeddedTab, hiddenTabs }: JobCostEn
       return;
     }
     const missingGlobal = selectedSchema.globalFields.find(
-      (field) => field.required !== false && isEmptyBudgetValue(field, budgetForm.values[`global.${field.key}`])
+      (field) =>
+        !isStoredGlobalField(field) &&
+        field.required !== false &&
+        isEmptyBudgetValue(field, budgetForm.values[`global.${field.key}`])
     );
     if (missingGlobal) {
       toast.error(`${missingGlobal.label} is required`);
@@ -3132,14 +3314,15 @@ export default function JobCostEnginePage({ embeddedTab, hiddenTabs }: JobCostEn
                     onChange={(id) => {
                       const formula = formulas.find((row) => row.id === id);
                       const schema = parseBudgetSchema(formula);
+                      const areaInstances = buildInitialAreaInstances(schema);
                       setBudgetForm((current) => ({
                         ...current,
                         budgetMode: 'formula',
                         name: formula?.name ?? '',
                         description: '',
                         formulaLibraryId: id,
-                        values: buildInitialBudgetValues(schema),
-                        areaInstances: buildInitialAreaInstances(schema),
+                        values: buildInitialBudgetValues(schema, areaInstances),
+                        areaInstances,
                         trackingItems: [],
                         manualMaterials: [],
                         manualLabor: [],
@@ -3640,68 +3823,67 @@ export default function JobCostEnginePage({ embeddedTab, hiddenTabs }: JobCostEn
             <div className="space-y-4">
               {selectedSchema.globalFields.length > 0 ? (
                 <div className="rounded-2xl border border-border bg-muted/40 p-4 dark:border-border dark:bg-muted/30">
-                  <h3 className="text-sm font-semibold text-foreground">Global Measurements</h3>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    {selectedSchema.globalFields.map((field) => (
-                      <BudgetInput
-                        key={field.key}
-                        field={field}
-                        materials={materials}
-                        value={budgetForm.values[`global.${field.key}`] ?? ''}
-                        onChange={(value) =>
-                          setBudgetForm((current) => ({
-                            ...current,
-                            values: { ...current.values, [`global.${field.key}`]: value },
-                          }))
-                        }
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {hasBudgetFormulaOverrides ? (
-                <div className="rounded-2xl border border-cyan-200 bg-background p-4 dark:border-cyan-500/20 dark:bg-background/60">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="text-sm font-semibold text-foreground">Stored formula value overrides</h3>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Job-level inputs</p>
+                      <h3 className="mt-1 text-sm font-semibold text-foreground">Measurements and stored values</h3>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Keep hidden unless this budget item needs values different from the formula defaults.
+                        User inputs are editable. Stored formula values use the formula default unless overridden.
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => setShowBudgetFormulaOverrides((current) => !current)}
-                    >
-                      {showBudgetFormulaOverrides ? 'Hide override input boxes' : 'View override input boxes'}
-                    </Button>
+                    {hasStoredGlobalBudgetFields ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setShowBudgetFormulaOverrides((current) => !current)}
+                      >
+                        {showBudgetFormulaOverrides ? 'Hide overrides' : 'Show overrides'}
+                      </Button>
+                    ) : null}
                   </div>
-                </div>
-              ) : null}
-
-              {showBudgetFormulaOverrides && selectedSchema.formulaValues.length > 0 ? (
-                <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-500/20 dark:bg-cyan-500/10">
-                  <h3 className="text-sm font-semibold text-foreground">Stored formula value overrides</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Leave blank to use the formula default. Override values can be fixed numbers or expressions.
-                  </p>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    {selectedSchema.formulaValues.map((field) => (
-                      <FormulaOverrideInput
-                        key={field.key}
-                        field={field}
-                        token={`formula.${field.key}`}
-                        value={budgetForm.values[`formulaOverride.global.${field.key}`] ?? ''}
-                        onChange={(value) =>
-                          setBudgetForm((current) => ({
-                            ...current,
-                            values: { ...current.values, [`formulaOverride.global.${field.key}`]: value },
-                          }))
-                        }
-                      />
-                    ))}
+                  <div className="mt-3">
+                    <JobLevelInputsTable
+                      mode="entry"
+                      showOverrideColumn={showBudgetFormulaOverrides}
+                      fields={selectedSchema.globalFields.map((field) => ({
+                        id: field.key,
+                        label: field.label,
+                        key: field.key,
+                        inputType: field.inputType ?? 'number',
+                        unit: field.unit,
+                        defaultMaterialId: field.defaultMaterialId,
+                        defaultValue: field.defaultValue,
+                        storedValue: field.storedValue,
+                      }))}
+                      materials={materials}
+                      getValue={(key) => {
+                        const field = selectedSchema.globalFields.find((item) => item.key === key);
+                        if (!field) return '';
+                        if (isStoredGlobalField(field)) return field.storedValue ?? '';
+                        return resolveGlobalFieldFormValue(
+                          {
+                            inputType: field.inputType ?? 'number',
+                            defaultMaterialId: field.defaultMaterialId,
+                            defaultValue: field.defaultValue,
+                          },
+                          budgetForm.values[`global.${key}`]
+                        );
+                      }}
+                      onValueChange={(key, value) =>
+                        setBudgetForm((current) => ({
+                          ...current,
+                          values: { ...current.values, [`global.${key}`]: value },
+                        }))
+                      }
+                      getOverrideValue={(key) => budgetForm.values[`formulaOverride.global.${key}`] ?? ''}
+                      onOverrideChange={(key, value) =>
+                        setBudgetForm((current) => ({
+                          ...current,
+                          values: { ...current.values, [`formulaOverride.global.${key}`]: value },
+                        }))
+                      }
+                    />
                   </div>
                 </div>
               ) : null}
@@ -3717,98 +3899,50 @@ export default function JobCostEnginePage({ embeddedTab, hiddenTabs }: JobCostEn
                         </p>
                       ) : null}
                     </div>
-                    {area.dynamic ? (
-                      <Button type="button" size="sm" variant="secondary" onClick={() => addDynamicAreaInstance(area)}>
-                        Add {area.label || 'area'}
-                      </Button>
-                    ) : null}
                   </div>
                   {area.dynamic ? (
-                    <div className="mt-3 space-y-3">
-                      {(budgetForm.areaInstances[area.key] ?? []).map((instance, instanceIndex) => {
-                        const collapsed = Boolean(collapsedAreaInstanceIds[instance.id]);
-                        return (
-                          <div
-                            key={instance.id}
-                            className="rounded-2xl border border-border bg-background p-3 dark:border-border dark:bg-background/60"
-                          >
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                              <label className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                Instance label
-                                <input
-                                  value={instance.label}
-                                  onChange={(event) => updateDynamicAreaInstanceLabel(area.key, instance.id, event.target.value)}
-                                  placeholder={`${area.label || 'Area'} ${instanceIndex + 1}`}
-                                  className="mt-1.5 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm font-normal text-foreground outline-none focus:border-emerald-300 dark:border-border dark:bg-background"
-                                />
-                              </label>
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() =>
-                                    setCollapsedAreaInstanceIds((current) => ({
-                                      ...current,
-                                      [instance.id]: !current[instance.id],
-                                    }))
-                                  }
-                                >
-                                  {collapsed ? 'Expand' : 'Collapse'}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => duplicateDynamicAreaInstance(area, instance)}
-                                >
-                                  Duplicate
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => removeDynamicAreaInstance(area, instance.id)}
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                            </div>
-                            {!collapsed ? (
-                              area.fields.length > 0 ? (
-                                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                                  {area.fields.map((field) => (
-                                    <BudgetInput
-                                      key={`${area.key}.${instance.id}.${field.key}`}
-                                      field={field}
-                                      materials={materials}
-                                      value={budgetForm.values[areaInstanceValueKey(area.key, instance.id, field.key)] ?? ''}
-                                      onChange={(value) =>
-                                        setBudgetForm((current) => ({
-                                          ...current,
-                                          values: {
-                                            ...current.values,
-                                            [areaInstanceValueKey(area.key, instance.id, field.key)]: value,
-                                          },
-                                        }))
-                                      }
-                                    />
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="mt-3 text-sm text-muted-foreground">
-                                  This formula area has no input fields yet.
-                                </p>
-                              )
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                      {(budgetForm.areaInstances[area.key] ?? []).length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-border bg-background/60 px-4 py-6 text-center text-sm text-muted-foreground dark:border-border">
-                          No {area.label || 'area'} instances yet. Add one to enter measurements.
-                        </div>
-                      ) : null}
+                    <div className="mt-3">
+                      <DynamicAreaInstanceTable
+                        areaLabel={area.label}
+                        fields={area.fields.map((field) => ({
+                          key: field.key,
+                          label: field.label,
+                          inputType: field.inputType,
+                          unit: field.unit,
+                          defaultMaterialId: field.defaultMaterialId,
+                          defaultValue: field.defaultValue,
+                        }))}
+                        instances={budgetForm.areaInstances[area.key] ?? []}
+                        materials={materials}
+                        getValue={(instanceId, fieldKey) => {
+                          const field = area.fields.find((item) => item.key === fieldKey);
+                          if (!field) return '';
+                          return resolveAreaFieldFormValue(
+                            field,
+                            budgetForm.values[areaInstanceValueKey(area.key, instanceId, fieldKey)]
+                          );
+                        }}
+                        onValueChange={(instanceId, fieldKey, value) =>
+                          setBudgetForm((current) => ({
+                            ...current,
+                            values: {
+                              ...current.values,
+                              [areaInstanceValueKey(area.key, instanceId, fieldKey)]: value,
+                            },
+                          }))
+                        }
+                        onInstanceLabelChange={(instanceId, label) =>
+                          updateDynamicAreaInstanceLabel(area.key, instanceId, label)
+                        }
+                        onAddInstance={() => addDynamicAreaInstance(area)}
+                        onDuplicateInstance={(instanceId) => {
+                          const source = (budgetForm.areaInstances[area.key] ?? []).find(
+                            (instance) => instance.id === instanceId,
+                          );
+                          if (source) duplicateDynamicAreaInstance(area, source);
+                        }}
+                        onRemoveInstance={(instanceId) => removeDynamicAreaInstance(area, instanceId)}
+                      />
                     </div>
                   ) : area.fields.length > 0 ? (
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -3817,7 +3951,7 @@ export default function JobCostEnginePage({ embeddedTab, hiddenTabs }: JobCostEn
                           key={`${area.key}.${field.key}`}
                           field={field}
                           materials={materials}
-                          value={budgetForm.values[`area.${area.key}.${field.key}`] ?? ''}
+                          value={resolveAreaFieldFormValue(field, budgetForm.values[`area.${area.key}.${field.key}`])}
                           onChange={(value) =>
                             setBudgetForm((current) => ({
                               ...current,

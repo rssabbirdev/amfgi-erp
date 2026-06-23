@@ -43,6 +43,7 @@ type BuildEstimateArgs = {
     name: string;
     fabricationType: string;
     formulaConfig: FormulaConfig;
+    specificationSchema?: unknown;
   };
   jobItem: {
     id: string;
@@ -235,12 +236,25 @@ function buildVariableMap(
   return values;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isDynamicAreaRule(areaRule: FormulaAreaRule, specificationSchema?: unknown) {
+  if (areaRule.dynamic === true) return true;
+  if (!isRecord(specificationSchema)) return false;
+  const schemaAreas = Array.isArray(specificationSchema.areas) ? specificationSchema.areas : [];
+  const schemaArea = schemaAreas.find((area) => isRecord(area) && area.key === areaRule.key);
+  return isRecord(schemaArea) && schemaArea.dynamic === true;
+}
+
 function getAreaSpecsToEvaluate(
   areaRule: FormulaAreaRule,
-  specs: JobItemSpecifications
+  specs: JobItemSpecifications,
+  specificationSchema?: unknown
 ): JobItemSpecificationArea[] {
   const areaSpecs = specs.areas?.[areaRule.key];
-  if (!areaRule.dynamic || !areaSpecs?.instances) {
+  if (!isDynamicAreaRule(areaRule, specificationSchema) || !areaSpecs?.instances) {
     return [areaSpecs ?? {}];
   }
   if (areaSpecs.instances.length === 0) {
@@ -378,7 +392,11 @@ export function buildJobItemEstimate({
           : 'ON_TRACK';
 
   for (const areaRule of formulaLibrary.formulaConfig.areas) {
-    for (const areaSpecs of getAreaSpecsToEvaluate(areaRule, jobItem.specifications)) {
+    for (const areaSpecs of getAreaSpecsToEvaluate(
+      areaRule,
+      jobItem.specifications,
+      formulaLibrary.specificationSchema
+    )) {
       const variables = buildVariableMap(
         areaRule,
         jobItem.specifications,

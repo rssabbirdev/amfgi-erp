@@ -7,7 +7,18 @@ import {
   type FormulaVariableMap,
 } from '@/lib/job-costing/expressionEvaluator';
 
-export type FieldType = 'number' | 'percent' | 'length' | 'area' | 'volume' | 'count' | 'boolean' | 'select' | 'text' | 'material';
+export type FieldType =
+  | 'number'
+  | 'percent'
+  | 'length'
+  | 'area'
+  | 'volume'
+  | 'count'
+  | 'boolean'
+  | 'select'
+  | 'text'
+  | 'material'
+  | 'stored';
 export type FieldScope = 'measurement' | 'variable';
 
 export type DynamicField = {
@@ -17,6 +28,9 @@ export type DynamicField = {
   inputType: FieldType;
   unit: string;
   defaultMaterialId?: string;
+  defaultValue?: string;
+  /** Fixed number or formula expression when inputType is `stored`. */
+  storedValue?: string;
   required: boolean;
   scope?: FieldScope;
 };
@@ -69,6 +83,367 @@ export type BuilderState = {
 
 export type PlaygroundValues = Record<string, string>;
 
+export type PlaygroundAreaInstance = {
+  id: string;
+  label: string;
+};
+
+export function playgroundInstancesMetaKey(areaId: string) {
+  return `playgroundInstances.${areaId}`;
+}
+
+export function playgroundInstanceValueKey(areaKey: string, instanceId: string, fieldKey: string) {
+  return `areaInstance.${areaKey}.${instanceId}.${fieldKey}`;
+}
+
+export function parsePlaygroundAreaInstances(area: AreaRule, values: PlaygroundValues): PlaygroundAreaInstance[] {
+  if (!area.dynamic) return [];
+
+  const metaRaw = values[playgroundInstancesMetaKey(area.id)];
+  if (metaRaw) {
+    try {
+      const parsed = JSON.parse(metaRaw) as unknown;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const instances = parsed.flatMap((item, index): PlaygroundAreaInstance[] => {
+          if (!isRecord(item) || typeof item.id !== 'string') return [];
+          const label =
+            typeof item.label === 'string' && item.label.trim()
+              ? item.label.trim()
+              : `${area.label || area.key || 'Area'} ${index + 1}`;
+          return [{ id: item.id, label }];
+        });
+        if (instances.length > 0) return instances;
+      }
+    } catch {
+      // Fall through to key inference.
+    }
+  }
+
+  const areaKey = area.key.trim();
+  if (!areaKey) return [{ id: `${area.id}-instance-1`, label: `${area.label || 'Area'} 1` }];
+
+  const instanceIds = new Set<string>();
+  const prefix = `areaInstance.${areaKey}.`;
+  for (const key of Object.keys(values)) {
+    if (!key.startsWith(prefix)) continue;
+    const rest = key.slice(prefix.length);
+    const instanceId = rest.split('.')[0];
+    if (instanceId) instanceIds.add(instanceId);
+  }
+
+  if (instanceIds.size > 0) {
+    return Array.from(instanceIds).map((id, index) => ({
+      id,
+      label: `${area.label || area.key || 'Area'} ${index + 1}`,
+    }));
+  }
+
+  return [{ id: `${area.id}-instance-1`, label: `${area.label || area.key || 'Area'} 1` }];
+}
+
+export function writePlaygroundInstancesMeta(
+  values: PlaygroundValues,
+  areaId: string,
+  instances: PlaygroundAreaInstance[],
+): PlaygroundValues {
+  return {
+    ...values,
+    [playgroundInstancesMetaKey(areaId)]: JSON.stringify(
+      instances.map((instance) => ({ id: instance.id, label: instance.label })),
+    ),
+  };
+}
+
+export function addPlaygroundAreaInstance(
+  area: AreaRule,
+  values: PlaygroundValues,
+): PlaygroundValues {
+  const instances = parsePlaygroundAreaInstances(area, values);
+  const nextInstance: PlaygroundAreaInstance = {
+    id: uid('pg-instance'),
+    label: `${area.label || area.key || 'Area'} ${instances.length + 1}`,
+  };
+  return writePlaygroundInstancesMeta(values, area.id, [...instances, nextInstance]);
+}
+
+export function duplicatePlaygroundAreaInstance(
+  area: AreaRule,
+  values: PlaygroundValues,
+  sourceInstanceId: string,
+): PlaygroundValues {
+  const instances = parsePlaygroundAreaInstances(area, values);
+  const source = instances.find((instance) => instance.id === sourceInstanceId);
+  if (!source) return values;
+
+  const nextInstance: PlaygroundAreaInstance = {
+    id: uid('pg-instance'),
+    label: `${source.label || area.label || 'Area'} Copy`,
+  };
+  const areaKey = area.key.trim();
+  const nextValues = writePlaygroundInstancesMeta(values, area.id, [...instances, nextInstance]);
+  for (const field of area.fields ?? []) {
+    const fieldKey = field.key.trim();
+    if (!fieldKey) continue;
+    nextValues[playgroundInstanceValueKey(areaKey, nextInstance.id, fieldKey)] =
+      values[playgroundInstanceValueKey(areaKey, sourceInstanceId, fieldKey)] ?? '';
+  }
+  return nextValues;
+}
+
+export function removePlaygroundAreaInstance(
+  area: AreaRule,
+  values: PlaygroundValues,
+  instanceId: string,
+): PlaygroundValues {
+  const instances = parsePlaygroundAreaInstances(area, values);
+  if (instances.length <= 1) return values;
+
+  const areaKey = area.key.trim();
+  const nextValues = { ...values };
+  for (const field of area.fields ?? []) {
+    const fieldKey = field.key.trim();
+    if (!fieldKey) continue;
+    delete nextValues[playgroundInstanceValueKey(areaKey, instanceId, fieldKey)];
+  }
+  return writePlaygroundInstancesMeta(
+    nextValues,
+    area.id,
+    instances.filter((instance) => instance.id !== instanceId),
+  );
+}
+
+export function updatePlaygroundAreaInstanceLabel(
+  area: AreaRule,
+  values: PlaygroundValues,
+  instanceId: string,
+  label: string,
+): PlaygroundValues {
+  const instances = parsePlaygroundAreaInstances(area, values).map((instance) =>
+    instance.id === instanceId ? { ...instance, label } : instance,
+  );
+  return writePlaygroundInstancesMeta(values, area.id, instances);
+}
+
+export function migrateAreaPlaygroundValuesToDynamic(area: AreaRule, values: PlaygroundValues): PlaygroundValues {
+  const areaKey = area.key.trim();
+  if (!areaKey) return values;
+
+  const existingInstances = parsePlaygroundAreaInstances(area, values);
+  const primaryInstance = existingInstances[0] ?? {
+    id: `${area.id}-instance-1`,
+    label: `${area.label || area.key || 'Area'} 1`,
+  };
+  const instances = existingInstances.length > 0 ? existingInstances : [primaryInstance];
+  let next = writePlaygroundInstancesMeta(values, area.id, instances);
+
+  for (const field of area.fields ?? []) {
+    const fieldKey = field.key.trim();
+    if (!fieldKey) continue;
+    const staticKey = `area.${area.id}.${field.key}`;
+    const instanceKey = playgroundInstanceValueKey(areaKey, primaryInstance.id, fieldKey);
+    if (!next[instanceKey]?.trim() && next[staticKey]?.trim()) {
+      next = { ...next, [instanceKey]: next[staticKey] };
+    } else if (!next[instanceKey]?.trim() && field.defaultValue?.trim()) {
+      next = { ...next, [instanceKey]: field.defaultValue };
+    }
+  }
+
+  return next;
+}
+
+export function hydratePlaygroundDynamicAreas(form: BuilderState, values: PlaygroundValues): PlaygroundValues {
+  let next = values;
+  for (const area of form.areas) {
+    if (!area.dynamic) continue;
+    next = migrateAreaPlaygroundValuesToDynamic(area, next);
+  }
+  return next;
+}
+
+export function buildAreaScopedPlaygroundValues(
+  form: BuilderState,
+  values: PlaygroundValues,
+  area: AreaRule,
+  instanceId?: string
+) {
+  const resolvedValues = buildPlaygroundBaseValues(form, values);
+  const areaKey = area.key.trim();
+
+  if (area.dynamic) {
+    const instances = parsePlaygroundAreaInstances(area, values);
+    const instance = instanceId
+      ? instances.find((item) => item.id === instanceId)
+      : instances[0];
+    if (!instance || !areaKey) return resolvedValues;
+    for (const field of area.fields ?? []) {
+      const fieldKey = field.key.trim();
+      if (!fieldKey) continue;
+      const parsed = parsePlaygroundValue(
+        resolveAreaFieldFormValue(
+          field,
+          values[playgroundInstanceValueKey(areaKey, instance.id, field.key)]
+        ),
+        field.inputType
+      );
+      resolvedValues[`areas.${areaKey}.${fieldKey}`] = parsed;
+      resolvedValues[`area.${fieldKey}`] = parsed;
+    }
+  } else {
+    addScopedAreaPlaygroundValues(resolvedValues, [area], values);
+    for (const field of area.fields ?? []) {
+      const fieldKey = field.key.trim();
+      if (!fieldKey) continue;
+      resolvedValues[`area.${fieldKey}`] = parsePlaygroundValue(
+        resolveAreaFieldFormValue(field, values[`area.${area.id}.${field.key}`]),
+        field.inputType
+      );
+    }
+  }
+
+  applyResolvedFormulaFields(
+    resolvedValues,
+    resolveStoredFormulaConstants(form),
+    'formula.',
+    buildGlobalFormulaOverrideMap(resolveStoredFormulaConstants(form), values)
+  );
+  applyResolvedFormulaFields(
+    resolvedValues,
+    area.formulaValues ?? [],
+    'area.formula.',
+    buildAreaFormulaOverrideMap(area.id, area.formulaValues ?? [], values)
+  );
+  return resolvedValues;
+}
+
+export function formatPossibleFormulaOutput(value: unknown) {
+  if (typeof value === 'number') return formatPreviewQty(value);
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'string') return value || '--';
+  return '--';
+}
+
+export function forEachAreaPlaygroundInstance(
+  area: AreaRule,
+  values: PlaygroundValues,
+  iterate: (instanceId: string | undefined) => void
+) {
+  if (!area.dynamic) {
+    iterate(undefined);
+    return;
+  }
+  for (const instance of parsePlaygroundAreaInstances(area, values)) {
+    iterate(instance.id);
+  }
+}
+
+export function evaluateAreaExpressionAcrossInstances(
+  form: BuilderState,
+  values: PlaygroundValues,
+  area: AreaRule,
+  expression: string
+) {
+  const results: unknown[] = [];
+  forEachAreaPlaygroundInstance(area, values, (instanceId) => {
+    const resolved = buildAreaScopedPlaygroundValues(form, values, area, instanceId);
+    results.push(evaluatePlaygroundExpression(expression || '0', resolved));
+  });
+  return results;
+}
+
+export function formatAreaExpressionOutputPreview(
+  form: BuilderState,
+  values: PlaygroundValues,
+  area: AreaRule,
+  expression: string
+) {
+  const results = evaluateAreaExpressionAcrossInstances(form, values, area, expression);
+  if (results.length === 0) return '--';
+  if (results.length === 1) return formatPossibleFormulaOutput(results[0]);
+
+  const numericResults = results.map((value) => Number(value));
+  const allNumeric = numericResults.every((value) => Number.isFinite(value));
+  if (!allNumeric) {
+    return formatPossibleFormulaOutput(results[0]);
+  }
+
+  const allSame = numericResults.every((value) => Object.is(value, numericResults[0]));
+  if (allSame) return formatPossibleFormulaOutput(numericResults[0]);
+
+  const total = numericResults.reduce((sum, value) => sum + value, 0);
+  return `${formatPreviewQty(total)} total (${results.length} rows)`;
+}
+
+export function formatAreaMaterialRuleOutputPreview(
+  form: BuilderState,
+  values: PlaygroundValues,
+  area: AreaRule,
+  rule: MaterialRule,
+  materialUnit?: string
+) {
+  const wastePercent = Number(parsePlaygroundValue(rule.wastePercent || '0', 'percent'));
+  let quantityTotal = 0;
+  let finalQuantityTotal = 0;
+  let rowCount = 0;
+
+  forEachAreaPlaygroundInstance(area, values, (instanceId) => {
+    rowCount += 1;
+    const resolved = buildAreaScopedPlaygroundValues(form, values, area, instanceId);
+    const quantity = Number(evaluatePlaygroundExpression(rule.quantityExpression || '0', resolved));
+    quantityTotal += quantity;
+    finalQuantityTotal += quantity * (1 + wastePercent / 100);
+  });
+
+  const unitSuffix = materialUnit?.trim() ? ` ${materialUnit.trim()}` : '';
+  const rowNote = area.dynamic && rowCount > 1 ? ` • ${rowCount} rows` : '';
+  const parts = [`Qty ${formatPreviewQty(quantityTotal)}${unitSuffix}${rowNote}`];
+  if (wastePercent) parts.push(`Final ${formatPreviewQty(finalQuantityTotal)}${unitSuffix}`);
+  if (wastePercent) parts.push(`Waste ${formatPreviewQty(wastePercent)}%`);
+  return parts.join(' • ');
+}
+
+export function formatAreaLaborRuleOutputPreview(
+  form: BuilderState,
+  values: PlaygroundValues,
+  area: AreaRule,
+  rule: LaborRule
+) {
+  let quantityTotal = 0;
+  let daysTotal = 0;
+  let rowCount = 0;
+  let crewSample = 0;
+  let productivitySample = 0;
+
+  forEachAreaPlaygroundInstance(area, values, (instanceId) => {
+    rowCount += 1;
+    const resolved = buildAreaScopedPlaygroundValues(form, values, area, instanceId);
+    const quantity = Number(evaluatePlaygroundExpression(rule.quantityExpression || '0', resolved));
+    const crew = Number(
+      evaluatePlaygroundExpression(rule.crewSizeExpression.trim() ? rule.crewSizeExpression : '1', resolved)
+    );
+    const productivity = Number(
+      evaluatePlaygroundExpression(
+        rule.productivityPerWorkerPerDay.trim() ? rule.productivityPerWorkerPerDay : '0',
+        resolved
+      )
+    );
+    quantityTotal += quantity;
+    crewSample = crew;
+    productivitySample = productivity;
+    if (crew > 0 && productivity > 0) {
+      daysTotal += quantity / (crew * productivity);
+    }
+  });
+
+  const rowNote = area.dynamic && rowCount > 1 ? ` • ${rowCount} rows` : '';
+  const parts = [
+    `Qty ${formatPreviewQty(quantityTotal)}${rowNote}`,
+    `Crew ${formatPreviewQty(crewSample)}`,
+    `Prod ${formatPreviewQty(productivitySample)}/day`,
+  ];
+  if (daysTotal > 0) parts.push(`Days ${formatPreviewQty(daysTotal)}`);
+  return parts.join(' • ');
+}
+
 export type FormulaOverrideMap = Record<string, string>;
 
 export type PlaygroundMaterialLine = {
@@ -90,15 +465,73 @@ export type FormulaToken = {
   group: 'Job input' | 'Formula value' | 'Area input';
 };
 
-export const FIELD_TYPES: FieldType[] = ['number', 'percent', 'length', 'area', 'volume', 'count', 'boolean', 'select', 'text', 'material'];
-export const FORMULA_DRAFT_STORAGE_PREFIX = 'formula-builder-draft';
+export const FIELD_TYPES: FieldType[] = [
+  'number',
+  'percent',
+  'length',
+  'area',
+  'volume',
+  'count',
+  'boolean',
+  'select',
+  'text',
+  'material',
+  'stored',
+];
+
+export function isStoredGlobalField(field: { inputType?: string }) {
+  return field.inputType === 'stored';
+}
+
+export function formulaConstantToGlobalField(constant: FormulaConstantField): DynamicField {
+  return {
+    id: constant.id,
+    key: constant.key,
+    label: constant.label,
+    inputType: 'stored',
+    unit: constant.unit,
+    storedValue: constant.value,
+    defaultMaterialId: '',
+    defaultValue: '',
+    required: false,
+  };
+}
+
+export function getStoredFormulaConstants(fields: DynamicField[]): FormulaConstantField[] {
+  return fields.filter(isStoredGlobalField).map((field) => ({
+    id: field.id,
+    key: field.key,
+    label: field.label,
+    value: field.storedValue ?? '',
+    unit: field.unit,
+  }));
+}
+
+export function resolveStoredFormulaConstants(form: BuilderState): FormulaConstantField[] {
+  const fromGlobals = getStoredFormulaConstants(form.globalFields);
+  return fromGlobals.length > 0 ? fromGlobals : (form.formulaConstants ?? []);
+}
+
+export function mergeGlobalFieldsWithFormulaConstants(
+  globalFields: DynamicField[],
+  formulaConstants: FormulaConstantField[]
+): DynamicField[] {
+  const userFields = globalFields.filter((field) => !isStoredGlobalField(field));
+  const storedByKey = new Map<string, DynamicField>();
+  for (const field of globalFields.filter(isStoredGlobalField)) {
+    const key = field.key.trim();
+    if (key) storedByKey.set(key, field);
+  }
+  for (const constant of formulaConstants) {
+    const key = constant.key.trim();
+    if (!key || storedByKey.has(key)) continue;
+    storedByKey.set(key, formulaConstantToGlobalField(constant));
+  }
+  return [...userFields, ...Array.from(storedByKey.values())];
+}
 
 export function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-export function getFormulaDraftStorageKey(formulaId?: string) {
-  return `${FORMULA_DRAFT_STORAGE_PREFIX}:${formulaId ?? 'new'}`;
 }
 
 export function describeFieldType(inputType: FieldType) {
@@ -121,6 +554,8 @@ export function describeFieldType(inputType: FieldType) {
       return 'Select option';
     case 'text':
       return 'Text';
+    case 'stored':
+      return 'Stored value';
     default:
       return 'Number';
   }
@@ -136,25 +571,6 @@ export function describeLaborRule(rule: LaborRule) {
   const quantity = rule.quantityExpression || '1';
   const productivity = rule.productivityPerWorkerPerDay || 'productivity';
   return `${expertise} works on ${quantity} with ${productivity} per worker/day`;
-}
-
-export function formatAutoSaveLabel(state: 'idle' | 'draft' | 'saving' | 'saved' | 'error', lastSavedAt: string | null) {
-  const timeLabel = lastSavedAt
-    ? new Date(lastSavedAt).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })
-    : null;
-
-  switch (state) {
-    case 'draft':
-      return 'Draft saved locally';
-    case 'saving':
-      return 'Auto-saving...';
-    case 'saved':
-      return timeLabel ? `Saved ${timeLabel}` : 'Saved';
-    case 'error':
-      return 'Autosave failed';
-    default:
-      return 'No unsaved changes';
-  }
 }
 
 export function slugify(value: string) {
@@ -200,6 +616,14 @@ export function renameFormulaReferences(state: BuilderState, previousKey: string
 
   return {
     ...state,
+    globalFields: state.globalFields.map((field) =>
+      isStoredGlobalField(field)
+        ? {
+            ...field,
+            storedValue: replaceExpressionToken(field.storedValue ?? '', fromToken, toToken),
+          }
+        : field
+    ),
     formulaConstants: state.formulaConstants.map((field) => ({
       ...field,
       value: replaceExpressionToken(field.value, fromToken, toToken),
@@ -313,10 +737,37 @@ export function newField(scope?: FieldScope): DynamicField {
     inputType: 'number',
     unit: '',
     defaultMaterialId: '',
+    defaultValue: '',
     required: true,
     scope,
   };
 }
+
+export function coerceFieldDefaultValue(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value === 'boolean') {
+    return String(value);
+  }
+  return undefined;
+}
+
+export function resolveGlobalFieldFormValue(
+  field: { inputType?: FieldType | string; defaultMaterialId?: string; defaultValue?: string },
+  rawValue?: string
+) {
+  if (field.inputType === 'material') {
+    return (rawValue ?? '').trim() || field.defaultMaterialId || '';
+  }
+  return (rawValue ?? '').trim() || field.defaultValue || '';
+}
+
+export const resolveAreaFieldFormValue = resolveGlobalFieldFormValue;
 
 export function newMaterialRule(): MaterialRule {
   return {
@@ -471,19 +922,30 @@ export function applyResolvedFormulaFields(
 
     if (!changed) break;
   }
+
+  if (tokenPrefix === 'area.formula.') {
+    for (const field of activeFields) {
+      const key = field.key.trim();
+      if (!key) continue;
+      values[`rule.${key}`] = values[`area.formula.${key}`];
+    }
+  }
 }
 
 export function buildPlaygroundBaseValues(form: BuilderState, values: PlaygroundValues) {
   const resolvedValues: FormulaVariableMap = {};
   for (const field of form.globalFields) {
     if (field.inputType === 'material') {
-      const selectedMaterialId = values[`global.${field.key}`] ?? field.defaultMaterialId ?? '';
+      const selectedMaterialId = resolveGlobalFieldFormValue(field, values[`global.${field.key}`]);
       resolvedValues[`specs.global.${field.key}`] = selectedMaterialId;
       continue;
     }
     const key = field.key.trim();
     if (!key) continue;
-    resolvedValues[`specs.global.${key}`] = parsePlaygroundValue(values[`global.${field.key}`] ?? '', field.inputType);
+    resolvedValues[`specs.global.${key}`] = parsePlaygroundValue(
+      resolveGlobalFieldFormValue(field, values[`global.${field.key}`]),
+      field.inputType
+    );
   }
   return resolvedValues;
 }
@@ -496,12 +958,30 @@ export function addScopedAreaPlaygroundValues(
   for (const area of areas) {
     const areaKey = area.key.trim();
     if (!areaKey) continue;
-    for (const field of area.fields ?? []) {
+    const fields = area.fields ?? [];
+    if (area.dynamic) {
+      const primaryInstance = parsePlaygroundAreaInstances(area, values)[0];
+      if (!primaryInstance) continue;
+      for (const field of fields) {
+        const fieldKey = field.key.trim();
+        if (!fieldKey) continue;
+        const sourceKey = playgroundInstanceValueKey(areaKey, primaryInstance.id, field.key);
+        resolvedValues[`areas.${areaKey}.${fieldKey}`] = parsePlaygroundValue(
+          resolveAreaFieldFormValue(field, values[sourceKey]),
+          field.inputType
+        );
+      }
+      continue;
+    }
+    for (const field of fields) {
       const fieldKey = field.key.trim();
       if (!fieldKey) continue;
       const sourceKey = `area.${area.id}.${field.key}`;
       const target = `areas.${areaKey}.${fieldKey}`;
-      resolvedValues[target] = parsePlaygroundValue(values[sourceKey] ?? '', field.inputType);
+      resolvedValues[target] = parsePlaygroundValue(
+        resolveAreaFieldFormValue(field, values[sourceKey]),
+        field.inputType
+      );
     }
   }
 }
@@ -511,9 +991,9 @@ export function buildPlaygroundNumericValues(form: BuilderState, values: Playgro
   addScopedAreaPlaygroundValues(resolvedValues, form.areas, values);
   applyResolvedFormulaFields(
     resolvedValues,
-    form.formulaConstants,
+    resolveStoredFormulaConstants(form),
     'formula.',
-    buildGlobalFormulaOverrideMap(form.formulaConstants, values)
+    buildGlobalFormulaOverrideMap(resolveStoredFormulaConstants(form), values)
   );
   return resolvedValues;
 }
@@ -524,59 +1004,51 @@ export function buildPlaygroundPreview(form: BuilderState, values: PlaygroundVal
   const warnings: string[] = [];
 
   for (const area of form.areas) {
-    const resolvedValues = buildPlaygroundBaseValues(form, values);
-    addScopedAreaPlaygroundValues(resolvedValues, form.areas, values);
-    for (const field of area.fields ?? []) {
-      const fieldKey = field.key.trim();
-      if (!fieldKey) continue;
-      const target = `area.${fieldKey}`;
-      resolvedValues[target] = parsePlaygroundValue(values[`area.${area.id}.${field.key}`] ?? '', field.inputType);
-    }
-    applyResolvedFormulaFields(
-      resolvedValues,
-      form.formulaConstants,
-      'formula.',
-      buildGlobalFormulaOverrideMap(form.formulaConstants, values)
-    );
-    applyResolvedFormulaFields(
-      resolvedValues,
-      area.formulaValues ?? [],
-      'area.formula.',
-      buildAreaFormulaOverrideMap(area.id, area.formulaValues ?? [], values)
-    );
+    const areaKey = area.key.trim();
+    const instances = area.dynamic
+      ? parsePlaygroundAreaInstances(area, values)
+      : [{ id: 'static', label: area.label || area.key || 'Area' }];
 
-    for (const rule of area.materials ?? []) {
-      const materialId = rule.materialSource === 'global'
-        ? values[`global.${rule.materialSelectorKey}`] ??
-          form.globalFields.find((field) => field.key === rule.materialSelectorKey)?.defaultMaterialId ??
-          ''
-        : rule.materialId;
-      const material = materialId ? materialMap.get(materialId) : null;
-      if (!material) {
-        warnings.push(
-          rule.materialSource === 'global'
-            ? `Select material for ${rule.materialSelectorKey || 'job dropdown'} in playground.`
-            : 'Select a fixed material in material rules.'
-        );
-        continue;
+    for (const instance of instances) {
+      const resolvedValues = buildAreaScopedPlaygroundValues(form, values, area, area.dynamic ? instance.id : undefined);
+
+      for (const rule of area.materials ?? []) {
+        const materialId = rule.materialSource === 'global'
+          ? resolveGlobalFieldFormValue(
+              form.globalFields.find((field) => field.key === rule.materialSelectorKey) ?? {
+                inputType: 'material',
+                defaultMaterialId: '',
+              },
+              values[`global.${rule.materialSelectorKey}`]
+            )
+          : rule.materialId;
+        const material = materialId ? materialMap.get(materialId) : null;
+        if (!material) {
+          warnings.push(
+            rule.materialSource === 'global'
+              ? `Select material for ${rule.materialSelectorKey || 'job dropdown'} in playground.`
+              : 'Select a fixed material in material rules.'
+          );
+          continue;
+        }
+
+        const quantity = evaluateNumericFormulaExpression(rule.quantityExpression || '0', resolvedValues);
+        const wastePercent = coerceFormulaNumber(parsePlaygroundValue(rule.wastePercent, 'percent'));
+        const finalQuantity = quantity * (1 + wastePercent / 100);
+        const unitCost = Number(material.unitCost ?? 0);
+        lines.push({
+          key: `${area.id}-${instance.id}-${rule.id}`,
+          areaLabel: area.dynamic ? `${area.label || area.key || 'Area'} - ${instance.label}` : area.label || area.key || 'Area',
+          materialName: material.name,
+          quantity,
+          wastePercent,
+          finalQuantity,
+          unit: material.unit,
+          unitCost,
+          totalCost: finalQuantity * unitCost,
+          source: rule.materialSource === 'global' ? `Job input: ${rule.materialSelectorKey}` : 'Fixed material',
+        });
       }
-
-      const quantity = evaluateNumericFormulaExpression(rule.quantityExpression || '0', resolvedValues);
-      const wastePercent = coerceFormulaNumber(parsePlaygroundValue(rule.wastePercent, 'percent'));
-      const finalQuantity = quantity * (1 + wastePercent / 100);
-      const unitCost = Number(material.unitCost ?? 0);
-      lines.push({
-        key: `${area.id}-${rule.id}`,
-        areaLabel: area.label || area.key || 'Area',
-        materialName: material.name,
-        quantity,
-        wastePercent,
-        finalQuantity,
-        unit: material.unit,
-        unitCost,
-        totalCost: finalQuantity * unitCost,
-        source: rule.materialSource === 'global' ? `Job input: ${rule.materialSelectorKey}` : 'Fixed material',
-      });
     }
   }
 
@@ -598,20 +1070,31 @@ export function buildFormulaConstantTokens(
   const safeAreas = Array.isArray(areas) ? areas : [];
 
   const globalTokens: FormulaToken[] = safeGlobalFields
-    .filter((field) => field.key.trim() && field.inputType !== 'material')
+    .filter((field) => field.key.trim() && field.inputType !== 'material' && !isStoredGlobalField(field))
     .map((field) => ({
       token: `specs.global.${field.key.trim()}`,
       label: field.label.trim() || field.key.trim(),
       group: 'Job input',
     }));
 
-  const formulaTokens: FormulaToken[] = safeFormulaConstants
-    .filter((field) => field.id !== currentId && field.key.trim())
+  const storedGlobalTokens: FormulaToken[] = safeGlobalFields
+    .filter((field) => field.id !== currentId && isStoredGlobalField(field) && field.key.trim())
     .map((field) => ({
       token: `formula.${field.key.trim()}`,
       label: field.label.trim() || field.key.trim(),
       group: 'Formula value',
     }));
+
+  const formulaTokens: FormulaToken[] = [
+    ...storedGlobalTokens,
+    ...safeFormulaConstants
+    .filter((field) => field.id !== currentId && field.key.trim())
+    .map((field): FormulaToken => ({
+      token: `formula.${field.key.trim()}`,
+      label: field.label.trim() || field.key.trim(),
+      group: 'Formula value',
+    })),
+  ];
 
   const areaTokens: FormulaToken[] = safeAreas.flatMap((area) =>
     (area.fields ?? [])
