@@ -73,6 +73,7 @@ import {
   normalizeSlugInput,
   getStoredFormulaConstants,
   mergeGlobalFieldsWithFormulaConstants,
+  migrateBuilderStateFormulaTokens,
   isStoredGlobalField,
   renameFormulaReferences,
   reorderItemsById,
@@ -349,7 +350,7 @@ function parseFormula(row?: FormulaLibrary | null): BuilderState {
 
   const areas = Array.from(areaMap.values());
 
-  return {
+  return migrateBuilderStateFormulaTokens({
     name: row?.name ?? '',
     slug: row?.slug ?? '',
     fabricationType: row?.fabricationType ?? '',
@@ -357,7 +358,7 @@ function parseFormula(row?: FormulaLibrary | null): BuilderState {
     globalFields: mergeGlobalFieldsWithFormulaConstants(globalFields, formulaConstants),
     formulaConstants: [],
     areas: areas.length > 0 ? areas : [newArea()],
-  };
+  });
 }
 
 function parsePlaygroundValues(row?: FormulaLibrary | null): PlaygroundValues {
@@ -753,7 +754,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
         item.group.toLowerCase().includes(query)
       );
     });
-    const order: FormulaToken['group'][] = ['Job input', 'Formula value', 'Area input'];
+    const order: FormulaToken['group'][] = ['Job input', 'Stored value', 'Area input'];
     return order
       .map((group) => ({
         group,
@@ -765,7 +766,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     if (!formulaEditor) return [];
     const query = formulaEditorSearch.trim().toLowerCase();
     return formulaEditor.tokens.filter((item) => {
-      if (item.group !== 'Formula value') return false;
+      if (item.group !== 'Stored value') return false;
       if (!query) return true;
       return item.token.toLowerCase().includes(query) || item.label.toLowerCase().includes(query);
     });
@@ -797,17 +798,17 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     const areaToken =
       formulaEditor.tokens.find((item) => item.token.startsWith('area.') || item.token.startsWith('areas.'))?.token ??
       'area.total_sqm';
-    const formulaToken =
-      formulaEditor.tokens.find((item) => item.token.startsWith('formula.'))?.token ??
-      'formula.resin_rate';
     const jobToken =
       formulaEditor.tokens.find((item) => item.token.startsWith('specs.global.'))?.token ??
       'specs.global.layers';
+    const storedToken =
+      formulaEditor.tokens.find((item) => item.group === 'Stored value')?.token ??
+      jobToken;
 
     return [
       {
         label: 'If / else',
-        expression: `if(${jobToken} > 2, ${areaToken} * ${formulaToken}, ${areaToken})`,
+        expression: `if(${jobToken} > 2, ${areaToken} * ${storedToken}, ${areaToken})`,
         note: 'Use one value when the condition is true and another when false.',
         sample: 'Sample: layers=3, area=12, rate=1.5 => 18',
       },
@@ -819,19 +820,19 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
       },
       {
         label: 'Text match',
-        expression: `if(specs.global.finish_type == "premium", ${formulaToken}, 0)`,
+        expression: `if(specs.global.finish_type == "premium", ${storedToken}, 0)`,
         note: 'Works with text/select values using == or !=.',
         sample: 'Sample: finish_type="premium", rate=1.5 => 1.5',
       },
       {
         label: 'Boolean flag',
-        expression: `if(specs.global.include_topcoat, ${areaToken} * ${formulaToken}, 0)`,
+        expression: `if(specs.global.include_topcoat, ${areaToken} * ${storedToken}, 0)`,
         note: 'Booleans can be used directly as the condition.',
         sample: 'Sample: include_topcoat=true, area=12, rate=1.5 => 18',
       },
       {
         label: 'Combined rules',
-        expression: `if(${jobToken} >= 2 && ${areaToken} > 0, ${formulaToken}, 0)`,
+        expression: `if(${jobToken} >= 2 && ${areaToken} > 0, ${storedToken}, 0)`,
         note: 'Combine conditions with &&, ||, and not / !.',
         sample: 'Sample: layers=3, area=12, rate=1.5 => 1.5',
       },
@@ -1862,7 +1863,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-700 dark:text-teal-300">Job-level inputs</p>
                   <h2 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">Measurements, materials, and stored values</h2>
                   <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                    Add user inputs for job data, or stored formula values (fixed numbers or expressions) referenced as <span className="font-mono">formula.key</span>.
+                    Add user inputs for job data, or stored formula values (fixed numbers or expressions) referenced as <span className="font-mono">specs.global.key</span>.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2681,9 +2682,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                   <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
                     Used in formulas as{' '}
                     <span className="font-mono text-sky-700 dark:text-sky-300">
-                      {isStoredGlobalField(globalFieldEditor.draft)
-                        ? `formula.${globalFieldEditor.draft.key || 'key'}`
-                        : `specs.global.${globalFieldEditor.draft.key || 'key'}`}
+                      specs.global.{globalFieldEditor.draft.key || 'key'}
                     </span>
                   </p>
                 </label>
@@ -2773,7 +2772,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                       placeholder="0.85 or specs.global.base_rate * 1.08"
                       className="focus:border-teal-300 dark:focus:border-teal-400"
                       title={`${globalFieldEditor.draft.label || globalFieldEditor.draft.key || 'Stored value'} formula`}
-                      description="Stored values are reusable in expressions as formula.key. Budget lines use them by default."
+                      description="Stored values are reusable in expressions as specs.global.key. Budget lines use them by default."
                       resolvePreview={resolveGlobalFormulaOutputPreview}
                       previewLabel="Possible output with current playground"
                       onRequestEditor={openFormulaEditor}
@@ -3133,7 +3132,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                         {formulaEditorGroups.map((section) => (
                           <div key={section.group} className="space-y-2">
                             <div className="flex items-center justify-between gap-3">
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{section.group === 'Formula value' ? 'Available tokens' : section.group}</p>
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{section.group}</p>
                               <span className="text-[10px] font-mono text-slate-400">{section.items.length}</span>
                             </div>
                             <div className="space-y-2">

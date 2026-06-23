@@ -303,7 +303,7 @@ export function buildAreaScopedPlaygroundValues(
   applyResolvedFormulaFields(
     resolvedValues,
     resolveStoredFormulaConstants(form),
-    'formula.',
+    'specs.global.',
     buildGlobalFormulaOverrideMap(resolveStoredFormulaConstants(form), values)
   );
   applyResolvedFormulaFields(
@@ -462,8 +462,77 @@ export type PlaygroundMaterialLine = {
 export type FormulaToken = {
   token: string;
   label: string;
-  group: 'Job input' | 'Formula value' | 'Area input';
+  group: 'Job input' | 'Formula value' | 'Stored value' | 'Area input';
 };
+
+const FORMULA_TOKEN_GROUP_PRIORITY: Record<FormulaToken['group'], number> = {
+  'Stored value': 0,
+  'Job input': 1,
+  'Formula value': 2,
+  'Area input': 3,
+};
+
+export function dedupeFormulaTokens(tokens: FormulaToken[]): FormulaToken[] {
+  const byToken = new Map<string, FormulaToken>();
+  for (const token of tokens) {
+    const existing = byToken.get(token.token);
+    if (!existing) {
+      byToken.set(token.token, token);
+      continue;
+    }
+    const existingPriority = FORMULA_TOKEN_GROUP_PRIORITY[existing.group] ?? 99;
+    const nextPriority = FORMULA_TOKEN_GROUP_PRIORITY[token.group] ?? 99;
+    if (nextPriority < existingPriority) {
+      byToken.set(token.token, token);
+    }
+  }
+  return Array.from(byToken.values());
+}
+
+export function migrateGlobalFormulaTokenPrefix(expression: string, globalKeys: string[]) {
+  let next = expression;
+  for (const key of globalKeys) {
+    const normalizedKey = key.trim();
+    if (!normalizedKey) continue;
+    next = replaceExpressionToken(next, `formula.${normalizedKey}`, `specs.global.${normalizedKey}`);
+  }
+  return next;
+}
+
+export function migrateBuilderStateFormulaTokens(state: BuilderState): BuilderState {
+  const globalKeys = state.globalFields.map((field) => field.key.trim()).filter(Boolean);
+  const migrate = (value: string) => migrateGlobalFormulaTokenPrefix(value, globalKeys);
+
+  return {
+    ...state,
+    globalFields: state.globalFields.map((field) =>
+      isStoredGlobalField(field)
+        ? { ...field, storedValue: migrate(field.storedValue ?? '') }
+        : field
+    ),
+    formulaConstants: state.formulaConstants.map((field) => ({
+      ...field,
+      value: migrate(field.value),
+    })),
+    areas: state.areas.map((area) => ({
+      ...area,
+      formulaValues: (area.formulaValues ?? []).map((field) => ({
+        ...field,
+        value: migrate(field.value),
+      })),
+      materials: (area.materials ?? []).map((rule) => ({
+        ...rule,
+        quantityExpression: migrate(rule.quantityExpression),
+      })),
+      labor: (area.labor ?? []).map((rule) => ({
+        ...rule,
+        quantityExpression: migrate(rule.quantityExpression),
+        crewSizeExpression: migrate(rule.crewSizeExpression),
+        productivityPerWorkerPerDay: migrate(rule.productivityPerWorkerPerDay),
+      })),
+    })),
+  };
+}
 
 export const FIELD_TYPES: FieldType[] = [
   'number',
@@ -516,17 +585,26 @@ export function mergeGlobalFieldsWithFormulaConstants(
   globalFields: DynamicField[],
   formulaConstants: FormulaConstantField[]
 ): DynamicField[] {
-  const userFields = globalFields.filter((field) => !isStoredGlobalField(field));
   const storedByKey = new Map<string, DynamicField>();
-  for (const field of globalFields.filter(isStoredGlobalField)) {
-    const key = field.key.trim();
-    if (key) storedByKey.set(key, field);
-  }
+  const userFields = globalFields.filter((field) => {
+    if (isStoredGlobalField(field)) {
+      const key = field.key.trim();
+      if (key) storedByKey.set(key, field);
+      return false;
+    }
+    return true;
+  });
+
   for (const constant of formulaConstants) {
     const key = constant.key.trim();
     if (!key || storedByKey.has(key)) continue;
+    const userIndex = userFields.findIndex((field) => field.key.trim() === key);
+    if (userIndex >= 0) {
+      userFields.splice(userIndex, 1);
+    }
     storedByKey.set(key, formulaConstantToGlobalField(constant));
   }
+
   return [...userFields, ...Array.from(storedByKey.values())];
 }
 
@@ -610,9 +688,19 @@ export function replaceExpressionToken(value: string, previousToken: string, nex
 }
 
 export function renameFormulaReferences(state: BuilderState, previousKey: string, nextKey: string): BuilderState {
-  const fromToken = previousKey ? `formula.${previousKey}` : '';
-  const toToken = nextKey ? `formula.${nextKey}` : '';
-  if (!fromToken || !toToken || fromToken === toToken) return state;
+  const fromGlobalToken = previousKey ? `specs.global.${previousKey}` : '';
+  const toGlobalToken = nextKey ? `specs.global.${nextKey}` : '';
+  const fromFormulaToken = previousKey ? `formula.${previousKey}` : '';
+  const toFormulaToken = nextKey ? `formula.${nextKey}` : '';
+  if (!fromGlobalToken || !toGlobalToken || fromGlobalToken === toGlobalToken) return state;
+
+  const migrateStoredExpression = (value: string) => {
+    let next = replaceExpressionToken(value, fromGlobalToken, toGlobalToken);
+    if (fromFormulaToken && toGlobalToken) {
+      next = replaceExpressionToken(next, fromFormulaToken, toGlobalToken);
+    }
+    return next;
+  };
 
   return {
     ...state,
@@ -620,29 +708,29 @@ export function renameFormulaReferences(state: BuilderState, previousKey: string
       isStoredGlobalField(field)
         ? {
             ...field,
-            storedValue: replaceExpressionToken(field.storedValue ?? '', fromToken, toToken),
+            storedValue: migrateStoredExpression(field.storedValue ?? ''),
           }
         : field
     ),
     formulaConstants: state.formulaConstants.map((field) => ({
       ...field,
-      value: replaceExpressionToken(field.value, fromToken, toToken),
+      value: migrateStoredExpression(field.value),
     })),
     areas: state.areas.map((area) => ({
       ...area,
       formulaValues: (area.formulaValues ?? []).map((field) => ({
         ...field,
-        value: replaceExpressionToken(field.value, fromToken, toToken),
+        value: migrateStoredExpression(field.value),
       })),
       materials: (area.materials ?? []).map((rule) => ({
         ...rule,
-        quantityExpression: replaceExpressionToken(rule.quantityExpression, fromToken, toToken),
+        quantityExpression: migrateStoredExpression(rule.quantityExpression),
       })),
       labor: (area.labor ?? []).map((rule) => ({
         ...rule,
-        quantityExpression: replaceExpressionToken(rule.quantityExpression, fromToken, toToken),
-        crewSizeExpression: replaceExpressionToken(rule.crewSizeExpression, fromToken, toToken),
-        productivityPerWorkerPerDay: replaceExpressionToken(rule.productivityPerWorkerPerDay, fromToken, toToken),
+        quantityExpression: migrateStoredExpression(rule.quantityExpression),
+        crewSizeExpression: migrateStoredExpression(rule.crewSizeExpression),
+        productivityPerWorkerPerDay: migrateStoredExpression(rule.productivityPerWorkerPerDay),
       })),
     })),
   };
@@ -654,6 +742,8 @@ export function getTokenChipClasses(group: FormulaToken['group']) {
       return 'border-sky-200 bg-sky-100/80 text-sky-900 dark:border-sky-500/20 dark:bg-sky-500/15 dark:text-sky-100';
     case 'Formula value':
       return 'border-cyan-200 bg-cyan-100/80 text-cyan-900 dark:border-cyan-500/20 dark:bg-cyan-500/15 dark:text-cyan-100';
+    case 'Stored value':
+      return 'border-teal-200 bg-teal-100/80 text-teal-900 dark:border-teal-500/20 dark:bg-teal-500/15 dark:text-teal-100';
     case 'Area input':
       return 'border-emerald-200 bg-emerald-100/80 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-100';
     default:
@@ -891,7 +981,7 @@ export function evaluatePlaygroundExpression(expression: string, values: Formula
 export function applyResolvedFormulaFields(
   values: FormulaVariableMap,
   fields: Array<{ key: string; value: string }>,
-  tokenPrefix: 'formula.' | 'area.formula.',
+  tokenPrefix: 'formula.' | 'area.formula.' | 'specs.global.',
   overrides: FormulaOverrideMap = {}
 ) {
   const fieldMap = new Map<string, string>();
@@ -910,6 +1000,14 @@ export function applyResolvedFormulaFields(
 
   for (let pass = 0; pass < maxPasses; pass += 1) {
     let changed = false;
+
+    if (tokenPrefix === 'specs.global.') {
+      for (const field of activeFields) {
+        const key = field.key.trim();
+        if (!key) continue;
+        values[`formula.${key}`] = values[`specs.global.${key}`];
+      }
+    }
 
     for (const field of activeFields) {
       const token = `${tokenPrefix}${field.key.trim()}`;
@@ -930,11 +1028,20 @@ export function applyResolvedFormulaFields(
       values[`rule.${key}`] = values[`area.formula.${key}`];
     }
   }
+
+  if (tokenPrefix === 'specs.global.') {
+    for (const field of activeFields) {
+      const key = field.key.trim();
+      if (!key) continue;
+      values[`formula.${key}`] = values[`specs.global.${key}`];
+    }
+  }
 }
 
 export function buildPlaygroundBaseValues(form: BuilderState, values: PlaygroundValues) {
   const resolvedValues: FormulaVariableMap = {};
   for (const field of form.globalFields) {
+    if (isStoredGlobalField(field)) continue;
     if (field.inputType === 'material') {
       const selectedMaterialId = resolveGlobalFieldFormValue(field, values[`global.${field.key}`]);
       resolvedValues[`specs.global.${field.key}`] = selectedMaterialId;
@@ -992,7 +1099,7 @@ export function buildPlaygroundNumericValues(form: BuilderState, values: Playgro
   applyResolvedFormulaFields(
     resolvedValues,
     resolveStoredFormulaConstants(form),
-    'formula.',
+    'specs.global.',
     buildGlobalFormulaOverrideMap(resolveStoredFormulaConstants(form), values)
   );
   return resolvedValues;
@@ -1070,31 +1177,24 @@ export function buildFormulaConstantTokens(
   const safeAreas = Array.isArray(areas) ? areas : [];
 
   const globalTokens: FormulaToken[] = safeGlobalFields
-    .filter((field) => field.key.trim() && field.inputType !== 'material' && !isStoredGlobalField(field))
+    .filter((field) => field.id !== currentId && field.key.trim() && field.inputType !== 'material')
     .map((field) => ({
       token: `specs.global.${field.key.trim()}`,
       label: field.label.trim() || field.key.trim(),
-      group: 'Job input',
+      group: isStoredGlobalField(field) ? 'Stored value' : 'Job input',
     }));
 
-  const storedGlobalTokens: FormulaToken[] = safeGlobalFields
-    .filter((field) => field.id !== currentId && isStoredGlobalField(field) && field.key.trim())
+  const mergedStoredKeys = new Set(
+    safeGlobalFields.filter(isStoredGlobalField).map((field) => field.key.trim()).filter(Boolean)
+  );
+
+  const formulaTokens: FormulaToken[] = safeFormulaConstants
+    .filter((field) => field.id !== currentId && field.key.trim() && !mergedStoredKeys.has(field.key.trim()))
     .map((field) => ({
-      token: `formula.${field.key.trim()}`,
+      token: `specs.global.${field.key.trim()}`,
       label: field.label.trim() || field.key.trim(),
-      group: 'Formula value',
+      group: 'Stored value',
     }));
-
-  const formulaTokens: FormulaToken[] = [
-    ...storedGlobalTokens,
-    ...safeFormulaConstants
-    .filter((field) => field.id !== currentId && field.key.trim())
-    .map((field): FormulaToken => ({
-      token: `formula.${field.key.trim()}`,
-      label: field.label.trim() || field.key.trim(),
-      group: 'Formula value',
-    })),
-  ];
 
   const areaTokens: FormulaToken[] = safeAreas.flatMap((area) =>
     (area.fields ?? [])
@@ -1106,7 +1206,7 @@ export function buildFormulaConstantTokens(
       }))
   );
 
-  return [...globalTokens, ...formulaTokens, ...areaTokens];
+  return dedupeFormulaTokens([...globalTokens, ...formulaTokens, ...areaTokens]);
 }
 
 export function buildAreaFormulaValueTokens(
@@ -1121,25 +1221,34 @@ export function buildAreaFormulaValueTokens(
   });
 }
 
-export function buildFormulaTokens(globalFields: DynamicField[], formulaConstants: FormulaConstantField[], area: AreaRule): FormulaToken[] {
+export function buildFormulaTokens(
+  globalFields: DynamicField[],
+  formulaConstants: FormulaConstantField[],
+  area: AreaRule,
+  currentId?: string
+): FormulaToken[] {
   const safeGlobalFields = Array.isArray(globalFields) ? globalFields : [];
   const safeFormulaConstants = Array.isArray(formulaConstants) ? formulaConstants : [];
   const safeArea = area && typeof area === 'object' ? area : ({} as AreaRule);
 
   const globalTokens: FormulaToken[] = safeGlobalFields
-    .filter((field) => field.key.trim() && field.inputType !== 'material')
+    .filter((field) => field.id !== currentId && field.key.trim() && field.inputType !== 'material')
     .map((field) => ({
       token: `specs.global.${field.key.trim()}`,
       label: field.label.trim() || field.key.trim(),
-      group: 'Job input',
+      group: isStoredGlobalField(field) ? 'Stored value' : 'Job input',
     }));
 
+  const mergedStoredKeys = new Set(
+    safeGlobalFields.filter(isStoredGlobalField).map((field) => field.key.trim()).filter(Boolean)
+  );
+
   const formulaTokens: FormulaToken[] = safeFormulaConstants
-    .filter((field) => field.key.trim())
+    .filter((field) => field.key.trim() && !mergedStoredKeys.has(field.key.trim()))
     .map((field) => ({
-      token: `formula.${field.key.trim()}`,
+      token: `specs.global.${field.key.trim()}`,
       label: field.label.trim() || field.key.trim(),
-      group: 'Formula value',
+      group: 'Stored value',
     }));
 
   const areaTokens: FormulaToken[] = (safeArea.fields ?? [])
@@ -1161,7 +1270,7 @@ export function buildFormulaTokens(globalFields: DynamicField[], formulaConstant
       group: 'Area input',
       }));
 
-  return [...globalTokens, ...formulaTokens, ...areaTokens, ...areaFormulaTokens];
+  return dedupeFormulaTokens([...globalTokens, ...formulaTokens, ...areaTokens, ...areaFormulaTokens]);
 }
 
 export function getExpressionTokenQuery(value: string, cursorPosition?: number) {

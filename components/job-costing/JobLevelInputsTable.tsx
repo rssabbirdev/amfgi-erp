@@ -39,9 +39,6 @@ function inputTypeLabel(inputType: string) {
 }
 
 function keyTokenForField(field: JobLevelInputField, formatKeyToken?: (key: string) => string) {
-  if (isStoredGlobalField(field)) {
-    return field.key ? `formula.${field.key}` : 'formula.key';
-  }
   return formatKeyToken?.(field.key) ?? (field.key ? `specs.global.${field.key}` : 'specs.global.key');
 }
 

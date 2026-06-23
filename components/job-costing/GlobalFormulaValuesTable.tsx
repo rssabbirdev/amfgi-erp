@@ -71,7 +71,7 @@ export function GlobalFormulaValuesTable({
 }) {
   const classes = toneClasses(tone);
   const showOverride = mode === 'override' || (mode === 'readonly' && showOverrideColumn);
-  const keyToken = formatKeyToken ?? ((key: string) => (key ? `formula.${key}` : 'formula.key'));
+  const keyToken = formatKeyToken ?? ((key: string) => (key ? `specs.global.${key}` : 'specs.global.key'));
 
   if (rows.length === 0) return null;
 

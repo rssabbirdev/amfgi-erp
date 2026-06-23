@@ -481,21 +481,28 @@ function mergeStoredFormulaValuesIntoGlobalFields(
   globalFields: BudgetField[],
   formulaValues: BudgetFormulaValue[]
 ): BudgetField[] {
-  const userFields = globalFields.filter((field) => !isStoredGlobalField(field));
   const storedByKey = new Map<string, BudgetField>();
-  for (const field of globalFields.filter(isStoredGlobalField)) {
-    const key = field.key.trim();
-    if (!key) continue;
-    storedByKey.set(key, {
-      ...field,
-      inputType: 'stored',
-      storedValue: field.storedValue ?? '',
-      required: false,
-    });
-  }
+  const userFields = globalFields.filter((field) => {
+    if (isStoredGlobalField(field)) {
+      const key = field.key.trim();
+      if (key) {
+        storedByKey.set(key, {
+          ...field,
+          inputType: 'stored',
+          storedValue: field.storedValue ?? '',
+          required: false,
+        });
+      }
+      return false;
+    }
+    return true;
+  });
+
   for (const field of formulaValues) {
     const key = field.key.trim();
     if (!key || storedByKey.has(key)) continue;
+    const userIndex = userFields.findIndex((item) => item.key.trim() === key);
+    if (userIndex >= 0) userFields.splice(userIndex, 1);
     storedByKey.set(key, {
       key,
       label: field.label,

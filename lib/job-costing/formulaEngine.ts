@@ -93,7 +93,7 @@ function resolveFormulaValue(value: number | string, values: FormulaVariableMap)
 function applyResolvedFormulaEntries(
   values: FormulaVariableMap,
   entries: Array<{ key: string; value: number | string }>,
-  tokenPrefix: 'formula.' | 'rule.' | 'area.formula.',
+  tokenPrefix: 'formula.' | 'rule.' | 'area.formula.' | 'specs.global.',
   overrides: Record<string, number | string> = {}
 ) {
   const entryMap = new Map<string, number | string>();
@@ -116,9 +116,19 @@ function applyResolvedFormulaEntries(
     if (!(token in values)) values[token] = 0;
   }
 
+  const mirrorGlobalFormulaAliases = () => {
+    if (tokenPrefix !== 'specs.global.') return;
+    for (const entry of activeEntries) {
+      const key = entry.key.trim();
+      if (!key) continue;
+      values[`formula.${key}`] = values[`specs.global.${key}`];
+    }
+  };
+
   for (let pass = 0; pass < maxPasses; pass += 1) {
     let changed = false;
     deferredKeys.clear();
+    mirrorGlobalFormulaAliases();
 
     for (const entry of activeEntries) {
       const token = `${tokenPrefix}${entry.key.trim()}`;
@@ -139,8 +149,11 @@ function applyResolvedFormulaEntries(
   for (const entry of activeEntries) {
     if (!deferredKeys.has(entry.key.trim())) continue;
     const token = `${tokenPrefix}${entry.key.trim()}`;
+    mirrorGlobalFormulaAliases();
     values[token] = resolveFormulaValue(entry.value, values);
   }
+
+  mirrorGlobalFormulaAliases();
 }
 
 /**
@@ -221,7 +234,7 @@ function buildVariableMap(
       ...Object.entries(formulaVariables ?? {}).map(([key, value]) => ({ key, value })),
       ...(formulaConstants ?? []).map((constant) => ({ key: constant.key, value: constant.value })),
     ],
-    'formula.',
+    'specs.global.',
     globalFormulaOverrides
   );
   applyResolvedFormulaEntries(
