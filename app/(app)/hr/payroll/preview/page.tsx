@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/shadcn/input';
 import { cn } from '@/lib/utils';
 import { daysInMonth } from '@/lib/hr/payroll/calendar';
 import { downloadPayPreviewXlsx } from '@/lib/hr/payroll/exportPayPreviewXlsx';
+import { isPayPreviewPendingCompensationRow } from '@/lib/hr/payroll/payPreviewRowStatus';
 import { readApiJson } from '@/lib/utils/readApiResponse';
 
 type PreviewDayDetail = {
@@ -96,12 +97,20 @@ function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
 
-function formatMoney(n: number) {
-  return n.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function formatMoney(n: number | null | undefined) {
+  const value = Number(n);
+  return (Number.isFinite(value) ? value : 0).toLocaleString('en-AE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
-function formatHours(n: number) {
-  return n.toLocaleString('en-AE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+function formatHours(n: number | null | undefined) {
+  const value = Number(n);
+  return (Number.isFinite(value) ? value : 0).toLocaleString('en-AE', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 function resolveDisplayFullName(row: PreviewEmployee): string {
@@ -111,10 +120,10 @@ function resolveDisplayFullName(row: PreviewEmployee): string {
 function resolveAllowanceTotal(row: PreviewEmployee): number {
   if (row.salaryComponentEarnings != null) return row.salaryComponentEarnings;
   if (row.healthCheck?.componentEarningsPaid != null) return row.healthCheck.componentEarningsPaid;
-  if (row.healthCheck) return row.healthCheck.allowancePaid;
+  if (row.healthCheck?.allowancePaid != null) return row.healthCheck.allowancePaid;
   const days = row.dayDetails ?? [];
   return (
-    days.reduce((sum, day) => sum + (day.componentEarning ?? Math.max(0, day.allowance)), 0) +
+    days.reduce((sum, day) => sum + (day.componentEarning ?? Math.max(0, day.allowance ?? 0)), 0) +
     (row.breakdown.salaryComponentsFixed ?? 0) +
     (row.breakdown.salaryComponentsAttendance ?? 0)
   );
@@ -129,12 +138,12 @@ function resolveDeductionTotal(row: PreviewEmployee): number {
 
 function summarizeEmployeeRow(row: PreviewEmployee): EmployeeSummary {
   const days = row.dayDetails ?? [];
-  const activeDays = days.filter((day) => day.totalHours > 0 || day.totalSalary > 0).length;
+  const activeDays = days.filter((day) => (day.totalHours ?? 0) > 0 || (day.totalSalary ?? 0) > 0).length;
   return {
-    totalHours: days.reduce((sum, day) => sum + day.totalHours, 0),
-    totalOt: days.reduce((sum, day) => sum + day.otHours, 0),
-    basicSalary: days.reduce((sum, day) => sum + day.basicHourSalary, 0),
-    otSalary: days.reduce((sum, day) => sum + day.otHourSalary, 0),
+    totalHours: days.reduce((sum, day) => sum + (day.totalHours ?? 0), 0),
+    totalOt: days.reduce((sum, day) => sum + (day.otHours ?? 0), 0),
+    basicSalary: days.reduce((sum, day) => sum + (day.basicHourSalary ?? 0), 0),
+    otSalary: days.reduce((sum, day) => sum + (day.otHourSalary ?? 0), 0),
     allowance: resolveAllowanceTotal(row),
     deduction: resolveDeductionTotal(row),
     activeDays,
@@ -178,29 +187,15 @@ function visibleBreakdownEntries(breakdown: Record<string, number>) {
 function summarizeDayComponentTotals(rows: PreviewDayDetail[]) {
   return rows.reduce(
     (acc, day) => {
-      acc.earnings += day.componentEarning ?? Math.max(0, day.allowance);
+      acc.earnings += day.componentEarning ?? Math.max(0, day.allowance ?? 0);
       acc.deductions += day.componentDeduction ?? 0;
-      acc.basicSalary += day.basicHourSalary;
-      acc.otSalary += day.otHourSalary;
-      acc.totalSalary += day.totalSalary;
+      acc.basicSalary += day.basicHourSalary ?? 0;
+      acc.otSalary += day.otHourSalary ?? 0;
+      acc.totalSalary += day.totalSalary ?? 0;
       return acc;
     },
     { earnings: 0, deductions: 0, basicSalary: 0, otSalary: 0, totalSalary: 0 }
   );
-}
-
-function resolveSalaryComponentBreakdown(row: PreviewEmployee, dayRows: PreviewDayDetail[]) {
-  const dayTotals = summarizeDayComponentTotals(dayRows);
-  const totalEarnings = resolveAllowanceTotal(row);
-  const totalDeductions = resolveDeductionTotal(row);
-  return {
-    fixedEarnings: Math.max(0, totalEarnings - dayTotals.earnings),
-    fixedDeductions: Math.max(0, totalDeductions - dayTotals.deductions),
-    attendanceEarnings: dayTotals.earnings,
-    attendanceDeductions: dayTotals.deductions,
-    totalEarnings,
-    totalDeductions,
-  };
 }
 
 function HealthBadge({ health }: { health: PreviewEmployee['healthCheck'] }) {
@@ -252,7 +247,7 @@ function PayHealthCheckPanel({
         <div>
           <dt className="text-muted-foreground">Allowance paid / cap</dt>
           <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
-            {formatMoney(health.componentEarningsPaid)} / {formatMoney(health.componentEarningsCap)}
+            {formatMoney(health.allowancePaid)} / {formatMoney(health.allowanceCap)}
           </dd>
         </div>
         <div>
@@ -351,69 +346,6 @@ function DayBreakdownTable({
           )}
         </tfoot>
       </table>
-    </div>
-  );
-}
-
-function SalaryComponentBreakdownPanel({
-  row,
-  dayRows,
-}: {
-  row: PreviewEmployee;
-  dayRows: PreviewDayDetail[];
-}) {
-  const split = resolveSalaryComponentBreakdown(row, dayRows);
-  if (split.totalEarnings <= 0 && split.totalDeductions <= 0) return null;
-
-  return (
-    <div className="rounded-md border border-border bg-muted/20 p-3">
-      <h3 className="mb-2 text-sm font-medium">Salary components</h3>
-      <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-        {split.fixedEarnings > 0 ? (
-          <div>
-            <dt className="text-xs text-muted-foreground">Fixed earnings</dt>
-            <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
-              {formatMoney(split.fixedEarnings)}
-            </dd>
-          </div>
-        ) : null}
-        {split.fixedDeductions > 0 ? (
-          <div>
-            <dt className="text-xs text-muted-foreground">Fixed deductions</dt>
-            <dd className="font-medium tabular-nums text-rose-700 dark:text-rose-300">
-              {formatMoney(split.fixedDeductions)}
-            </dd>
-          </div>
-        ) : null}
-        {split.attendanceEarnings > 0 ? (
-          <div>
-            <dt className="text-xs text-muted-foreground">Attendance earnings</dt>
-            <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
-              {formatMoney(split.attendanceEarnings)}
-            </dd>
-          </div>
-        ) : null}
-        {split.attendanceDeductions > 0 ? (
-          <div>
-            <dt className="text-xs text-muted-foreground">Attendance deductions</dt>
-            <dd className="font-medium tabular-nums text-rose-700 dark:text-rose-300">
-              {formatMoney(split.attendanceDeductions)}
-            </dd>
-          </div>
-        ) : null}
-        <div>
-          <dt className="text-xs text-muted-foreground">Total earnings</dt>
-          <dd className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
-            {formatMoney(split.totalEarnings)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Total deductions</dt>
-          <dd className="font-medium tabular-nums text-rose-700 dark:text-rose-300">
-            {formatMoney(split.totalDeductions)}
-          </dd>
-        </div>
-      </dl>
     </div>
   );
 }
@@ -537,8 +469,6 @@ function EmployeeBreakdownModal({
           </div>
         </dl>
 
-        <SalaryComponentBreakdownPanel row={row} dayRows={dayRows} />
-
         {breakdownEntries.length > 0 ? (
           <dl className="grid gap-2 sm:grid-cols-2 md:grid-cols-4">
             {breakdownEntries.map(([key, value]) => (
@@ -559,8 +489,8 @@ function EmployeeBreakdownModal({
         <div>
           <h3 className="mb-2 text-sm font-medium">Daily breakdown</h3>
           <p className="mb-2 text-xs text-muted-foreground">
-            Allowance shows earning-type salary components. Deduction shows deduction-type components.
-            Fixed monthly components appear in the salary components section and month totals row.
+            Allowance shows earning-type components. Deduction shows deduction-type components.
+            Fixed monthly components are included in month totals when not listed per day.
           </p>
           <DayBreakdownTable rows={dayRows} summary={summary} />
         </div>
@@ -687,7 +617,12 @@ export default function PayrollPreviewPage() {
   );
 
   const included = preview?.employees.filter((e) => !e.skipped) ?? [];
-  const skipped = preview?.employees.filter((e) => e.skipped) ?? [];
+  const tableRows =
+    preview?.employees.filter((e) => !e.skipped || isPayPreviewPendingCompensationRow(e)) ?? [];
+  const pendingCompensation =
+    preview?.employees.filter((e) => isPayPreviewPendingCompensationRow(e)) ?? [];
+  const skipped =
+    preview?.employees.filter((e) => e.skipped && !isPayPreviewPendingCompensationRow(e)) ?? [];
 
   if (!canView) {
     return (
@@ -793,6 +728,11 @@ export default function PayrollPreviewPage() {
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-xs uppercase text-muted-foreground">Employees included</p>
               <p className="mt-1 text-xl font-semibold text-emerald-700">{included.length}</p>
+              {pendingCompensation.length > 0 ? (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  + {pendingCompensation.length} with attendance, no compensation
+                </p>
+              ) : null}
             </div>
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-xs uppercase text-muted-foreground">Total gross (preview)</p>
@@ -800,7 +740,7 @@ export default function PayrollPreviewPage() {
             </div>
           </div>
 
-          {included.length === 0 ? (
+          {tableRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No calculable rows for this month. Assign compensation on employee profiles first.
             </p>
@@ -827,14 +767,26 @@ export default function PayrollPreviewPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {included.map((row) => {
+                  {tableRows.map((row) => {
+                    const pendingCompensation = isPayPreviewPendingCompensationRow(row);
                     const summary = summarizeEmployeeRow(row);
                     return (
                       <tr
                         key={row.employeeId}
-                        className="cursor-pointer border-b transition-colors hover:bg-muted/30"
-                        onDoubleClick={() => setDetailEmployee(row)}
-                        title="Double-click for breakdown"
+                        className={cn(
+                          'border-b transition-colors',
+                          pendingCompensation
+                            ? 'bg-amber-50/60 dark:bg-amber-950/20'
+                            : 'cursor-pointer hover:bg-muted/30'
+                        )}
+                        onDoubleClick={
+                          pendingCompensation ? undefined : () => setDetailEmployee(row)
+                        }
+                        title={
+                          pendingCompensation
+                            ? row.skipReason ?? undefined
+                            : 'Double-click for breakdown'
+                        }
                       >
                         <td className="px-3 py-2 font-medium text-foreground">
                           {resolveDisplayFullName(row)}
@@ -848,25 +800,60 @@ export default function PayrollPreviewPage() {
                         <td className="px-3 py-2 text-muted-foreground">
                           {row.visaSponsorName ?? '—'}
                         </td>
-                        <td className="px-3 py-2 text-muted-foreground">{row.payTypeName ?? '—'}</td>
+                        <td
+                          className={cn(
+                            'px-3 py-2',
+                            pendingCompensation
+                              ? 'text-amber-800 dark:text-amber-200'
+                              : 'text-muted-foreground'
+                          )}
+                        >
+                          {pendingCompensation ? row.skipReason : (row.payTypeName ?? '—')}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                           {attendanceOutOfLabel(row, preview.month)}
                         </td>
                         <td className="px-3 py-2 text-center">
-                          <HealthBadge health={row.healthCheck} />
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatHours(summary.totalHours)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatHours(summary.totalOt)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(summary.basicSalary)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(summary.otSalary)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(summary.allowance)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          {summary.deduction ? formatMoney(summary.deduction) : formatMoney(0)}
+                          {pendingCompensation ? (
+                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/50 dark:text-amber-200">
+                              Pending
+                            </span>
+                          ) : (
+                            <HealthBadge health={row.healthCheck} />
+                          )}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {row.wpsTransferAmount != null ? formatMoney(row.wpsTransferAmount) : '—'}
+                          {pendingCompensation ? '—' : formatHours(summary.totalHours)}
                         </td>
-                        <td className="px-3 py-2 text-right font-medium tabular-nums">{formatMoney(row.gross)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {pendingCompensation ? '—' : formatHours(summary.totalOt)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {pendingCompensation ? '—' : formatMoney(summary.basicSalary)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {pendingCompensation ? '—' : formatMoney(summary.otSalary)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {pendingCompensation ? '—' : formatMoney(summary.allowance)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {pendingCompensation
+                            ? '—'
+                            : summary.deduction
+                              ? formatMoney(summary.deduction)
+                              : formatMoney(0)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {pendingCompensation
+                            ? '—'
+                            : row.wpsTransferAmount != null
+                              ? formatMoney(row.wpsTransferAmount)
+                              : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right font-medium tabular-nums">
+                          {pendingCompensation ? '—' : formatMoney(row.gross)}
+                        </td>
                       </tr>
                     );
                   })}

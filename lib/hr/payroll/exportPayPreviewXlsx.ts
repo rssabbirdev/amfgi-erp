@@ -1,5 +1,6 @@
 import { daysInMonth } from '@/lib/hr/payroll/calendar';
 import { formatPayMoney } from '@/lib/hr/payroll/payslipFormatting';
+import { isPayPreviewPendingCompensationRow } from '@/lib/hr/payroll/payPreviewRowStatus';
 import { downloadWorkbook, sanitizeSheetName } from '@/lib/import-export/xlsx';
 
 export type PayPreviewExportDayDetail = {
@@ -78,8 +79,12 @@ const BREAKDOWN_LABELS: Record<string, string> = {
   excludedWeekdayOt: 'Weekly off OT',
 };
 
-function formatHours(n: number) {
-  return n.toLocaleString('en-AE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+function formatHours(n: number | null | undefined) {
+  const value = Number(n);
+  return (Number.isFinite(value) ? value : 0).toLocaleString('en-AE', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 function breakdownLabel(key: string) {
@@ -93,10 +98,10 @@ function resolveDisplayFullName(row: PayPreviewExportEmployee): string {
 function resolveAllowanceTotal(row: PayPreviewExportEmployee): number {
   if (row.salaryComponentEarnings != null) return row.salaryComponentEarnings;
   if (row.healthCheck?.componentEarningsPaid != null) return row.healthCheck.componentEarningsPaid;
-  if (row.healthCheck) return row.healthCheck.allowancePaid;
+  if (row.healthCheck?.allowancePaid != null) return row.healthCheck.allowancePaid;
   const days = row.dayDetails ?? [];
   return (
-    days.reduce((sum, day) => sum + (day.componentEarning ?? Math.max(0, day.allowance)), 0) +
+    days.reduce((sum, day) => sum + (day.componentEarning ?? Math.max(0, day.allowance ?? 0)), 0) +
     (row.breakdown.salaryComponentsFixed ?? 0) +
     (row.breakdown.salaryComponentsAttendance ?? 0)
   );
@@ -111,12 +116,12 @@ function resolveDeductionTotal(row: PayPreviewExportEmployee): number {
 
 function summarizeEmployeeRow(row: PayPreviewExportEmployee) {
   const days = row.dayDetails ?? [];
-  const activeDays = days.filter((day) => day.totalHours > 0 || day.totalSalary > 0).length;
+  const activeDays = days.filter((day) => (day.totalHours ?? 0) > 0 || (day.totalSalary ?? 0) > 0).length;
   return {
-    totalHours: days.reduce((sum, day) => sum + day.totalHours, 0),
-    totalOt: days.reduce((sum, day) => sum + day.otHours, 0),
-    basicSalary: days.reduce((sum, day) => sum + day.basicHourSalary, 0),
-    otSalary: days.reduce((sum, day) => sum + day.otHourSalary, 0),
+    totalHours: days.reduce((sum, day) => sum + (day.totalHours ?? 0), 0),
+    totalOt: days.reduce((sum, day) => sum + (day.otHours ?? 0), 0),
+    basicSalary: days.reduce((sum, day) => sum + (day.basicHourSalary ?? 0), 0),
+    otSalary: days.reduce((sum, day) => sum + (day.otHourSalary ?? 0), 0),
     allowance: resolveAllowanceTotal(row),
     deduction: resolveDeductionTotal(row),
     activeDays,
@@ -174,7 +179,10 @@ function formatBreakdownValue(key: string, value: number) {
 
 function buildSummarySheet(payload: PayPreviewExportPayload): Array<Array<string | number>> {
   const included = payload.employees.filter((row) => !row.skipped);
-  const skipped = payload.employees.filter((row) => row.skipped);
+  const pendingCompensation = payload.employees.filter((row) => isPayPreviewPendingCompensationRow(row));
+  const skipped = payload.employees.filter(
+    (row) => row.skipped && !isPayPreviewPendingCompensationRow(row)
+  );
   const rows: Array<Array<string | number>> = [
     ['Payroll preview', payload.month],
     ['Total gross (AED)', payload.totalGross],
@@ -219,6 +227,27 @@ function buildSummarySheet(payload: PayPreviewExportPayload): Array<Array<string
       summary.deduction,
       row.wpsTransferAmount ?? '',
       row.gross,
+    ]);
+  }
+
+  for (const row of pendingCompensation) {
+    rows.push([
+      resolveDisplayFullName(row),
+      row.employeeCode,
+      row.workforceRoleTypeShort ?? '',
+      row.visaHoldingLabel ?? '',
+      row.visaSponsorName ?? '',
+      row.skipReason ?? '',
+      attendanceOutOfLabel(row, payload.month),
+      'Pending',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
     ]);
   }
 
@@ -308,7 +337,7 @@ function buildEmployeeDetailSheet(
     rows.push(['Basic paid / cap', `${formatPayMoney(health.basicPaid)} / ${formatPayMoney(health.basicCap)}`]);
     rows.push([
       'Allowance paid / cap',
-      `${formatPayMoney(health.componentEarningsPaid)} / ${formatPayMoney(health.componentEarningsCap)}`,
+      `${formatPayMoney(health.allowancePaid)} / ${formatPayMoney(health.allowanceCap)}`,
     ]);
     rows.push([
       'Deduction paid / cap',

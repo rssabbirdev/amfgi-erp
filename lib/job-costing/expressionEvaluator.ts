@@ -45,7 +45,13 @@ function toExpressionLiteral(value: FormulaValue) {
 }
 
 function replaceFormulaTokens(expression: string, values: FormulaVariableMap) {
-  let normalized = expression;
+  const stringLiterals: string[] = [];
+  const withoutStrings = expression.replace(/(["'])(?:\\.|(?!\1).)*\1/g, (match) => {
+    const index = stringLiterals.push(match) - 1;
+    return `__STR${index}__`;
+  });
+
+  let normalized = withoutStrings;
   for (const key of Object.keys(values).sort((a, b) => b.length - a.length)) {
     const literal = toExpressionLiteral(normalizeFormulaValue(values[key]));
     normalized = normalized.replace(
@@ -53,7 +59,8 @@ function replaceFormulaTokens(expression: string, values: FormulaVariableMap) {
       literal
     );
   }
-  return normalized;
+
+  return normalized.replace(/__STR(\d+)__/g, (_, index) => stringLiterals[Number(index)] ?? '""');
 }
 
 function canonicalizeExpressionOperators(expression: string) {
@@ -76,12 +83,32 @@ function validateNormalizedExpression(expression: string) {
   if (/[;`{}\[\]]/.test(expression)) {
     throw new Error('Unsupported tokens in formula expression');
   }
-  const scrubbedExpression = expression.replace(/(["'])(?:\\.|(?!\1).)*\1/g, '""');
+  const scrubbedExpression = expression
+    .replace(/(["'])(?:\\.|(?!\1).)*\1/g, '""')
+    .replace(/\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g, ' ');
   const identifiers = scrubbedExpression.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? [];
   for (const identifier of identifiers) {
     if (!ALLOWED_IDENTIFIERS.has(identifier)) {
       throw new Error(`Unsupported identifier "${identifier}" in formula expression`);
     }
+  }
+}
+
+export type FormulaEvaluationResult =
+  | { ok: true; value: FormulaValue }
+  | { ok: false; error: string };
+
+export function tryEvaluateFormulaExpression(
+  expression: string,
+  values: FormulaVariableMap
+): FormulaEvaluationResult {
+  try {
+    return { ok: true, value: evaluateFormulaExpression(expression, values) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Invalid formula expression',
+    };
   }
 }
 
@@ -112,7 +139,7 @@ export function coerceFormulaNumber(value: FormulaValue) {
 export function evaluateFormulaExpression(expression: string, values: FormulaVariableMap): FormulaValue {
   const trimmed = expression.trim();
   if (!trimmed) return 0;
-  const normalized = canonicalizeExpressionOperators(replaceFormulaTokens(trimmed, values));
+  const normalized = replaceFormulaTokens(canonicalizeExpressionOperators(trimmed), values);
   validateNormalizedExpression(normalized);
 
   const result = Function(
@@ -129,7 +156,13 @@ export function evaluateFormulaExpression(expression: string, values: FormulaVar
     (condition: unknown, whenTrue: unknown, whenFalse: unknown) => (condition ? whenTrue : whenFalse),
     Math.min,
     Math.max,
-    Math.round,
+    (value: unknown, decimals?: unknown) => {
+      const numeric = coerceFormulaNumber(normalizeFormulaValue(value));
+      if (decimals === undefined) return Math.round(numeric);
+      const places = coerceFormulaNumber(normalizeFormulaValue(decimals));
+      const factor = 10 ** places;
+      return Math.round(numeric * factor) / factor;
+    },
     Math.ceil,
     Math.floor,
     Math.abs,

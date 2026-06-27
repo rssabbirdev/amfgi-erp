@@ -15,6 +15,7 @@ export type FormulaLaborRule = {
   quantityExpression?: string;
   crewSizeExpression?: string;
   productivityPerWorkerPerDay: string;
+  scheduleDaysExpression?: string;
 };
 
 export type FormulaAreaRule = {

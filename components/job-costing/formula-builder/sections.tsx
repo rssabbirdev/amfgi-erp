@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/shadcn/button';
 import SearchSelect from '@/components/ui/SearchSelect';
@@ -23,7 +23,10 @@ import {
   type PlaygroundValues,
   addPlaygroundAreaInstance,
   buildAreaFormulaValueTokens,
+  buildFormulaMathFunctionTokens,
+  buildLaborScheduleTokens,
   buildFormulaTokens,
+  dedupeFormulaTokens,
   describeFieldType,
   describeMaterialRule,
   duplicatePlaygroundAreaInstance,
@@ -659,13 +662,28 @@ export function ExpressionInput({
   previewLabel?: string;
   className?: string;
 }) {
-  const displayParts = useMemo(() => tokenizeExpressionDisplay(value, tokens), [tokens, value]);
+  const displayTokens = useMemo(
+    () => dedupeFormulaTokens([...buildFormulaMathFunctionTokens(), ...tokens]),
+    [tokens]
+  );
+  const displayParts = useMemo(() => tokenizeExpressionDisplay(value, displayTokens), [displayTokens, value]);
 
   return (
     <div className="relative">
       <button
         type="button"
-        onClick={() => onRequestEditor({ title, description, value, placeholder, tokens, onChange, resolvePreview, previewLabel })}
+        onClick={() =>
+          onRequestEditor({
+            title,
+            description,
+            value,
+            placeholder,
+            tokens: displayTokens,
+            onChange,
+            resolvePreview,
+            previewLabel,
+          })
+        }
         className={`flex min-h-10 w-full items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-emerald-300 hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:hover:border-emerald-500/30 ${className}`}
       >
         <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap font-mono text-sm">
@@ -708,6 +726,8 @@ export function RuleRows({
   resolveMaterialPreview,
   resolveWastePreview,
   resolveLaborPreview,
+  resolveLaborExpressionPreview,
+  resolveLaborScheduleDaysPreview,
   onRequestFormulaEditor,
 }: {
   area: AreaRule;
@@ -720,9 +740,15 @@ export function RuleRows({
   resolveMaterialPreview: (rule: MaterialRule) => string;
   resolveWastePreview: (expression: string) => string;
   resolveLaborPreview: (rule: LaborRule) => string;
+  resolveLaborExpressionPreview: (expression: string) => string;
+  resolveLaborScheduleDaysPreview: (rule: LaborRule, expression: string) => string;
   onRequestFormulaEditor: (request: FormulaEditorRequest) => void;
 }) {
   const formulaTokens = buildFormulaTokens(globalFields, formulaConstants, area);
+  const laborScheduleTokens = useMemo(
+    () => dedupeFormulaTokens([...buildFormulaMathFunctionTokens(), ...buildLaborScheduleTokens(), ...formulaTokens]),
+    [formulaTokens]
+  );
   const searchableGlobalMaterialFields = useMemo(
     () =>
       globalMaterialFields.map((field) => ({
@@ -742,6 +768,67 @@ export function RuleRows({
   );
   const [materialEditor, setMaterialEditor] = useState<{ mode: 'create' | 'edit'; draft: MaterialRule; initialDraft: MaterialRule } | null>(null);
   const [laborEditor, setLaborEditor] = useState<{ mode: 'create' | 'edit'; draft: LaborRule; initialDraft: LaborRule } | null>(null);
+  const materialEditorRef = useRef(materialEditor);
+  const laborEditorRef = useRef(laborEditor);
+  const resolveMaterialPreviewRef = useRef(resolveMaterialPreview);
+  const resolveWastePreviewRef = useRef(resolveWastePreview);
+  const resolveLaborPreviewRef = useRef(resolveLaborPreview);
+  const resolveLaborExpressionPreviewRef = useRef(resolveLaborExpressionPreview);
+  const resolveLaborScheduleDaysPreviewRef = useRef(resolveLaborScheduleDaysPreview);
+  materialEditorRef.current = materialEditor;
+  laborEditorRef.current = laborEditor;
+  resolveMaterialPreviewRef.current = resolveMaterialPreview;
+  resolveWastePreviewRef.current = resolveWastePreview;
+  resolveLaborPreviewRef.current = resolveLaborPreview;
+  resolveLaborExpressionPreviewRef.current = resolveLaborExpressionPreview;
+  resolveLaborScheduleDaysPreviewRef.current = resolveLaborScheduleDaysPreview;
+
+  const previewMaterialRule = useCallback((rule: MaterialRule) => {
+    const editor = materialEditorRef.current;
+    if (editor?.mode === 'edit' && editor.draft.id === rule.id) {
+      return resolveMaterialPreviewRef.current(editor.draft);
+    }
+    return resolveMaterialPreviewRef.current(rule);
+  }, []);
+
+  const previewLaborRule = useCallback((rule: LaborRule) => {
+    const editor = laborEditorRef.current;
+    if (editor?.mode === 'edit' && editor.draft.id === rule.id) {
+      return resolveLaborPreviewRef.current(editor.draft);
+    }
+    return resolveLaborPreviewRef.current(rule);
+  }, []);
+
+  const resolveMaterialExpressionPreview = useCallback((expression: string) => {
+    const editor = materialEditorRef.current;
+    if (!editor) return resolveMaterialPreviewRef.current({ ...newMaterialRule(), quantityExpression: expression });
+    return resolveMaterialPreviewRef.current({ ...editor.draft, quantityExpression: expression });
+  }, []);
+
+  const resolveWasteExpressionPreview = useCallback(
+    (expression: string) => resolveWastePreviewRef.current(expression),
+    []
+  );
+
+  const resolveLaborExpressionPreviewStable = useCallback(
+    (expression: string) => resolveLaborExpressionPreviewRef.current(expression),
+    []
+  );
+
+  const resolveLaborScheduleDaysPreviewStable = useCallback((expression: string) => {
+    const editor = laborEditorRef.current;
+    if (!editor) {
+      return resolveLaborScheduleDaysPreviewRef.current(
+        { ...newLaborRule(), scheduleDaysExpression: expression },
+        expression
+      );
+    }
+    return resolveLaborScheduleDaysPreviewRef.current(
+      { ...editor.draft, scheduleDaysExpression: expression },
+      expression
+    );
+  }, []);
+
   const materialBackdropRef = useRef<HTMLButtonElement | null>(null);
   const materialPanelRef = useRef<HTMLDivElement | null>(null);
   const laborBackdropRef = useRef<HTMLButtonElement | null>(null);
@@ -828,7 +915,7 @@ export function RuleRows({
                   sourceLabel: rule.materialSource === 'global' ? 'job material' : 'fixed',
                   quantityExpression: rule.quantityExpression,
                   wastePercent: rule.wastePercent,
-                  preview: resolveMaterialPreview(rule),
+                  preview: previewMaterialRule(rule),
                 }))}
                 builderActions={{
                   onEdit: (id) => {
@@ -899,7 +986,8 @@ export function RuleRows({
                   quantityExpression: rule.quantityExpression,
                   crewSizeExpression: rule.crewSizeExpression,
                   productivityPerWorkerPerDay: rule.productivityPerWorkerPerDay,
-                  preview: resolveLaborPreview(rule),
+                  scheduleDaysExpression: rule.scheduleDaysExpression,
+                  preview: previewLaborRule(rule),
                 }))}
                 builderActions={{
                   onEdit: (id) => {
@@ -1012,7 +1100,7 @@ export function RuleRows({
                 )}
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Quantity formula</p>
-                  <ExpressionInput value={materialEditor.draft.quantityExpression} onChange={(value) => setMaterialEditor((current) => current ? { ...current, draft: { ...current.draft, quantityExpression: value } } : current)} tokens={formulaTokens} placeholder="Quantity formula, e.g. area.area_sqm * specs.global.resin_kg_per_sqm" title={`${area.label || area.key || 'Area'} material quantity`} description="This formula controls the issued quantity for the selected material rule." resolvePreview={(value) => resolveMaterialPreview({ ...materialEditor.draft, quantityExpression: value })} previewLabel="Possible output with current playground" onRequestEditor={onRequestFormulaEditor} />
+                  <ExpressionInput value={materialEditor.draft.quantityExpression} onChange={(value) => setMaterialEditor((current) => current ? { ...current, draft: { ...current.draft, quantityExpression: value } } : current)} tokens={formulaTokens} placeholder="Quantity formula, e.g. area.area_sqm * specs.global.resin_kg_per_sqm" title={`${area.label || area.key || 'Area'} material quantity`} description="This formula controls the issued quantity for the selected material rule." resolvePreview={resolveMaterialExpressionPreview} previewLabel="Possible output with current playground" onRequestEditor={onRequestFormulaEditor} />
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Waste percent formula</p>
@@ -1027,7 +1115,7 @@ export function RuleRows({
                     placeholder="Waste percent, e.g. 5 or specs.global.waste_allowance * 100"
                     title={`${area.label || area.key || 'Area'} material waste percent`}
                     description="Use a fixed percent or a formula that resolves to a percentage value."
-                    resolvePreview={resolveWastePreview}
+                    resolvePreview={resolveWasteExpressionPreview}
                     previewLabel="Possible waste percent with current playground"
                     onRequestEditor={onRequestFormulaEditor}
                   />
@@ -1065,15 +1153,33 @@ export function RuleRows({
                 </label>
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Work quantity</p>
-                  <ExpressionInput value={laborEditor.draft.quantityExpression} onChange={(value) => setLaborEditor((current) => current ? { ...current, draft: { ...current.draft, quantityExpression: value } } : current)} tokens={formulaTokens} placeholder="Work quantity, e.g. area.area_sqm" title={`${area.label || area.key || 'Area'} labor quantity`} description="This formula defines the work quantity used by the labor rule." resolvePreview={(value) => resolveLaborPreview({ ...laborEditor.draft, quantityExpression: value })} previewLabel="Possible output with current playground" onRequestEditor={onRequestFormulaEditor} />
+                  <ExpressionInput value={laborEditor.draft.quantityExpression} onChange={(value) => setLaborEditor((current) => current ? { ...current, draft: { ...current.draft, quantityExpression: value } } : current)} tokens={formulaTokens} placeholder="Work quantity, e.g. areas.walls.sqm" title={`${area.label || area.key || 'Area'} labor quantity`} description="This formula defines the work quantity used by the labor rule." resolvePreview={resolveLaborExpressionPreviewStable} previewLabel="Expression result with current playground" onRequestEditor={onRequestFormulaEditor} />
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Crew size</p>
-                  <ExpressionInput value={laborEditor.draft.crewSizeExpression} onChange={(value) => setLaborEditor((current) => current ? { ...current, draft: { ...current.draft, crewSizeExpression: value } } : current)} tokens={formulaTokens} placeholder="Crew size" title={`${area.label || area.key || 'Area'} crew size`} description="Set a fixed crew size or derive it from another formula value." resolvePreview={(value) => resolveLaborPreview({ ...laborEditor.draft, crewSizeExpression: value })} previewLabel="Possible output with current playground" onRequestEditor={onRequestFormulaEditor} />
+                  <ExpressionInput value={laborEditor.draft.crewSizeExpression} onChange={(value) => setLaborEditor((current) => current ? { ...current, draft: { ...current.draft, crewSizeExpression: value } } : current)} tokens={formulaTokens} placeholder="Crew size" title={`${area.label || area.key || 'Area'} crew size`} description="Set a fixed crew size or derive it from another formula value." resolvePreview={resolveLaborExpressionPreviewStable} previewLabel="Expression result with current playground" onRequestEditor={onRequestFormulaEditor} />
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Productivity per worker per day</p>
-                  <ExpressionInput value={laborEditor.draft.productivityPerWorkerPerDay} onChange={(value) => setLaborEditor((current) => current ? { ...current, draft: { ...current.draft, productivityPerWorkerPerDay: value } } : current)} tokens={formulaTokens} placeholder="Qty / worker / day" title={`${area.label || area.key || 'Area'} productivity`} description="Define how much one worker can finish per day for this area labor rule." resolvePreview={(value) => resolveLaborPreview({ ...laborEditor.draft, productivityPerWorkerPerDay: value })} previewLabel="Possible output with current playground" onRequestEditor={onRequestFormulaEditor} />
+                  <ExpressionInput value={laborEditor.draft.productivityPerWorkerPerDay} onChange={(value) => setLaborEditor((current) => current ? { ...current, draft: { ...current.draft, productivityPerWorkerPerDay: value } } : current)} tokens={formulaTokens} placeholder="Qty / worker / day" title={`${area.label || area.key || 'Area'} productivity`} description="Define how much one worker can finish per day for this area labor rule." resolvePreview={resolveLaborExpressionPreviewStable} previewLabel="Expression result with current playground" onRequestEditor={onRequestFormulaEditor} />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Schedule days (optional)</p>
+                  <ExpressionInput
+                    value={laborEditor.draft.scheduleDaysExpression}
+                    onChange={(value) =>
+                      setLaborEditor((current) =>
+                        current ? { ...current, draft: { ...current.draft, scheduleDaysExpression: value } } : current
+                      )
+                    }
+                    tokens={laborScheduleTokens}
+                    placeholder="e.g. ceil(labor.days) or round(labor.days, 1)"
+                    title={`${area.label || area.key || 'Area'} schedule days`}
+                    description="Leave blank to use quantity ÷ (crew × productivity). Use labor.days with floor, ceil, or round to shape the final manpower days."
+                    resolvePreview={resolveLaborScheduleDaysPreviewStable}
+                    previewLabel="Schedule days with current playground"
+                    onRequestEditor={onRequestFormulaEditor}
+                  />
                 </div>
               </div>
               <div className="border-t border-slate-200 px-5 py-4 dark:border-slate-800">

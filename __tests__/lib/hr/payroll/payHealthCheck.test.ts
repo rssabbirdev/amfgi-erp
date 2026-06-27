@@ -1,5 +1,6 @@
 import { splitBasicOtSalary } from '@/lib/hr/payroll/payDayBreakdown';
 import { evaluatePayHealthCheck } from '@/lib/hr/payroll/payHealthCheck';
+import { buildSalaryComponentTotals } from '@/lib/hr/payroll/salaryComponent';
 
 describe('splitBasicOtSalary', () => {
   it('puts full amount in basic when OT hours are zero', () => {
@@ -60,6 +61,64 @@ describe('evaluatePayHealthCheck', () => {
     expect(result.componentDeductionsPaid).toBe(0);
   });
 
+  it('excludes day allowances from basic paid for monthly calendar deduct', () => {
+    const basicDay = 3000 / 26;
+    const allowanceDay = 200 / 26;
+    const fixedNet = 250;
+    const result = evaluatePayHealthCheck({
+      month: '2026-06',
+      config: { mode: 'MONTHLY_CALENDAR_DEDUCT', deductDenominator: 'WORKING_DAYS', excludedWeekdays: [0] },
+      compensation: {
+        monthlyBasic: 3000,
+        monthlyAllowance: 0,
+        dailyRate: 0,
+        salaryComponents: {
+          fixedEarnings: 300,
+          fixedDeductions: 50,
+          attendanceEarningPerDay: 200 / 26,
+          attendanceDeductionPerDay: 0,
+        },
+      },
+      lines: [
+        {
+          workDate: '2026-06-02',
+          status: 'PRESENT',
+          leaveType: null,
+          basicHours: 9,
+          workedMinutes: 540,
+          isSunday: false,
+        },
+      ],
+      result: {
+        gross: basicDay + allowanceDay + fixedNet,
+        breakdown: { monthlyBasic: 3000, earnedDays: 1, salaryComponentsFixed: fixedNet },
+        days: [
+          {
+            date: '2026-06-02',
+            status: 'Present',
+            totalHours: 9,
+            basicHours: 9,
+            otHours: 0,
+            basicHourRate: basicDay / 9,
+            basicHourSalary: basicDay,
+            otHourRate: 0,
+            otHourSalary: 0,
+            allowance: allowanceDay,
+            componentEarning: allowanceDay,
+            componentDeduction: 0,
+            totalSalary: basicDay + allowanceDay,
+            amount: basicDay + allowanceDay,
+          },
+        ],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.allowanceCap).toBe(450);
+    expect(result.basicPaid).toBe(115.39);
+    expect(result.allowancePaid).toBeCloseTo(allowanceDay + fixedNet, 2);
+  });
+
   it('tracks earnings and deductions separately for salary components', () => {
     const result = evaluatePayHealthCheck({
       month: '2026-06',
@@ -114,6 +173,61 @@ describe('evaluatePayHealthCheck', () => {
     expect(result.componentEarningsCap).toBeCloseTo(300 + 260 / 26, 2);
     expect(result.componentDeductionsPaid).toBeCloseTo(50 + 52 / 26, 2);
     expect(result.componentDeductionsCap).toBeCloseTo(50 + 52 / 26, 2);
+  });
+
+  it('does not flag earnings when cap uses the same per-day rounding as pay', () => {
+    const salaryComponents = buildSalaryComponentTotals(
+      [
+        { amount: 250, componentKind: 'EARNING', applicationMode: 'FIXED_MONTHLY' },
+        { amount: 211.54, componentKind: 'EARNING', applicationMode: 'ATTENDANCE_PRESENT' },
+      ],
+      '2026-06',
+      [0]
+    );
+    const lines = Array.from({ length: 26 }, (_, index) => ({
+      workDate: `2026-06-${String(index + 1).padStart(2, '0')}`,
+      status: 'PRESENT' as const,
+      leaveType: null,
+      basicHours: 9,
+      workedMinutes: 540,
+      isSunday: false,
+    }));
+    const dayEarning = salaryComponents.attendanceEarningPerDay;
+    const roundedDayEarning = Math.round(dayEarning * 100) / 100;
+    const result = evaluatePayHealthCheck({
+      month: '2026-06',
+      config: { mode: 'MONTHLY_CALENDAR_DEDUCT', deductDenominator: 'WORKING_DAYS', excludedWeekdays: [0] },
+      compensation: {
+        monthlyBasic: 3000,
+        monthlyAllowance: 0,
+        dailyRate: 0,
+        salaryComponents,
+      },
+      lines,
+      result: {
+        gross: 3000,
+        breakdown: { monthlyBasic: 3000, salaryComponentsFixed: 250 },
+        days: lines.map((line) => ({
+          date: line.workDate,
+          status: 'Present',
+          totalHours: 9,
+          basicHours: 9,
+          otHours: 0,
+          basicHourRate: 0,
+          basicHourSalary: 0,
+          otHourRate: 0,
+          otHourSalary: 0,
+          allowance: roundedDayEarning,
+          componentEarning: roundedDayEarning,
+          componentDeduction: 0,
+          totalSalary: roundedDayEarning,
+          amount: roundedDayEarning,
+        })),
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.componentEarningsPaid).toBe(result.componentEarningsCap);
   });
 
   it('flags OT salary when OT hours are zero', () => {

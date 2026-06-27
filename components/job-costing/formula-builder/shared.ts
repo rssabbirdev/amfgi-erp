@@ -5,6 +5,7 @@ import {
   evaluateNumericFormulaExpression,
   normalizeFormulaValue,
   resolveMaterialWastePercent,
+  tryEvaluateFormulaExpression,
   type FormulaVariableMap,
 } from '@/lib/job-costing/expressionEvaluator';
 
@@ -51,6 +52,7 @@ export type LaborRule = {
   quantityExpression: string;
   crewSizeExpression: string;
   productivityPerWorkerPerDay: string;
+  scheduleDaysExpression: string;
 };
 
 export type FormulaConstantField = {
@@ -323,6 +325,12 @@ export function formatPossibleFormulaOutput(value: unknown) {
   return '--';
 }
 
+export function formatFormulaPreviewResult(expression: string, values: FormulaVariableMap) {
+  const result = tryEvaluateFormulaExpression(expression, values);
+  if (!result.ok) return `Error: ${result.error}`;
+  return formatPossibleFormulaOutput(result.value);
+}
+
 export function forEachAreaPlaygroundInstance(
   area: AreaRule,
   values: PlaygroundValues,
@@ -357,21 +365,19 @@ export function formatAreaExpressionOutputPreview(
   area: AreaRule,
   expression: string
 ) {
-  const results = evaluateAreaExpressionAcrossInstances(form, values, area, expression);
-  if (results.length === 0) return '--';
-  if (results.length === 1) return formatPossibleFormulaOutput(results[0]);
+  const trimmed = expression.trim();
+  if (!trimmed) return '--';
 
-  const numericResults = results.map((value) => Number(value));
-  const allNumeric = numericResults.every((value) => Number.isFinite(value));
-  if (!allNumeric) {
-    return formatPossibleFormulaOutput(results[0]);
-  }
+  const previews: string[] = [];
+  forEachAreaPlaygroundInstance(area, values, (instanceId) => {
+    const resolved = buildAreaScopedPlaygroundValues(form, values, area, instanceId);
+    previews.push(formatFormulaPreviewResult(trimmed, resolved));
+  });
 
-  const allSame = numericResults.every((value) => Object.is(value, numericResults[0]));
-  if (allSame) return formatPossibleFormulaOutput(numericResults[0]);
-
-  const total = numericResults.reduce((sum, value) => sum + value, 0);
-  return `${formatPreviewQty(total)} total (${results.length} rows)`;
+  if (previews.length === 0) return '--';
+  if (previews.length === 1) return previews[0] ?? '--';
+  if (previews.every((preview) => preview === previews[0])) return previews[0] ?? '--';
+  return `${previews.length} rows`;
 }
 
 export function formatAreaMaterialRuleOutputPreview(
@@ -386,15 +392,25 @@ export function formatAreaMaterialRuleOutputPreview(
   let wastePercentTotal = 0;
   let rowCount = 0;
 
+  let evaluationError: string | null = null;
+
   forEachAreaPlaygroundInstance(area, values, (instanceId) => {
+    if (evaluationError) return;
     rowCount += 1;
     const resolved = buildAreaScopedPlaygroundValues(form, values, area, instanceId);
-    const quantity = Number(evaluatePlaygroundExpression(rule.quantityExpression || '0', resolved));
+    const quantityResult = tryEvaluateFormulaExpression(rule.quantityExpression || '0', resolved);
+    if (!quantityResult.ok) {
+      evaluationError = quantityResult.error;
+      return;
+    }
+    const quantity = Number(quantityResult.value);
     const wastePercent = resolveMaterialWastePercent(rule.wastePercent, resolved);
     quantityTotal += quantity;
     wastePercentTotal += wastePercent;
     finalQuantityTotal += quantity * (1 + wastePercent / 100);
   });
+
+  if (evaluationError) return `Error: ${evaluationError}`;
 
   const averageWastePercent = rowCount > 0 ? wastePercentTotal / rowCount : 0;
   const unitSuffix = materialUnit?.trim() ? ` ${materialUnit.trim()}` : '';
@@ -415,10 +431,19 @@ export function formatMaterialWastePercentPreview(
   if (!trimmed) return '0%';
 
   const results: number[] = [];
+  let evaluationError: string | null = null;
   forEachAreaPlaygroundInstance(area, values, (instanceId) => {
+    if (evaluationError) return;
     const resolved = buildAreaScopedPlaygroundValues(form, values, area, instanceId);
+    const result = tryEvaluateFormulaExpression(trimmed, resolved);
+    if (!result.ok) {
+      evaluationError = result.error;
+      return;
+    }
     results.push(resolveMaterialWastePercent(trimmed, resolved));
   });
+
+  if (evaluationError) return `Error: ${evaluationError}`;
 
   if (results.length === 0) return '0%';
   if (results.every((value) => Object.is(value, results[0]))) {
@@ -429,46 +454,150 @@ export function formatMaterialWastePercentPreview(
   return `${formatPreviewQty(average)}% avg (${results.length} rows)`;
 }
 
+export function resolveLaborRuleMetrics(
+  form: BuilderState,
+  values: PlaygroundValues,
+  area: AreaRule,
+  rule: LaborRule,
+  instanceId?: string
+) {
+  const resolved = buildAreaScopedPlaygroundValues(form, values, area, instanceId);
+  const quantityResult = tryEvaluateFormulaExpression(rule.quantityExpression || '0', resolved);
+  const quantity = quantityResult.ok ? coerceFormulaNumber(quantityResult.value) : 0;
+
+  const crewExpression = rule.crewSizeExpression.trim() ? rule.crewSizeExpression : '1';
+  const crewResult = tryEvaluateFormulaExpression(crewExpression, resolved);
+  const crewEvaluated = crewResult.ok ? coerceFormulaNumber(crewResult.value) : 1;
+  const crew = Math.max(1, Math.ceil(crewEvaluated));
+
+  const productivityExpression = rule.productivityPerWorkerPerDay.trim()
+    ? rule.productivityPerWorkerPerDay
+    : '0';
+  const productivityResult = tryEvaluateFormulaExpression(productivityExpression, resolved);
+  const productivity = productivityResult.ok
+    ? Math.max(coerceFormulaNumber(productivityResult.value), 0.0001)
+    : 0.0001;
+
+  const baseDays = quantity > 0 ? quantity / (crew * productivity) : 0;
+
+  return { resolved, quantity, crew, productivity, baseDays };
+}
+
+export function resolveAggregateLaborRuleMetrics(
+  form: BuilderState,
+  values: PlaygroundValues,
+  area: AreaRule,
+  rule: LaborRule
+) {
+  const instanceIds: Array<string | undefined> = area.dynamic
+    ? parsePlaygroundAreaInstances(area, values).map((instance) => instance.id)
+    : [undefined];
+
+  if (instanceIds.length === 0) {
+    return {
+      resolved: buildAreaScopedPlaygroundValues(form, values, area, undefined),
+      quantity: 0,
+      crew: 1,
+      productivity: 0.0001,
+      baseDays: 0,
+      rowCount: 0,
+    };
+  }
+
+  let quantityTotal = 0;
+  let baseDaysTotal = 0;
+  let lastMetrics = resolveLaborRuleMetrics(form, values, area, rule, instanceIds[0]);
+
+  for (const instanceId of instanceIds) {
+    const metrics = resolveLaborRuleMetrics(form, values, area, rule, instanceId);
+    quantityTotal += metrics.quantity;
+    baseDaysTotal += metrics.baseDays;
+    lastMetrics = metrics;
+  }
+
+  return {
+    resolved: lastMetrics.resolved,
+    quantity: quantityTotal,
+    crew: lastMetrics.crew,
+    productivity: lastMetrics.productivity,
+    baseDays: baseDaysTotal,
+    rowCount: instanceIds.length,
+  };
+}
+
+export function appendLaborScheduleVariables(
+  resolved: FormulaVariableMap,
+  metrics: { quantity: number; crew: number; productivity: number; baseDays: number }
+) {
+  resolved['labor.quantity'] = metrics.quantity;
+  resolved['labor.crew'] = metrics.crew;
+  resolved['labor.productivity'] = metrics.productivity;
+  resolved['labor.baseDays'] = metrics.baseDays;
+  resolved['labor.days'] = metrics.baseDays;
+}
+
+export function evaluateLaborScheduleDays(
+  rule: LaborRule,
+  resolved: FormulaVariableMap,
+  metrics: { quantity: number; crew: number; productivity: number; baseDays: number }
+) {
+  const scheduleValues = { ...resolved };
+  appendLaborScheduleVariables(scheduleValues, metrics);
+  const expression = rule.scheduleDaysExpression.trim();
+  if (!expression) return metrics.baseDays;
+  const result = tryEvaluateFormulaExpression(expression, scheduleValues);
+  if (!result.ok) return null;
+  return coerceFormulaNumber(result.value);
+}
+
+export function formatLaborScheduleDaysExpressionPreview(
+  form: BuilderState,
+  values: PlaygroundValues,
+  area: AreaRule,
+  rule: LaborRule,
+  expression: string
+) {
+  const trimmed = expression.trim();
+  const aggregate = resolveAggregateLaborRuleMetrics(form, values, area, rule);
+  const ruleWithExpression = { ...rule, scheduleDaysExpression: trimmed };
+
+  if (!trimmed) {
+    return `${formatPreviewQty(aggregate.baseDays)} days`;
+  }
+
+  const days = evaluateLaborScheduleDays(ruleWithExpression, aggregate.resolved, aggregate);
+  if (days === null) {
+    const scheduleValues = { ...aggregate.resolved };
+    appendLaborScheduleVariables(scheduleValues, aggregate);
+    const result = tryEvaluateFormulaExpression(trimmed, scheduleValues);
+    return result.ok ? 'Error: Invalid schedule days expression' : `Error: ${result.error}`;
+  }
+
+  return `${formatPreviewQty(days)} days`;
+}
+
 export function formatAreaLaborRuleOutputPreview(
   form: BuilderState,
   values: PlaygroundValues,
   area: AreaRule,
   rule: LaborRule
 ) {
-  let quantityTotal = 0;
-  let daysTotal = 0;
-  let rowCount = 0;
-  let crewSample = 0;
-  let productivitySample = 0;
+  const aggregate = resolveAggregateLaborRuleMetrics(form, values, area, rule);
+  const days = evaluateLaborScheduleDays(rule, aggregate.resolved, aggregate);
+  if (days === null) {
+    const scheduleValues = { ...aggregate.resolved };
+    appendLaborScheduleVariables(scheduleValues, aggregate);
+    const result = tryEvaluateFormulaExpression(rule.scheduleDaysExpression.trim(), scheduleValues);
+    return result.ok ? 'Error: Invalid schedule days expression' : `Error: ${result.error}`;
+  }
 
-  forEachAreaPlaygroundInstance(area, values, (instanceId) => {
-    rowCount += 1;
-    const resolved = buildAreaScopedPlaygroundValues(form, values, area, instanceId);
-    const quantity = Number(evaluatePlaygroundExpression(rule.quantityExpression || '0', resolved));
-    const crew = Number(
-      evaluatePlaygroundExpression(rule.crewSizeExpression.trim() ? rule.crewSizeExpression : '1', resolved)
-    );
-    const productivity = Number(
-      evaluatePlaygroundExpression(
-        rule.productivityPerWorkerPerDay.trim() ? rule.productivityPerWorkerPerDay : '0',
-        resolved
-      )
-    );
-    quantityTotal += quantity;
-    crewSample = crew;
-    productivitySample = productivity;
-    if (crew > 0 && productivity > 0) {
-      daysTotal += quantity / (crew * productivity);
-    }
-  });
-
-  const rowNote = area.dynamic && rowCount > 1 ? ` • ${rowCount} rows` : '';
+  const rowNote = area.dynamic && aggregate.rowCount > 1 ? ` • ${aggregate.rowCount} rows` : '';
   const parts = [
-    `Qty ${formatPreviewQty(quantityTotal)}${rowNote}`,
-    `Crew ${formatPreviewQty(crewSample)}`,
-    `Prod ${formatPreviewQty(productivitySample)}/day`,
+    `Qty ${formatPreviewQty(aggregate.quantity)}${rowNote}`,
+    `Crew ${formatPreviewQty(aggregate.crew)}`,
+    `Prod ${formatPreviewQty(aggregate.productivity)}/day`,
   ];
-  if (daysTotal > 0) parts.push(`Days ${formatPreviewQty(daysTotal)}`);
+  if (days > 0) parts.push(`Days ${formatPreviewQty(days)}`);
   return parts.join(' • ');
 }
 
@@ -490,14 +619,48 @@ export type PlaygroundMaterialLine = {
 export type FormulaToken = {
   token: string;
   label: string;
-  group: 'Job input' | 'Formula value' | 'Stored value' | 'Area input';
+  group: 'Job input' | 'Formula value' | 'Stored value' | 'Area input' | 'Function' | 'Labor result';
 };
+
+export const FORMULA_MATH_FUNCTION_TOKENS: FormulaToken[] = [
+  { token: 'floor(', label: 'floor — round down', group: 'Function' },
+  { token: 'ceil(', label: 'ceil — round up', group: 'Function' },
+  { token: 'round(', label: 'round — nearest integer or decimals', group: 'Function' },
+];
+
+export const LABOR_SCHEDULE_TOKENS: FormulaToken[] = [
+  { token: 'labor.quantity', label: 'Evaluated work quantity', group: 'Labor result' },
+  { token: 'labor.crew', label: 'Evaluated crew size', group: 'Labor result' },
+  { token: 'labor.productivity', label: 'Evaluated productivity per worker per day', group: 'Labor result' },
+  { token: 'labor.days', label: 'Base schedule days before rounding', group: 'Labor result' },
+  { token: 'labor.baseDays', label: 'Same as labor.days', group: 'Labor result' },
+];
+
+export function buildLaborScheduleTokens(): FormulaToken[] {
+  return LABOR_SCHEDULE_TOKENS;
+}
+
+export function buildFormulaMathFunctionTokens(): FormulaToken[] {
+  return FORMULA_MATH_FUNCTION_TOKENS;
+}
+
+export function matchesFormulaTokenQuery(item: FormulaToken, query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  return (
+    item.token.toLowerCase().includes(normalized) ||
+    item.label.toLowerCase().includes(normalized) ||
+    item.group.toLowerCase().includes(normalized)
+  );
+}
 
 const FORMULA_TOKEN_GROUP_PRIORITY: Record<FormulaToken['group'], number> = {
   'Stored value': 0,
   'Job input': 1,
   'Formula value': 2,
   'Area input': 3,
+  'Labor result': 4,
+  'Function': 5,
 };
 
 export function dedupeFormulaTokens(tokens: FormulaToken[]): FormulaToken[] {
@@ -557,6 +720,7 @@ export function migrateBuilderStateFormulaTokens(state: BuilderState): BuilderSt
         quantityExpression: migrate(rule.quantityExpression),
         crewSizeExpression: migrate(rule.crewSizeExpression),
         productivityPerWorkerPerDay: migrate(rule.productivityPerWorkerPerDay),
+        scheduleDaysExpression: migrate(rule.scheduleDaysExpression),
       })),
     })),
   };
@@ -759,6 +923,7 @@ export function renameFormulaReferences(state: BuilderState, previousKey: string
         quantityExpression: migrateStoredExpression(rule.quantityExpression),
         crewSizeExpression: migrateStoredExpression(rule.crewSizeExpression),
         productivityPerWorkerPerDay: migrateStoredExpression(rule.productivityPerWorkerPerDay),
+        scheduleDaysExpression: migrateStoredExpression(rule.scheduleDaysExpression),
       })),
     })),
   };
@@ -774,6 +939,10 @@ export function getTokenChipClasses(group: FormulaToken['group']) {
       return 'border-teal-200 bg-teal-100/80 text-teal-900 dark:border-teal-500/20 dark:bg-teal-500/15 dark:text-teal-100';
     case 'Area input':
       return 'border-emerald-200 bg-emerald-100/80 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-100';
+    case 'Function':
+      return 'border-violet-200 bg-violet-100/80 text-violet-900 dark:border-violet-500/20 dark:bg-violet-500/15 dark:text-violet-100';
+    case 'Labor result':
+      return 'border-amber-200 bg-amber-100/80 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/15 dark:text-amber-100';
     default:
       return 'border-slate-200 bg-slate-100/80 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
   }
@@ -905,6 +1074,7 @@ export function newLaborRule(): LaborRule {
     quantityExpression: '',
     crewSizeExpression: '',
     productivityPerWorkerPerDay: '',
+    scheduleDaysExpression: '',
   };
 }
 
@@ -999,11 +1169,9 @@ export function parsePlaygroundValue(value: string, inputType?: FieldType) {
 }
 
 export function evaluatePlaygroundExpression(expression: string, values: FormulaVariableMap) {
-  try {
-    return evaluateFormulaExpression(expression, values);
-  } catch {
-    return 0;
-  }
+  const result = tryEvaluateFormulaExpression(expression, values);
+  if (!result.ok) return 0;
+  return result.value;
 }
 
 export function applyResolvedFormulaFields(
@@ -1113,10 +1281,12 @@ export function addScopedAreaPlaygroundValues(
       if (!fieldKey) continue;
       const sourceKey = `area.${area.id}.${field.key}`;
       const target = `areas.${areaKey}.${fieldKey}`;
-      resolvedValues[target] = parsePlaygroundValue(
+      const parsed = parsePlaygroundValue(
         resolveAreaFieldFormValue(field, values[sourceKey]),
         field.inputType
       );
+      resolvedValues[target] = parsed;
+      resolvedValues[`area.${fieldKey}`] = parsed;
     }
   }
 }

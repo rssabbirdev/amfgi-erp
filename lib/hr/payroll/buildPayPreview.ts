@@ -36,6 +36,9 @@ import {
 } from '@/lib/hr/payroll/salaryComponent';
 import { evaluatePayHealthCheck, evaluateTimelinePayHealthCheck, type PayHealthCheck } from '@/lib/hr/payroll/payHealthCheck';
 import {
+  resolveNoActiveCompensationSkipReason,
+} from '@/lib/hr/payroll/payPreviewRowStatus';
+import {
   fetchAllowancesForCompensationPackageIds,
   type EmployeeAllowanceItem,
 } from '@/lib/hr/payroll/resolveEmployeeAllowances';
@@ -122,6 +125,7 @@ type PayPreviewEmployeeSource = {
   employeeCode: string;
   fullName: string;
   preferredName: string | null;
+  employmentType: string | null;
   profileExtension: unknown;
 };
 
@@ -332,7 +336,7 @@ function computeEmployeePayPreviewRow(
       approvedAttendanceRows: attendanceRowCount,
       draftAttendanceRows: draftCount,
       skipped: true,
-      skipReason: 'No active compensation for this month',
+      skipReason: resolveNoActiveCompensationSkipReason(attendanceRowCount),
     };
   }
 
@@ -357,7 +361,7 @@ function computeEmployeePayPreviewRow(
       approvedAttendanceRows: attendanceRowCount,
       draftAttendanceRows: draftCount,
       skipped: true,
-      skipReason: 'No active compensation for this month',
+      skipReason: resolveNoActiveCompensationSkipReason(attendanceRowCount),
     };
   }
 
@@ -616,28 +620,37 @@ export async function buildPayrollPreview(
   const { start, end } = monthBounds(month);
   const monthEnd = monthEndDate(month);
 
-  const compensationRows = await prisma.employeeCompensation.findMany({
-    where: {
-      companyId,
-      effectiveFrom: { lte: monthEnd },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
-    },
-    include: {
-      payType: { select: { id: true, name: true, code: true, config: true, isActive: true } },
-      visaPeriod: { select: { sponsorType: true } },
-      employee: {
-        select: {
-          id: true,
-          employeeCode: true,
-          fullName: true,
-          preferredName: true,
-          employmentType: true,
-          profileExtension: true,
+  const [compensationRows, attendanceRows] = await Promise.all([
+    prisma.employeeCompensation.findMany({
+      where: {
+        companyId,
+        effectiveFrom: { lte: monthEnd },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
+      },
+      include: {
+        payType: { select: { id: true, name: true, code: true, config: true, isActive: true } },
+        visaPeriod: { select: { sponsorType: true } },
+        employee: {
+          select: {
+            id: true,
+            employeeCode: true,
+            fullName: true,
+            preferredName: true,
+            employmentType: true,
+            profileExtension: true,
+          },
         },
       },
-    },
-    orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
-  });
+      orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
+    }),
+    prisma.attendanceEntry.findMany({
+      where: {
+        companyId,
+        workDate: { gte: start, lt: end },
+      },
+      select: { ...attendanceSelect, employeeId: true },
+    }),
+  ]);
 
   const compensationByEmployee = new Map<string, (typeof compensationRows)[number][]>();
   for (const row of compensationRows) {
@@ -646,25 +659,44 @@ export async function buildPayrollPreview(
     compensationByEmployee.set(row.employeeId, list);
   }
 
-  const employeeIds = [...compensationByEmployee.keys()];
-  if (employeeIds.length === 0) {
+  const attendanceByEmployee = new Map<string, AttendanceRow[]>();
+  for (const row of attendanceRows) {
+    const { employeeId: attendanceEmployeeId, ...attendance } = row;
+    const list = attendanceByEmployee.get(attendanceEmployeeId) ?? [];
+    list.push(attendance);
+    attendanceByEmployee.set(attendanceEmployeeId, list);
+  }
+
+  const previewEmployeeIds = new Set<string>(compensationByEmployee.keys());
+  for (const [employeeId, rows] of attendanceByEmployee) {
+    if (rows.length > 0) previewEmployeeIds.add(employeeId);
+  }
+
+  if (previewEmployeeIds.size === 0) {
     return { month, employees: [] };
   }
 
-  const attendanceRows = await prisma.attendanceEntry.findMany({
-    where: {
-      companyId,
-      employeeId: { in: employeeIds },
-      workDate: { gte: start, lt: end },
-    },
-    select: { ...attendanceSelect, employeeId: true },
-  });
+  const employeeById = new Map<string, PayPreviewEmployeeSource>();
+  for (const [employeeId, employeePackages] of compensationByEmployee) {
+    employeeById.set(employeeId, employeePackages[0].employee);
+  }
 
-  const attendanceByEmployee = new Map<string, AttendanceRow[]>();
-  for (const row of attendanceRows) {
-    const list = attendanceByEmployee.get(row.employeeId) ?? [];
-    list.push(row);
-    attendanceByEmployee.set(row.employeeId, list);
+  const missingEmployeeIds = [...previewEmployeeIds].filter((id) => !employeeById.has(id));
+  if (missingEmployeeIds.length > 0) {
+    const extraEmployees = await prisma.employee.findMany({
+      where: { companyId, id: { in: missingEmployeeIds } },
+      select: {
+        id: true,
+        employeeCode: true,
+        fullName: true,
+        preferredName: true,
+        employmentType: true,
+        profileExtension: true,
+      },
+    });
+    for (const employee of extraEmployees) {
+      employeeById.set(employee.id, employee);
+    }
   }
 
   const allPackageIds = compensationRows.map((row) => row.id);
@@ -675,8 +707,11 @@ export async function buildPayrollPreview(
   );
 
   const rows: EmployeePayPreviewRow[] = [];
-  for (const [employeeId, employeePackages] of compensationByEmployee) {
-    const employee = employeePackages[0].employee;
+  for (const employeeId of previewEmployeeIds) {
+    const employee = employeeById.get(employeeId);
+    if (!employee) continue;
+
+    const employeePackages = compensationByEmployee.get(employeeId) ?? [];
     const monthPackages = listCompensationPackagesOverlappingMonth(
       employeePackages.filter((pkg) => pkg.payType.isActive),
       month

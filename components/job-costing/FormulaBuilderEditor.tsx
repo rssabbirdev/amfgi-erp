@@ -58,7 +58,9 @@ import {
   formatAreaExpressionOutputPreview,
   formatAreaMaterialRuleOutputPreview,
   formatMaterialWastePercentPreview,
+  formatFormulaPreviewResult,
   formatAreaLaborRuleOutputPreview,
+  formatLaborScheduleDaysExpressionPreview,
   formatPossibleFormulaOutput,
   evaluatePlaygroundExpression,
   formatPreviewQty,
@@ -73,6 +75,10 @@ import {
   normalizeFormulaKey,
   normalizeSlugInput,
   getStoredFormulaConstants,
+  buildFormulaMathFunctionTokens,
+  buildLaborScheduleTokens,
+  dedupeFormulaTokens,
+  matchesFormulaTokenQuery,
   mergeGlobalFieldsWithFormulaConstants,
   migrateBuilderStateFormulaTokens,
   isStoredGlobalField,
@@ -248,6 +254,8 @@ function parseFormula(row?: FormulaLibrary | null): BuilderState {
             crewSizeExpression: typeof rule.crewSizeExpression === 'string' ? rule.crewSizeExpression : '',
             productivityPerWorkerPerDay:
               typeof rule.productivityPerWorkerPerDay === 'string' ? rule.productivityPerWorkerPerDay : '',
+            scheduleDaysExpression:
+              typeof rule.scheduleDaysExpression === 'string' ? rule.scheduleDaysExpression : '',
           }];
         })
       : [];
@@ -542,6 +550,7 @@ function buildPayload(form: BuilderState, playgroundValues: PlaygroundValues) {
             quantityExpression: rule.quantityExpression.trim() || undefined,
             crewSizeExpression: rule.crewSizeExpression.trim() || undefined,
             productivityPerWorkerPerDay: rule.productivityPerWorkerPerDay.trim(),
+            scheduleDaysExpression: rule.scheduleDaysExpression.trim() || undefined,
           })),
       })),
   };
@@ -698,6 +707,8 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
   const [formulaConstantsCollapsed, setFormulaConstantsCollapsed] = useState(false);
   const [jobInputsCollapsed, setJobInputsCollapsed] = useState(false);
   const [formulaEditor, setFormulaEditor] = useState<FormulaEditorRequest | null>(null);
+  const [formulaEditorPreview, setFormulaEditorPreview] = useState<string | null>(null);
+  const formulaEditorRequestRef = useRef<FormulaEditorRequest | null>(null);
   const [formulaEditorSearch, setFormulaEditorSearch] = useState('');
   const [formulaEditorCursor, setFormulaEditorCursor] = useState(0);
   const formulaEditorTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -749,6 +760,12 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     [form, materials, playgroundValues]
   );
   const resolvedPlaygroundValues = useMemo(() => buildPlaygroundNumericValues(form, playgroundValues), [form, playgroundValues]);
+  const formRef = useRef(form);
+  const playgroundValuesRef = useRef(playgroundValues);
+  const materialsRef = useRef(materials);
+  formRef.current = form;
+  playgroundValuesRef.current = playgroundValues;
+  materialsRef.current = materials;
   const formulaEditorGroups = useMemo(() => {
     if (!formulaEditor) return [];
     const query = formulaEditorSearch.trim().toLowerCase();
@@ -760,7 +777,7 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
         item.group.toLowerCase().includes(query)
       );
     });
-    const order: FormulaToken['group'][] = ['Job input', 'Stored value', 'Area input'];
+    const order: FormulaToken['group'][] = ['Job input', 'Stored value', 'Area input', 'Labor result'];
     return order
       .map((group) => ({
         group,
@@ -777,6 +794,11 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
       return item.token.toLowerCase().includes(query) || item.label.toLowerCase().includes(query);
     });
   }, [formulaEditor, formulaEditorSearch]);
+  const formulaEditorMathFunctions = useMemo(() => {
+    if (!formulaEditor) return [];
+    const query = formulaEditorSearch.trim().toLowerCase();
+    return buildFormulaMathFunctionTokens().filter((item) => matchesFormulaTokenQuery(item, query));
+  }, [formulaEditor, formulaEditorSearch]);
   const formulaEditorSuggestions = useMemo(() => {
     if (!formulaEditor) return [];
     const rawValue = formulaEditor.value;
@@ -786,19 +808,12 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
       /(^|[\s(,?:+\-*/!<>=&|])$/.test(beforeCursor) ||
       /\(\s*$/.test(beforeCursor);
     if (!query && !shouldOfferGeneralSuggestions) return [];
-    return formulaEditor.tokens
-      .filter((item) => (
-        !query ||
-        item.token.toLowerCase().includes(query) ||
-        item.label.toLowerCase().includes(query)
-      ))
-      .slice(0, 8);
+    const functionMatches = buildFormulaMathFunctionTokens().filter((item) => matchesFormulaTokenQuery(item, query));
+    const tokenMatches = formulaEditor.tokens.filter((item) => matchesFormulaTokenQuery(item, query));
+    return dedupeFormulaTokens([...functionMatches, ...tokenMatches]).slice(0, 8);
   }, [formulaEditor, formulaEditorCursor]);
   const inlineFormulaSuggestion = formulaEditorSuggestions[0] ?? null;
-  const formulaEditorPossibleOutput = useMemo(() => {
-    if (!formulaEditor?.resolvePreview) return null;
-    return formulaEditor.resolvePreview(formulaEditor.value);
-  }, [formulaEditor]);
+  const formulaEditorPossibleOutput = formulaEditorPreview;
   const formulaHelpExamples = useMemo<FormulaHelpExample[]>(() => {
     if (!formulaEditor) return [];
     const areaToken =
@@ -841,6 +856,12 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
         expression: `if(${jobToken} >= 2 && ${areaToken} > 0, ${storedToken}, 0)`,
         note: 'Combine conditions with &&, ||, and not / !.',
         sample: 'Sample: layers=3, area=12, rate=1.5 => 1.5',
+      },
+      {
+        label: 'Round quantity',
+        expression: `round(${areaToken} * ${storedToken})`,
+        note: 'Use floor, ceil, or round to snap calculated quantities.',
+        sample: 'Sample: area=12.7, rate=1.5 => round(19.05)=19',
       },
     ];
   }, [formulaEditor]);
@@ -885,9 +906,16 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     setCollapsedAreaIds((current) => ({ ...current, [areaId]: !current[areaId] }));
   };
 
+  const resolveFormulaEditorPreview = (expression: string) => {
+    const request = formulaEditorRequestRef.current;
+    if (!request?.resolvePreview) return null;
+    return request.resolvePreview(expression);
+  };
+
   const applyFormulaEditorValue = (nextValue: string, nextCursorPosition?: number) => {
     if (!formulaEditor) return;
-    formulaEditor.onChange(nextValue);
+    formulaEditorRequestRef.current?.onChange(nextValue);
+    setFormulaEditorPreview(resolveFormulaEditorPreview(nextValue));
     setFormulaEditor((current) => (current ? { ...current, value: nextValue } : current));
     const resolvedCursor = typeof nextCursorPosition === 'number' ? nextCursorPosition : nextValue.length;
     setFormulaEditorCursor(resolvedCursor);
@@ -920,7 +948,9 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
   };
 
   const openFormulaEditor = (request: FormulaEditorRequest) => {
+    formulaEditorRequestRef.current = request;
     setFormulaEditor(request);
+    setFormulaEditorPreview(request.resolvePreview?.(request.value) ?? null);
     setFormulaEditorSearch('');
     setFormulaEditorCursor(request.value.length);
   };
@@ -938,72 +968,81 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
     }
   };
 
-  const resolveGlobalFormulaOutputPreview = (expression: string) => {
-    try {
-      return formatPossibleFormulaOutput(evaluatePlaygroundExpression(expression || '0', resolvedPlaygroundValues));
-    } catch {
-      return 'Unable to resolve with current playground values';
-    }
-  };
+  const resolveGlobalFormulaOutputPreview = useCallback((expression: string) => {
+    return formatFormulaPreviewResult(
+      expression || '0',
+      buildPlaygroundNumericValues(formRef.current, playgroundValuesRef.current)
+    );
+  }, []);
 
-  const resolveAreaFormulaOutputPreview = (areaId: string, expression: string) => {
-    try {
-      const area = form.areas.find((item) => item.id === areaId);
-      if (!area) return '--';
-      return formatAreaExpressionOutputPreview(form, playgroundValues, area, expression);
-    } catch {
-      return 'Unable to resolve with current playground values';
-    }
-  };
+  const resolveAreaFormulaOutputPreview = useCallback((areaId: string, expression: string) => {
+    const area = formRef.current.areas.find((item) => item.id === areaId);
+    if (!area) return '--';
+    return formatAreaExpressionOutputPreview(formRef.current, playgroundValuesRef.current, area, expression);
+  }, []);
 
-  const resolveAreaMaterialWastePreview = (areaId: string, expression: string) => {
-    try {
-      const area = form.areas.find((item) => item.id === areaId);
-      if (!area) return '--';
-      return formatMaterialWastePercentPreview(form, playgroundValues, area, expression);
-    } catch {
-      return 'Unable to resolve with current playground values';
-    }
-  };
+  const resolveAreaMaterialWastePreview = useCallback((areaId: string, expression: string) => {
+    const area = formRef.current.areas.find((item) => item.id === areaId);
+    if (!area) return '--';
+    return formatMaterialWastePercentPreview(formRef.current, playgroundValuesRef.current, area, expression);
+  }, []);
 
-  const resolveAreaMaterialRuleOutputPreview = (areaId: string, rule: AreaRule['materials'][number]) => {
-    try {
-      const area = form.areas.find((item) => item.id === areaId);
+  const resolveAreaMaterialRuleOutputPreview = useCallback((areaId: string, rule: AreaRule['materials'][number]) => {
+    const area = formRef.current.areas.find((item) => item.id === areaId);
+    if (!area) return '--';
+    const selectedMaterialId =
+      rule.materialSource === 'global'
+        ? resolveGlobalFieldFormValue(
+            formRef.current.globalFields.find((field) => field.key === rule.materialSelectorKey) ?? {
+              inputType: 'material',
+              defaultMaterialId: '',
+            },
+            playgroundValuesRef.current[`global.${rule.materialSelectorKey}`]
+          )
+        : rule.materialId;
+    const selectedMaterial = selectedMaterialId
+      ? materialsRef.current.find((material) => material.id === selectedMaterialId)
+      : null;
+    return formatAreaMaterialRuleOutputPreview(
+      formRef.current,
+      playgroundValuesRef.current,
+      area,
+      rule,
+      selectedMaterial?.unit
+    );
+  }, []);
+
+  const resolveAreaLaborRuleOutputPreview = useCallback((areaId: string, rule: AreaRule['labor'][number]) => {
+    const area = formRef.current.areas.find((item) => item.id === areaId);
+    if (!area) return '--';
+    return formatAreaLaborRuleOutputPreview(formRef.current, playgroundValuesRef.current, area, rule);
+  }, []);
+
+  const resolveAreaLaborExpressionPreview = useCallback((areaId: string, expression: string) => {
+    const area = formRef.current.areas.find((item) => item.id === areaId);
+    if (!area) return '--';
+    return formatAreaExpressionOutputPreview(formRef.current, playgroundValuesRef.current, area, expression);
+  }, []);
+
+  const resolveAreaLaborScheduleDaysPreview = useCallback(
+    (areaId: string, rule: AreaRule['labor'][number], expression: string) => {
+      const area = formRef.current.areas.find((item) => item.id === areaId);
       if (!area) return '--';
-      const selectedMaterialId =
-        rule.materialSource === 'global'
-          ? resolveGlobalFieldFormValue(
-              form.globalFields.find((field) => field.key === rule.materialSelectorKey) ?? {
-                inputType: 'material',
-                defaultMaterialId: '',
-              },
-              playgroundValues[`global.${rule.materialSelectorKey}`]
-            )
-          : rule.materialId;
-      const selectedMaterial = selectedMaterialId
-        ? materials.find((material) => material.id === selectedMaterialId)
-        : null;
-      return formatAreaMaterialRuleOutputPreview(
-        form,
-        playgroundValues,
+      return formatLaborScheduleDaysExpressionPreview(
+        formRef.current,
+        playgroundValuesRef.current,
         area,
         rule,
-        selectedMaterial?.unit
+        expression
       );
-    } catch {
-      return 'Unable to resolve with current playground values';
-    }
-  };
+    },
+    []
+  );
 
-  const resolveAreaLaborRuleOutputPreview = (areaId: string, rule: AreaRule['labor'][number]) => {
-    try {
-      const area = form.areas.find((item) => item.id === areaId);
-      if (!area) return '--';
-      return formatAreaLaborRuleOutputPreview(form, playgroundValues, area, rule);
-    } catch {
-      return 'Unable to resolve with current playground values';
-    }
-  };
+  useEffect(() => {
+    if (!formulaEditor) return;
+    setFormulaEditorPreview(formulaEditorRequestRef.current?.resolvePreview?.(formulaEditor.value) ?? null);
+  }, [formulaEditor, resolvedPlaygroundValues, form]);
 
   const openGlobalFieldCreate = (inputType: FieldType) => {
     const initialDraft = createGlobalFieldDraft(inputType);
@@ -2217,6 +2256,10 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                           resolveMaterialPreview={(rule) => resolveAreaMaterialRuleOutputPreview(area.id, rule)}
                           resolveWastePreview={(expression) => resolveAreaMaterialWastePreview(area.id, expression)}
                           resolveLaborPreview={(rule) => resolveAreaLaborRuleOutputPreview(area.id, rule)}
+                          resolveLaborExpressionPreview={(expression) => resolveAreaLaborExpressionPreview(area.id, expression)}
+                          resolveLaborScheduleDaysPreview={(rule, expression) =>
+                            resolveAreaLaborScheduleDaysPreview(area.id, rule, expression)
+                          }
                           onRequestFormulaEditor={openFormulaEditor}
                         />
                       </div>
@@ -3041,7 +3084,11 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                       {formulaEditor.description ?? 'Use full paths and click tokens to insert them into the current formula.'}
                     </p>
                   </div>
-                  <Button size="sm" variant="secondary" onClick={() => setFormulaEditor(null)}>
+                  <Button size="sm" variant="secondary" onClick={() => {
+                    formulaEditorRequestRef.current = null;
+                    setFormulaEditorPreview(null);
+                    setFormulaEditor(null);
+                  }}>
                     Close
                   </Button>
                 </div>
@@ -3169,6 +3216,30 @@ export function FormulaBuilderEditor({ formulaId }: { formulaId?: string }) {
                         ))}
                         </div>
                       )}
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">Math functions</p>
+                          <div className="flex flex-wrap gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                            <span className="rounded-full border border-violet-200 px-2 py-1 font-mono dark:border-violet-500/20">floor()</span>
+                            <span className="rounded-full border border-violet-200 px-2 py-1 font-mono dark:border-violet-500/20">ceil()</span>
+                            <span className="rounded-full border border-violet-200 px-2 py-1 font-mono dark:border-violet-500/20">round()</span>
+                          </div>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          {formulaEditorMathFunctions.map((item) => (
+                            <button
+                              key={`math-fn-${item.token}`}
+                              type="button"
+                              onClick={() => insertFormulaEditorToken(item.token)}
+                              className="rounded-2xl border border-violet-200 bg-white px-3 py-3 text-left transition hover:border-violet-300 hover:bg-violet-50/60 dark:border-violet-500/20 dark:bg-slate-950 dark:hover:border-violet-500/40 dark:hover:bg-violet-500/10"
+                            >
+                              <p className="font-mono text-[11px] font-semibold text-slate-900 dark:text-slate-100">{item.token}</p>
+                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.label}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
 
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-3">

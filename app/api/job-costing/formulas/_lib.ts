@@ -41,6 +41,7 @@ export const FormulaConfigSchema = z.object({
             quantityExpression: z.string().optional(),
             crewSizeExpression: z.string().optional(),
             productivityPerWorkerPerDay: z.string().min(1),
+            scheduleDaysExpression: z.string().optional(),
           })
         ),
       })

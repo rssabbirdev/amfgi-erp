@@ -3,6 +3,7 @@ import type {
   EmployeeExpertiseProfile,
   FormulaAreaRule,
   FormulaConfig,
+  FormulaLaborRule,
   FormulaVariableMap,
   JobCostingSummary,
   JobItemCostEstimate,
@@ -329,40 +330,75 @@ function resolveMaterialRuleId(
   return materialRule.materialId ?? '';
 }
 
+function computeLaborRuleMetrics(laborRule: FormulaLaborRule, variables: FormulaVariableMap) {
+  const quantity = laborRule.quantityExpression
+    ? evaluateNumericFormulaExpression(laborRule.quantityExpression, variables)
+    : 1;
+  const productivityPerWorkerPerDay = Math.max(
+    evaluateNumericFormulaExpression(laborRule.productivityPerWorkerPerDay, variables),
+    0.0001
+  );
+  const crewSize = laborRule.crewSizeExpression
+    ? Math.max(1, Math.ceil(evaluateNumericFormulaExpression(laborRule.crewSizeExpression, variables)))
+    : 1;
+  const baseDays = quantity > 0 ? quantity / (crewSize * productivityPerWorkerPerDay) : 0;
+  return {
+    quantity,
+    crew: crewSize,
+    productivity: productivityPerWorkerPerDay,
+    baseDays,
+  };
+}
+
+function evaluateLaborScheduleDaysForRule(
+  laborRule: FormulaLaborRule,
+  variables: FormulaVariableMap,
+  aggregate: { quantity: number; crew: number; productivity: number; baseDays: number }
+) {
+  const scheduleValues: FormulaVariableMap = {
+    ...variables,
+    'labor.quantity': aggregate.quantity,
+    'labor.crew': aggregate.crew,
+    'labor.productivity': aggregate.productivity,
+    'labor.baseDays': aggregate.baseDays,
+    'labor.days': aggregate.baseDays,
+  };
+  return laborRule.scheduleDaysExpression?.trim()
+    ? evaluateNumericFormulaExpression(laborRule.scheduleDaysExpression, scheduleValues)
+    : aggregate.baseDays;
+}
+
+function buildLaborEstimateRow(
+  laborRule: FormulaLaborRule,
+  variables: FormulaVariableMap,
+  aggregate: { quantity: number; crew: number; productivity: number; baseDays: number },
+  assignedTeam: EmployeeExpertiseProfile[]
+): JobItemLaborEstimate {
+  const estimatedDays = evaluateLaborScheduleDaysForRule(laborRule, variables, aggregate);
+  const expertiseKey = normalizeExpertise(laborRule.expertiseName);
+  const matchingEmployees = assignedTeam.filter((employee) =>
+    employee.expertises.some((expertise) => normalizeExpertise(expertise) === expertiseKey)
+  );
+
+  return {
+    expertiseName: laborRule.expertiseName,
+    requiredWorkers: aggregate.crew,
+    estimatedDays,
+    productivityPerWorkerPerDay: aggregate.productivity,
+    assignedEmployeeIds: matchingEmployees.map((employee) => employee.id),
+    assignedEmployeeNames: matchingEmployees.map((employee) => employee.fullName),
+    missingExpertises: matchingEmployees.length > 0 ? [] : [laborRule.expertiseName],
+  };
+}
+
 function buildLaborEstimate(
   areaRule: FormulaAreaRule,
   variables: FormulaVariableMap,
   assignedTeam: EmployeeExpertiseProfile[]
 ): JobItemLaborEstimate[] {
   return areaRule.labor.map((laborRule) => {
-    const quantityBasis = laborRule.quantityExpression
-      ? evaluateNumericFormulaExpression(laborRule.quantityExpression, variables)
-      : 1;
-    const productivityPerWorkerPerDay = Math.max(
-      evaluateNumericFormulaExpression(laborRule.productivityPerWorkerPerDay, variables),
-      0.0001
-    );
-    const crewSize = laborRule.crewSizeExpression
-      ? Math.max(1, Math.ceil(evaluateNumericFormulaExpression(laborRule.crewSizeExpression, variables)))
-      : 1;
-    const requiredWorkers = Math.max(1, crewSize);
-    const estimatedDays = quantityBasis > 0
-      ? quantityBasis / (requiredWorkers * productivityPerWorkerPerDay)
-      : 0;
-    const expertiseKey = normalizeExpertise(laborRule.expertiseName);
-    const matchingEmployees = assignedTeam.filter((employee) =>
-      employee.expertises.some((expertise) => normalizeExpertise(expertise) === expertiseKey)
-    );
-
-    return {
-      expertiseName: laborRule.expertiseName,
-      requiredWorkers,
-      estimatedDays,
-      productivityPerWorkerPerDay,
-      assignedEmployeeIds: matchingEmployees.map((employee) => employee.id),
-      assignedEmployeeNames: matchingEmployees.map((employee) => employee.fullName),
-      missingExpertises: matchingEmployees.length > 0 ? [] : [laborRule.expertiseName],
-    };
+    const aggregate = computeLaborRuleMetrics(laborRule, variables);
+    return buildLaborEstimateRow(laborRule, variables, aggregate, assignedTeam);
   });
 }
 
@@ -406,11 +442,13 @@ export function buildJobItemEstimate({
           : 'ON_TRACK';
 
   for (const areaRule of formulaLibrary.formulaConfig.areas) {
-    for (const areaSpecs of getAreaSpecsToEvaluate(
+    const areaSpecsList = getAreaSpecsToEvaluate(
       areaRule,
       jobItem.specifications,
       formulaLibrary.specificationSchema
-    )) {
+    );
+
+    for (const areaSpecs of areaSpecsList) {
       const variables = buildVariableMap(
         areaRule,
         jobItem.specifications,
@@ -479,23 +517,58 @@ export function buildJobItemEstimate({
           pricingSource: price?.source ?? pricingMode,
         });
       }
+    }
 
-      const laborRows = buildLaborEstimate(areaRule, variables, teamProfiles);
-      for (const laborRow of laborRows) {
-        const existing = laborTotals.get(laborRow.expertiseName);
-        if (!existing) {
-          laborTotals.set(laborRow.expertiseName, laborRow);
-          continue;
-        }
-        laborTotals.set(laborRow.expertiseName, {
-          ...existing,
-          requiredWorkers: Math.max(existing.requiredWorkers, laborRow.requiredWorkers),
-          estimatedDays: existing.estimatedDays + laborRow.estimatedDays,
-          assignedEmployeeIds: Array.from(new Set([...existing.assignedEmployeeIds, ...laborRow.assignedEmployeeIds])),
-          assignedEmployeeNames: Array.from(new Set([...existing.assignedEmployeeNames, ...laborRow.assignedEmployeeNames])),
-          missingExpertises: Array.from(new Set([...existing.missingExpertises, ...laborRow.missingExpertises])),
-        });
+    for (const laborRule of areaRule.labor) {
+      let quantitySum = 0;
+      let baseDaysSum = 0;
+      let crew = 1;
+      let productivity = 1;
+      let lastVariables: FormulaVariableMap = {};
+
+      for (const areaSpecs of areaSpecsList) {
+        const variables = buildVariableMap(
+          areaRule,
+          jobItem.specifications,
+          areaRule.key,
+          formulaLibrary.formulaConfig.variables,
+          formulaLibrary.formulaConfig.constants,
+          areaSpecs
+        );
+        const metrics = computeLaborRuleMetrics(laborRule, variables);
+        quantitySum += metrics.quantity;
+        baseDaysSum += metrics.baseDays;
+        crew = metrics.crew;
+        productivity = metrics.productivity;
+        lastVariables = variables;
       }
+
+      if (areaSpecsList.length === 0) continue;
+
+      const laborRow = buildLaborEstimateRow(
+        laborRule,
+        lastVariables,
+        {
+          quantity: quantitySum,
+          crew,
+          productivity,
+          baseDays: baseDaysSum,
+        },
+        teamProfiles
+      );
+      const existing = laborTotals.get(laborRow.expertiseName);
+      if (!existing) {
+        laborTotals.set(laborRow.expertiseName, laborRow);
+        continue;
+      }
+      laborTotals.set(laborRow.expertiseName, {
+        ...existing,
+        requiredWorkers: Math.max(existing.requiredWorkers, laborRow.requiredWorkers),
+        estimatedDays: existing.estimatedDays + laborRow.estimatedDays,
+        assignedEmployeeIds: Array.from(new Set([...existing.assignedEmployeeIds, ...laborRow.assignedEmployeeIds])),
+        assignedEmployeeNames: Array.from(new Set([...existing.assignedEmployeeNames, ...laborRow.assignedEmployeeNames])),
+        missingExpertises: Array.from(new Set([...existing.missingExpertises, ...laborRow.missingExpertises])),
+      });
     }
   }
 

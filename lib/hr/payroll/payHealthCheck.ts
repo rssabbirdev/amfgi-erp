@@ -1,8 +1,9 @@
-import { denomDaysExcludingWeekdays, roundMoney } from '@/lib/hr/payroll/calendar';
+import { roundMoney } from '@/lib/hr/payroll/calendar';
 import { resolveExcludedWeekdays } from '@/lib/hr/payroll/payTypeConfigHelpers';
 import {
   compensationWithProratedFixedMonthly,
-  countAllowanceDays,
+  resolveMonthlyAllowanceCap,
+  resolveSalaryComponentCaps,
   resolveSalaryComponentDisplayTotals,
 } from '@/lib/hr/payroll/salaryComponent';
 import type {
@@ -32,24 +33,29 @@ function resolveComponentCaps(
   compensation: CompensationInput,
   month: string,
   excludedWeekdays: number[],
-  allowanceDays: number
+  lines: PayLineInput[]
 ): { earningsCap: number; deductionsCap: number } {
-  const comps = compensation.salaryComponents;
-  if (!comps) {
-    const denom = denomDaysExcludingWeekdays(month, excludedWeekdays);
-    const earningsCap =
-      denom > 0 && compensation.monthlyAllowance > 0 && allowanceDays > 0
-        ? roundMoney((compensation.monthlyAllowance / denom) * allowanceDays)
-        : 0;
-    return { earningsCap, deductionsCap: 0 };
-  }
+  return resolveSalaryComponentCaps({ compensation, lines, month, excludedWeekdays });
+}
 
-  return {
-    earningsCap: roundMoney(comps.fixedEarnings + allowanceDays * comps.attendanceEarningPerDay),
-    deductionsCap: roundMoney(
-      comps.fixedDeductions + allowanceDays * comps.attendanceDeductionPerDay
-    ),
-  };
+function resolveDayAllowanceNetTotal(result: PayLineResult): number {
+  return roundMoney(
+    result.days.reduce((sum, day) => {
+      const dayComponentNet =
+        day.componentEarning != null || day.componentDeduction != null
+          ? roundMoney((day.componentEarning ?? 0) - (day.componentDeduction ?? 0))
+          : day.allowance;
+      return sum + dayComponentNet;
+    }, 0)
+  );
+}
+
+function resolveOutsideCapPayTotal(breakdown: Record<string, number>): number {
+  return roundMoney(
+    (breakdown.outsideCapOt ?? 0) +
+      (breakdown.holidayWorkedOt ?? 0) +
+      (breakdown.excludedWeekdayOt ?? 0)
+  );
 }
 
 function resolveBasicPaid(
@@ -57,13 +63,17 @@ function resolveBasicPaid(
   compensation: CompensationInput,
   result: PayLineResult
 ): number {
-  const outsideCapOt = result.breakdown.outsideCapOt ?? 0;
-  const componentAllowance =
-    (result.breakdown.salaryComponentsFixed ?? 0) +
-    (result.breakdown.salaryComponentsAttendance ?? 0);
+  void compensation;
 
   if (config.mode === 'MONTHLY_CALENDAR_DEDUCT' || config.mode === 'MONTHLY_FIXED') {
-    return roundMoney(result.gross - outsideCapOt - componentAllowance);
+    const outsideCapPay = resolveOutsideCapPayTotal(result.breakdown);
+    const componentFixed = result.breakdown.salaryComponentsFixed ?? 0;
+    const componentAttendance = result.breakdown.salaryComponentsAttendance ?? 0;
+    const dayAllowanceNet = resolveDayAllowanceNetTotal(result);
+    const allowanceInGross = roundMoney(
+      dayAllowanceNet > 0 ? dayAllowanceNet + componentFixed : componentFixed + componentAttendance
+    );
+    return roundMoney(result.gross - outsideCapPay - allowanceInGross);
   }
 
   if (config.mode === 'HOURLY_SPLIT') {
@@ -82,7 +92,6 @@ export function evaluatePayHealthCheck(params: {
 }): PayHealthCheck {
   const { month, config, compensation, result, lines } = params;
   const issues: string[] = [];
-  const allowanceDays = countAllowanceDays(lines);
   const excludedWeekdays = resolveExcludedWeekdays(config);
 
   const basicPaid = resolveBasicPaid(config, compensation, result);
@@ -90,7 +99,7 @@ export function evaluatePayHealthCheck(params: {
     compensation,
     month,
     excludedWeekdays,
-    allowanceDays
+    lines
   );
   const componentTotals = resolveSalaryComponentDisplayTotals({
     compensation,
@@ -102,7 +111,7 @@ export function evaluatePayHealthCheck(params: {
   const componentEarningsPaid = componentTotals.earnings;
   const componentDeductionsPaid = componentTotals.deductions;
   const allowancePaid = roundMoney(componentEarningsPaid - componentDeductionsPaid);
-  const allowanceCap = roundMoney(Math.max(0, earningsCap - deductionsCap));
+  const allowanceCap = resolveMonthlyAllowanceCap(compensation, month, excludedWeekdays);
 
   if (compensation.monthlyBasic > 0 && basicPaid > compensation.monthlyBasic + MONEY_TOLERANCE) {
     issues.push(
@@ -178,20 +187,23 @@ export function evaluateTimelinePayHealthCheck(params: {
   let componentEarningsPaid = 0;
   let componentDeductionsPaid = 0;
   let basicCap = 0;
+  let allowanceCap = 0;
 
   for (const pkg of packages) {
     const pkgLines = lines.filter((line) => resolvePackageId(line) === pkg.packageId);
-    const allowanceDays = countAllowanceDays(pkgLines);
     const excludedWeekdays = resolveExcludedWeekdays(pkg.config);
     const proratedCompensation = compensationWithProratedFixedMonthly(
       pkg.compensation,
       pkg.fixedMonthlyProrationFactor
     );
-    const caps = resolveComponentCaps(proratedCompensation, month, excludedWeekdays, allowanceDays);
+    const caps = resolveComponentCaps(proratedCompensation, month, excludedWeekdays, pkgLines);
     earningsCap = roundMoney(earningsCap + caps.earningsCap);
     deductionsCap = roundMoney(deductionsCap + caps.deductionsCap);
     basicCap = roundMoney(
       basicCap + pkg.compensation.monthlyBasic * pkg.fixedMonthlyProrationFactor
+    );
+    allowanceCap = roundMoney(
+      allowanceCap + resolveMonthlyAllowanceCap(proratedCompensation, month, excludedWeekdays)
     );
 
     const pkgDayRows = result.days.filter((day) =>
@@ -214,7 +226,6 @@ export function evaluateTimelinePayHealthCheck(params: {
     dailyRate: 0,
   }, result);
   const allowancePaid = roundMoney(componentEarningsPaid - componentDeductionsPaid);
-  const allowanceCap = roundMoney(Math.max(0, earningsCap - deductionsCap));
 
   if (basicCap > 0 && basicPaid > basicCap + MONEY_TOLERANCE) {
     issues.push(

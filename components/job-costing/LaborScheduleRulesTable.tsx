@@ -9,6 +9,7 @@ export type LaborScheduleRuleRow = {
   quantityExpression: string;
   crewSizeExpression: string;
   productivityPerWorkerPerDay: string;
+  scheduleDaysExpression: string;
   preview: string;
 };
 
@@ -51,6 +52,7 @@ export function LaborScheduleRulesTable({
             <th className="min-w-56 px-3 py-2.5 font-semibold">Work quantity</th>
             <th className="min-w-36 px-3 py-2.5 font-semibold">Crew size</th>
             <th className="min-w-40 px-3 py-2.5 font-semibold">Productivity / day</th>
+            <th className="min-w-44 px-3 py-2.5 font-semibold">Schedule days</th>
             <th className="min-w-40 px-3 py-2.5 font-semibold">Preview</th>
             <th className="w-36 px-3 py-2.5 text-right font-semibold" />
           </tr>
@@ -68,6 +70,9 @@ export function LaborScheduleRulesTable({
               </td>
               <td className={cn('px-3 py-2.5 text-xs', classes.formulaMono)}>
                 <span className="line-clamp-2 break-all">{row.productivityPerWorkerPerDay || '—'}</span>
+              </td>
+              <td className={cn('px-3 py-2.5 text-xs', classes.formulaMono)}>
+                <span className="line-clamp-2 break-all">{row.scheduleDaysExpression || 'auto'}</span>
               </td>
               <td className="px-3 py-2.5 text-xs text-muted-foreground">
                 <span className="line-clamp-2">{row.preview || '—'}</span>

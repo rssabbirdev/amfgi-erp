@@ -1,5 +1,9 @@
-export function formatPayMoney(n: number) {
-  return n.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export function formatPayMoney(n: number | null | undefined) {
+  const value = Number(n);
+  return (Number.isFinite(value) ? value : 0).toLocaleString('en-AE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export function formatPayMonthLabel(month: string) {

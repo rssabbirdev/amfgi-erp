@@ -5,8 +5,10 @@ import {
   fixedSalaryComponentNet,
   netSalaryComponentTotal,
   prorateSalaryComponentTotals,
+  resolveMonthlyAllowanceCap,
   resolvePerDayAllowance,
   resolvePerDayComponentSplit,
+  resolveSalaryComponentCaps,
   resolveSalaryComponentDisplayTotals,
 } from '@/lib/hr/payroll/salaryComponent';
 import { calculatePayLine } from '@/lib/hr/payroll/calculatePayLine';
@@ -101,6 +103,77 @@ describe('resolvePerDayComponentSplit', () => {
       month: '2026-06',
       excludedWeekdays: [0],
     })).toBeCloseTo(208 / 26, 2);
+  });
+});
+
+describe('resolveMonthlyAllowanceCap', () => {
+  it('uses legacy monthly allowance when salary components are absent', () => {
+    expect(
+      resolveMonthlyAllowanceCap(
+        { monthlyBasic: 3000, monthlyAllowance: 200, dailyRate: 0 },
+        '2026-06',
+        [0]
+      )
+    ).toBe(200);
+  });
+
+  it('uses full-month net salary component allowance assignment', () => {
+    const compensation: CompensationInput = {
+      monthlyBasic: 3000,
+      monthlyAllowance: 0,
+      dailyRate: 0,
+      salaryComponents: buildSalaryComponentTotals(
+        [
+          { amount: 300, componentKind: 'EARNING', applicationMode: 'FIXED_MONTHLY' },
+          { amount: 50, componentKind: 'DEDUCTION', applicationMode: 'FIXED_MONTHLY' },
+          { amount: 211.54, componentKind: 'EARNING', applicationMode: 'ATTENDANCE_PRESENT' },
+        ],
+        '2026-06',
+        [0]
+      ),
+    };
+    expect(resolveMonthlyAllowanceCap(compensation, '2026-06', [0])).toBe(461.54);
+  });
+});
+
+describe('resolveSalaryComponentCaps', () => {
+  it('sums per-day rounded attendance amounts instead of days × unrounded rate', () => {
+    const compensation: CompensationInput = {
+      monthlyBasic: 3000,
+      monthlyAllowance: 0,
+      dailyRate: 0,
+      salaryComponents: buildSalaryComponentTotals(
+        [
+          { amount: 250, componentKind: 'EARNING', applicationMode: 'FIXED_MONTHLY' },
+          { amount: 211.54, componentKind: 'EARNING', applicationMode: 'ATTENDANCE_PRESENT' },
+        ],
+        '2026-06',
+        [0]
+      ),
+    };
+    const lines = Array.from({ length: 26 }, (_, index) => ({
+      workDate: `2026-06-${String(index + 1).padStart(2, '0')}`,
+      status: 'PRESENT' as const,
+      leaveType: null,
+      basicHours: 9,
+      workedMinutes: 540,
+      isSunday: false,
+    }));
+    const caps = resolveSalaryComponentCaps({
+      compensation,
+      lines,
+      month: '2026-06',
+      excludedWeekdays: [0],
+    });
+    const perDay = resolvePerDayComponentSplit({
+      line: lines[0],
+      compensation,
+      month: '2026-06',
+      excludedWeekdays: [0],
+    }).earning;
+    const legacyCap = 250 + 26 * (211.54 / 26);
+    expect(caps.earningsCap).toBeCloseTo(250 + perDay * 26, 2);
+    expect(caps.earningsCap).not.toBeCloseTo(legacyCap, 2);
   });
 });
 

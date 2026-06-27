@@ -11,6 +11,8 @@ describe('payslipFormatting', () => {
 
   it('formats money', () => {
     expect(formatPayMoney(3000)).toBe('3,000.00');
+    expect(formatPayMoney(null)).toBe('0.00');
+    expect(formatPayMoney(undefined)).toBe('0.00');
   });
 
   it('labels breakdown keys', () => {

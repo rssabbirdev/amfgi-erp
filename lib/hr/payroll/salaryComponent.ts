@@ -141,6 +141,69 @@ export function resolvePerDayAllowance(params: {
   return roundMoney(earning - deduction);
 }
 
+export function resolveSalaryComponentCaps(params: {
+  compensation: CompensationInput;
+  lines: PayLineInput[];
+  month: string;
+  excludedWeekdays: number[];
+}): { earningsCap: number; deductionsCap: number } {
+  const { compensation, lines, month, excludedWeekdays } = params;
+  const comps = compensation.salaryComponents;
+
+  if (!comps) {
+    const denom = denomDaysExcludingWeekdays(month, excludedWeekdays);
+    let earnings = 0;
+    for (const line of lines) {
+      if (
+        line.status !== 'PRESENT' &&
+        line.status !== 'HALF_DAY' &&
+        !isPayrollHolidayLine(line)
+      ) {
+        continue;
+      }
+      if (compensation.monthlyAllowance > 0 && denom > 0) {
+        earnings += roundMoney(compensation.monthlyAllowance / denom);
+      }
+    }
+    return { earningsCap: roundMoney(earnings), deductionsCap: 0 };
+  }
+
+  let attendanceEarnings = 0;
+  let attendanceDeductions = 0;
+  for (const line of lines) {
+    const split = resolvePerDayComponentSplit({
+      line,
+      compensation,
+      month,
+      excludedWeekdays,
+    });
+    attendanceEarnings += split.earning;
+    attendanceDeductions += split.deduction;
+  }
+
+  return {
+    earningsCap: roundMoney(comps.fixedEarnings + attendanceEarnings),
+    deductionsCap: roundMoney(comps.fixedDeductions + attendanceDeductions),
+  };
+}
+
+/** Full-month assigned allowance (net of fixed + attendance components), for health-check display caps. */
+export function resolveMonthlyAllowanceCap(
+  compensation: CompensationInput,
+  month: string,
+  excludedWeekdays: number[]
+): number {
+  const comps = compensation.salaryComponents;
+  if (!comps) {
+    return roundMoney(Math.max(0, compensation.monthlyAllowance));
+  }
+  const denom = denomDaysExcludingWeekdays(month, excludedWeekdays);
+  const attendanceNet = roundMoney(
+    (comps.attendanceEarningPerDay - comps.attendanceDeductionPerDay) * denom
+  );
+  return roundMoney(Math.max(0, comps.fixedEarnings - comps.fixedDeductions + attendanceNet));
+}
+
 export function resolveSalaryComponentDisplayTotals(params: {
   compensation: CompensationInput;
   lines: PayLineInput[];
@@ -161,7 +224,6 @@ export function resolveSalaryComponentDisplayTotals(params: {
   const hasSplitOnDays = dayRows.some(
     (day) => (day.componentEarning ?? 0) > 0 || (day.componentDeduction ?? 0) > 0
   );
-  const allowanceDays = countAllowanceDays(lines);
 
   if (hasSplitOnDays) {
     return {
@@ -174,10 +236,8 @@ export function resolveSalaryComponentDisplayTotals(params: {
     };
   }
 
-  return {
-    earnings: roundMoney(comps.fixedEarnings + allowanceDays * comps.attendanceEarningPerDay),
-    deductions: roundMoney(comps.fixedDeductions + allowanceDays * comps.attendanceDeductionPerDay),
-  };
+  const caps = resolveSalaryComponentCaps({ compensation, lines, month, excludedWeekdays });
+  return { earnings: caps.earningsCap, deductions: caps.deductionsCap };
 }
 
 export function netSignedComponentAmount(
