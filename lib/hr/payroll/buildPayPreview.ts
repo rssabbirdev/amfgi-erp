@@ -42,8 +42,12 @@ import {
   fetchAllowancesForCompensationPackageIds,
   type EmployeeAllowanceItem,
 } from '@/lib/hr/payroll/resolveEmployeeAllowances';
+import {
+  resolveVisaSponsorForPayroll,
+  type VisaPeriodSponsorSource,
+} from '@/lib/hr/payroll/resolveVisaSponsorForPayroll';
 import type { CompensationInput, LinePayContext, PayLineInput, PayLineResult, PayTypeConfig } from '@/lib/hr/payroll/types';
-import { workforceEmployeeTypeShortNameFromProfile, workforceVisaHoldingLabelFromProfile } from '@/lib/hr/workforceProfile';
+import { parseWorkforceProfile, workforceEmployeeTypeShortNameFromProfile, workforceVisaHoldingLabelFromProfile } from '@/lib/hr/workforceProfile';
 
 export type EmployeePayPreviewRow = {
   employeeId: string;
@@ -120,6 +124,14 @@ const compensationInclude = {
   visaPeriod: { select: { sponsorType: true } },
 } as const;
 
+const visaPeriodSponsorSelect = {
+  employeeId: true,
+  sponsorType: true,
+  startDate: true,
+  endDate: true,
+  status: true,
+} as const;
+
 type PayPreviewEmployeeSource = {
   id: string;
   employeeCode: string;
@@ -131,14 +143,22 @@ type PayPreviewEmployeeSource = {
 
 function resolvePayPreviewCompensationMeta(
   employee: PayPreviewEmployeeSource,
-  primaryPackage: CompensationWithPayType | null
+  primaryPackage: CompensationWithPayType | null,
+  visaPeriods: VisaPeriodSponsorSource[],
+  month: string
 ): Pick<EmployeePayPreviewRow, 'workforceRoleTypeShort' | 'visaHoldingLabel' | 'wpsTransferAmount' | 'visaSponsorName'> {
+  const workforce = parseWorkforceProfile(employee.profileExtension);
+  const resolvedVisaSponsor =
+    primaryPackage?.visaPeriod?.sponsorType?.trim() ||
+    resolveVisaSponsorForPayroll(visaPeriods, month) ||
+    null;
+
   return {
     workforceRoleTypeShort: workforceEmployeeTypeShortNameFromProfile(employee.profileExtension),
     visaHoldingLabel: workforceVisaHoldingLabelFromProfile(employee.profileExtension),
     wpsTransferAmount:
       primaryPackage?.wpsTransferAmount != null ? Number(primaryPackage.wpsTransferAmount) : null,
-    visaSponsorName: primaryPackage?.visaPeriod?.sponsorType?.trim() || null,
+    visaSponsorName: workforce.visaHolding === 'COMPANY_PROVIDED' ? resolvedVisaSponsor : null,
   };
 }
 
@@ -303,7 +323,8 @@ function computeEmployeePayPreviewRow(
   packages: CompensationWithPayType[],
   attendanceRowCount: number,
   lines: PayLineInput[],
-  allowancesByPackageId: Map<string, EmployeeAllowanceItem[]>
+  allowancesByPackageId: Map<string, EmployeeAllowanceItem[]>,
+  visaPeriods: VisaPeriodSponsorSource[] = []
 ): EmployeePayPreviewRow {
   const name = employee.preferredName || employee.fullName;
   const draftCount = 0;
@@ -313,7 +334,7 @@ function computeEmployeePayPreviewRow(
     resolveCompensationPackageForDate(monthPackages, ymdFromMonthEnd(month)) ??
     monthPackages[monthPackages.length - 1] ??
     null;
-  const compensationMeta = resolvePayPreviewCompensationMeta(employee, primaryPackage);
+  const compensationMeta = resolvePayPreviewCompensationMeta(employee, primaryPackage, visaPeriods, month);
 
   if (activePackages.length === 0) {
     return {
@@ -570,13 +591,18 @@ export async function buildEmployeePayPreview(
 
   const packages = await fetchCompensationPackagesForEmployee(companyId, employeeId, month);
   const packageIds = packages.map((pkg) => pkg.id);
-  const [attendance, allowancesByPackageId] = await Promise.all([
+  const [attendance, allowancesByPackageId, visaPeriodRows] = await Promise.all([
     prisma.attendanceEntry.findMany({
       where: { companyId, employeeId, workDate: { gte: start, lt: end } },
       select: attendanceSelect,
     }),
     fetchAllowancesForCompensationPackageIds(companyId, packageIds, month),
+    prisma.visaPeriod.findMany({
+      where: { companyId, employeeId },
+      select: visaPeriodSponsorSelect,
+    }),
   ]);
+  const visaPeriods = visaPeriodRows.map(({ employeeId: _employeeId, ...period }) => period);
 
   const monthPackages = listCompensationPackagesOverlappingMonth(
     packages.filter((pkg) => pkg.payType.isActive),
@@ -602,7 +628,8 @@ export async function buildEmployeePayPreview(
     packages,
     attendance.length,
     lines,
-    allowancesByPackageId
+    allowancesByPackageId,
+    visaPeriods
   );
 }
 
@@ -700,11 +727,21 @@ export async function buildPayrollPreview(
   }
 
   const allPackageIds = compensationRows.map((row) => row.id);
-  const allowancesByPackageId = await fetchAllowancesForCompensationPackageIds(
-    companyId,
-    allPackageIds,
-    month
-  );
+  const [allowancesByPackageId, visaPeriodRows] = await Promise.all([
+    fetchAllowancesForCompensationPackageIds(companyId, allPackageIds, month),
+    prisma.visaPeriod.findMany({
+      where: { companyId, employeeId: { in: [...previewEmployeeIds] } },
+      select: visaPeriodSponsorSelect,
+    }),
+  ]);
+
+  const visaPeriodsByEmployee = new Map<string, VisaPeriodSponsorSource[]>();
+  for (const row of visaPeriodRows) {
+    const { employeeId: visaEmployeeId, ...period } = row;
+    const list = visaPeriodsByEmployee.get(visaEmployeeId) ?? [];
+    list.push(period);
+    visaPeriodsByEmployee.set(visaEmployeeId, list);
+  }
 
   const rows: EmployeePayPreviewRow[] = [];
   for (const employeeId of previewEmployeeIds) {
@@ -736,7 +773,8 @@ export async function buildPayrollPreview(
         employeePackages,
         rawAttendance.length,
         lines,
-        allowancesByPackageId
+        allowancesByPackageId,
+        visaPeriodsByEmployee.get(employeeId) ?? []
       )
     );
   }
