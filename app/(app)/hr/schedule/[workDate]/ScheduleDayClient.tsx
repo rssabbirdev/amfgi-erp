@@ -25,6 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/shadcn/table';
 import CreateEmployeeModal from '@/components/hr/CreateEmployeeModal';
+import { EmployeeMetaSelect } from '@/components/hr/EmployeeMetaSelect';
 import ScheduleSearchSelect from '@/components/hr/ScheduleSearchSelect';
 import { ScheduleWorkerPoolCard } from '@/components/hr/ScheduleWorkerPoolCard';
 import TimeEntryInput from '@/components/hr/TimeEntryInput';
@@ -91,6 +92,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  ClipboardList,
   Copy,
   GripVertical,
   LayoutTemplate,
@@ -1063,6 +1065,8 @@ export default function HrScheduleDayPage() {
   const [previousSchedules, setPreviousSchedules] = useState<ScheduleTemplateOption[]>([]);
   const [selectedTemplateDate, setSelectedTemplateDate] = useState('');
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [signatureSheetModalOpen, setSignatureSheetModalOpen] = useState(false);
+  const [signatureSheetGroup, setSignatureSheetGroup] = useState('');
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [drafts, setDrafts] = useState<AsgDraft[]>([]);
   const [scheduleInfo, setScheduleInfo] = useState('');
@@ -3957,6 +3961,21 @@ export default function HrScheduleDayPage() {
     }
   };
 
+  const openSignatureSheetPrint = () => {
+    const group = signatureSheetGroup.trim();
+    if (!group) {
+      toast.error('Select a signature group');
+      return;
+    }
+    const url = `/hr-attendance-signature-print?workDate=${encodeURIComponent(workDate)}&group=${encodeURIComponent(group)}&auto=1`;
+    const printWindow = window.open(url, '_blank');
+    if (!printWindow) {
+      toast.error('Could not open print window');
+      return;
+    }
+    setSignatureSheetModalOpen(false);
+  };
+
   
   if (!canView) {
     return (
@@ -4685,6 +4704,23 @@ export default function HrScheduleDayPage() {
 											</TooltipTrigger>
 											<TooltipContent>
 												Print schedule
+											</TooltipContent>
+										</Tooltip>
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Button
+													type='button'
+													variant='outline'
+													size='icon'
+													className='h-8 w-8'
+													onClick={() => setSignatureSheetModalOpen(true)}
+													aria-label='Print signature sheet'
+												>
+													<ClipboardList className='h-4 w-4' />
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent>
+												Signature sheet
 											</TooltipContent>
 										</Tooltip>
 										<Separator
@@ -5685,6 +5721,36 @@ export default function HrScheduleDayPage() {
 						Showing the 5 most recent schedule dates (excluding today).
 					</p>
 				</div>
+			</Modal>
+
+			<Modal
+				isOpen={signatureSheetModalOpen}
+				onClose={() => setSignatureSheetModalOpen(false)}
+				title='Print signature sheet'
+				description={`Attendance signature list for ${workDate}. Only active employees in the selected group are included.`}
+				size='sm'
+				actions={
+					<>
+						<Button type='button' variant='outline' onClick={() => setSignatureSheetModalOpen(false)}>
+							Cancel
+						</Button>
+						<Button type='button' onClick={openSignatureSheetPrint} disabled={!signatureSheetGroup.trim()}>
+							Print
+						</Button>
+					</>
+				}
+			>
+				<label className='block space-y-1.5'>
+					<span className='text-sm font-medium text-foreground'>Signature group</span>
+					<EmployeeMetaSelect
+						kind='SIGNATURE_GROUP'
+						name='signatureSheetGroup'
+						value={signatureSheetGroup}
+						onValueChange={setSignatureSheetGroup}
+						fieldClass='h-9 w-full rounded-md border border-border bg-background px-3 text-sm'
+						emptyLabel='Select group…'
+					/>
+				</label>
 			</Modal>
 
 			<Modal

@@ -42,6 +42,7 @@ export interface HrEmployeeExportRecord {
   designation: string | null;
   department: string | null;
   employmentType: string | null;
+  signatureGroup: string | null;
   hireDate: string | Date | null;
   terminationDate: string | Date | null;
   status: HrEmployeeStatus;

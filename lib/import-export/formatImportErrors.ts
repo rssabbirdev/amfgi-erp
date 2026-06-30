@@ -22,6 +22,7 @@ const FIELD_LABELS: Record<string, string> = {
   preferredName: 'Preferred Name',
   dateOfBirth: 'Date of Birth',
   employmentType: 'Employment Type',
+  signatureGroup: 'Signature Group',
   hireDate: 'Hire Date',
   terminationDate: 'Termination Date',
   emergencyContactName: 'Emergency Contact Name',

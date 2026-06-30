@@ -46,7 +46,6 @@ export function NationalitySearchSelect({
         placeholder={placeholder}
         disabled={disabled}
         minCharactersToSearch={0}
-        openOnFocus
         dropdownInPortal
         inputProps={{
           className: cn(

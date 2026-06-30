@@ -57,7 +57,6 @@ export function CatalogSearchSelect({
         disabled={disabled || loading}
         loading={loading}
         minCharactersToSearch={0}
-        openOnFocus
         dropdownInPortal
         inputProps={{
           className: cn(

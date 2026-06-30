@@ -879,6 +879,7 @@ enum EmployeeMetaKind {
   DESIGNATION
   DEPARTMENT
   EMPLOYMENT_TYPE
+  SIGNATURE_GROUP
 }
 
 model EmployeeMetaOption {
@@ -1520,6 +1521,7 @@ model Employee {
   designation           String?
   department            String?
   employmentType        String?
+  signatureGroup        String?
   hireDate              DateTime?      @db.Date
   terminationDate       DateTime?      @db.Date
   status                EmployeeStatus @default(ACTIVE)

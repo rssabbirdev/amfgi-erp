@@ -27,6 +27,7 @@ const PatchSchema = z.object({
   designation: z.string().max(120).optional().nullable(),
   department: z.string().max(120).optional().nullable(),
   employmentType: z.string().max(80).optional().nullable(),
+  signatureGroup: z.string().max(120).optional().nullable(),
   hireDate: z.string().optional().nullable(),
   terminationDate: z.string().optional().nullable(),
   status: z.enum(['ACTIVE', 'ON_LEAVE', 'SUSPENDED', 'EXITED']).optional(),
@@ -106,6 +107,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (d.designation !== undefined) data.designation = d.designation?.trim() || null;
     if (d.department !== undefined) data.department = d.department?.trim() || null;
     if (d.employmentType !== undefined) data.employmentType = d.employmentType?.trim() || null;
+    if (d.signatureGroup !== undefined) data.signatureGroup = d.signatureGroup?.trim() || null;
     if (d.hireDate !== undefined) data.hireDate = d.hireDate ? new Date(d.hireDate) : null;
     if (d.terminationDate !== undefined) data.terminationDate = d.terminationDate ? new Date(d.terminationDate) : null;
     if (d.status !== undefined) data.status = d.status;

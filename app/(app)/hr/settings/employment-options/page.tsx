@@ -115,7 +115,15 @@ function MetaSection({
               className="max-w-xs"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={`e.g. ${kind === 'DESIGNATION' ? 'Supervisor' : kind === 'DEPARTMENT' ? 'Operations' : 'Permanent'}`}
+              placeholder={`e.g. ${
+                kind === 'DESIGNATION'
+                  ? 'Supervisor'
+                  : kind === 'DEPARTMENT'
+                    ? 'Operations'
+                    : kind === 'SIGNATURE_GROUP'
+                      ? 'Steel Section'
+                      : 'Permanent'
+              }`}
             />
             <Button size="sm" disabled={saving} onClick={() => void save()}>
               {editingId ? 'Save' : 'Add'}
@@ -205,7 +213,8 @@ export default function EmploymentOptionsSettingsPage() {
       <div className="mb-4">
         <h1 className="text-lg font-semibold">Employment options</h1>
         <p className="text-sm text-muted-foreground">
-          Manage designation, department, and employment type lists used on employee profiles.
+          Manage designation, department, employment type, and signature group lists used on employee profiles and
+          attendance signature sheets.
         </p>
       </div>
 

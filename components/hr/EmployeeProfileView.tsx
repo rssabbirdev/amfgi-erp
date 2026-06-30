@@ -98,6 +98,7 @@ interface EmployeeRecord {
   designation: string | null;
   department: string | null;
   employmentType: string | null;
+  signatureGroup: string | null;
   hireDate: string | null;
   terminationDate: string | null;
   status: string;
@@ -192,25 +193,40 @@ function confirmRemoveDocument(doc: DocRow): boolean {
   return window.confirm('This cannot be undone. Permanently delete this document record?');
 }
 
-function buildOverviewDraftSignature(form: HTMLFormElement, expertises: string[]) {
+function buildOverviewDraftSignature(
+  form: HTMLFormElement,
+  expertises: string[],
+  controlled: {
+    designation: string;
+    department: string;
+    employmentType: string;
+    signatureGroup: string;
+    employeeType: string;
+    visaHolding: string;
+    status: string;
+    nationality: string;
+    gender: string;
+  },
+) {
   const read = (name: string) => String(form.elements.namedItem(name) && 'value' in (form.elements.namedItem(name) as Element) ? ((form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value ?? '') : '').trim();
   const snapshot = {
     fullName: read('fullName'),
     preferredName: read('preferredName'),
     employeeCode: read('employeeCode'),
-    nationality: read('nationality'),
+    nationality: controlled.nationality.trim(),
     dateOfBirth: read('dateOfBirth'),
-    gender: read('gender'),
+    gender: controlled.gender.trim(),
     email: read('email'),
     phone: read('phone'),
-    designation: read('designation'),
-    department: read('department'),
-    employmentType: read('employmentType'),
-    employeeType: read('employeeType'),
-    visaHolding: read('visaHolding'),
+    designation: controlled.designation.trim(),
+    department: controlled.department.trim(),
+    employmentType: controlled.employmentType.trim(),
+    signatureGroup: controlled.signatureGroup.trim(),
+    employeeType: controlled.employeeType.trim(),
+    visaHolding: controlled.visaHolding.trim(),
     hireDate: read('hireDate'),
     terminationDate: read('terminationDate'),
-    status: read('status'),
+    status: controlled.status.trim(),
     emergencyContactName: read('emergencyContactName'),
     emergencyContactPhone: read('emergencyContactPhone'),
     bloodGroup: read('bloodGroup'),
@@ -218,6 +234,21 @@ function buildOverviewDraftSignature(form: HTMLFormElement, expertises: string[]
     expertises: [...expertises].sort(),
   };
   return JSON.stringify(snapshot);
+}
+
+function controlledOverviewFieldsFromEmp(emp: EmployeeRecord) {
+  const workforce = parseWorkforceProfile(emp.profileExtension);
+  return {
+    designation: String(emp.designation ?? '').trim(),
+    department: String(emp.department ?? '').trim(),
+    employmentType: String(emp.employmentType ?? '').trim(),
+    signatureGroup: String(emp.signatureGroup ?? '').trim(),
+    employeeType: String(workforce.employeeType ?? '').trim(),
+    visaHolding: String(workforce.visaHolding ?? '').trim(),
+    status: String(emp.status ?? '').trim(),
+    nationality: displayNationalityCountryName(emp.nationality).trim(),
+    gender: String(emp.gender ?? '').trim(),
+  };
 }
 
 function buildOverviewEmployeeSignature(emp: EmployeeRecord, expertises: string[]) {
@@ -233,6 +264,7 @@ function buildOverviewEmployeeSignature(emp: EmployeeRecord, expertises: string[
     designation: String(emp.designation ?? '').trim(),
     department: String(emp.department ?? '').trim(),
     employmentType: String(emp.employmentType ?? '').trim(),
+    signatureGroup: String(emp.signatureGroup ?? '').trim(),
     employeeType: String(parseWorkforceProfile(emp.profileExtension).employeeType ?? '').trim(),
     visaHolding: String(parseWorkforceProfile(emp.profileExtension).visaHolding ?? '').trim(),
     hireDate: toInputDate(emp.hireDate),
@@ -260,6 +292,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const [designation, setDesignation] = useState('');
   const [department, setDepartment] = useState('');
   const [employmentType, setEmploymentType] = useState('');
+  const [signatureGroup, setSignatureGroup] = useState('');
   const [workforceRoleType, setWorkforceRoleType] = useState('LABOUR_WORKER');
   const [visaHolding, setVisaHolding] = useState('COMPANY_PROVIDED');
   const [employmentStatus, setEmploymentStatus] = useState('ACTIVE');
@@ -408,6 +441,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
       'designation',
       'department',
       'employmentType',
+      'signatureGroup',
       'emergencyContactName',
       'emergencyContactPhone',
       'bloodGroup',
@@ -719,6 +753,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     setDesignation(emp.designation ?? '');
     setDepartment(emp.department ?? '');
     setEmploymentType(emp.employmentType ?? '');
+    setSignatureGroup(emp.signatureGroup ?? '');
     const workforce = parseWorkforceProfile(emp.profileExtension);
     setWorkforceRoleType(workforce.employeeType);
     setVisaHolding(workforce.visaHolding);
@@ -727,7 +762,11 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     setOverviewDirty(false);
     const frame = requestAnimationFrame(() => {
       if (!overviewFormRef.current) return;
-      const signature = buildOverviewDraftSignature(overviewFormRef.current, nextExpertises);
+      const signature = buildOverviewDraftSignature(
+        overviewFormRef.current,
+        nextExpertises,
+        controlledOverviewFieldsFromEmp(emp),
+      );
       setOverviewInitialSignature(signature);
       setOverviewDirty(false);
     });
@@ -741,7 +780,11 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     setOverviewDirty(false);
     const frame = requestAnimationFrame(() => {
       if (!overviewFormRef.current) return;
-      const signature = buildOverviewDraftSignature(overviewFormRef.current, nextExpertises);
+      const signature = buildOverviewDraftSignature(
+        overviewFormRef.current,
+        nextExpertises,
+        controlledOverviewFieldsFromEmp(emp),
+      );
       setOverviewInitialSignature(signature);
       setOverviewDirty(false);
     });
@@ -749,19 +792,48 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   }, [emp, overviewInitialSignature, tab]);
 
   const syncOverviewDirty = useCallback(
-    (nextExpertises?: string[]) => {
+    (
+      nextExpertises?: string[],
+      controlledOverrides?: Partial<ReturnType<typeof controlledOverviewFieldsFromEmp>>,
+    ) => {
       if (!overviewFormRef.current) return;
       const baseline =
         overviewInitialSignature ??
         (emp ? buildOverviewEmployeeSignature(emp, parseWorkforceProfile(emp.profileExtension).expertises) : null);
       if (baseline === null) return;
+      const controlled = {
+        designation,
+        department,
+        employmentType,
+        signatureGroup,
+        employeeType: workforceRoleType,
+        visaHolding,
+        status: employmentStatus,
+        nationality,
+        gender,
+        ...controlledOverrides,
+      };
       const signature = buildOverviewDraftSignature(
         overviewFormRef.current,
         nextExpertises ?? selectedExpertises,
+        controlled,
       );
       setOverviewDirty(signature !== baseline);
     },
-    [emp, overviewInitialSignature, selectedExpertises],
+    [
+      emp,
+      overviewInitialSignature,
+      selectedExpertises,
+      designation,
+      department,
+      employmentType,
+      signatureGroup,
+      workforceRoleType,
+      visaHolding,
+      employmentStatus,
+      nationality,
+      gender,
+    ],
   );
 
   const confirmOverviewLeave = useCallback(() => {
@@ -1003,7 +1075,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       value={nationality}
                       onChange={(next) => {
                         setNationality(next);
-                        requestAnimationFrame(() => syncOverviewDirty());
+                        syncOverviewDirty(undefined, { nationality: next });
                       }}
                       disabled={!canEdit}
                       inputClassName={searchInputClass}
@@ -1020,7 +1092,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       value={gender}
                       onChange={(next) => {
                         setGender(next);
-                        syncOverviewDirty();
+                        syncOverviewDirty(undefined, { gender: next });
                       }}
                       options={GENDER_OPTIONS}
                       disabled={!canEdit}
@@ -1057,7 +1129,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       value={designation}
                       onValueChange={(next) => {
                         setDesignation(next);
-                        syncOverviewDirty();
+                        syncOverviewDirty(undefined, { designation: next });
                       }}
                       disabled={!canEdit}
                       fieldClass={searchInputClass}
@@ -1071,7 +1143,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       value={department}
                       onValueChange={(next) => {
                         setDepartment(next);
-                        syncOverviewDirty();
+                        syncOverviewDirty(undefined, { department: next });
                       }}
                       disabled={!canEdit}
                       fieldClass={searchInputClass}
@@ -1085,10 +1157,25 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       value={employmentType}
                       onValueChange={(next) => {
                         setEmploymentType(next);
-                        syncOverviewDirty();
+                        syncOverviewDirty(undefined, { employmentType: next });
                       }}
                       disabled={!canEdit}
                       fieldClass={searchInputClass}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className={labelClass}>Signature group</span>
+                    <EmployeeMetaSelect
+                      kind="SIGNATURE_GROUP"
+                      name="signatureGroup"
+                      value={signatureGroup}
+                      onValueChange={(next) => {
+                        setSignatureGroup(next);
+                        syncOverviewDirty(undefined, { signatureGroup: next });
+                      }}
+                      disabled={!canEdit}
+                      fieldClass={searchInputClass}
+                      emptyLabel="None"
                     />
                   </label>
                   <label className="block">
@@ -1098,7 +1185,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       value={workforceRoleType}
                       onChange={(next) => {
                         setWorkforceRoleType(next);
-                        syncOverviewDirty();
+                        syncOverviewDirty(undefined, { employeeType: next });
                       }}
                       options={workforceRoleOptions}
                       disabled={!canEdit}
@@ -1114,7 +1201,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       value={visaHolding}
                       onChange={(next) => {
                         setVisaHolding(next);
-                        syncOverviewDirty();
+                        syncOverviewDirty(undefined, { visaHolding: next });
                       }}
                       options={visaHoldingOptionList}
                       disabled={!canEdit}
@@ -1156,7 +1243,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       value={employmentStatus}
                       onChange={(next) => {
                         setEmploymentStatus(next);
-                        syncOverviewDirty();
+                        syncOverviewDirty(undefined, { status: next });
                       }}
                       options={EMPLOYMENT_STATUS_OPTIONS}
                       disabled={!canEdit}

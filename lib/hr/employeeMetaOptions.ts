@@ -1,4 +1,4 @@
-export const EMPLOYEE_META_KINDS = ['DESIGNATION', 'DEPARTMENT', 'EMPLOYMENT_TYPE'] as const;
+export const EMPLOYEE_META_KINDS = ['DESIGNATION', 'DEPARTMENT', 'EMPLOYMENT_TYPE', 'SIGNATURE_GROUP'] as const;
 
 export type EmployeeMetaKind = (typeof EMPLOYEE_META_KINDS)[number];
 
@@ -6,6 +6,7 @@ export const EMPLOYEE_META_KIND_LABELS: Record<EmployeeMetaKind, string> = {
   DESIGNATION: 'Designation',
   DEPARTMENT: 'Department',
   EMPLOYMENT_TYPE: 'Employment type',
+  SIGNATURE_GROUP: 'Signature group',
 };
 
 export type EmployeeMetaOptionRow = {

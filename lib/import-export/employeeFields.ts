@@ -30,6 +30,7 @@ export const EMPLOYEE_IMPORT_FIELDS: ImportFieldDef[] = [
   { key: 'designation', label: 'Designation' },
   { key: 'department', label: 'Department' },
   { key: 'employment_type', label: 'Employment Type' },
+  { key: 'signature_group', label: 'Signature Group', aliases: ['attendance group', 'sign group'] },
   { key: 'hire_date', label: 'Hire Date' },
   { key: 'termination_date', label: 'Termination Date' },
   { key: 'status', label: 'Status', aliases: ['employee status'] },
@@ -59,6 +60,7 @@ export type EmployeeImportRow = {
   designation?: string | null;
   department?: string | null;
   employmentType?: string | null;
+  signatureGroup?: string | null;
   hireDate?: string | null;
   terminationDate?: string | null;
   status?: (typeof EMPLOYEE_STATUSES)[number];
@@ -102,6 +104,7 @@ export function employeeToExportRow(employee: HrEmployeeExportRecord): Record<st
     Designation: employee.designation ?? '',
     Department: employee.department ?? '',
     'Employment Type': employee.employmentType ?? '',
+    'Signature Group': employee.signatureGroup ?? '',
     'Hire Date': formatDateExport(employee.hireDate),
     'Termination Date': formatDateExport(employee.terminationDate),
     Status: employee.status,
@@ -301,6 +304,7 @@ export function employeeImportRowToPayload(row: MappedImportRow): EmployeeImport
   if ('designation' in row) payload.designation = optionalMappedString(row, 'designation') ?? null;
   if ('department' in row) payload.department = optionalMappedString(row, 'department') ?? null;
   if ('employment_type' in row) payload.employmentType = optionalMappedString(row, 'employment_type') ?? null;
+  if ('signature_group' in row) payload.signatureGroup = optionalMappedString(row, 'signature_group') ?? null;
   if ('hire_date' in row) payload.hireDate = optionalMappedString(row, 'hire_date') ?? null;
   if ('termination_date' in row) payload.terminationDate = optionalMappedString(row, 'termination_date') ?? null;
   if (row.status !== undefined) payload.status = row.status as EmployeeImportRow['status'];
@@ -334,7 +338,9 @@ export function downloadEmployeeImportTemplate() {
     ['Expertises', 'No', 'Comma-separated names from HR → Expertise catalog.'],
     ['Nationality', 'No', 'Use country names (e.g. India, United Arab Emirates). Legacy demonyms like Indian or Emirati are accepted on import.'],
     ['Gender', 'No', 'Male, Female, or Prefer not to say (M/F/X also accepted).'],
-    ['Dates', 'No', 'Use YYYY-MM-DD.'],
+    ['Employment Type', 'No', 'From HR → Employment options (e.g. Permanent).'],
+    ['Signature Group', 'No', 'From HR → Employment options (e.g. Steel Section). Used for attendance signature sheets.'],
+    ['Hire Date', 'No', 'Use YYYY-MM-DD.'],
     ['Updates', '—', 'Only mapped columns with values are changed; blank cells keep existing data.'],
   ];
   const template = [
@@ -351,6 +357,7 @@ export function downloadEmployeeImportTemplate() {
       Designation: 'Technician',
       Department: 'Production',
       'Employment Type': 'Permanent',
+      'Signature Group': 'Steel Section',
       'Hire Date': '2024-01-01',
       'Termination Date': '',
       Status: 'ACTIVE',

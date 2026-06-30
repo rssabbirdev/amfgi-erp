@@ -60,6 +60,7 @@ function employeeCreateData(
     designation: row.designation?.trim() || null,
     department: row.department?.trim() || null,
     employmentType: row.employmentType?.trim() || null,
+    signatureGroup: row.signatureGroup?.trim() || null,
     hireDate: parseDateOrNull(row.hireDate) ?? null,
     terminationDate: parseDateOrNull(row.terminationDate) ?? null,
     status,
@@ -100,6 +101,7 @@ function employeeUpdateData(
   if (row.designation !== undefined) data.designation = row.designation?.trim() || null;
   if (row.department !== undefined) data.department = row.department?.trim() || null;
   if (row.employmentType !== undefined) data.employmentType = row.employmentType?.trim() || null;
+  if (row.signatureGroup !== undefined) data.signatureGroup = row.signatureGroup?.trim() || null;
   if (row.hireDate !== undefined) data.hireDate = parseDateOrNull(row.hireDate) ?? null;
   if (row.terminationDate !== undefined) data.terminationDate = parseDateOrNull(row.terminationDate) ?? null;
   if (row.emergencyContactName !== undefined) {

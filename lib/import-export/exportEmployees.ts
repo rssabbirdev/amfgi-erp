@@ -12,6 +12,7 @@ export function exportEmployeesToXlsx(employees: HrEmployeeExportRecord[], label
         ['Employee export'],
         ['Re-import using Import on the employee directory. Match updates by ID or Employee Code.'],
         ['Only columns present in your import file are updated; export → edit → import is supported.'],
+        ['Signature Group must match a name from HR → Settings → Employment options.'],
         ['Compensation, visa periods, and documents are managed on each employee profile, not in this file.'],
       ],
     },
