@@ -106,6 +106,7 @@ export default function HrAttendanceSignaturePrintPage() {
         }
         .signature-table .col-note {
           width: 1%;
+          min-width: 12ch;
           white-space: nowrap;
           padding: 2px 2px;
           text-align: center;
