@@ -1,5 +1,5 @@
-import MeProfilePage from '@/components/me/MeProfilePage';
+import { redirect } from 'next/navigation';
 
-export default function EmployeeProfilePage() {
-  return <MeProfilePage />;
+export default function MeProfileRedirectPage() {
+  redirect('/me');
 }

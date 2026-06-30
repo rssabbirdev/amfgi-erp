@@ -15,10 +15,23 @@ export type VisaRow = {
   notes: string | null;
 };
 
+export type PortalDocRow = {
+  id: string;
+  name: string;
+  documentNumber: string | null;
+  issueDate: string | null;
+  expiryDate: string | null;
+  issuingAuthority: string | null;
+  notes: string | null;
+  documentType: { name: string; slug: string };
+  canDownload: boolean;
+};
+
 export type DocRow = {
   id: string;
   documentNumber: string | null;
   expiryDate: string | null;
+  customFields?: unknown;
   documentType: { id: string; name: string; slug: string };
 };
 
@@ -43,7 +56,9 @@ export type EmployeeRecord = {
   portalEnabled: boolean;
   profileExtension?: unknown;
   visaPeriods: VisaRow[];
-  documents: DocRow[];
+  documents?: DocRow[];
+  documentsOnFileCount?: number;
+  portalDocuments?: PortalDocRow[];
 };
 
 export type AttendanceRow = {
@@ -107,14 +122,39 @@ export function formatDate(value: string | null | undefined) {
   });
 }
 
+export function daysUntilExpiry(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.floor((target - startOfToday) / dayMs);
+}
+
+export function documentValidityLabel(days: number | null): string {
+  if (days === null) return '-';
+  if (days < 0) return `Expired ${Math.abs(days)}d ago`;
+  if (days === 0) return 'Expires today';
+  return `${days}d left`;
+}
+
+export function documentValidityToneClass(days: number | null): string {
+  if (days === null) return 'text-slate-500';
+  if (days < 0) return 'text-red-600 dark:text-red-400';
+  if (days <= 30) return 'text-amber-700 dark:text-amber-300';
+  return 'text-emerald-700 dark:text-emerald-300';
+}
+
 export function formatTime(value: string | null | undefined) {
   if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleTimeString('en-GB', {
-    hour: '2-digit',
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
     minute: '2-digit',
-    hour12: false,
+    hour12: true,
     timeZone: 'Asia/Dubai',
   });
 }
@@ -168,24 +208,36 @@ export function jobNumberLabel(row: AttendanceRow) {
   return row.workAssignment?.jobNumberSnapshot || row.workAssignment?.job?.jobNumber || '';
 }
 
-export function upcomingDocument(documents: DocRow[]) {
-  const withExpiry = documents
-    .filter((doc) => doc.expiryDate)
+export function upcomingDocument<T extends { expiryDate: string | null }>(documents: T[]): T | null {
+  const withFutureExpiry = documents
+    .filter((doc) => {
+      const days = daysUntilExpiry(doc.expiryDate);
+      return days !== null && days >= 0;
+    })
     .sort((a, b) => new Date(a.expiryDate!).getTime() - new Date(b.expiryDate!).getTime());
-  return withExpiry[0] ?? null;
+  return withFutureExpiry[0] ?? null;
+}
+
+export function upcomingPortalDocumentRow(documents: PortalDocRow[]) {
+  return upcomingDocument(documents);
 }
 
 export function SelfServiceTabs() {
   const pathname = usePathname();
   const items = [
-    { href: '/me/profile', label: 'Profile' },
+    { href: '/me', label: 'Home' },
     { href: '/me/attendance', label: 'Attendance' },
+    { href: '/me/leave', label: 'Leave' },
+    { href: '/me/documents', label: 'Documents' },
   ];
 
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">
       {items.map((item) => {
-        const active = pathname === item.href;
+        const active =
+          item.href === '/me'
+            ? pathname === '/me' || pathname === '/me/profile'
+            : pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <Link
             key={item.href}

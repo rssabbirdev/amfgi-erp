@@ -8,6 +8,7 @@ import Modal from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
 import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown';
 import { CatalogSearchSelect } from '@/components/hr/CatalogSearchSelect';
+import { DocumentPortalSelfServiceFields } from '@/components/hr/DocumentPortalSelfServiceFields';
 import EmployeeCompensationPanel from '@/components/hr/EmployeeCompensationPanel';
 import { EmployeeMetaSelect } from '@/components/hr/EmployeeMetaSelect';
 import { NationalitySearchSelect } from '@/components/hr/NationalitySearchSelect';
@@ -23,6 +24,19 @@ import {
   buildWorkforceProfileExtension,
   parseWorkforceProfile,
 } from '@/lib/hr/workforceProfile';
+import {
+  canHrDocumentCreate,
+  canHrDocumentDelete,
+  canHrDocumentEdit,
+  canHrDocumentView,
+} from '@/lib/hr/documentPermissions';
+import {
+  CUSTOM_EMPLOYEE_DOC_TYPE_VALUE,
+  EMPLOYEE_DOC_OTHER_SLUG,
+  employeeDocumentDisplayName,
+  isEmployeeDocumentCustomTitle,
+  readEmployeeDocumentCustomTitle,
+} from '@/lib/hr/employeeDocumentDisplay';
 import { useGlobalContextMenu } from '@/providers/ContextMenuProvider';
 import toast from 'react-hot-toast';
 
@@ -64,6 +78,9 @@ interface DocRow {
   issuingAuthority: string | null;
   notes: string | null;
   mediaUrl: string | null;
+  portalViewEnabled: boolean;
+  portalDownloadEnabled: boolean;
+  customFields?: unknown;
   documentType: { id: string; name: string; slug: string };
   visaPeriod: { id: string; label: string } | null;
 }
@@ -162,6 +179,19 @@ function validityLabel(days: number | null): string {
   return `${days}d left`;
 }
 
+function validityToneClass(days: number | null): string {
+  if (days === null) return 'text-slate-500';
+  if (days < 0) return 'text-red-600 dark:text-red-400';
+  if (days <= 30) return 'text-amber-700 dark:text-amber-300';
+  return 'text-emerald-700 dark:text-emerald-300';
+}
+
+function confirmRemoveDocument(doc: DocRow): boolean {
+  const name = employeeDocumentDisplayName(doc);
+  if (!window.confirm(`Remove document "${name}"?`)) return false;
+  return window.confirm('This cannot be undone. Permanently delete this document record?');
+}
+
 function buildOverviewDraftSignature(form: HTMLFormElement, expertises: string[]) {
   const read = (name: string) => String(form.elements.namedItem(name) && 'value' in (form.elements.namedItem(name) as Element) ? ((form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value ?? '') : '').trim();
   const snapshot = {
@@ -239,7 +269,13 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const [showVisaForm, setShowVisaForm] = useState(false);
   const [editingVisa, setEditingVisa] = useState<VisaRow | null>(null);
   const [editingDoc, setEditingDoc] = useState<DocRow | null>(null);
+  const [viewingDoc, setViewingDoc] = useState<DocRow | null>(null);
   const [showAddDocumentModal, setShowAddDocumentModal] = useState(false);
+  const [addDocTypeSelection, setAddDocTypeSelection] = useState('');
+  const [addPortalViewEnabled, setAddPortalViewEnabled] = useState(false);
+  const [addPortalDownloadEnabled, setAddPortalDownloadEnabled] = useState(false);
+  const [editPortalViewEnabled, setEditPortalViewEnabled] = useState(false);
+  const [editPortalDownloadEnabled, setEditPortalDownloadEnabled] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [expandedVisaId, setExpandedVisaId] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -254,10 +290,47 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const canEdit = isSA || perms.includes('hr.employee.edit');
   const canCompensation =
     isSA || perms.includes('hr.payroll.compensation') || perms.includes('hr.payroll.settings');
-  const canDoc = isSA || perms.includes('hr.document.edit');
-  const canDocView = isSA || perms.includes('hr.document.view');
+  const canDocCreate = session?.user ? canHrDocumentCreate(session.user) : false;
+  const canDocEdit = session?.user ? canHrDocumentEdit(session.user) : false;
+  const canDocDelete = session?.user ? canHrDocumentDelete(session.user) : false;
+  const canDocView = session?.user ? canHrDocumentView(session.user) : false;
   const canCatalogTypes = isSA || perms.includes('hr.settings.document_types');
   const isBusy = busyKey !== null;
+
+  const catalogDocTypesForSelect = useMemo(
+    () => catalogDocTypes.filter((t) => t.slug !== EMPLOYEE_DOC_OTHER_SLUG),
+    [catalogDocTypes]
+  );
+  const otherDocType = useMemo(
+    () => catalogDocTypes.find((t) => t.slug === EMPLOYEE_DOC_OTHER_SLUG) ?? null,
+    [catalogDocTypes]
+  );
+  const canAddDocuments = catalogDocTypesForSelect.length > 0 || otherDocType !== null;
+
+  const resolveDocumentFormPayload = (fd: FormData) => {
+    const typeSelection = String(fd.get('documentTypeId') ?? '');
+    const isCustom = typeSelection === CUSTOM_EMPLOYEE_DOC_TYPE_VALUE;
+    const customTitle = isCustom ? String(fd.get('customTitle') ?? '').trim() : null;
+
+    if (isCustom) {
+      if (!customTitle) return { error: 'Enter a document title for custom documents' as const };
+      if (!otherDocType) return { error: 'Custom documents are not available yet. Contact HR settings.' as const };
+    }
+
+    const documentTypeId = isCustom ? otherDocType!.id : typeSelection;
+    if (!documentTypeId) return { error: 'Select a document type' as const };
+
+    return {
+      documentTypeId,
+      customTitle: isCustom ? customTitle : null,
+    };
+  };
+
+  useEffect(() => {
+    if (!editingDoc) return;
+    setEditPortalViewEnabled(editingDoc.portalViewEnabled);
+    setEditPortalDownloadEnabled(editingDoc.portalDownloadEnabled);
+  }, [editingDoc]);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/hr/employees/${employeeId}`, { cache: 'no-store' });
@@ -418,10 +491,16 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
 
   const addDocument = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!canDoc || isBusy) return;
+    if (!canDocCreate || isBusy) return;
     setBusyKey('document-create');
     const form = e.currentTarget;
     const fd = new FormData(form);
+    const resolved = resolveDocumentFormPayload(fd);
+    if ('error' in resolved) {
+      toast.error(resolved.error ?? 'Invalid document form');
+      setBusyKey(null);
+      return;
+    }
     const fileEl = form.elements.namedItem('documentFile') as HTMLInputElement | null;
     const file = fileEl?.files?.[0] ?? null;
     const visaPeriodId = fd.get('visaPeriodId');
@@ -437,14 +516,16 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        documentTypeId: fd.get('documentTypeId'),
+        documentTypeId: resolved.documentTypeId,
+        customTitle: resolved.customTitle,
         visaPeriodId: selectedVisaPeriodId,
         documentNumber: fd.get('documentNumber') || null,
         issueDate: fd.get('issueDate') || null,
         expiryDate: fd.get('expiryDate') || null,
         issuingAuthority: fd.get('issuingAuthority') || null,
         notes: fd.get('notes') || null,
-        mediaUrl: fd.get('mediaUrl') || null,
+        portalViewEnabled: addPortalViewEnabled,
+        portalDownloadEnabled: addPortalDownloadEnabled,
       }),
     });
     const json = await res.json();
@@ -461,6 +542,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
       } else toast.success('Document added');
       await load();
       form.reset();
+      setAddDocTypeSelection('');
+      setAddPortalViewEnabled(false);
+      setAddPortalDownloadEnabled(false);
       setShowAddDocumentModal(false);
     }
     setBusyKey(null);
@@ -468,23 +552,31 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
 
   const saveEditedDocument = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!canDoc || !editingDoc || isBusy) return;
+    if (!canDocEdit || !editingDoc || isBusy) return;
     setBusyKey('document-update');
     const form = e.currentTarget;
     const fd = new FormData(form);
+    const resolved = resolveDocumentFormPayload(fd);
+    if ('error' in resolved) {
+      toast.error(resolved.error ?? 'Invalid document form');
+      setBusyKey(null);
+      return;
+    }
     const visaPeriodId = fd.get('visaPeriodId');
     const res = await fetch(`/api/hr/documents/${editingDoc.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        documentTypeId: String(fd.get('documentTypeId') ?? ''),
+        documentTypeId: resolved.documentTypeId,
+        customTitle: resolved.customTitle,
         visaPeriodId: visaPeriodId && String(visaPeriodId) !== '' ? String(visaPeriodId) : null,
         documentNumber: fd.get('documentNumber') || null,
         issueDate: fd.get('issueDate') || null,
         expiryDate: fd.get('expiryDate') || null,
         issuingAuthority: fd.get('issuingAuthority') || null,
         notes: fd.get('notes') || null,
-        mediaUrl: fd.get('mediaUrl') || null,
+        portalViewEnabled: editPortalViewEnabled,
+        portalDownloadEnabled: editPortalDownloadEnabled,
       }),
     });
     const json = await res.json();
@@ -570,14 +662,16 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     setBusyKey(null);
   };
 
-  const deleteDocument = async (docId: string) => {
-    if (!canDoc || isBusy || !window.confirm('Remove this document record?')) return;
-    setBusyKey(`document-delete-${docId}`);
-    const res = await fetch(`/api/hr/documents/${docId}`, { method: 'DELETE' });
+  const deleteDocument = async (doc: DocRow) => {
+    if (!canDocDelete || isBusy) return;
+    if (!confirmRemoveDocument(doc)) return;
+    setBusyKey(`document-delete-${doc.id}`);
+    const res = await fetch(`/api/hr/documents/${doc.id}`, { method: 'DELETE' });
     const json = await res.json();
     if (!res.ok || !json?.success) toast.error(json?.error ?? 'Delete failed');
     else {
       toast.success('Document removed');
+      setViewingDoc((current) => (current?.id === doc.id ? null : current));
       await load();
     }
     setBusyKey(null);
@@ -1277,7 +1371,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                                     {relatedDocs.map((d) => (
                                       <div key={d.id} className="flex items-center justify-between gap-2 rounded border border-white/5 bg-slate-900/40 px-3 py-2 text-xs">
                                         <div>
-                                          <p className="font-medium text-slate-200">{d.documentType.name}</p>
+                                          <p className="font-medium text-slate-200">{employeeDocumentDisplayName(d)}</p>
                                           <p className="text-slate-500">{d.documentNumber ?? 'No number'} / {d.expiryDate ? toInputDate(d.expiryDate) : 'No expiry'}</p>
                                         </div>
                                         {d.mediaUrl && (
@@ -1311,9 +1405,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
             <div className="space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                <h2 className="text-lg font-semibold text-white">Official documents</h2>
+                <h2 className="text-lg font-semibold text-white">Documents</h2>
                 <p className="text-sm text-slate-500">
-                  Passport, Emirates ID, insurance, licences with issue and expiry tracking. Upload PDF or images, or paste a Drive file ID.
+                  Passport, Emirates ID, insurance, licences, or any custom-titled document. Upload PDF or images for each record.
                 </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1329,7 +1423,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       Manage document types
                     </Button>
                   )}
-                  {canDoc && (
+                  {canDocCreate && (
                     <Button type="button" disabled={isBusy} onClick={() => setShowAddDocumentModal(true)}>
                       Add document
                     </Button>
@@ -1337,7 +1431,140 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                 </div>
               </div>
 
-              {editingDoc && canDoc && (
+              {viewingDoc && canDocView && (
+                <Modal
+                  isOpen
+                  onClose={() => {
+                    if (!isBusy) setViewingDoc(null);
+                  }}
+                  title={employeeDocumentDisplayName(viewingDoc)}
+                  size="lg"
+                >
+                  <div className="space-y-6">
+                    <dl className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <dt className={labelClass}>Document</dt>
+                        <dd className="mt-1 text-sm text-white">{employeeDocumentDisplayName(viewingDoc)}</dd>
+                      </div>
+                      <div>
+                        <dt className={labelClass}>Type</dt>
+                        <dd className="mt-1 text-sm text-slate-200">
+                          {isEmployeeDocumentCustomTitle(viewingDoc)
+                            ? 'Custom title'
+                            : viewingDoc.documentType.name}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className={labelClass}>Document number</dt>
+                        <dd className="mt-1 font-mono text-sm text-slate-200">{viewingDoc.documentNumber ?? '-'}</dd>
+                      </div>
+                      <div>
+                        <dt className={labelClass}>Issuing authority</dt>
+                        <dd className="mt-1 text-sm text-slate-200">{viewingDoc.issuingAuthority ?? '-'}</dd>
+                      </div>
+                      <div>
+                        <dt className={labelClass}>Issue date</dt>
+                        <dd className="mt-1 text-sm text-slate-200">
+                          {viewingDoc.issueDate ? toInputDate(viewingDoc.issueDate) : '-'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className={labelClass}>Expiry date</dt>
+                        <dd className="mt-1 text-sm text-slate-200">
+                          {viewingDoc.expiryDate ? toInputDate(viewingDoc.expiryDate) : '-'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className={labelClass}>Validity</dt>
+                        <dd className="mt-1 text-sm text-slate-200">
+                          {validityLabel(daysUntil(viewingDoc.expiryDate))}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className={labelClass}>Visa link</dt>
+                        <dd className="mt-1 text-sm text-slate-200">{viewingDoc.visaPeriod?.label ?? '-'}</dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className={labelClass}>Notes</dt>
+                        <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-300">{viewingDoc.notes?.trim() || '-'}</dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className={labelClass}>Employee portal</dt>
+                        <dd className="mt-1 text-sm text-slate-200">
+                          {viewingDoc.portalViewEnabled
+                            ? viewingDoc.portalDownloadEnabled
+                              ? 'View and download enabled'
+                              : 'View enabled'
+                            : 'Hidden (count only)'}
+                        </dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className={labelClass}>Attached file</dt>
+                        <dd className="mt-1 text-sm">
+                          {viewingDoc.mediaUrl ? (
+                            <a
+                              href={driveFileWebViewUrl(viewingDoc.mediaUrl) ?? '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium text-emerald-400 hover:text-emerald-300"
+                            >
+                              Open file
+                            </a>
+                          ) : (
+                            <span className="text-slate-500">No file uploaded</span>
+                          )}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="flex flex-wrap justify-end gap-2 border-t border-white/10 pt-4">
+                      <Button type="button" variant="ghost" disabled={isBusy} onClick={() => setViewingDoc(null)}>
+                        Close
+                      </Button>
+                      {viewingDoc.mediaUrl && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => {
+                            const url = driveFileWebViewUrl(viewingDoc.mediaUrl);
+                            if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                          }}
+                        >
+                          Open file
+                        </Button>
+                      )}
+                      {(canDocEdit || canDocDelete) && (
+                        <>
+                          {canDocEdit && (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={isBusy}
+                              onClick={() => {
+                                setEditingDoc(viewingDoc);
+                                setViewingDoc(null);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                          )}
+                          {canDocDelete && (
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              disabled={isBusy}
+                              onClick={() => void deleteDocument(viewingDoc)}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </Modal>
+              )}
+
+              {editingDoc && canDocEdit && (
                 <Modal
                   isOpen
                   onClose={() => {
@@ -1350,15 +1577,39 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                     <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block">
                       <span className={labelClass}>Type</span>
-                      <select name="documentTypeId" required defaultValue={editingDoc.documentType.id} className={fieldClass}>
-                        {catalogDocTypes.map((t) => (
+                      <select
+                        name="documentTypeId"
+                        required
+                        defaultValue={
+                          isEmployeeDocumentCustomTitle(editingDoc)
+                            ? CUSTOM_EMPLOYEE_DOC_TYPE_VALUE
+                            : editingDoc.documentType.id
+                        }
+                        className={fieldClass}
+                      >
+                        {catalogDocTypesForSelect.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.name}
                             {!t.isActive ? ' (inactive)' : ''}
                           </option>
                         ))}
+                        {otherDocType && (
+                          <option value={CUSTOM_EMPLOYEE_DOC_TYPE_VALUE}>Custom title…</option>
+                        )}
                       </select>
                     </label>
+                    {otherDocType && (
+                      <label className="block">
+                        <span className={labelClass}>Document title</span>
+                        <input
+                          name="customTitle"
+                          defaultValue={readEmployeeDocumentCustomTitle(editingDoc.customFields) ?? ''}
+                          className={fieldClass}
+                          placeholder="e.g. Training certificate"
+                        />
+                        <span className="mt-1 block text-xs text-slate-500">Required when type is Custom title.</span>
+                      </label>
+                    )}
                     <label className="block">
                       <span className={labelClass}>Link to visa period</span>
                       <select name="visaPeriodId" defaultValue={editingDoc.visaPeriod?.id ?? ''} className={fieldClass}>
@@ -1390,10 +1641,13 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       <span className={labelClass}>Notes</span>
                       <textarea name="notes" rows={2} defaultValue={editingDoc.notes ?? ''} className={fieldClass} />
                     </label>
-                    <label className="block sm:col-span-2">
-                      <span className={labelClass}>File (Drive id)</span>
-                      <input name="mediaUrl" defaultValue={editingDoc.mediaUrl ?? ''} className={fieldClass} placeholder="Optional - or replace by uploading" />
-                    </label>
+                    <DocumentPortalSelfServiceFields
+                      portalViewEnabled={editPortalViewEnabled}
+                      portalDownloadEnabled={editPortalDownloadEnabled}
+                      onPortalViewChange={setEditPortalViewEnabled}
+                      onPortalDownloadChange={setEditPortalDownloadEnabled}
+                      labelClass={labelClass}
+                    />
                     <label className="block sm:col-span-2">
                       <span className={labelClass}>Replace file (PDF / JPEG / PNG / WebP)</span>
                       <input name="documentEditFile" type="file" accept=".pdf,image/jpeg,image/png,image/webp" className={fieldClass} />
@@ -1411,31 +1665,56 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                 </Modal>
               )}
 
-              {canDoc && showAddDocumentModal && (
+              {canDocCreate && showAddDocumentModal && (
                 <Modal
                   isOpen
                   onClose={() => {
-                    if (!isBusy) setShowAddDocumentModal(false);
+                    if (!isBusy) {
+                      setShowAddDocumentModal(false);
+                      setAddDocTypeSelection('');
+                      setAddPortalViewEnabled(false);
+                      setAddPortalDownloadEnabled(false);
+                    }
                   }}
                   title="Add document"
                   size="lg"
                 >
                   <form onSubmit={addDocument} className="space-y-4">
-                    {catalogDocTypes.length === 0 ? (
+                    {!canAddDocuments ? (
                       <p className="text-sm text-amber-200/90">No document types yet. Add them from HR Settings {'>'} Document types.</p>
                     ) : (
                     <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block">
                       <span className={labelClass}>Type</span>
-                      <select name="documentTypeId" required className={fieldClass}>
-                        {catalogDocTypes.map((t) => (
+                      <select
+                        name="documentTypeId"
+                        required
+                        value={addDocTypeSelection || catalogDocTypesForSelect.find((t) => t.isActive)?.id || CUSTOM_EMPLOYEE_DOC_TYPE_VALUE}
+                        onChange={(e) => setAddDocTypeSelection(e.target.value)}
+                        className={fieldClass}
+                      >
+                        {catalogDocTypesForSelect.map((t) => (
                           <option key={t.id} value={t.id} disabled={!t.isActive}>
                             {t.name}
                             {!t.isActive ? ' (inactive)' : ''}
                           </option>
                         ))}
+                        {otherDocType && (
+                          <option value={CUSTOM_EMPLOYEE_DOC_TYPE_VALUE}>Custom title…</option>
+                        )}
                       </select>
                     </label>
+                    {otherDocType && addDocTypeSelection === CUSTOM_EMPLOYEE_DOC_TYPE_VALUE && (
+                      <label className="block">
+                        <span className={labelClass}>Document title</span>
+                        <input
+                          name="customTitle"
+                          required
+                          className={fieldClass}
+                          placeholder="e.g. Safety induction letter"
+                        />
+                      </label>
+                    )}
                     <label className="block">
                       <span className={labelClass}>Link to visa period</span>
                       <select name="visaPeriodId" className={fieldClass} disabled={emp.visaPeriods.length === 0}>
@@ -1467,10 +1746,13 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       <span className={labelClass}>Notes</span>
                       <textarea name="notes" rows={2} className={fieldClass} />
                     </label>
-                    <label className="block sm:col-span-2">
-                      <span className={labelClass}>File (Drive id)</span>
-                      <input name="mediaUrl" className={fieldClass} placeholder="Optional - or upload below" />
-                    </label>
+                    <DocumentPortalSelfServiceFields
+                      portalViewEnabled={addPortalViewEnabled}
+                      portalDownloadEnabled={addPortalDownloadEnabled}
+                      onPortalViewChange={setAddPortalViewEnabled}
+                      onPortalDownloadChange={setAddPortalDownloadEnabled}
+                      labelClass={labelClass}
+                    />
                     <label className="block sm:col-span-2">
                       <span className={labelClass}>Upload scan (PDF / JPEG / PNG / WebP)</span>
                       <input name="documentFile" type="file" accept=".pdf,image/jpeg,image/png,image/webp" className={fieldClass} />
@@ -1481,7 +1763,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       <Button type="button" variant="ghost" disabled={isBusy} onClick={() => setShowAddDocumentModal(false)}>
                         Cancel
                       </Button>
-                      {catalogDocTypes.length > 0 && (
+                      {canAddDocuments && (
                         <Button type="submit" disabled={isBusy}>
                           {busyKey === 'document-create' ? 'Saving...' : 'Add document'}
                         </Button>
@@ -1494,7 +1776,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
               {!canDocView ? (
                 <p className="text-slate-500">You cannot view documents.</p>
               ) : (
-                <div className="overflow-hidden rounded-2xl border border-white/10">
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-500">Double-click a row to view details.</p>
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
                   <table className="w-full text-left text-sm">
                     <thead className="border-b border-white/10 bg-slate-950/80 text-xs uppercase text-slate-500">
                       <tr>
@@ -1503,25 +1787,34 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                         <th className="px-4 py-3">Validity</th>
                         <th className="px-4 py-3">Visa link</th>
                         <th className="px-4 py-3">File</th>
-                        {canDoc && <th className="px-4 py-3 w-36">Actions</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {emp.documents.length === 0 ? (
                         <tr>
-                          <td colSpan={canDoc ? 6 : 5} className="px-4 py-8 text-center text-slate-500">
+                          <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                             No documents on file.
                           </td>
                         </tr>
                       ) : (
-                        emp.documents.map((d) => (
-                          <tr key={d.id} className="text-slate-200">
-                            <td className="px-4 py-3 font-medium text-white">{d.documentType.name}</td>
-                            <td className="px-4 py-3 font-mono text-xs">{d.documentNumber ?? '-'}</td>
-                            <td className="px-4 py-3 text-xs text-slate-400">
-                              {d.issueDate ? toInputDate(d.issueDate) : '-'} to {d.expiryDate ? toInputDate(d.expiryDate) : '-'}
+                        emp.documents.map((d) => {
+                          const validityDays = daysUntil(d.expiryDate);
+                          return (
+                          <tr
+                            key={d.id}
+                            className="group cursor-pointer text-slate-600 transition-colors duration-150 hover:bg-muted/50 dark:text-slate-200 dark:hover:bg-white/5"
+                            onDoubleClick={() => setViewingDoc(d)}
+                          >
+                            <td className="px-4 py-3 font-medium text-slate-900 transition-colors group-hover:text-emerald-800 dark:text-white dark:group-hover:text-emerald-100">
+                              {employeeDocumentDisplayName(d)}
                             </td>
-                            <td className="px-4 py-3 text-xs">{d.visaPeriod?.label ?? '-'}</td>
+                            <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">{d.documentNumber ?? '-'}</td>
+                            <td className={`px-4 py-3 text-xs font-medium ${validityToneClass(validityDays)}`}>
+                              {validityLabel(validityDays)}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-slate-600 transition-colors group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-slate-100">
+                              {d.visaPeriod?.label ?? '-'}
+                            </td>
                             <td className="px-4 py-3 text-xs">
                               {d.mediaUrl ? (
                                 <a
@@ -1529,6 +1822,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="font-medium text-emerald-400 hover:text-emerald-300"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
                                   Open
                                 </a>
@@ -1536,27 +1830,13 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                                 '-'
                               )}
                             </td>
-                            {canDoc && (
-                              <td className="px-4 py-3">
-                                <div className="flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
-                                    onClick={() => setEditingDoc(d)}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button type="button" className="text-xs text-red-400 hover:text-red-300" onClick={() => deleteDocument(d.id)}>
-                                    Remove
-                                  </button>
-                                </div>
-                              </td>
-                            )}
                           </tr>
-                        ))
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -1674,7 +1954,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
             </dl>
           </div>
           <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/30 p-5 text-xs leading-relaxed text-slate-500">
-            Lifetime profile: keep dates accurate for compliance. Document scans can be stored in Drive and referenced by file id.
+            Lifetime profile: keep dates accurate for compliance. Document scans are uploaded to Drive automatically.
           </div>
         </aside>
       </div>

@@ -20,9 +20,9 @@ export default function EmployeePortalLayout({ children }: { children: React.Rea
 
   const tabs = [
     { href: '/me', label: 'Home' },
-    { href: '/me/profile', label: 'Profile' },
     { href: '/me/attendance', label: 'Attendance' },
     { href: '/me/leave', label: 'Leave' },
+    { href: '/me/documents', label: 'Documents' },
   ];
 
   return (

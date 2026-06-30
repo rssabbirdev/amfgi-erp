@@ -1,5 +1,5 @@
-import MeDashboardPage from '@/components/me/MeDashboardPage';
+import MeProfilePage from '@/components/me/MeProfilePage';
 
 export default function MeHomePage() {
-  return <MeDashboardPage />;
+  return <MeProfilePage />;
 }

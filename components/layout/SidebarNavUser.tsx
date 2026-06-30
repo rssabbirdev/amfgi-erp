@@ -19,7 +19,7 @@ export function SidebarNavUser() {
   const { data: session } = useSession();
   const { isMobile, setOpenMobile } = useSidebar();
   const selfServiceOnly = isEmployeeSelfServiceUser(session?.user);
-  const profileHref = selfServiceOnly ? '/me/profile' : '/profile';
+  const profileHref = selfServiceOnly ? '/me' : '/profile';
   const name = session?.user?.name ?? 'Account';
   const email = session?.user?.email ?? '';
   const avatar = session?.user?.image?.trim() ?? '';

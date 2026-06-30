@@ -1,6 +1,7 @@
+import { employeeDocumentDisplayName } from '@/lib/hr/employeeDocumentDisplay';
+import { canHrDocumentEdit } from '@/lib/hr/documentPermissions';
 import { prisma } from '@/lib/db/prisma';
-import { P } from '@/lib/permissions';
-import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
+import { requireCompanySession } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { buildEmployeeDriveFolderName, deleteFromDrive, uploadToDrive } from '@/lib/utils/googleDrive';
 import { extractGoogleDriveFileId } from '@/lib/utils/googleDriveUrl';
@@ -17,12 +18,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_DOCUMENT_EDIT)) return errorResponse('Forbidden', 403);
+  if (!canHrDocumentEdit(session.user)) return errorResponse('Forbidden', 403);
   const { id: documentId } = await params;
 
   const doc = await prisma.employeeDocument.findFirst({
     where: { id: documentId, companyId },
-    include: { employee: { select: { employeeCode: true, fullName: true, id: true } }, documentType: { select: { name: true } }, visaPeriod: { select: { label: true } } },
+    include: {
+      employee: { select: { employeeCode: true, fullName: true, id: true } },
+      documentType: { select: { name: true, slug: true } },
+      visaPeriod: { select: { label: true } },
+    },
   });
   if (!doc) return errorResponse('Document not found', 404);
 
@@ -45,7 +50,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const ext = ALLOWED.get(file.type)!;
     // const safeCode = doc.employee.employeeCode.replace(/[^a-zA-Z0-9-_]/g, '_');
     const employeeName = doc.employee.fullName
-    const documentType = doc.documentType.name
+    const documentType = employeeDocumentDisplayName(doc)
     const visaPeriod = doc.visaPeriod?.label ?? null;
 
     const { viewerUrl } = await uploadToDrive(

@@ -241,9 +241,10 @@ export const SIDEBAR_NAV_ENTRIES: SidebarNavEntry[] = [
 ];
 
 export const SIDEBAR_SELF_SERVICE_ENTRIES: SidebarNavEntry[] = [
-  { type: 'link', href: '/me/profile', label: 'My Profile', icon: User, linkedEmployeeOnly: true },
+  { type: 'link', href: '/me', label: 'My Profile', icon: User, linkedEmployeeOnly: true },
   { type: 'link', href: '/me/attendance', label: 'My Attendance', icon: Calendar, linkedEmployeeOnly: true },
   { type: 'link', href: '/me/leave', label: 'My Leave', icon: Calendar, linkedEmployeeOnly: true },
+  { type: 'link', href: '/me/documents', label: 'My Documents', icon: User, linkedEmployeeOnly: true },
 ];
 
 export type SidebarNavVisibility = {

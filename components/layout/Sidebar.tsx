@@ -36,7 +36,7 @@ export default function AppNavigationSidebar() {
   const initial = activeCompanyName?.[0]?.toUpperCase() ?? 'A';
   const workspaceTitle = selfServiceOnly ? 'Employee Portal' : (activeCompanyName ?? 'Select company');
   const workspaceSubtitle = selfServiceOnly ? 'Self service' : 'AMFGI ERP';
-  const homeHref = selfServiceOnly ? '/me/profile' : '/dashboard';
+  const homeHref = selfServiceOnly ? '/me' : '/dashboard';
   const teamTooltip = selfServiceOnly ? 'Employee Portal' : (activeCompanyName ?? 'Workspace');
 
   return (

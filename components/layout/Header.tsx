@@ -14,9 +14,13 @@ export default function Header() {
   const selfServiceTitle =
     pathname?.startsWith('/me/attendance')
       ? 'My Attendance'
-      : pathname?.startsWith('/me/profile')
-        ? 'My Profile'
-        : 'Employee Portal';
+      : pathname?.startsWith('/me/leave')
+        ? 'My Leave'
+        : pathname?.startsWith('/me/documents')
+          ? 'My Documents'
+          : pathname === '/me' || pathname?.startsWith('/me/profile')
+            ? 'My Profile'
+            : 'Employee Portal';
 
   return (
     <header className="relative z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/80 px-3 backdrop-blur-xl supports-backdrop-filter:bg-background/70 sm:gap-4 sm:px-5 lg:px-6">

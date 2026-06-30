@@ -1,10 +1,11 @@
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db/prisma';
+import { employeeDocumentDisplayName } from '@/lib/hr/employeeDocumentDisplay';
 import { readOnLeaveFrom } from '@/lib/hr/employeeLeavePeriod';
 import { getPortalEmployeeForSession } from '@/lib/hr/linkedEmployee';
 import { getOrCreateLeaveBalance, remainingLeaveDays } from '@/lib/hr/leaveBalance';
 import { countLeaveDaysInclusive } from '@/lib/hr/leaveTypes';
 import { dateFromYmd } from '@/lib/hr/workDate';
+import { prisma } from '@/lib/db/prisma';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
 function monthBoundsUtc(year: number, month: number) {
@@ -105,12 +106,15 @@ export async function GET() {
     where: {
       employeeId: emp.id,
       companyId: emp.companyId,
+      portalViewEnabled: true,
       expiryDate: { gte: today },
     },
     orderBy: { expiryDate: 'asc' },
     select: {
       expiryDate: true,
-      documentType: { select: { name: true } },
+      customFields: true,
+      portalViewEnabled: true,
+      documentType: { select: { name: true, slug: true } },
     },
   });
 
@@ -149,7 +153,7 @@ export async function GET() {
     },
     upcomingDocument: upcomingDocument
       ? {
-          name: upcomingDocument.documentType.name,
+          name: employeeDocumentDisplayName(upcomingDocument),
           expiryDate: upcomingDocument.expiryDate,
         }
       : null,

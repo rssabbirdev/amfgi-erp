@@ -1,4 +1,7 @@
 import { prisma } from '@/lib/db/prisma';
+import { canHrDocumentCreate } from '@/lib/hr/documentPermissions';
+import { normalizePortalDocumentFlags } from '@/lib/hr/employeeDocumentPortal';
+import { EMPLOYEE_DOC_OTHER_SLUG, resolveEmployeeDocumentCustomFields } from '@/lib/hr/employeeDocumentDisplay';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
@@ -6,6 +9,7 @@ import { z } from 'zod';
 
 const DocSchema = z.object({
   documentTypeId: z.string().min(1),
+  customTitle: z.string().max(200).optional().nullable(),
   visaPeriodId: z.string().optional().nullable(),
   documentNumber: z.string().max(120).optional().nullable(),
   issueDate: z.string().optional().nullable(),
@@ -14,6 +18,8 @@ const DocSchema = z.object({
   notes: z.string().max(5000).optional().nullable(),
   customFields: z.any().optional().nullable(),
   mediaUrl: z.string().max(2000).optional().nullable(),
+  portalViewEnabled: z.boolean().optional(),
+  portalDownloadEnabled: z.boolean().optional(),
 });
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -38,7 +44,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_DOCUMENT_EDIT)) return errorResponse('Forbidden', 403);
+  if (!canHrDocumentCreate(session.user)) return errorResponse('Forbidden', 403);
   const { id: employeeId } = await params;
 
   const emp = await prisma.employee.findFirst({ where: { id: employeeId, companyId } });
@@ -54,12 +60,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   if (!dt) return errorResponse('Invalid document type', 422);
 
+  const customTitle = d.customTitle?.trim() || null;
+  if (dt.slug === EMPLOYEE_DOC_OTHER_SLUG && !customTitle) {
+    return errorResponse('Custom title is required for custom documents', 422);
+  }
+  if (customTitle && dt.slug !== EMPLOYEE_DOC_OTHER_SLUG) {
+    return errorResponse('Custom title is only allowed for custom documents', 422);
+  }
+
   if (d.visaPeriodId) {
     const vp = await prisma.visaPeriod.findFirst({
       where: { id: d.visaPeriodId, employeeId, companyId },
     });
     if (!vp) return errorResponse('Invalid visa period', 422);
   }
+
+  const portalFlags = normalizePortalDocumentFlags(d.portalViewEnabled, d.portalDownloadEnabled);
 
   const doc = await prisma.employeeDocument.create({
     data: {
@@ -72,8 +88,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       expiryDate: d.expiryDate ? new Date(d.expiryDate) : null,
       issuingAuthority: d.issuingAuthority?.trim() || null,
       notes: d.notes?.trim() || null,
-      customFields: d.customFields === undefined ? undefined : d.customFields,
+      customFields:
+        d.customFields !== undefined
+          ? d.customFields
+          : resolveEmployeeDocumentCustomFields(d.customTitle ?? null),
       mediaUrl: d.mediaUrl?.trim() || null,
+      portalViewEnabled: portalFlags.portalViewEnabled,
+      portalDownloadEnabled: portalFlags.portalDownloadEnabled,
     },
   });
   return successResponse(doc, 201);

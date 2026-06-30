@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 
+import { MetricCard } from '@/components/me/shared';
 import { Badge } from '@/components/ui/shadcn/badge';
 import { Button, buttonVariants } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
@@ -35,6 +36,14 @@ type BalanceData = {
   remainingDays: number;
 };
 
+type DashboardLeaveSummary = {
+  leaveBalance: BalanceData;
+  leaveSummary: {
+    pendingCount: number;
+    approvedLeaveDaysYtd: number;
+  };
+};
+
 function statusTone(status: string) {
   if (status === 'APPROVED') return 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300';
   if (status === 'PENDING') return 'bg-amber-500/10 text-amber-800 dark:text-amber-300';
@@ -52,18 +61,26 @@ export default function MeLeavePage() {
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [dashboardLeave, setDashboardLeave] = useState<DashboardLeaveSummary | null>(null);
 
   const load = useCallback(async () => {
-    const [reqRes, balRes, typesRes] = await Promise.all([
+    const [reqRes, balRes, typesRes, dashRes] = await Promise.all([
       fetch('/api/me/leave-requests', { cache: 'no-store' }),
       fetch(`/api/me/leave-balance?year=${balanceYear}`, { cache: 'no-store' }),
       fetch('/api/me/leave-types', { cache: 'no-store' }),
+      fetch('/api/me/dashboard', { cache: 'no-store' }),
     ]);
     const reqJson = await readApiJson<LeaveRow[]>(reqRes);
     const balJson = await readApiJson<BalanceData>(balRes);
     const typesJson = await readApiJson<LeaveTypeOption[]>(typesRes);
+    const dashJson = await readApiJson<DashboardLeaveSummary>(dashRes);
     if (reqRes.ok && reqJson?.success) setRows(reqJson.data as LeaveRow[]);
     if (balRes.ok && balJson?.success) setBalance(balJson.data as BalanceData);
+    if (dashRes.ok && dashJson?.success && dashJson.data) {
+      setDashboardLeave(dashJson.data as DashboardLeaveSummary);
+    } else {
+      setDashboardLeave(null);
+    }
     if (typesRes.ok && typesJson?.success) {
       const types = (typesJson.data ?? []) as LeaveTypeOption[];
       const active = types.filter((t) => t.isActive !== false);
@@ -137,9 +154,30 @@ export default function MeLeavePage() {
           </p>
         </div>
         <Link href="/me" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          Dashboard
+          Home
         </Link>
       </div>
+
+      {dashboardLeave ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label={`Leave remaining (${dashboardLeave.leaveBalance.year})`}
+            value={String(dashboardLeave.leaveBalance.remainingDays)}
+            tone="emerald"
+          />
+          <MetricCard label="Leave used" value={String(dashboardLeave.leaveBalance.usedDays)} />
+          <MetricCard
+            label="Pending requests"
+            value={String(dashboardLeave.leaveSummary.pendingCount)}
+            tone="amber"
+          />
+          <MetricCard
+            label="Approved leave days (YTD)"
+            value={String(dashboardLeave.leaveSummary.approvedLeaveDaysYtd)}
+            tone="sky"
+          />
+        </div>
+      ) : null}
 
       {balance ? (
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm">

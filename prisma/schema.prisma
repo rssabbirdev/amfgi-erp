@@ -1620,6 +1620,8 @@ model EmployeeDocument {
   notes            String?   @db.Text
   customFields     Json?
   mediaUrl         String?
+  portalViewEnabled Boolean @default(false)
+  portalDownloadEnabled Boolean @default(false)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
