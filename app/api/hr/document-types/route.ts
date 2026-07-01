@@ -1,8 +1,12 @@
 import { prisma } from '@/lib/db/prisma';
 import { publishLiveUpdate } from '@/lib/live-updates/server';
-import { P } from '@/lib/permissions';
 import { ensureDefaultEmployeeDocumentTypes } from '@/lib/hr/defaultDocumentTypes';
-import { hasPerm, requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
+import {
+  canHrDocumentTypeCreate,
+  canHrDocumentTypeEdit,
+  canHrDocumentTypeView,
+} from '@/lib/hr/documentTypePermissions';
+import { requireCompanySession } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
@@ -20,7 +24,7 @@ export async function GET() {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!hasPerm(session.user, P.HR_SETTINGS_DOC_TYPES) && !hasPerm(session.user, P.HR_DOCUMENT_VIEW)) {
+  if (!canHrDocumentTypeView(session.user)) {
     return errorResponse('Forbidden', 403);
   }
 
@@ -35,7 +39,7 @@ export async function POST(req: Request) {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_SETTINGS_DOC_TYPES)) return errorResponse('Forbidden', 403);
+  if (!canHrDocumentTypeCreate(session.user)) return errorResponse('Forbidden', 403);
 
   const body = await req.json();
   const parsed = CreateSchema.safeParse(body);
@@ -75,7 +79,7 @@ export async function PUT() {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_SETTINGS_DOC_TYPES)) return errorResponse('Forbidden', 403);
+  if (!canHrDocumentTypeEdit(session.user)) return errorResponse('Forbidden', 403);
 
   await ensureDefaultEmployeeDocumentTypes(prisma, companyId);
   const list = await prisma.employeeDocumentType.findMany({

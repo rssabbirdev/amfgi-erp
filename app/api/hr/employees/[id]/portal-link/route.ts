@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/db/prisma';
-import { P } from '@/lib/permissions';
-import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
+import {
+  canHrAccountAccessCreate,
+  canHrAccountAccessDelete,
+} from '@/lib/hr/accountAccessPermissions';
+import { requireCompanySession } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
@@ -13,7 +16,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_EMPLOYEE_EDIT)) return errorResponse('Forbidden', 403);
+  if (!canHrAccountAccessCreate(session.user)) return errorResponse('Forbidden', 403);
   const { id: employeeId } = await params;
 
   const emp = await prisma.employee.findFirst({ where: { id: employeeId, companyId } });
@@ -29,6 +32,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     include: { companyAccess: true },
   });
   if (!user) return errorResponse('User not found', 404);
+
+  if (user.linkedEmployeeId && user.linkedEmployeeId !== employeeId) {
+    return errorResponse('This user is already linked to another employee', 409);
+  }
 
   if (user.email.trim().toLowerCase() !== emp.email.trim().toLowerCase()) {
     return errorResponse('User email must match the employee email', 422);
@@ -65,7 +72,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_EMPLOYEE_EDIT)) return errorResponse('Forbidden', 403);
+  if (!canHrAccountAccessDelete(session.user)) return errorResponse('Forbidden', 403);
   const { id: employeeId } = await params;
 
   const emp = await prisma.employee.findFirst({ where: { id: employeeId, companyId } });

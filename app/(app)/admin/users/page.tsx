@@ -21,6 +21,7 @@ import {
   useGetRolesQuery,
   useCreateUserMutation,
   useUpdateUserMutation,
+  useDeleteUserMutation,
   USER_PAGE_SIZE_OPTIONS,
 } from '@/store/hooks';
 import toast from 'react-hot-toast';
@@ -109,6 +110,7 @@ export default function AdminUsersPage() {
   });
   const [createUser] = useCreateUserMutation();
   const [updateUser] = useUpdateUserMutation();
+  const [deleteUser] = useDeleteUserMutation();
   /** `isFetching` would flip true on background refetch and swap the whole table for a skeleton — use first-load only. */
   const dataTableLoading = usersLoading;
   const filtersDisabled = (companiesInitialLoading && companies.length === 0) || (rolesInitialLoading && roles.length === 0);
@@ -204,6 +206,21 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleDeleteSelfService = async (u: User) => {
+    const confirmed = window.confirm(
+      `Delete login for ${u.name} (${u.email})?\n\nThis permanently removes the user account and unlinks it from the employee. The employee email on the HR record will be kept.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteUser(u.id).unwrap();
+      toast.success('Self-service login deleted');
+    } catch (error) {
+      const message = (error as { data?: { error?: string } }).data?.error ?? 'Delete failed';
+      toast.error(message);
+    }
+  };
+
   const columns: Column<User>[] = [
     { key: 'name', header: 'Name', sortable: true },
     { key: 'email', header: 'Email', sortable: true },
@@ -256,21 +273,35 @@ export default function AdminUsersPage() {
       header: '',
       render: (u) => {
         const selfProtected = Boolean(currentUserId && isSuperAdminSelfTarget(currentUserId, u) && u.isActive);
+        const selfService = isEmployeeSelfServiceAccount(u);
         return (
         <div className="flex justify-end gap-2">
-          <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(u)}>
-            Edit
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={u.isActive ? 'destructive' : 'default'}
-            disabled={selfProtected}
-            title={selfProtected ? 'Super admins cannot deactivate their own account' : undefined}
-            onClick={() => void handleToggleActive(u)}
-          >
-            {u.isActive ? 'Deactivate' : 'Activate'}
-          </Button>
+          {!selfService ? (
+            <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(u)}>
+              Edit
+            </Button>
+          ) : null}
+          {selfService ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              onClick={() => void handleDeleteSelfService(u)}
+            >
+              Delete
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant={u.isActive ? 'destructive' : 'default'}
+              disabled={selfProtected}
+              title={selfProtected ? 'Super admins cannot deactivate their own account' : undefined}
+              onClick={() => void handleToggleActive(u)}
+            >
+              {u.isActive ? 'Deactivate' : 'Activate'}
+            </Button>
+          )}
         </div>
         );
       },
@@ -296,7 +327,7 @@ export default function AdminUsersPage() {
           </Button>
         ) : (
           <p className="max-w-sm text-right text-xs text-muted-foreground sm:max-w-xs">
-            Portal logins are usually created from HR when an employee is linked to a user.
+            Portal logins are created from HR. Delete here to remove the login and unlink the employee; the employee email stays on the HR record.
           </p>
         )}
       </header>

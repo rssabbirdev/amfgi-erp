@@ -108,7 +108,7 @@ const HUB_SECTIONS: Array<{
         description: 'Define passport, visa, licence, and other tracked document categories with compliance rules.',
         badge: 'Compliance',
         tone: 'amber',
-        perms: ['hr.settings.document_types', 'hr.document.view'],
+        perms: ['hr.document_type.view', 'hr.settings.document_types'],
       },
     ],
   },

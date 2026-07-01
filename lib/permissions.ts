@@ -76,6 +76,10 @@ export const P = {
   HR_DOCUMENT_CREATE: 'hr.document.create',
   HR_DOCUMENT_EDIT: 'hr.document.edit',
   HR_DOCUMENT_DELETE: 'hr.document.delete',
+  HR_DOCUMENT_TYPE_VIEW: 'hr.document_type.view',
+  HR_DOCUMENT_TYPE_CREATE: 'hr.document_type.create',
+  HR_DOCUMENT_TYPE_EDIT: 'hr.document_type.edit',
+  HR_DOCUMENT_TYPE_DELETE: 'hr.document_type.delete',
   HR_SCHEDULE_VIEW: 'hr.schedule.view',
   HR_SCHEDULE_EDIT: 'hr.schedule.edit',
   HR_SCHEDULE_PUBLISH: 'hr.schedule.publish',
@@ -97,6 +101,10 @@ export const P = {
   HR_VISA_CREATE: 'hr.visa.create',
   HR_VISA_EDIT: 'hr.visa.edit',
   HR_VISA_DELETE: 'hr.visa.delete',
+  HR_ACCOUNT_ACCESS_VIEW: 'hr.account_access.view',
+  HR_ACCOUNT_ACCESS_CREATE: 'hr.account_access.create',
+  HR_ACCOUNT_ACCESS_EDIT: 'hr.account_access.edit',
+  HR_ACCOUNT_ACCESS_DELETE: 'hr.account_access.delete',
 
   // Employee self-service (linked User.linkedEmployeeId)
   SELF_EMPLOYEE_VIEW: 'self.employee.view',
@@ -135,6 +143,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.SETTINGS_API,
     P.HR_EMPLOYEE_VIEW, P.HR_EMPLOYEE_EDIT,
     P.HR_DOCUMENT_VIEW, P.HR_DOCUMENT_CREATE, P.HR_DOCUMENT_EDIT, P.HR_DOCUMENT_DELETE,
+    P.HR_DOCUMENT_TYPE_VIEW, P.HR_DOCUMENT_TYPE_CREATE, P.HR_DOCUMENT_TYPE_EDIT, P.HR_DOCUMENT_TYPE_DELETE,
     P.HR_SCHEDULE_VIEW, P.HR_SCHEDULE_EDIT, P.HR_SCHEDULE_PUBLISH,
     P.HR_ATTENDANCE_VIEW, P.HR_ATTENDANCE_EDIT, P.HR_ATTENDANCE_APPROVE,
     P.HR_SETTINGS_DOC_TYPES,
@@ -142,6 +151,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.HR_PAYROLL_SETTINGS, P.HR_PAYROLL_COMPENSATION,
     P.HR_COMPENSATION_VIEW, P.HR_COMPENSATION_CREATE, P.HR_COMPENSATION_EDIT, P.HR_COMPENSATION_DELETE,
     P.HR_VISA_VIEW, P.HR_VISA_CREATE, P.HR_VISA_EDIT, P.HR_VISA_DELETE,
+    P.HR_ACCOUNT_ACCESS_VIEW, P.HR_ACCOUNT_ACCESS_CREATE, P.HR_ACCOUNT_ACCESS_EDIT, P.HR_ACCOUNT_ACCESS_DELETE,
     P.STOCK_JOB_BUDGET_VIEW,
     P.STOCK_JOB_BUDGET_EDIT,
     P.STOCK_FORMULA_VIEW,
@@ -177,6 +187,10 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.HR_DOCUMENT_CREATE,
     P.HR_DOCUMENT_EDIT,
     P.HR_DOCUMENT_DELETE,
+    P.HR_DOCUMENT_TYPE_VIEW,
+    P.HR_DOCUMENT_TYPE_CREATE,
+    P.HR_DOCUMENT_TYPE_EDIT,
+    P.HR_DOCUMENT_TYPE_DELETE,
     P.HR_SCHEDULE_VIEW,
     P.HR_SCHEDULE_EDIT,
     P.HR_SCHEDULE_PUBLISH,
@@ -198,6 +212,10 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.HR_VISA_CREATE,
     P.HR_VISA_EDIT,
     P.HR_VISA_DELETE,
+    P.HR_ACCOUNT_ACCESS_VIEW,
+    P.HR_ACCOUNT_ACCESS_CREATE,
+    P.HR_ACCOUNT_ACCESS_EDIT,
+    P.HR_ACCOUNT_ACCESS_DELETE,
   ],
 };
 
@@ -368,8 +386,14 @@ export const PERMISSION_GROUPS: Array<{
     ],
   },
   {
-    group: 'HR — Settings',
-    perms: [{ key: P.HR_SETTINGS_DOC_TYPES, label: 'Document types' }],
+    group: 'HR — Document types',
+    perms: [
+      { key: P.HR_DOCUMENT_TYPE_VIEW, label: 'View' },
+      { key: P.HR_DOCUMENT_TYPE_CREATE, label: 'Create' },
+      { key: P.HR_DOCUMENT_TYPE_EDIT, label: 'Edit' },
+      { key: P.HR_DOCUMENT_TYPE_DELETE, label: 'Delete' },
+      { key: P.HR_SETTINGS_DOC_TYPES, label: 'Manage document types (legacy full access)' },
+    ],
   },
   {
     group: 'HR — Leave',
@@ -403,6 +427,15 @@ export const PERMISSION_GROUPS: Array<{
       { key: P.HR_VISA_CREATE, label: 'Create' },
       { key: P.HR_VISA_EDIT, label: 'Edit' },
       { key: P.HR_VISA_DELETE, label: 'Delete' },
+    ],
+  },
+  {
+    group: 'HR — Account access',
+    perms: [
+      { key: P.HR_ACCOUNT_ACCESS_VIEW, label: 'View' },
+      { key: P.HR_ACCOUNT_ACCESS_CREATE, label: 'Create / link login' },
+      { key: P.HR_ACCOUNT_ACCESS_EDIT, label: 'Edit portal access' },
+      { key: P.HR_ACCOUNT_ACCESS_DELETE, label: 'Unlink login' },
     ],
   },
   {

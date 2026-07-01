@@ -24,6 +24,7 @@ export {
   useGetUsersPageQuery,
   useCreateUserMutation,
   useUpdateUserMutation,
+  useDeleteUserMutation,
   USER_PAGE_SIZE_OPTIONS,
   type UsersListParams,
   type User,

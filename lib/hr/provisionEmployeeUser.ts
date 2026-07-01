@@ -2,6 +2,10 @@ import type { Prisma } from '@prisma/client';
 import { EMPLOYEE_SELF_ROLE_SLUG } from '@/lib/permissions';
 import { ensureEmployeeSelfServiceRole } from '@/lib/hr/ensureEmployeeSelfServiceRole';
 import { syncUserCompanyAccess } from '@/lib/auth/syncUserCompanyAccess';
+import {
+  checkEmployeeEmailUserConflict,
+  EMAIL_USER_CONFLICT_MESSAGE,
+} from '@/lib/hr/employeeEmailUserConflict';
 
 export { EMPLOYEE_SELF_ROLE_SLUG };
 
@@ -42,20 +46,14 @@ export async function provisionEmployeeUser(
   // Employee already has a linked user account. Keep that account and sync its email.
   if (linkedUser) {
     if (existingUser && existingUser.id !== linkedUser.id) {
-      // Target email belongs to another employee-linked account: hard conflict.
-      if (existingUser.linkedEmployeeId && existingUser.linkedEmployeeId !== params.employeeId) {
-        return {
-          ok: false,
-          code: 'EMAIL_LINKED_OTHER',
-          message: 'This email is already linked to another employee account.',
-        };
+      const conflict = await checkEmployeeEmailUserConflict(db, {
+        email: emailNorm,
+        employeeId: params.employeeId,
+        allowedUserId: linkedUser.id,
+      });
+      if (!conflict.ok) {
+        return { ok: false, code: conflict.code, message: conflict.message };
       }
-      // Target email belongs to a standalone user account. Avoid implicit merge.
-      return {
-        ok: false,
-        code: 'EMAIL_USER_CONFLICT',
-        message: 'This email is already used by another user account. Resolve or unlink it first.',
-      };
     }
 
     await db.user.update({
@@ -86,38 +84,37 @@ export async function provisionEmployeeUser(
   }
 
   if (existingUser) {
-    if (existingUser.linkedEmployeeId && existingUser.linkedEmployeeId !== params.employeeId) {
-      return {
-        ok: false,
-        code: 'EMAIL_LINKED_OTHER',
-        message: 'This email is already linked to another employee account.',
-      };
-    }
-
-    await db.user.update({
-      where: { id: existingUser.id },
-      data: {
-        linkedEmployeeId: params.employeeId,
-        name: existingUser.name?.trim() ? existingUser.name : params.fullName,
-        isActive: true,
-      },
+    const conflict = await checkEmployeeEmailUserConflict(db, {
+      email: emailNorm,
+      employeeId: params.employeeId,
     });
-
-    const hasAccess = existingUser.companyAccess.some((a) => a.companyId === params.companyId);
-    if (!hasAccess) {
-      await syncUserCompanyAccess(db, existingUser.id, [
-        { companyId: params.companyId, roleId: role.id },
-      ]);
+    if (!conflict.ok) {
+      return { ok: false, code: conflict.code, message: conflict.message };
     }
 
-    if (!existingUser.activeCompanyId) {
-      await db.user.update({
-        where: { id: existingUser.id },
-        data: { activeCompanyId: params.companyId },
-      });
+    if (existingUser.linkedEmployeeId === params.employeeId) {
+      const hasAccess = existingUser.companyAccess.some((a) => a.companyId === params.companyId);
+      if (!hasAccess) {
+        await syncUserCompanyAccess(db, existingUser.id, [
+          { companyId: params.companyId, roleId: role.id },
+        ]);
+      }
+
+      if (!existingUser.activeCompanyId) {
+        await db.user.update({
+          where: { id: existingUser.id },
+          data: { activeCompanyId: params.companyId },
+        });
+      }
+
+      return { ok: true, userId: existingUser.id, createdUser: false };
     }
 
-    return { ok: true, userId: existingUser.id, createdUser: false };
+    return {
+      ok: false,
+      code: 'EMAIL_USER_CONFLICT',
+      message: EMAIL_USER_CONFLICT_MESSAGE,
+    };
   }
 
   const created = await db.user.create({

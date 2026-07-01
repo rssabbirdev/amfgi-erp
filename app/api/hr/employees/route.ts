@@ -3,6 +3,10 @@ import { publishLiveUpdate } from '@/lib/live-updates/server';
 import type { Employee, Prisma } from '@prisma/client';
 import { provisionEmployeeUser } from '@/lib/hr/provisionEmployeeUser';
 import {
+  checkEmployeeEmailUserConflict,
+  employeeEmailConflictStatus,
+} from '@/lib/hr/employeeEmailUserConflict';
+import {
   basicHoursForProfileExtension,
   employeeTypeFromProfileExtension,
   readEmployeeTypeSettingsFromCompanyData,
@@ -260,6 +264,13 @@ export async function POST(req: Request) {
   const emailNorm = d.email ? d.email.trim().toLowerCase() : null;
   const auto = d.autoProvisionLogin !== false && Boolean(emailNorm);
 
+  if (emailNorm) {
+    const emailConflict = await checkEmployeeEmailUserConflict(prisma, { email: emailNorm });
+    if (!emailConflict.ok) {
+      return errorResponse(emailConflict.message, employeeEmailConflictStatus(emailConflict.code));
+    }
+  }
+
   let nationality: string | null = null;
   if (d.nationality !== undefined) {
     const parsedNationality = parseNationalityInput(d.nationality);
@@ -344,6 +355,7 @@ export async function POST(req: Request) {
       const code = parts[1];
       const msg = parts.slice(2).join(':') || 'Login provisioning failed';
       if (code === 'EMAIL_LINKED_OTHER') return errorResponse(msg, 409);
+      if (code === 'EMAIL_USER_CONFLICT') return errorResponse(msg, 422);
       return errorResponse(msg, 422);
     }
     if (e instanceof Error && e.message.includes('Unique constraint')) {

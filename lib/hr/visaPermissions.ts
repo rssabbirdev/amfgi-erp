@@ -5,14 +5,18 @@ function userPerms(user: AppSessionUser): string[] {
   return user.permissions ?? [];
 }
 
+function hasGranularHrVisaPermissions(permissions: string[]): boolean {
+  return (
+    permissions.includes(P.HR_VISA_VIEW) ||
+    permissions.includes(P.HR_VISA_CREATE) ||
+    permissions.includes(P.HR_VISA_EDIT) ||
+    permissions.includes(P.HR_VISA_DELETE)
+  );
+}
+
 /** Legacy roles with only `hr.employee.edit` retain full visa / contract CRUD. */
 export function hasLegacyHrVisaFullAccess(permissions: string[]): boolean {
-  return (
-    permissions.includes(P.HR_EMPLOYEE_EDIT) &&
-    !permissions.includes(P.HR_VISA_CREATE) &&
-    !permissions.includes(P.HR_VISA_EDIT) &&
-    !permissions.includes(P.HR_VISA_DELETE)
-  );
+  return permissions.includes(P.HR_EMPLOYEE_EDIT) && !hasGranularHrVisaPermissions(permissions);
 }
 
 export function canHrVisaView(user: AppSessionUser): boolean {

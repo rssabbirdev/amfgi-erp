@@ -1,8 +1,11 @@
 import { auth }            from '@/auth';
 import { syncUserCompanyAccess } from '@/lib/auth/syncUserCompanyAccess';
+import { isEmployeeSelfServiceAccount } from '@/lib/auth/selfService';
 import { assertCanDeactivateUser } from '@/lib/auth/userSelfProtection';
+import { deleteSelfServiceUser, DeleteSelfServiceUserError } from '@/lib/hr/deleteSelfServiceUser';
 import { prisma }          from '@/lib/db/prisma';
 import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
+import { P } from '@/lib/permissions';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { Prisma }          from '@prisma/client';
 import { z }               from 'zod';
@@ -117,17 +120,60 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user?.isSuperAdmin) return errorResponse('Forbidden', 403);
+  if (!session?.user) return errorResponse('Unauthorized', 401);
   const { id } = await params;
 
   const existing = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, isSuperAdmin: true },
+    select: { id: true, isSuperAdmin: true, linkedEmployeeId: true },
   });
   if (!existing) return errorResponse('User not found', 404);
 
   const blocked = assertCanDeactivateUser(session.user.id, existing);
   if (blocked) return errorResponse(blocked, 403);
+
+  if (isEmployeeSelfServiceAccount(existing)) {
+    const canDeleteSelfService =
+      session.user.isSuperAdmin || session.user.permissions.includes(P.USER_DELETE);
+    if (!canDeleteSelfService) return errorResponse('Forbidden', 403);
+
+    try {
+      const result = await prisma.$transaction((tx) => deleteSelfServiceUser(tx, id));
+
+      publishLiveUpdate({
+        companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
+        channel: 'admin',
+        entity: 'user',
+        action: 'deleted',
+      });
+      publishLiveUpdate({
+        companyId: result.companyId,
+        channel: 'hr',
+        entity: 'employee',
+        action: 'updated',
+      });
+
+      return successResponse({
+        deleted: true,
+        permanent: true,
+        employeeId: result.employeeId,
+      });
+    } catch (err) {
+      if (err instanceof DeleteSelfServiceUserError) {
+        const status = err.code === 'NOT_FOUND' ? 404 : 422;
+        return errorResponse(err.message, status);
+      }
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+        return errorResponse(
+          'This login cannot be deleted because it is referenced by other records. Deactivate it instead.',
+          409
+        );
+      }
+      throw err;
+    }
+  }
+
+  if (!session.user.isSuperAdmin) return errorResponse('Forbidden', 403);
 
   await prisma.user.update({
     where: { id },
@@ -140,5 +186,5 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     entity: 'user',
     action: 'deleted',
   });
-  return successResponse({ deleted: true });
+  return successResponse({ deleted: true, permanent: false });
 }

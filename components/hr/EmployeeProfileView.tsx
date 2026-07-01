@@ -30,6 +30,13 @@ import {
   canHrDocumentEdit,
   canHrDocumentView,
 } from '@/lib/hr/documentPermissions';
+import { canHrDocumentTypeView } from '@/lib/hr/documentTypePermissions';
+import {
+  canHrAccountAccessCreate,
+  canHrAccountAccessDelete,
+  canHrAccountAccessEdit,
+  canHrAccountAccessView,
+} from '@/lib/hr/accountAccessPermissions';
 import {
   canHrCompensationDelete,
   canHrCompensationRecordPackage,
@@ -340,11 +347,15 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const canVisaEdit = session?.user ? canHrVisaEdit(session.user) : false;
   const canVisaDelete = session?.user ? canHrVisaDelete(session.user) : false;
   const canVisaShowActions = canVisaEdit || canVisaDelete;
+  const canAccountAccess = session?.user ? canHrAccountAccessView(session.user) : false;
+  const canAccountAccessCreate = session?.user ? canHrAccountAccessCreate(session.user) : false;
+  const canAccountAccessEdit = session?.user ? canHrAccountAccessEdit(session.user) : false;
+  const canAccountAccessDelete = session?.user ? canHrAccountAccessDelete(session.user) : false;
   const canDocCreate = session?.user ? canHrDocumentCreate(session.user) : false;
   const canDocEdit = session?.user ? canHrDocumentEdit(session.user) : false;
   const canDocDelete = session?.user ? canHrDocumentDelete(session.user) : false;
   const canDocView = session?.user ? canHrDocumentView(session.user) : false;
-  const canCatalogTypes = isSA || perms.includes('hr.settings.document_types');
+  const canCatalogTypes = session?.user ? canHrDocumentTypeView(session.user) : false;
   const isBusy = busyKey !== null;
 
   const catalogDocTypesForSelect = useMemo(
@@ -704,7 +715,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   };
 
   const provisionLogin = async () => {
-    if (!canEdit || isBusy) return;
+    if (!canAccountAccessCreate || isBusy) return;
     setBusyKey('provision-login');
     await patchEmployee(
       { provisionNow: true },
@@ -730,7 +741,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   };
 
   const linkPortal = async () => {
-    if (!linkUserId.trim() || isBusy) return;
+    if (!canAccountAccessCreate || !linkUserId.trim() || isBusy) return;
     setBusyKey('portal-link');
     const res = await fetch(`/api/hr/employees/${employeeId}/portal-link`, {
       method: 'POST',
@@ -749,7 +760,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   };
 
   const unlinkPortal = async () => {
-    if (isBusy) return;
+    if (!canAccountAccessDelete || isBusy) return;
     setBusyKey('portal-unlink');
     const res = await fetch(`/api/hr/employees/${employeeId}/portal-link`, { method: 'DELETE' });
     const json = await res.json();
@@ -939,7 +950,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
     ...(canCompensation
       ? [{ id: 'compensation' as const, label: 'Compensation', hint: 'Pay type and salary rates' }]
       : []),
-    { id: 'access', label: 'Account access', hint: 'Portal login & Google sign-in' },
+    ...(canAccountAccess
+      ? [{ id: 'access' as const, label: 'Account access', hint: 'Portal login & Google sign-in' }]
+      : []),
   ];
 
   const fieldClass =
@@ -1963,7 +1976,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
             </div>
           )}
 
-          {tab === 'access' && (
+          {tab === 'access' && canAccountAccess && (
             <div className="rounded-2xl border border-white/10 bg-slate-900/35 p-6 space-y-6">
               <div>
                 <h2 className="text-lg font-semibold text-white">Employee portal</h2>
@@ -1975,7 +1988,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                   You can still paste a user id below if you need a manual link. New employees created with an email are provisioned by default.
                 </p>
               </div>
-              {canEdit && (
+              {canAccountAccessEdit && (
                 <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-slate-950/40 p-4">
                   <input
                     type="checkbox"
@@ -1997,7 +2010,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                   <span className="text-sm text-slate-300">Allow employee self-service portal</span>
                 </label>
               )}
-              {canEdit && emp.email && (
+              {canAccountAccessCreate && emp.email && (
                 <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4">
                   <p className="text-sm text-slate-300">
                     Email on file: <span className="font-mono text-emerald-200/90">{emp.email}</span>
@@ -2013,14 +2026,14 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                     Linked account: <span className="font-medium text-white">{emp.userLink.email}</span>
                   </p>
                   <p className="mt-1 text-xs text-slate-500 font-mono">{emp.userLink.id}</p>
-                  {canEdit && (
+                  {canAccountAccessDelete && (
                     <Button type="button" variant="destructive" className="mt-4" onClick={unlinkPortal}>
                       Unlink account
                     </Button>
                   )}
                 </div>
               ) : (
-                canEdit && (
+                canAccountAccessCreate && (
                   <div className="space-y-3">
                     <label className="block max-w-md">
                       <span className={labelClass}>User id (from Users admin)</span>
@@ -2037,7 +2050,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                   </div>
                 )
               )}
-              {!emp.userLink && !canEdit && <p className="text-sm text-slate-500">No portal link. Contact HR to set up access.</p>}
+              {!emp.userLink && !canAccountAccessCreate && !canAccountAccessEdit && (
+                <p className="text-sm text-slate-500">No portal link. Contact HR to set up access.</p>
+              )}
             </div>
           )}
         </div>

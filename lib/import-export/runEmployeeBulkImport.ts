@@ -6,14 +6,19 @@ import {
   type WorkforceImportPatch,
 } from '@/lib/hr/employeeImportProfile';
 import { parseNationalityInput } from '@/lib/hr/countryNames';
-import type { EmployeeImportRow } from '@/lib/import-export/employeeFields';
+import {
+  checkEmployeeEmailUserConflict,
+  EMAIL_USER_CONFLICT_MESSAGE,
+} from '@/lib/hr/employeeEmailUserConflict';
 import type { BulkImportResult } from '@/lib/import-export/types';
+import type { EmployeeImportRow } from '@/lib/import-export/employeeFields';
 
 type ExistingEmployee = {
   id: string;
   employeeCode: string;
   status: EmployeeStatus;
   profileExtension: unknown;
+  userLink: { id: string } | null;
 };
 
 function parseDateOrNull(value?: string | null) {
@@ -152,7 +157,13 @@ export async function runEmployeeBulkImport(
 
   const existing = await prisma.employee.findMany({
     where: { companyId },
-    select: { id: true, employeeCode: true, status: true, profileExtension: true },
+    select: {
+      id: true,
+      employeeCode: true,
+      status: true,
+      profileExtension: true,
+      userLink: { select: { id: true } },
+    },
   });
   const byId = new Map(existing.map((e) => [e.id, e]));
   const byCode = new Map(existing.map((e) => [e.employeeCode.trim().toLowerCase(), e]));
@@ -190,6 +201,23 @@ export async function runEmployeeBulkImport(
     }
     const nationality = nationalityResult.value;
 
+    const importEmail =
+      row.email !== undefined && row.email?.trim() ? row.email.trim().toLowerCase() : null;
+    if (importEmail) {
+      const emailConflict = await checkEmployeeEmailUserConflict(prisma, {
+        email: importEmail,
+        employeeId: match?.id,
+        allowedUserId: match?.userLink?.id,
+      });
+      if (!emailConflict.ok) {
+        skipped += 1;
+        warnings.push(
+          `${row.employeeCode}: ${emailConflict.message ?? EMAIL_USER_CONFLICT_MESSAGE}`
+        );
+        return;
+      }
+    }
+
     if (mode === 'create') {
       const dup = byCode.get(row.employeeCode.trim().toLowerCase());
       if (dup) {
@@ -207,12 +235,14 @@ export async function runEmployeeBulkImport(
           employeeCode: emp.employeeCode,
           status: emp.status,
           profileExtension: emp.profileExtension,
+          userLink: null,
         });
         byCode.set(emp.employeeCode.trim().toLowerCase(), {
           id: emp.id,
           employeeCode: emp.employeeCode,
           status: emp.status,
           profileExtension: emp.profileExtension,
+          userLink: null,
         });
         created += 1;
       } catch (e) {
@@ -243,12 +273,14 @@ export async function runEmployeeBulkImport(
         employeeCode: emp.employeeCode,
         status: emp.status,
         profileExtension: emp.profileExtension,
+        userLink: match.userLink,
       });
       byId.set(emp.id, {
         id: emp.id,
         employeeCode: emp.employeeCode,
         status: emp.status,
         profileExtension: emp.profileExtension,
+        userLink: match.userLink,
       });
       updated += 1;
     } catch (e) {

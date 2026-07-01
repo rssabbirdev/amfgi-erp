@@ -132,6 +132,15 @@ export const usersApi = adminApi.injectEndpoints({
         }
       },
     }),
+
+    deleteUser: builder.mutation<{ deleted: boolean; permanent?: boolean }, string>({
+      query: (id) => ({
+        url: `/users/${id}`,
+        method: 'DELETE',
+      }),
+      transformResponse: (r: { data: { deleted: boolean; permanent?: boolean } }) => r.data,
+      invalidatesTags: [{ type: 'User', id: 'LIST' }],
+    }),
   }),
 });
 
@@ -140,4 +149,5 @@ export const {
   useGetUsersPageQuery,
   useCreateUserMutation,
   useUpdateUserMutation,
+  useDeleteUserMutation,
 } = usersApi;

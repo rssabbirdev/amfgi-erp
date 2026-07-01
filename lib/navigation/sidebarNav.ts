@@ -127,6 +127,8 @@ export const SIDEBAR_NAV_ENTRIES: SidebarNavEntry[] = [
 			'hr.attendance.view',
 			'hr.leave.view',
 			'hr.payroll.compensation',
+			P.HR_DOCUMENT_TYPE_VIEW,
+			P.HR_SETTINGS_DOC_TYPES,
 		],
 		children: [
 			{
@@ -149,6 +151,11 @@ export const SIDEBAR_NAV_ENTRIES: SidebarNavEntry[] = [
 				href: '/hr/employees',
 				label: 'Employees',
 				perm: 'hr.employee.view',
+			},
+			{
+				href: '/hr/settings/document-types',
+				label: 'Document types',
+				anyPerms: [P.HR_DOCUMENT_TYPE_VIEW, P.HR_SETTINGS_DOC_TYPES],
 			},
 			{
 				href: '/hr/payroll/preview',

@@ -8,6 +8,12 @@ import { Button } from '@/components/ui/shadcn/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/shadcn/card';
 import { Input } from '@/components/ui/shadcn/input';
 import Modal from '@/components/ui/Modal';
+import {
+  canHrDocumentTypeCreate,
+  canHrDocumentTypeDelete,
+  canHrDocumentTypeEdit,
+  canHrDocumentTypeView,
+} from '@/lib/hr/documentTypePermissions';
 import { type HrDocumentType, useGetHrDocumentTypesQuery } from '@/store/api/endpoints/hr';
 
 const labelClass = 'text-[11px] font-medium uppercase tracking-wide text-muted-foreground';
@@ -20,17 +26,18 @@ export default function HrDocumentTypesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<HrDocumentType | null>(null);
 
-  const isSA = session?.user?.isSuperAdmin ?? false;
-  const perms = (session?.user?.permissions ?? []) as string[];
-  const canView = isSA || perms.includes('hr.settings.document_types') || perms.includes('hr.document.view');
-  const canEdit = isSA || perms.includes('hr.settings.document_types');
+  const canView = session?.user ? canHrDocumentTypeView(session.user) : false;
+  const canCreate = session?.user ? canHrDocumentTypeCreate(session.user) : false;
+  const canEdit = session?.user ? canHrDocumentTypeEdit(session.user) : false;
+  const canDelete = session?.user ? canHrDocumentTypeDelete(session.user) : false;
+  const canMutate = canCreate || canEdit || canDelete;
   const { data: list = [], isLoading: loading, refetch } = useGetHrDocumentTypesQuery(undefined, {
     skip: !canView,
   });
 
   const createType = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!canEdit || saving) return;
+    if (!canCreate || saving) return;
     setSaving(true);
     const fd = new FormData(e.currentTarget);
     const body = {
@@ -87,7 +94,7 @@ export default function HrDocumentTypesPage() {
   };
 
   const removeType = async (id: string) => {
-    if (!canEdit || saving || !window.confirm('Delete this document type?')) return;
+    if (!canDelete || saving || !window.confirm('Delete this document type?')) return;
     setSaving(true);
     const res = await fetch(`/api/hr/document-types/${id}`, { method: 'DELETE' });
     const json = await res.json();
@@ -220,14 +227,14 @@ export default function HrDocumentTypesPage() {
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Document types</h1>
           <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">HR document catalog for your company.</p>
         </div>
-        {canEdit ? (
+        {canCreate ? (
           <Button type="button" size="sm" onClick={() => setShowCreate(true)}>
             New type
           </Button>
         ) : null}
       </header>
 
-      {showCreate && canEdit ? (
+      {showCreate && canCreate ? (
         <Modal isOpen onClose={closeCreate} title="Create document type" size="lg">
           <form onSubmit={createType} className="space-y-4">
             {formFields('create')}
@@ -269,13 +276,13 @@ export default function HrDocumentTypesPage() {
                 <th className="px-4 py-3">Rules</th>
                 <th className="px-4 py-3">Order</th>
                 <th className="px-4 py-3">Status</th>
-                {canEdit ? <th className="w-36 px-4 py-3">Actions</th> : null}
+                {canMutate ? <th className="w-36 px-4 py-3">Actions</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {list.length === 0 ? (
                 <tr>
-                  <td colSpan={canEdit ? 6 : 5} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={canMutate ? 6 : 5} className="px-4 py-10 text-center text-muted-foreground">
                     No document types yet.
                   </td>
                 </tr>
@@ -291,21 +298,25 @@ export default function HrDocumentTypesPage() {
                     </td>
                     <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">{r.sortOrder}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{r.isActive ? 'active' : 'inactive'}</td>
-                    {canEdit ? (
+                    {canMutate ? (
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
-                          <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => setEditing(r)}>
-                            Edit
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="link"
-                            size="sm"
-                            className="h-auto p-0 text-destructive"
-                            onClick={() => void removeType(r.id)}
-                          >
-                            Delete
-                          </Button>
+                          {canEdit ? (
+                            <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => setEditing(r)}>
+                              Edit
+                            </Button>
+                          ) : null}
+                          {canDelete ? (
+                            <Button
+                              type="button"
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0 text-destructive"
+                              onClick={() => void removeType(r.id)}
+                            >
+                              Delete
+                            </Button>
+                          ) : null}
                         </div>
                       </td>
                     ) : null}

@@ -1,8 +1,11 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { publishLiveUpdate } from '@/lib/live-updates/server';
-import { P } from '@/lib/permissions';
-import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
+import {
+  canHrDocumentTypeDelete,
+  canHrDocumentTypeEdit,
+} from '@/lib/hr/documentTypePermissions';
+import { requireCompanySession } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
@@ -20,7 +23,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_SETTINGS_DOC_TYPES)) return errorResponse('Forbidden', 403);
+  if (!canHrDocumentTypeEdit(session.user)) return errorResponse('Forbidden', 403);
   const { id } = await params;
 
   const existing = await prisma.employeeDocumentType.findFirst({ where: { id, companyId } });
@@ -61,7 +64,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_SETTINGS_DOC_TYPES)) return errorResponse('Forbidden', 403);
+  if (!canHrDocumentTypeDelete(session.user)) return errorResponse('Forbidden', 403);
   const { id } = await params;
 
   const existing = await prisma.employeeDocumentType.findFirst({ where: { id, companyId } });

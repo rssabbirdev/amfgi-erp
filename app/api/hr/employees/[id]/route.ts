@@ -2,10 +2,20 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { publishLiveUpdate } from '@/lib/live-updates/server';
 import { provisionEmployeeUser } from '@/lib/hr/provisionEmployeeUser';
+import {
+  checkEmployeeEmailUserConflict,
+  employeeEmailConflictStatus,
+} from '@/lib/hr/employeeEmailUserConflict';
 import { P } from '@/lib/permissions';
 import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { mergeProfileExtensionForStatusChange } from '@/lib/hr/employeeLeavePeriod';
+import {
+  assertCanPatchEmployeeAccountFields,
+  canHrAccountAccessCreate,
+  canHrAccountAccessView,
+  employeePatchTouchesAccountFields,
+} from '@/lib/hr/accountAccessPermissions';
 import { parseNationalityInput } from '@/lib/hr/countryNames';
 import { z } from 'zod';
 
@@ -44,6 +54,11 @@ const PatchSchema = z.object({
   provisionNow: z.boolean().optional(),
 });
 
+function patchHasNonAccountEmployeeFields(d: z.infer<typeof PatchSchema>): boolean {
+  const accountKeys = new Set(['portalEnabled', 'provisionNow', 'provisionLogin']);
+  return Object.entries(d).some(([key, value]) => value !== undefined && !accountKeys.has(key));
+}
+
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
@@ -74,11 +89,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const ctx = await requireCompanySession();
     if (!ctx.ok) return ctx.response;
     const { session, companyId } = ctx;
-    if (!requirePerm(session.user, P.HR_EMPLOYEE_EDIT)) return errorResponse('Forbidden', 403);
     const { id } = await params;
-
-    const existing = await prisma.employee.findFirst({ where: { id, companyId } });
-    if (!existing) return errorResponse('Not found', 404);
 
     let body: unknown;
     try {
@@ -89,7 +100,42 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const parsed = PatchSchema.safeParse(body);
     if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message ?? 'Validation error', 422);
     const d = parsed.data;
+
+    const touchesEmployee = patchHasNonAccountEmployeeFields(d);
+    const touchesAccount = employeePatchTouchesAccountFields(d);
+    if (touchesEmployee && !requirePerm(session.user, P.HR_EMPLOYEE_EDIT)) {
+      return errorResponse('Forbidden', 403);
+    }
+    if (!touchesEmployee && touchesAccount && !canHrAccountAccessView(session.user)) {
+      return errorResponse('Forbidden', 403);
+    }
+    const accountForbidden = assertCanPatchEmployeeAccountFields(session.user, d);
+    if (accountForbidden) return errorResponse(accountForbidden, 403);
+
+    const existing = await prisma.employee.findFirst({
+      where: { id, companyId },
+      include: { userLink: { select: { id: true } } },
+    });
+    if (!existing) return errorResponse('Not found', 404);
+
     const emailNorm = d.email !== undefined && d.email ? d.email.trim().toLowerCase() : d.email;
+
+    if (d.email !== undefined && emailNorm) {
+      const emailConflict = await checkEmployeeEmailUserConflict(prisma, {
+        email: emailNorm,
+        employeeId: id,
+        allowedUserId: existing.userLink?.id,
+      });
+      if (!emailConflict.ok) {
+        return errorResponse(emailConflict.message, employeeEmailConflictStatus(emailConflict.code));
+      }
+    }
+
+    const shouldTryProvision =
+      d.provisionLogin !== false && (d.provisionNow === true || (d.email !== undefined && Boolean(emailNorm)));
+    if (shouldTryProvision && !canHrAccountAccessCreate(session.user)) {
+      return errorResponse('Forbidden', 403);
+    }
 
     const data: Prisma.EmployeeUpdateInput = {};
     if (d.employeeCode !== undefined) data.employeeCode = d.employeeCode.trim();
@@ -126,9 +172,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       );
       data.profileExtension = merged as Prisma.InputJsonValue;
     }
-
-    const shouldTryProvision =
-      d.provisionLogin !== false && (d.provisionNow === true || (d.email !== undefined && Boolean(d.email)));
 
     try {
       const emp = await prisma.$transaction(async (tx) => {
@@ -202,6 +245,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const code = parts[1];
         const msg = parts.slice(2).join(':') || 'Login provisioning failed';
         if (code === 'EMAIL_LINKED_OTHER') return errorResponse(msg, 409);
+        if (code === 'EMAIL_USER_CONFLICT') return errorResponse(msg, 422);
         return errorResponse(msg, 422);
       }
       if (e instanceof Error && e.message.includes('Unique constraint')) {

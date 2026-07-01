@@ -35,4 +35,13 @@ describe('visaPermissions', () => {
     expect(canHrVisaEdit(editor)).toBe(true);
     expect(canHrVisaDelete(editor)).toBe(false);
   });
+
+  it('does not elevate employee.edit when any granular visa permission is assigned', () => {
+    const perms = [P.HR_EMPLOYEE_EDIT, P.HR_VISA_VIEW];
+    expect(hasLegacyHrVisaFullAccess(perms)).toBe(false);
+    expect(canHrVisaView(user(perms))).toBe(true);
+    expect(canHrVisaCreate(user(perms))).toBe(false);
+    expect(canHrVisaEdit(user(perms))).toBe(false);
+    expect(canHrVisaDelete(user(perms))).toBe(false);
+  });
 });
