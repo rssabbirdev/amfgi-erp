@@ -195,6 +195,7 @@ export interface WorkScheduleContext {
     driverTripSummary: string;
     notes: string;
     remarksSummary: string;
+    multiAssignedWorkerSummary: string;
   };
   scheduleGroups: Array<{
     label: string;
@@ -1020,6 +1021,7 @@ export const MOCK_WORK_SCHEDULE_DATA: WorkScheduleContext = {
     driverTripSummary: '3 active drivers listed below',
     notes: 'General notes for the day and crew coordination.',
     remarksSummary: 'Two site teams and one factory support group.',
+    multiAssignedWorkerSummary: 'Sabbir - [T1,T3], Rahat - [T2,T3]',
   },
   scheduleGroups: [
     {
@@ -1037,15 +1039,15 @@ export const MOCK_WORK_SCHEDULE_DATA: WorkScheduleContext = {
         teamLeaderName: 'Mohammad Ali',
         driverNames: 'Yousuf / Kareem',
         targetQty: '120 pcs',
-        workerNames: 'Imran, Faiz, Salim, Hamza',
-        workerDisplay: '1. Imran\n2. Faiz\n3. Salim\n4. Hamza',
-      workerRows: ['1. Imran', '2. Faiz', '3. Salim', '4. Hamza'],
-      workerStructuredRows: ['1. Imran', '2. Faiz', '3. Salim', '4. Hamza'],
+        workerNames: 'Imran, Faiz, Salim, Sabbir - [T1,T3]',
+        workerDisplay: '1. Imran\n2. Faiz\n3. Salim\n4. Sabbir - [T1,T3]',
+      workerRows: ['1. Imran', '2. Faiz', '3. Salim', '4. Sabbir - [T1,T3]'],
+      workerStructuredRows: ['1. Imran', '2. Faiz', '3. Salim', '4. Sabbir - [T1,T3]'],
       workerBlocks: [
         { kind: 'leader', text: '1. Imran' },
         { kind: 'worker', text: '2. Faiz' },
         { kind: 'worker', text: '3. Salim' },
-        { kind: 'worker', text: '4. Hamza' },
+        { kind: 'worker', text: '4. Sabbir - [T1,T3]' },
       ],
       workerCount: 4,
       dutyStart: formatScheduleTimeForPrint('05:00'),
@@ -1071,12 +1073,12 @@ export const MOCK_WORK_SCHEDULE_DATA: WorkScheduleContext = {
         teamLeaderName: 'Rizwan Khan',
         driverNames: 'Adnan',
         targetQty: '3 areas / 42 brackets',
-        workerNames: 'Asif, Kabir, Sameer, Bilal, Tariq',
-      workerDisplay: 'Sub-team A\n1. Rahat\n2. Asif\n3. Kabir\nSub-team B\n1. Saad\n2. Sameer\n3. Bilal\n4. Tariq',
-      workerRows: ['1. Rahat', '2. Asif', '3. Kabir', '1. Saad', '2. Sameer', '3. Bilal', '4. Tariq'],
+        workerNames: 'Asif, Kabir, Rahat - [T2,T3], Sameer, Bilal, Tariq',
+      workerDisplay: 'Sub-team A\n1. Rahat - [T2,T3]\n2. Asif\n3. Kabir\nSub-team B\n1. Saad\n2. Sameer\n3. Bilal\n4. Tariq',
+      workerRows: ['1. Rahat - [T2,T3]', '2. Asif', '3. Kabir', '1. Saad', '2. Sameer', '3. Bilal', '4. Tariq'],
       workerStructuredRows: [
         'Sub-team A',
-        '1. Rahat',
+        '1. Rahat - [T2,T3]',
         '2. Asif',
         '3. Kabir',
         '',
@@ -1088,7 +1090,7 @@ export const MOCK_WORK_SCHEDULE_DATA: WorkScheduleContext = {
       ],
       workerBlocks: [
         { kind: 'subteam', text: 'Sub-team A' },
-        { kind: 'leader', text: '1. Rahat' },
+        { kind: 'leader', text: '1. Rahat - [T2,T3]' },
         { kind: 'worker', text: '2. Asif' },
         { kind: 'worker', text: '3. Kabir' },
         { kind: 'spacer', text: '' },

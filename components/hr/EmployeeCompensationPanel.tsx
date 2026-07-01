@@ -261,10 +261,12 @@ function CompensationDetailBody({ pkg }: { pkg: CompensationPackage }) {
 
 export default function EmployeeCompensationPanel({
   employeeId,
-  canEdit,
+  canRecord,
+  canDelete,
 }: {
   employeeId: string;
-  canEdit: boolean;
+  canRecord: boolean;
+  canDelete: boolean;
 }) {
   const [packages, setPackages] = useState<CompensationPackage[]>([]);
   const [payTypes, setPayTypes] = useState<PayType[]>([]);
@@ -522,7 +524,7 @@ export default function EmployeeCompensationPanel({
         </div>
       ) : null}
 
-      {canEdit ? (
+      {canRecord ? (
         <Button size="sm" variant="outline" onClick={openForm}>
           {currentPackage ? 'Record change' : 'Add compensation'}
         </Button>
@@ -578,7 +580,7 @@ export default function EmployeeCompensationPanel({
                         <Button size="sm" variant="ghost" onClick={() => setDetailPackage(pkg)}>
                           Details
                         </Button>
-                        {canEdit ? (
+                        {canDelete ? (
                           <Button
                             size="sm"
                             variant="ghost"
@@ -774,7 +776,7 @@ export default function EmployeeCompensationPanel({
         actions={
           detailPackage ? (
             <>
-              {canEdit ? (
+              {canDelete ? (
                 <Button
                   size="sm"
                   variant="destructive"

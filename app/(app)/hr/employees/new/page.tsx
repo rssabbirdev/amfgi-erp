@@ -15,6 +15,7 @@ import { CatalogSearchSelect } from '@/components/hr/CatalogSearchSelect';
 import { GENDER_OPTIONS, visaHoldingOptions, workforceRoleTypeOptions } from '@/lib/hr/employeeFieldOptions';
 import { createEmployeeRecord } from '@/lib/hr/createEmployeeClient';
 import { generateEmployeeCode } from '@/lib/hr/generateEmployeeCode';
+import { todayYmdLocal } from '@/lib/hr/employeeLeavePeriod';
 import { invalidateEmployeeCaches } from '@/lib/hr/invalidateEmployeeCaches';
 import { useAppDispatch } from '@/store/hooks';
 
@@ -31,8 +32,10 @@ export default function NewEmployeePage() {
   const [designation, setDesignation] = useState('');
   const [department, setDepartment] = useState('');
   const [employmentType, setEmploymentType] = useState('');
+  const [signatureGroup, setSignatureGroup] = useState('');
+  const [hireDate, setHireDate] = useState(() => todayYmdLocal());
   const [employeeType, setEmployeeType] = useState<'OFFICE_STAFF' | 'HYBRID_STAFF' | 'DRIVER' | 'LABOUR_WORKER'>('LABOUR_WORKER');
-  const [visaHolding, setVisaHolding] = useState<'COMPANY_PROVIDED' | 'SELF_OWN' | 'NO_VISA'>('COMPANY_PROVIDED');
+  const [visaHolding, setVisaHolding] = useState('');
 
   const isSA = session?.user?.isSuperAdmin ?? false;
   const perms = (session?.user?.permissions ?? []) as string[];
@@ -62,8 +65,12 @@ export default function NewEmployeePage() {
         designation: designation.trim() || null,
         department: department.trim() || null,
         employmentType: employmentType.trim() || null,
+        signatureGroup: signatureGroup.trim() || null,
+        hireDate: hireDate || null,
         employeeType,
-        visaHolding,
+        visaHolding: visaHolding
+          ? (visaHolding as 'COMPANY_PROVIDED' | 'SELF_OWN' | 'NO_VISA')
+          : undefined,
       });
       invalidateEmployeeCaches(dispatch, { entity: 'employee', action: 'created' });
       toast.success('Employee created');
@@ -183,6 +190,25 @@ export default function NewEmployeePage() {
                 />
               </div>
               <div className="space-y-1">
+                <span className={labelClass}>Signature group</span>
+                <EmployeeMetaSelect
+                  kind="SIGNATURE_GROUP"
+                  name="signatureGroup"
+                  value={signatureGroup}
+                  onValueChange={setSignatureGroup}
+                  fieldClass={metaSelectClass}
+                  emptyLabel="Select signature group…"
+                />
+              </div>
+              <div className="space-y-1">
+                <span className={labelClass}>Hire date</span>
+                <Input
+                  type="date"
+                  value={hireDate}
+                  onChange={(e) => setHireDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
                 <span className={labelClass}>Workforce role type</span>
                 <CatalogSearchSelect
                   value={employeeType}
@@ -199,9 +225,7 @@ export default function NewEmployeePage() {
                 <span className={labelClass}>Visa holding</span>
                 <CatalogSearchSelect
                   value={visaHolding}
-                  onChange={(next) =>
-                    setVisaHolding(next as 'COMPANY_PROVIDED' | 'SELF_OWN' | 'NO_VISA')
-                  }
+                  onChange={setVisaHolding}
                   options={visaHoldingOptionList}
                   placeholder="Search visa holding…"
                   inputClassName={searchInputClass}

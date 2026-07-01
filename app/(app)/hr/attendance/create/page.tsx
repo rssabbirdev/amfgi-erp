@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import AttendanceEntryGrid, {
+  ATTENDANCE_DAY_SHEET_GRID_PREFERENCE_KEY,
   type AttendanceGridAssignmentMeta,
   type AttendanceGridDraftRow,
   type AttendanceGridEmployee,
@@ -1716,6 +1717,7 @@ export default function AttendanceCreatePage() {
         className="flex flex-col"
       >
         <AttendanceEntryGrid
+          gridPreferenceKey={ATTENDANCE_DAY_SHEET_GRID_PREFERENCE_KEY}
           rows={visibleDrafts}
           employeesById={employeeById}
           assignmentsById={assignmentMetaById}

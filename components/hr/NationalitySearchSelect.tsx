@@ -47,6 +47,8 @@ export function NationalitySearchSelect({
         disabled={disabled}
         minCharactersToSearch={0}
         dropdownInPortal
+        allowClearButton={false}
+        clearOnEmptyInput
         inputProps={{
           className: cn(
             'h-8 w-full rounded-md border px-2 py-1 text-xs shadow-inner focus:outline-none focus:ring-1 disabled:opacity-50',

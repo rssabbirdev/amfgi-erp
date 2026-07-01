@@ -106,9 +106,18 @@ export async function assertWarehouseModeTransition(
   companyId: string,
   nextMode: WarehouseMode
 ) {
+  const company = await tx.company.findUnique({
+    where: { id: companyId },
+    select: { warehouseMode: true },
+  });
+
+  if (!company) {
+    throw new Error('Company not found');
+  }
+
   await ensureCompanyFallbackWarehouse(tx, companyId);
 
-  if (nextMode !== WarehouseMode.REQUIRED) {
+  if (company.warehouseMode === nextMode || nextMode !== WarehouseMode.REQUIRED) {
     return;
   }
 

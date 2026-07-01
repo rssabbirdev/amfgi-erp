@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/db/prisma';
-import { P } from '@/lib/permissions';
-import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
+import {
+  canHrCompensationDelete,
+  canHrCompensationEdit,
+} from '@/lib/hr/compensationPermissions';
+import { requireCompanySession } from '@/lib/hr/requireCompanySession';
 import { dateFromYmd, ymdFromInput } from '@/lib/hr/workDate';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
@@ -18,8 +21,8 @@ export async function PATCH(
 ) {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
-  const { companyId } = ctx;
-  if (!requirePerm(ctx.session.user, P.HR_PAYROLL_COMPENSATION)) return errorResponse('Forbidden', 403);
+  const { companyId, session } = ctx;
+  if (!canHrCompensationEdit(session.user)) return errorResponse('Forbidden', 403);
   const { id: employeeId, allowanceId } = await params;
 
   const existing = await prisma.employeeAllowance.findFirst({
@@ -77,8 +80,8 @@ export async function DELETE(
 ) {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
-  const { companyId } = ctx;
-  if (!requirePerm(ctx.session.user, P.HR_PAYROLL_COMPENSATION)) return errorResponse('Forbidden', 403);
+  const { companyId, session } = ctx;
+  if (!canHrCompensationDelete(session.user)) return errorResponse('Forbidden', 403);
   const { id: employeeId, allowanceId } = await params;
 
   const existing = await prisma.employeeAllowance.findFirst({

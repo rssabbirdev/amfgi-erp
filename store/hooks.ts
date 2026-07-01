@@ -15,6 +15,7 @@ export {
   useGetCompaniesQuery,
   useCreateCompanyMutation,
   useUpdateCompanyMutation,
+  useDeleteCompanyMutation,
   type Company,
 } from './api/adminEndpoints/companies';
 

@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/db/prisma';
-import { P } from '@/lib/permissions';
-import { requireCompanySession, requirePerm, hasPerm } from '@/lib/hr/requireCompanySession';
+import {
+  canHrCompensationRecordPackage,
+  canHrCompensationView,
+} from '@/lib/hr/compensationPermissions';
+import { requireCompanySession } from '@/lib/hr/requireCompanySession';
 import { resolveRouteEmployeeId } from '@/lib/hr/resolveRouteEmployeeId';
 import {
   createCompensationPackage,
@@ -30,10 +33,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { companyId, session } = ctx;
-  if (
-    !hasPerm(session.user, P.HR_PAYROLL_COMPENSATION) &&
-    !hasPerm(session.user, P.HR_PAYROLL_SETTINGS)
-  ) {
+  if (!canHrCompensationView(session.user)) {
     return errorResponse('Forbidden', 403);
   }
   const employeeId = await resolveRouteEmployeeId(req, params);
@@ -56,8 +56,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
-  const { companyId } = ctx;
-  if (!requirePerm(ctx.session.user, P.HR_PAYROLL_COMPENSATION)) return errorResponse('Forbidden', 403);
+  const { companyId, session } = ctx;
+  if (!canHrCompensationRecordPackage(session.user)) return errorResponse('Forbidden', 403);
   const employeeId = await resolveRouteEmployeeId(req, params);
   if (!employeeId) return errorResponse('Employee id required', 400);
 

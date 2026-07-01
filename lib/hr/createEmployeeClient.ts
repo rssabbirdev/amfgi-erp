@@ -1,4 +1,3 @@
-import { buildWorkforceProfileExtension } from '@/lib/hr/workforceProfile';
 import { generateEmployeeCode } from '@/lib/hr/generateEmployeeCode';
 
 export type WorkforceEmployeeType = 'OFFICE_STAFF' | 'HYBRID_STAFF' | 'DRIVER' | 'LABOUR_WORKER';
@@ -13,6 +12,8 @@ export type CreateEmployeeClientInput = {
   designation?: string | null;
   department?: string | null;
   employmentType?: string | null;
+  signatureGroup?: string | null;
+  hireDate?: string | null;
   employeeType?: WorkforceEmployeeType;
   visaHolding?: VisaHolding;
 };
@@ -48,11 +49,15 @@ export async function createEmployeeRecord(
       designation: input.designation?.trim() || null,
       department: input.department?.trim() || null,
       employmentType: input.employmentType?.trim() || null,
-      profileExtension: buildWorkforceProfileExtension({
-        employeeType: input.employeeType ?? 'LABOUR_WORKER',
-        visaHolding: input.visaHolding ?? 'COMPANY_PROVIDED',
-        expertises: [],
-      }),
+      signatureGroup: input.signatureGroup?.trim() || null,
+      hireDate: input.hireDate?.trim() || null,
+      profileExtension: {
+        workforce: {
+          employeeType: input.employeeType ?? 'LABOUR_WORKER',
+          expertises: [],
+          ...(input.visaHolding ? { visaHolding: input.visaHolding } : {}),
+        },
+      },
     }),
   });
   const json = (await res.json().catch(() => null)) as {

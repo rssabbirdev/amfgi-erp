@@ -8,6 +8,7 @@ import { Redo2, Undo2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import AttendanceEntryGrid, {
+  ATTENDANCE_EMPLOYEE_MONTH_GRID_PREFERENCE_KEY,
   type AttendanceGridAssignmentMeta,
   type AttendanceGridDraftRow,
   type AttendanceGridEmployee,
@@ -958,7 +959,7 @@ export default function HrEmployeeAttendancePage() {
             >
               <AttendanceEntryGrid
                 sheetMode="dates"
-                gridPreferenceKeySuffix="employee-month"
+                gridPreferenceKey={ATTENDANCE_EMPLOYEE_MONTH_GRID_PREFERENCE_KEY}
                 resolveRowKey={attendanceDraftRowKey}
                 monthDateBounds={dateBounds}
                 rows={visibleDrafts}

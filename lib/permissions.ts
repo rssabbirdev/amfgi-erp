@@ -89,6 +89,14 @@ export const P = {
   HR_LEAVE_DELETE: 'hr.leave.delete',
   HR_PAYROLL_SETTINGS: 'hr.payroll.settings',
   HR_PAYROLL_COMPENSATION: 'hr.payroll.compensation',
+  HR_COMPENSATION_VIEW: 'hr.compensation.view',
+  HR_COMPENSATION_CREATE: 'hr.compensation.create',
+  HR_COMPENSATION_EDIT: 'hr.compensation.edit',
+  HR_COMPENSATION_DELETE: 'hr.compensation.delete',
+  HR_VISA_VIEW: 'hr.visa.view',
+  HR_VISA_CREATE: 'hr.visa.create',
+  HR_VISA_EDIT: 'hr.visa.edit',
+  HR_VISA_DELETE: 'hr.visa.delete',
 
   // Employee self-service (linked User.linkedEmployeeId)
   SELF_EMPLOYEE_VIEW: 'self.employee.view',
@@ -132,6 +140,8 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.HR_SETTINGS_DOC_TYPES,
     P.HR_LEAVE_VIEW, P.HR_LEAVE_APPROVE, P.HR_LEAVE_EDIT, P.HR_LEAVE_DELETE,
     P.HR_PAYROLL_SETTINGS, P.HR_PAYROLL_COMPENSATION,
+    P.HR_COMPENSATION_VIEW, P.HR_COMPENSATION_CREATE, P.HR_COMPENSATION_EDIT, P.HR_COMPENSATION_DELETE,
+    P.HR_VISA_VIEW, P.HR_VISA_CREATE, P.HR_VISA_EDIT, P.HR_VISA_DELETE,
     P.STOCK_JOB_BUDGET_VIEW,
     P.STOCK_JOB_BUDGET_EDIT,
     P.STOCK_FORMULA_VIEW,
@@ -180,6 +190,14 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     P.HR_LEAVE_DELETE,
     P.HR_PAYROLL_SETTINGS,
     P.HR_PAYROLL_COMPENSATION,
+    P.HR_COMPENSATION_VIEW,
+    P.HR_COMPENSATION_CREATE,
+    P.HR_COMPENSATION_EDIT,
+    P.HR_COMPENSATION_DELETE,
+    P.HR_VISA_VIEW,
+    P.HR_VISA_CREATE,
+    P.HR_VISA_EDIT,
+    P.HR_VISA_DELETE,
   ],
 };
 
@@ -366,7 +384,25 @@ export const PERMISSION_GROUPS: Array<{
     group: 'HR — Payroll setup',
     perms: [
       { key: P.HR_PAYROLL_SETTINGS, label: 'Manage salary structure' },
-      { key: P.HR_PAYROLL_COMPENSATION, label: 'Manage employee compensation' },
+      { key: P.HR_PAYROLL_COMPENSATION, label: 'Payroll preview & runs (legacy full access)' },
+    ],
+  },
+  {
+    group: 'HR — Compensation',
+    perms: [
+      { key: P.HR_COMPENSATION_VIEW, label: 'View' },
+      { key: P.HR_COMPENSATION_CREATE, label: 'Create' },
+      { key: P.HR_COMPENSATION_EDIT, label: 'Edit' },
+      { key: P.HR_COMPENSATION_DELETE, label: 'Delete' },
+    ],
+  },
+  {
+    group: 'HR — Visa & Contract',
+    perms: [
+      { key: P.HR_VISA_VIEW, label: 'View' },
+      { key: P.HR_VISA_CREATE, label: 'Create' },
+      { key: P.HR_VISA_EDIT, label: 'Edit' },
+      { key: P.HR_VISA_DELETE, label: 'Delete' },
     ],
   },
   {

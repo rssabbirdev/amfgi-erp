@@ -31,6 +31,17 @@ import {
   canHrDocumentView,
 } from '@/lib/hr/documentPermissions';
 import {
+  canHrCompensationDelete,
+  canHrCompensationRecordPackage,
+  canHrCompensationView,
+} from '@/lib/hr/compensationPermissions';
+import {
+  canHrVisaCreate,
+  canHrVisaDelete,
+  canHrVisaEdit,
+  canHrVisaView,
+} from '@/lib/hr/visaPermissions';
+import {
   CUSTOM_EMPLOYEE_DOC_TYPE_VALUE,
   EMPLOYEE_DOC_OTHER_SLUG,
   employeeDocumentDisplayName,
@@ -321,8 +332,14 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const perms = (session?.user?.permissions ?? []) as string[];
   const canView = isSA || perms.includes('hr.employee.view');
   const canEdit = isSA || perms.includes('hr.employee.edit');
-  const canCompensation =
-    isSA || perms.includes('hr.payroll.compensation') || perms.includes('hr.payroll.settings');
+  const canCompensation = session?.user ? canHrCompensationView(session.user) : false;
+  const canCompensationRecord = session?.user ? canHrCompensationRecordPackage(session.user) : false;
+  const canCompensationDelete = session?.user ? canHrCompensationDelete(session.user) : false;
+  const canVisa = session?.user ? canHrVisaView(session.user) : false;
+  const canVisaCreate = session?.user ? canHrVisaCreate(session.user) : false;
+  const canVisaEdit = session?.user ? canHrVisaEdit(session.user) : false;
+  const canVisaDelete = session?.user ? canHrVisaDelete(session.user) : false;
+  const canVisaShowActions = canVisaEdit || canVisaDelete;
   const canDocCreate = session?.user ? canHrDocumentCreate(session.user) : false;
   const canDocEdit = session?.user ? canHrDocumentEdit(session.user) : false;
   const canDocDelete = session?.user ? canHrDocumentDelete(session.user) : false;
@@ -477,7 +494,8 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
 
   const submitVisa = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!canEdit || isBusy) return;
+    if (isBusy) return;
+    if (editingVisa ? !canVisaEdit : !canVisaCreate) return;
     setBusyKey(editingVisa ? 'visa-update' : 'visa-create');
     const form = e.currentTarget;
     const fd = new FormData(form);
@@ -511,7 +529,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   };
 
   const deleteVisa = async (vid: string) => {
-    if (!canEdit || isBusy || !window.confirm('Delete this visa period? Linked documents will keep but lose the visa link.')) return;
+    if (!canVisaDelete || isBusy || !window.confirm('Delete this visa period? Linked documents will keep but lose the visa link.')) return;
     setBusyKey(`visa-delete-${vid}`);
     const res = await fetch(`/api/hr/visa-periods/${vid}`, { method: 'DELETE' });
     const json = await res.json();
@@ -914,7 +932,9 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
   const photoUrl = emp.photoUrl?.trim() || null;
   const tabs: { id: Tab; label: string; hint: string }[] = [
     { id: 'overview', label: 'Overview', hint: 'Identity, employment, emergency' },
-    { id: 'visa', label: 'Visa & authorization', hint: 'Work authorization periods' },
+    ...(canVisa
+      ? [{ id: 'visa' as const, label: 'Visa & Contract', hint: 'Visa periods and contract windows' }]
+      : []),
     { id: 'documents', label: 'Documents', hint: 'Files, scans, and expiry tracking' },
     ...(canCompensation
       ? [{ id: 'compensation' as const, label: 'Compensation', hint: 'Pay type and salary rates' }]
@@ -1296,10 +1316,10 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
             <div className="space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Visa & work authorization</h2>
-                  <p className="text-sm text-slate-500">Track residence / employment visa windows and compliance notes.</p>
+                  <h2 className="text-lg font-semibold text-white">Visa & Contract</h2>
+                  <p className="text-sm text-slate-500">Track visa periods, contract windows, and compliance notes.</p>
                 </div>
-                {canEdit && !showVisaForm && !editingVisa && (
+                {canVisaCreate && !showVisaForm && !editingVisa && (
                   <Button
                     type="button"
                     onClick={() => {
@@ -1312,7 +1332,7 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                 )}
               </div>
 
-              {(showVisaForm || editingVisa) && canEdit && (
+              {(showVisaForm || editingVisa) && (editingVisa ? canVisaEdit : canVisaCreate) && (
                 <form
                   key={editingVisa?.id ?? 'new'}
                   onSubmit={submitVisa}
@@ -1386,13 +1406,13 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                       <th className="px-4 py-3">Period</th>
                       <th className="px-4 py-3">Validity</th>
                       <th className="px-4 py-3">Status</th>
-                      {canEdit && <th className="px-4 py-3 w-44">Actions</th>}
+                      {canVisaShowActions && <th className="px-4 py-3 w-44">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {emp.visaPeriods.length === 0 ? (
                       <tr>
-                        <td colSpan={canEdit ? 4 : 3} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={canVisaShowActions ? 4 : 3} className="px-4 py-8 text-center text-slate-500">
                           No visa periods recorded yet.
                         </td>
                       </tr>
@@ -1426,9 +1446,10 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                           <td className="px-4 py-3">
                             <VisaStatusPill status={v.status} />
                           </td>
-                          {canEdit && (
+                          {canVisaShowActions && (
                             <td className="px-4 py-3">
                               <div className="flex flex-wrap gap-2">
+                                {canVisaEdit ? (
                                 <button
                                   type="button"
                                   className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
@@ -1440,16 +1461,19 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
                                 >
                                   Edit
                                 </button>
+                                ) : null}
+                                {canVisaDelete ? (
                                 <button type="button" className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50" disabled={isBusy} onClick={() => deleteVisa(v.id)}>
                                   Delete
                                 </button>
+                                ) : null}
                               </div>
                             </td>
                           )}
                         </tr>
                         {isExpanded && (
                           <tr>
-                            <td colSpan={canEdit ? 4 : 3} className="px-4 pb-4">
+                            <td colSpan={canVisaShowActions ? 4 : 3} className="px-4 pb-4">
                               <div className="rounded-lg border border-white/10 bg-slate-950/40 p-3">
                                 {relatedDocs.length === 0 ? (
                                   <p className="text-xs text-slate-500">No related documents linked to this visa period.</p>
@@ -1933,7 +1957,8 @@ export function EmployeeProfileView({ employeeId }: { employeeId: string }) {
             <div className="rounded-2xl border border-white/10 bg-slate-900/35 p-6">
               <EmployeeCompensationPanel
                 employeeId={employeeId}
-                canEdit={isSA || perms.includes('hr.payroll.compensation')}
+                canRecord={canCompensationRecord}
+                canDelete={canCompensationDelete}
               />
             </div>
           )}

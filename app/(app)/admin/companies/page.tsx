@@ -11,7 +11,7 @@ import Modal from '@/components/ui/Modal';
 import { cn } from '@/lib/utils';
 import type { Column } from '@/components/ui/DataTable';
 import type { Company } from '@/store/api/adminEndpoints/companies';
-import { useGetCompaniesQuery, useCreateCompanyMutation, useUpdateCompanyMutation } from '@/store/hooks';
+import { useGetCompaniesQuery, useCreateCompanyMutation, useUpdateCompanyMutation, useDeleteCompanyMutation } from '@/store/hooks';
 import toast from 'react-hot-toast';
 
 const labelClass = 'text-[11px] font-medium uppercase tracking-wide text-muted-foreground';
@@ -20,13 +20,16 @@ const textareaClass =
   'min-h-[5.5rem] w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-none';
 
 export default function AdminCompaniesPage() {
-  const { data: companies = [], isLoading: companiesLoading } = useGetCompaniesQuery(undefined, {
-    refetchOnMountOrArgChange: 30,
-  });
+  const { data: companies = [], isLoading: companiesLoading } = useGetCompaniesQuery(
+    { includeInactive: true },
+    { refetchOnMountOrArgChange: 30 },
+  );
   const [createCompany, { isLoading: isCreating }] = useCreateCompanyMutation();
   const [updateCompany, { isLoading: isUpdating }] = useUpdateCompanyMutation();
+  const [deleteCompany, { isLoading: isDeleting }] = useDeleteCompanyMutation();
 
   const [modal, setModal] = useState(false);
+  const [deletingCompany, setDeletingCompany] = useState<Company | null>(null);
   const [editing, setEditing] = useState<Company | null>(null);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -34,6 +37,11 @@ export default function AdminCompaniesPage() {
   const [externalCompanyId, setExternalCompanyId] = useState('');
 
   const formBusy = isCreating || isUpdating;
+
+  const extractApiError = (err: unknown, fallback: string) => {
+    const message = (err as { data?: { error?: string } }).data?.error;
+    return typeof message === 'string' && message.trim() ? message : fallback;
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -90,6 +98,17 @@ export default function AdminCompaniesPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deletingCompany) return;
+    try {
+      await deleteCompany(deletingCompany.id).unwrap();
+      toast.success('Company deleted');
+      setDeletingCompany(null);
+    } catch (err) {
+      toast.error(extractApiError(err, 'Failed to delete company'));
+    }
+  };
+
   const columns: Column<Company>[] = [
     { key: 'name', header: 'Company name', sortable: true },
     {
@@ -126,10 +145,20 @@ export default function AdminCompaniesPage() {
           <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(c)}>
             Edit
           </Button>
+          {c.canDelete ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              onClick={() => setDeletingCompany(c)}
+            >
+              Delete
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="sm"
-            variant={c.isActive ? 'destructive' : 'default'}
+            variant={c.isActive ? 'outline' : 'default'}
             onClick={() => void handleToggleActive(c)}
           >
             {c.isActive ? 'Deactivate' : 'Activate'}
@@ -255,6 +284,39 @@ export default function AdminCompaniesPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(deletingCompany)}
+        onClose={() => !isDeleting && setDeletingCompany(null)}
+        title="Delete company"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Permanently delete <strong className="text-foreground">{deletingCompany?.name}</strong>? This is only
+            available for companies with no jobs, stock, customers, employees, or other operational data.
+          </p>
+          <div className="flex gap-3 border-t border-border pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              disabled={isDeleting}
+              onClick={() => setDeletingCompany(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="flex-1"
+              disabled={isDeleting}
+              onClick={() => void handleDelete()}
+            >
+              {isDeleting ? 'Deleting…' : 'Delete company'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

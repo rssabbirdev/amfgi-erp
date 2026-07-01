@@ -312,17 +312,7 @@ export default function HrScheduleListPage() {
                               )
                             }
                           >
-                            Plan
-                          </Button>
-                          <Button
-                            variant={attendanceReady ? 'secondary' : 'default'}
-                            size="sm"
-                            type="button"
-                            onClick={() =>
-                              router.push(`/hr/attendance?month=${encodeURIComponent(workDateYmd.slice(0, 7))}`)
-                            }
-                          >
-                            {attendanceReady ? 'Attendance' : 'Create attendance'}
+                            Build Plan
                           </Button>
                         </div>
                       </td>

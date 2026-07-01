@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
-import { P } from '@/lib/permissions';
-import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
+import { canHrVisaDelete, canHrVisaEdit } from '@/lib/hr/visaPermissions';
+import { requireCompanySession } from '@/lib/hr/requireCompanySession';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
 
@@ -19,7 +19,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_EMPLOYEE_EDIT)) return errorResponse('Forbidden', 403);
+  if (!canHrVisaEdit(session.user)) return errorResponse('Forbidden', 403);
   const { id } = await params;
 
   const existing = await prisma.visaPeriod.findFirst({ where: { id, companyId } });
@@ -47,7 +47,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_EMPLOYEE_EDIT)) return errorResponse('Forbidden', 403);
+  if (!canHrVisaDelete(session.user)) return errorResponse('Forbidden', 403);
   const { id } = await params;
 
   const existing = await prisma.visaPeriod.findFirst({ where: { id, companyId } });

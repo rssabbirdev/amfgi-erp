@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db/prisma';
-import { P } from '@/lib/permissions';
+import { canHrCompensationDelete } from '@/lib/hr/compensationPermissions';
 import { deleteCompensationPackage } from '@/lib/hr/payroll/compensationPackages';
-import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
+import { requireCompanySession } from '@/lib/hr/requireCompanySession';
 import { resolveRouteEmployeeId } from '@/lib/hr/resolveRouteEmployeeId';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 
@@ -11,8 +11,8 @@ export async function DELETE(
 ) {
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
-  const { companyId } = ctx;
-  if (!requirePerm(ctx.session.user, P.HR_PAYROLL_COMPENSATION)) {
+  const { companyId, session } = ctx;
+  if (!canHrCompensationDelete(session.user)) {
     return errorResponse('Forbidden', 403);
   }
 

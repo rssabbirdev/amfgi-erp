@@ -221,6 +221,7 @@ export const ITEM_TYPE_FIELDS: Record<KnownItemType, FieldDef[]> = {
     { path: 'schedule.driverTripSummary', label: 'Driver Trip Summary', category: 'Schedule' },
     { path: 'schedule.notes', label: 'Schedule Notes', category: 'Schedule' },
     { path: 'schedule.remarksSummary', label: 'Remarks Summary', category: 'Schedule' },
+    { path: 'schedule.multiAssignedWorkerSummary', label: 'Multi-Assigned Workers Summary', category: 'Schedule' },
     { path: 'today', label: "Today's Date", category: 'General' },
   ],
 };

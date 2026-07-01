@@ -102,7 +102,8 @@ interface AttendanceEntryGridProps {
   monthDateBounds?: { min: string; max: string };
   onWorkDateChange?: (rowKey: string, workDate: string) => void;
   onRemoveRow?: (rowKey: string) => void;
-  gridPreferenceKeySuffix?: string;
+  /** Database + localStorage key for column layout; use a distinct key per attendance screen. */
+  gridPreferenceKey?: string;
   canEdit: boolean;
   emptyMessage: string;
   /** Left side of the day-sheet chrome row (search, scope, add employee). */
@@ -118,7 +119,10 @@ interface AttendanceEntryGridProps {
   onAllJobsChange: (employeeId: string, jobId: string) => void;
 }
 
-const ATTENDANCE_GRID_PREFERENCE_KEY = 'hr-attendance-create-line-grid';
+/** Day sheet (`/hr/attendance/create`) — legacy key kept for existing saved layouts. */
+export const ATTENDANCE_DAY_SHEET_GRID_PREFERENCE_KEY = 'hr-attendance-create-line-grid';
+/** Employee-month sheet (`/hr/attendance/employee`). */
+export const ATTENDANCE_EMPLOYEE_MONTH_GRID_PREFERENCE_KEY = 'hr-attendance-employee-month-line-grid';
 
 function formatDateCellLabel(ymd: string): string {
   try {
@@ -311,9 +315,12 @@ function gridColumnsToPreferencePayload(columns: LineGridColumnConfig[]): LineGr
   };
 }
 
-function getAttendanceGridLocalStorageKey(companyId: string, suffix?: string) {
-  const base = `attendance-line-grid:${ATTENDANCE_GRID_PREFERENCE_KEY}${suffix ? `:${suffix}` : ''}:${companyId}`;
-  return base;
+function getAttendanceGridLocalStorageKey(companyId: string, preferenceKey: string) {
+  return `attendance-line-grid:${preferenceKey}:${companyId}`;
+}
+
+function attendanceGridPreferenceSessionKey(preferenceKey: string, companyId: string | null | undefined) {
+  return `${preferenceKey}:${companyId ?? ''}`;
 }
 
 function readAttendanceGridLocalPref(storageKey: string): Partial<LineGridPreferencePayload> | null {
@@ -439,7 +446,7 @@ export default function AttendanceEntryGrid({
   monthDateBounds,
   onWorkDateChange,
   onRemoveRow,
-  gridPreferenceKeySuffix,
+  gridPreferenceKey = ATTENDANCE_DAY_SHEET_GRID_PREFERENCE_KEY,
   canEdit,
   emptyMessage,
   filters,
@@ -453,8 +460,13 @@ export default function AttendanceEntryGrid({
   const { data: session, status: sessionStatus } = useSession();
   const companyId = session?.user?.activeCompanyId;
   const storageKey = useMemo(
-    () => (companyId ? getAttendanceGridLocalStorageKey(companyId, gridPreferenceKeySuffix) : null),
-    [companyId, gridPreferenceKeySuffix]
+    () => (companyId ? getAttendanceGridLocalStorageKey(companyId, gridPreferenceKey) : null),
+    [companyId, gridPreferenceKey]
+  );
+
+  const preferenceSessionKey = useMemo(
+    () => attendanceGridPreferenceSessionKey(gridPreferenceKey, companyId),
+    [companyId, gridPreferenceKey]
   );
 
   const isDatesMode = sheetMode === 'dates';
@@ -571,7 +583,7 @@ export default function AttendanceEntryGrid({
 
     if (!companyId) {
       setPreferencesLoaded(true);
-      loadedPreferenceKeyRef.current = `${ATTENDANCE_GRID_PREFERENCE_KEY}:`;
+      loadedPreferenceKeyRef.current = attendanceGridPreferenceSessionKey(gridPreferenceKey, undefined);
       return;
     }
 
@@ -580,11 +592,8 @@ export default function AttendanceEntryGrid({
 
     void (async () => {
       try {
-        const prefKey = gridPreferenceKeySuffix
-          ? `${ATTENDANCE_GRID_PREFERENCE_KEY}:${gridPreferenceKeySuffix}`
-          : ATTENDANCE_GRID_PREFERENCE_KEY;
         const response = await fetch(
-          `/api/me/table-preferences/${encodeURIComponent(prefKey)}`,
+          `/api/me/table-preferences/${encodeURIComponent(gridPreferenceKey)}`,
           { cache: 'no-store', signal: controller.signal }
         );
         if (!response.ok) throw new Error('Failed to load table preferences');
@@ -602,22 +611,22 @@ export default function AttendanceEntryGrid({
           }
         }
 
-        loadedPreferenceKeyRef.current = `${ATTENDANCE_GRID_PREFERENCE_KEY}:${companyId}`;
+        loadedPreferenceKeyRef.current = preferenceSessionKey;
         setPreferencesLoaded(true);
       } catch {
         if (controller.signal.aborted) return;
         const fallback = storageKey ? readAttendanceGridLocalPref(storageKey) : null;
         setGridColumns(mergeStoredGridColumns(defaultGridColumns, fallback));
-        loadedPreferenceKeyRef.current = `${ATTENDANCE_GRID_PREFERENCE_KEY}:${companyId}`;
+        loadedPreferenceKeyRef.current = preferenceSessionKey;
         setPreferencesLoaded(true);
       }
     })();
 
     return () => controller.abort();
-  }, [companyId, defaultGridColumns, gridPreferenceKeySuffix, sessionStatus, storageKey]);
+  }, [companyId, defaultGridColumns, gridPreferenceKey, preferenceSessionKey, sessionStatus, storageKey]);
 
   useEffect(() => {
-    if (!preferencesLoaded || loadedPreferenceKeyRef.current !== `${ATTENDANCE_GRID_PREFERENCE_KEY}:${companyId ?? ''}`) {
+    if (!preferencesLoaded || loadedPreferenceKeyRef.current !== preferenceSessionKey) {
       return;
     }
     if (!storageKey) return;
@@ -627,7 +636,7 @@ export default function AttendanceEntryGrid({
 
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => {
-      void fetch(`/api/me/table-preferences/${encodeURIComponent(ATTENDANCE_GRID_PREFERENCE_KEY)}`, {
+      void fetch(`/api/me/table-preferences/${encodeURIComponent(gridPreferenceKey)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -639,7 +648,7 @@ export default function AttendanceEntryGrid({
       controller.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [gridColumns, preferencesLoaded, storageKey, companyId]);
+  }, [gridColumns, gridPreferenceKey, preferenceSessionKey, preferencesLoaded, storageKey]);
 
   const setGridColumnVisibility = (key: string) => {
     setGridColumns((current) => {

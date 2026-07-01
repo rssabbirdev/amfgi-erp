@@ -82,6 +82,13 @@ import {
 import type { RootState } from '@/store/store';
 import type { WorkScheduleContext } from '@/lib/utils/templateData';
 import {
+  buildEmployeeTeamAssignmentMap,
+  buildMultiAssignedWorkerSummary,
+  collectDraftPrintTeamAssignments,
+  formatNumberedScheduleWorkerNameForPrint,
+  formatScheduleWorkerNameForPrint,
+} from '@/lib/hr/scheduleMultiAssignPrint';
+import {
   WORK_SCHEDULE_PRINT_CHANNEL,
   WORK_SCHEDULE_PRINT_PAYLOAD_KEY,
   type WorkSchedulePrintPayload,
@@ -106,6 +113,7 @@ import {
   Undo2,
   UserPlus,
   Users,
+  AlertTriangle,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -1127,6 +1135,8 @@ export default function HrScheduleDayPage() {
   const [publishLowHourTeams, setPublishLowHourTeams] = useState<SchedulePublishLowHourTeam[] | null>(
     null,
   );
+  const [publishedEditAcknowledged, setPublishedEditAcknowledged] = useState(false);
+  const [publishedEditWarningOpen, setPublishedEditWarningOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [activatingJob, setActivatingJob] = useState(false);
   const dismissedStaleJobIdsRef = useRef<Set<string>>(new Set());
@@ -1157,7 +1167,10 @@ export default function HrScheduleDayPage() {
   const canPub = isSA || perms.includes('hr.schedule.publish');
   const status = schedule && typeof schedule === 'object' ? String((schedule as { status?: string }).status ?? '') : '';
   const locked = status === 'LOCKED';
-  const dis = !canEdit || locked;
+  const isPublished = status === 'PUBLISHED';
+  const publishedEditGuarded =
+    isPublished && !locked && !publishedEditAcknowledged && (canEdit || canEditJob);
+  const dis = !canEdit || locked || publishedEditGuarded;
   const canZoomOut = viewScale > 0.8;
   const canZoomIn = viewScale < 1.35;
   const scheduleRowLabelCls = STICKY_ROW_LABEL_CLASS;
@@ -1195,6 +1208,42 @@ export default function HrScheduleDayPage() {
         .sort((a, b) => b.workDate.localeCompare(a.workDate))
         .slice(0, 5),
     [previousSchedules],
+  );
+
+  const showTemplateOption =
+    Boolean(schedule) && canEdit && !dis && drafts.length === 0;
+
+  const confirmPublishedEdit = useCallback(() => {
+    setPublishedEditAcknowledged(true);
+    setPublishedEditWarningOpen(false);
+  }, []);
+
+  const requestPublishedEdit = useCallback(
+    (action?: () => void) => {
+      if (!publishedEditGuarded) {
+        action?.();
+        return;
+      }
+      setPublishedEditWarningOpen(true);
+    },
+    [publishedEditGuarded],
+  );
+
+  const handlePublishedEditAttempt = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      if (!publishedEditGuarded) return;
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest('[data-published-edit-exempt]')) return;
+      const interactive = target.closest(
+        'button, input, select, textarea, [role="combobox"], [data-schedule-drop], [data-schedule-drag-handle]',
+      );
+      if (!interactive) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPublishedEditWarningOpen(true);
+    },
+    [publishedEditGuarded],
   );
 
   useEffect(() => {
@@ -1807,6 +1856,11 @@ export default function HrScheduleDayPage() {
     setAutoSaveStatus('idle');
   }, [workDate, scheduleId]);
 
+  useEffect(() => {
+    setPublishedEditAcknowledged(false);
+    setPublishedEditWarningOpen(false);
+  }, [workDate, scheduleId, status]);
+
   const markScheduleStructureDirty = () => {
     structureDirtyRef.current = true;
   };
@@ -2170,7 +2224,7 @@ export default function HrScheduleDayPage() {
     scheduleId: scheduleId || null,
     sessionId: collaborationSessionIdRef.current,
     displayName: collaborationDisplayName,
-    enabled: Boolean(scheduleId && canEdit && !locked && !loading),
+    enabled: Boolean(scheduleId && canEdit && !dis && !loading),
     onRemoteNotes: () => {
       if (scheduleInfo !== persistedNotesRef.current) return;
       if (undoStackRef.current.length > 0 || redoStackRef.current.length > 0) return;
@@ -2807,6 +2861,10 @@ export default function HrScheduleDayPage() {
   }, [resetWorkDetailsHistorySession]);
 
   const undo = useCallback(() => {
+    if (publishedEditGuarded) {
+      setPublishedEditWarningOpen(true);
+      return;
+    }
     const stack = undoStackRef.current;
     if (stack.length === 0) return;
     const previous = stack[stack.length - 1];
@@ -2814,9 +2872,13 @@ export default function HrScheduleDayPage() {
     redoStackRef.current = [...redoStackRef.current, captureCurrentEditorSnapshot()];
     restoreEditorSnapshot(previous);
     syncHistoryUi();
-  }, [captureCurrentEditorSnapshot, restoreEditorSnapshot, syncHistoryUi]);
+  }, [captureCurrentEditorSnapshot, publishedEditGuarded, restoreEditorSnapshot, syncHistoryUi]);
 
   const redo = useCallback(() => {
+    if (publishedEditGuarded) {
+      setPublishedEditWarningOpen(true);
+      return;
+    }
     const stack = redoStackRef.current;
     if (stack.length === 0) return;
     const next = stack[stack.length - 1];
@@ -2824,7 +2886,7 @@ export default function HrScheduleDayPage() {
     undoStackRef.current = [...undoStackRef.current.slice(-39), captureCurrentEditorSnapshot()];
     restoreEditorSnapshot(next);
     syncHistoryUi();
-  }, [captureCurrentEditorSnapshot, restoreEditorSnapshot, syncHistoryUi]);
+  }, [captureCurrentEditorSnapshot, publishedEditGuarded, restoreEditorSnapshot, syncHistoryUi]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -3781,6 +3843,12 @@ export default function HrScheduleDayPage() {
         .map((draft) => getJob(draft.jobId))
         .find((job): job is JobOpt => Boolean(job)) ?? null;
 
+    const printTeamAssignments = buildEmployeeTeamAssignmentMap(
+      collectDraftPrintTeamAssignments(drafts),
+    );
+    const printWorkerName = (employeeId: string) =>
+      formatScheduleWorkerNameForPrint(empName(employeeId), employeeId, printTeamAssignments);
+
     return {
       company: {
         name: session?.user?.activeCompanyName ?? '',
@@ -3812,37 +3880,85 @@ export default function HrScheduleDayPage() {
         driverTripSummary: `${driverTripRows.length} active driver${driverTripRows.length === 1 ? '' : 's'} listed`,
         notes: scheduleInfo.trim(),
         remarksSummary: [scheduleInfo.trim(), ...drafts.map((draft) => draft.remarks.trim()).filter(Boolean)].filter(Boolean).join(' | '),
+        multiAssignedWorkerSummary: buildMultiAssignedWorkerSummary(printTeamAssignments, empName),
       },
       scheduleGroups: drafts.map((draft) => {
         const job = getJob(draft.jobId);
         const workDetails = getJobWorkDetails(draft.jobId);
         const flatWorkerNames = draft.splitMode
-          ? draft.subTeams.flatMap((subTeam) => subTeam.members.map((member) => empName(member.employeeId))).filter(Boolean)
-          : draft.members.map((member) => empName(member.employeeId)).filter(Boolean);
-        const numberedFlatWorkerNames = flatWorkerNames.map((name, index) => `${index + 1}. ${name}`);
+          ? draft.subTeams
+              .flatMap((subTeam) =>
+                subTeam.members
+                  .map((member) => printWorkerName(member.employeeId))
+                  .filter(Boolean),
+              )
+          : draft.members
+              .map((member) => printWorkerName(member.employeeId))
+              .filter(Boolean);
+        const numberedFlatWorkerNames = draft.splitMode
+          ? draft.subTeams.flatMap((subTeam) =>
+              subTeam.members
+                .map((member, index) =>
+                  formatNumberedScheduleWorkerNameForPrint(
+                    index + 1,
+                    empName(member.employeeId),
+                    member.employeeId,
+                    printTeamAssignments,
+                  ),
+                )
+                .filter(Boolean),
+            )
+          : draft.members
+              .map((member, index) =>
+                formatNumberedScheduleWorkerNameForPrint(
+                  index + 1,
+                  empName(member.employeeId),
+                  member.employeeId,
+                  printTeamAssignments,
+                ),
+              )
+              .filter(Boolean);
         const dutyStartLabel = formatScheduleTimeForPrint(draft.dutyStart);
         const dutyEndLabel = formatScheduleTimeForPrint(draft.dutyEnd);
         const breakStartLabel = formatScheduleTimeForPrint(draft.breakStart);
         const breakEndLabel = formatScheduleTimeForPrint(draft.breakEnd);
         const workerNames = flatWorkerNames.join(', ');
         const driverNames = [draft.driver1EmployeeId, draft.driver2EmployeeId]
-          .map((id) => empName(id))
+          .map((id) => printWorkerName(id))
           .filter(Boolean)
           .join(' / ');
         const workerBlockRows = !draft.splitMode
-          ? flatWorkerNames.map((name, index) => ({
-              kind: index === 0 ? ('leader' as const) : ('worker' as const),
-              text: `${index + 1}. ${name}`,
-            }))
+          ? draft.members
+              .map((member, index) => {
+                const text = formatNumberedScheduleWorkerNameForPrint(
+                  index + 1,
+                  empName(member.employeeId),
+                  member.employeeId,
+                  printTeamAssignments,
+                );
+                return text
+                  ? {
+                      kind: index === 0 ? ('leader' as const) : ('worker' as const),
+                      text,
+                    }
+                  : null;
+              })
+              .filter((row): row is { kind: 'leader' | 'worker'; text: string } => Boolean(row))
           : draft.subTeams.flatMap((subTeam, subTeamIndex) => {
               const rows: Array<{ kind: 'subteam' | 'leader' | 'worker' | 'spacer'; text: string }> = [];
               if (subTeamIndex > 0) rows.push({ kind: 'spacer', text: '' });
               rows.push({ kind: 'subteam', text: subTeam.label });
-              const subTeamPeople = subTeam.members.map((member) => empName(member.employeeId)).filter(Boolean);
-              subTeamPeople.forEach((name, index) => {
+              subTeam.members.forEach((member, index) => {
+                const text = formatNumberedScheduleWorkerNameForPrint(
+                  index + 1,
+                  empName(member.employeeId),
+                  member.employeeId,
+                  printTeamAssignments,
+                );
+                if (!text) return;
                 rows.push({
                   kind: index === 0 ? 'leader' : 'worker',
-                  text: `${index + 1}. ${name}`,
+                  text,
                 });
               });
               return rows;
@@ -4593,7 +4709,7 @@ export default function HrScheduleDayPage() {
 							{drafts.length} teams
 						</Badge>
 					) : null} */}
-					{schedule && canEdit && !locked ? (
+					{showTemplateOption ? (
 						<>
 							<Button
 								type='button'
@@ -4617,7 +4733,9 @@ export default function HrScheduleDayPage() {
 								type='button'
 								size='sm'
 								variant='secondary'
-								onClick={saveAssignments}
+								onClick={() =>
+									requestPublishedEdit(() => void saveAssignments())
+								}
 								disabled={saving}
 							>
 								{saving ? 'Saving…' : 'Save now'}
@@ -4653,6 +4771,25 @@ export default function HrScheduleDayPage() {
 
 			{schedule ? (
 				<>
+					{publishedEditGuarded ? (
+						<Alert className='flex gap-3 border-amber-500/40 bg-amber-500/10'>
+							<AlertTriangle className='mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300' />
+							<AlertDescription className='text-amber-950 dark:text-amber-100'>
+								This schedule is published. Changes may affect
+								attendance and other downstream records. Choose
+								to continue only if you intend to edit it.
+								<Button
+									type='button'
+									size='sm'
+									variant='outline'
+									className='mt-2 border-amber-600/40 bg-background/80'
+									onClick={() => setPublishedEditWarningOpen(true)}
+								>
+									Continue edit anyway
+								</Button>
+							</AlertDescription>
+						</Alert>
+					) : null}
 					<div
 						className={cn(
 							'grid min-h-0 gap-3',
@@ -4662,7 +4799,10 @@ export default function HrScheduleDayPage() {
 						)}
 					>
 						<section className='flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm'>
-							<div className='flex flex-col gap-2 border-b border-border px-3 py-2 lg:flex-row lg:items-center lg:justify-between'>
+							<div
+								className='flex flex-col gap-2 border-b border-border px-3 py-2 lg:flex-row lg:items-center lg:justify-between'
+								data-published-edit-exempt
+							>
 								<div className='flex flex-wrap items-center gap-2'>
 									<TooltipProvider delayDuration={400}>
 										<Tooltip>
@@ -4930,11 +5070,20 @@ export default function HrScheduleDayPage() {
 											)}
 										</span>
 									) : null}
-									{canEdit && !locked ? (
+									{canEdit && !dis ? (
 										<Button
 											type='button'
 											size='sm'
 											onClick={addColumn}
+										>
+											<UserPlus className='h-3.5 w-3.5' />
+										</Button>
+									) : publishedEditGuarded && canEdit ? (
+										<Button
+											type='button'
+											size='sm'
+											variant='outline'
+											onClick={() => setPublishedEditWarningOpen(true)}
 										>
 											<UserPlus className='h-3.5 w-3.5' />
 										</Button>
@@ -4946,6 +5095,7 @@ export default function HrScheduleDayPage() {
 								ref={teamBoardScrollRef}
 								className='isolate overflow-x-auto'
 								style={{ zoom: viewScale } as CSSProperties}
+								onPointerDownCapture={handlePublishedEditAttempt}
 							>
 								<table
 									className={`border-collapse text-xs ${drafts.length <= 0 ? 'min-w-full' : 'w-max'}`}
@@ -4983,8 +5133,7 @@ export default function HrScheduleDayPage() {
 														data-schedule-drag-preview=''
 													>
 														<div className='flex min-w-0 items-center gap-1'>
-															{canEdit &&
-															!locked ? (
+															{canEdit && !dis ? (
 																<>
 																	<ScheduleDragHandle
 																		label='team column'
@@ -5051,7 +5200,7 @@ export default function HrScheduleDayPage() {
 																{d.columnIndex}
 															</Badge>
 														</div>
-														{canEdit && !locked ? (
+														{canEdit && !dis ? (
 															<div className='flex shrink-0 items-center gap-0.5'>
 																<Button
 																	type='button'
@@ -5104,20 +5253,36 @@ export default function HrScheduleDayPage() {
 														yet
 													</p>
 													<p className='mt-1 text-sm text-muted-foreground'>
-														Add a team column to
-														start planning jobs,
-														workers, and timings.
+														Add a team column or load
+														a recent schedule as a
+														starting point.
 													</p>
-													{canEdit && !locked ? (
-														<Button
-															type='button'
-															size='sm'
-															className='mt-2'
-															onClick={addColumn}
-														>
-															<UserPlus className='mr-1.5 h-3.5 w-3.5' />
-															Add first team
-														</Button>
+													{canEdit && !dis ? (
+														<div className='mt-3 flex flex-wrap items-center justify-center gap-2'>
+															<Button
+																type='button'
+																size='sm'
+																onClick={addColumn}
+															>
+																<UserPlus className='mr-1.5 h-3.5 w-3.5' />
+																Add first team
+															</Button>
+															{showTemplateOption &&
+															recentTemplateSchedules.length >
+																0 ? (
+																<Button
+																	type='button'
+																	size='sm'
+																	variant='outline'
+																	onClick={
+																		openTemplateModal
+																	}
+																>
+																	<LayoutTemplate className='mr-1.5 h-3.5 w-3.5' />
+																	Load template
+																</Button>
+															) : null}
+														</div>
 													) : null}
 												</td>
 											</tr>
@@ -5137,7 +5302,10 @@ export default function HrScheduleDayPage() {
 						</section>
 
 						{showWorkerRail ? (
-							<Card className='flex max-h-[calc(100vh-1rem)] flex-col overflow-hidden xl:sticky xl:top-2 xl:self-start'>
+							<Card
+								className='flex max-h-[calc(100vh-1rem)] flex-col overflow-hidden xl:sticky xl:top-2 xl:self-start'
+								onPointerDownCapture={handlePublishedEditAttempt}
+							>
 								<CardHeader className='shrink-0 space-y-0.5 px-3 py-2 pb-1'>
 									<CardTitle className='text-sm'>
 										Worker pool
@@ -5663,6 +5831,33 @@ export default function HrScheduleDayPage() {
 						</p>
 					</div>
 				) : null}
+			</Modal>
+
+			<Modal
+				isOpen={publishedEditWarningOpen}
+				onClose={() => setPublishedEditWarningOpen(false)}
+				title='Edit published schedule?'
+				description='This schedule is already published. Editing it may change attendance, driver logs, and other records that depend on the published plan.'
+				size='sm'
+				actions={
+					<>
+						<Button
+							type='button'
+							variant='outline'
+							onClick={() => setPublishedEditWarningOpen(false)}
+						>
+							Cancel
+						</Button>
+						<Button type='button' onClick={confirmPublishedEdit}>
+							Continue edit anyway
+						</Button>
+					</>
+				}
+			>
+				<p className='text-sm text-muted-foreground'>
+					You can still view and print the schedule without editing. Only
+					continue if you need to make changes to this published day.
+				</p>
 			</Modal>
 
 			<Modal

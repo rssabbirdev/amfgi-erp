@@ -2,7 +2,9 @@ import { auth }            from '@/auth';
 import { canAccessSettingsPrintFormat } from '@/lib/auth/settingsAccess';
 import { prisma }          from '@/lib/db/prisma';
 import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
-import { assertWarehouseModeTransition, ensureCompanyFallbackWarehouse, normalizeWarehouseMode } from '@/lib/warehouses/companyWarehouseMode';
+import { checkCompanyDeleteEligibility } from '@/lib/companies/checkCompanyDeleteEligibility';
+import { deleteCompanyIfEligible } from '@/lib/companies/deleteCompany';
+import { ensureCompanyFallbackWarehouse } from '@/lib/warehouses/companyWarehouseMode';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { normalizeCompanyPrintTemplateShape } from '@/lib/utils/companyPrintTemplates';
 import { normalizeStockControlSettings, mergeStockControlSettingsIntoCompanySettings } from '@/lib/stock-control/settings';
@@ -125,10 +127,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       )
     );
   }
-  if (isSA) {
-    update.warehouseMode = normalizeWarehouseMode(undefined);
-  }
-
   const company = await prisma.$transaction(async (tx) => {
     const existing = await tx.company.findUniqueOrThrow({
       where: { id },
@@ -150,10 +148,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           : {}),
       };
       update.operationalSettings = nextOperationalSettings as Prisma.InputJsonValue;
-    }
-
-    if (isSA) {
-      await assertWarehouseModeTransition(tx, id, normalizeWarehouseMode(undefined));
     }
 
     const updated = await tx.company.update({
@@ -181,4 +175,34 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     action: 'updated',
   });
   return successResponse(normalizeCompanyPrintTemplateShape(company as Record<string, unknown>));
+}
+
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user) return errorResponse('Unauthorized', 401);
+  if (!session.user.isSuperAdmin) return errorResponse('Forbidden', 403);
+
+  const { id } = await params;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await deleteCompanyIfEligible(tx, id);
+    });
+
+    publishLiveUpdate({
+      companyId: GLOBAL_LIVE_UPDATE_COMPANY_ID,
+      channel: 'admin',
+      entity: 'company',
+      action: 'deleted',
+    });
+
+    return successResponse({ deleted: true, id });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to delete company';
+    if (message.includes('not found')) return errorResponse('Company not found', 404);
+    if (message.includes('Cannot delete company') || message.includes('cannot be deleted')) {
+      return errorResponse(message, 400);
+    }
+    return errorResponse(message, 500);
+  }
 }

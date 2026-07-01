@@ -31,6 +31,13 @@ import {
   type WorkScheduleContext,
 } from '@/lib/utils/templateData';
 import { formatDate } from '@/lib/utils/formatters';
+import {
+  buildEmployeeTeamAssignmentMap,
+  buildMultiAssignedWorkerSummary,
+  collectApiAssignmentEmployeeIds,
+  formatNumberedScheduleWorkerNameForPrint,
+  formatScheduleWorkerNameForPrint,
+} from '@/lib/hr/scheduleMultiAssignPrint';
 import { getItemTypeLabel, ITEM_TYPE_LABELS } from '@/lib/utils/itemTypeFields';
 import {
   getPrintBuilderConvertibleItemTypes,
@@ -219,12 +226,12 @@ type SchedulePreviewDetail = {
       projectQtyArea?: string | null;
       customer?: { name?: string | null } | null;
     } | null;
-    teamLeader?: { fullName?: string | null } | null;
-    driver1?: { fullName?: string | null } | null;
-    driver2?: { fullName?: string | null } | null;
+    teamLeader?: { id?: string | null; fullName?: string | null } | null;
+    driver1?: { id?: string | null; fullName?: string | null } | null;
+    driver2?: { id?: string | null; fullName?: string | null } | null;
     members?: Array<{
       role?: 'WORKER' | 'HELPER' | 'TEAM_LEADER' | null;
-      employee?: { fullName?: string | null } | null;
+      employee?: { id?: string | null; fullName?: string | null } | null;
     }> | null;
   }> | null;
   driverLogs?: Array<{
@@ -416,12 +423,50 @@ export function TemplateBuilder({
   const buildWorkSchedulePreviewFromApi = useCallback(
       (schedule: SchedulePreviewDetail): WorkScheduleContext => {
         const assignments = schedule.assignments ?? [];
+        const printTeamAssignments = buildEmployeeTeamAssignmentMap(
+          assignments.map((assignment, index) => ({
+            label: String(assignment.label ?? `Group ${index + 1}`).trim() || `Group ${index + 1}`,
+            employeeIds: collectApiAssignmentEmployeeIds(assignment),
+          })),
+        );
+        const employeeNameById = new Map<string, string>();
+        for (const assignment of assignments) {
+          const register = (id?: string | null, name?: string | null) => {
+            const employeeId = String(id ?? '').trim();
+            const fullName = String(name ?? '').trim();
+            if (employeeId && fullName) employeeNameById.set(employeeId, fullName);
+          };
+          register(assignment.teamLeader?.id, assignment.teamLeader?.fullName);
+          register(assignment.driver1?.id, assignment.driver1?.fullName);
+          register(assignment.driver2?.id, assignment.driver2?.fullName);
+          for (const member of assignment.members ?? []) {
+            register(member.employee?.id, member.employee?.fullName);
+          }
+        }
+        const resolveEmployeeName = (employeeId: string) =>
+          employeeNameById.get(employeeId) ?? '';
+
         const previewGroups = assignments.map((assignment, index) => {
           const memberRows = assignment.members ?? [];
           const workerRows = memberRows
-            .map((member) => member.employee?.fullName?.trim() ?? '')
+            .map((member) =>
+              formatScheduleWorkerNameForPrint(
+                member.employee?.fullName?.trim() ?? '',
+                member.employee?.id,
+                printTeamAssignments,
+              ),
+            )
             .filter(Boolean);
-          const numberedWorkerRows = workerRows.map((name, index) => `${index + 1}. ${name}`);
+          const numberedWorkerRows = memberRows
+            .map((member, workerIndex) =>
+              formatNumberedScheduleWorkerNameForPrint(
+                workerIndex + 1,
+                member.employee?.fullName?.trim() ?? '',
+                member.employee?.id,
+                printTeamAssignments,
+              ),
+            )
+            .filter(Boolean);
           const workerNames = workerRows.join(', ');
           const workerBlocks = memberRows.some((member) => member.role === 'TEAM_LEADER')
             ? (() => {
@@ -430,6 +475,7 @@ export function TemplateBuilder({
                 let peopleIndex = 0;
                 for (const member of memberRows) {
                   const name = member.employee?.fullName?.trim() ?? '';
+                  const employeeId = member.employee?.id;
                   if (!name) continue;
                   if (member.role === 'TEAM_LEADER') {
                     if (rows.length > 0) rows.push({ kind: 'spacer', text: '' });
@@ -437,21 +483,56 @@ export function TemplateBuilder({
                     peopleIndex = 0;
                     rows.push({ kind: 'subteam', text: `Sub-team ${String.fromCharCode(65 + Math.max(subteamIndex, 0))}` });
                     peopleIndex += 1;
-                    rows.push({ kind: 'leader', text: `${peopleIndex}. ${name}` });
+                    rows.push({
+                      kind: 'leader',
+                      text: formatNumberedScheduleWorkerNameForPrint(
+                        peopleIndex,
+                        name,
+                        employeeId,
+                        printTeamAssignments,
+                      ),
+                    });
                   } else {
                     peopleIndex += 1;
-                    rows.push({ kind: 'worker', text: `${peopleIndex}. ${name}` });
+                    rows.push({
+                      kind: 'worker',
+                      text: formatNumberedScheduleWorkerNameForPrint(
+                        peopleIndex,
+                        name,
+                        employeeId,
+                        printTeamAssignments,
+                      ),
+                    });
                   }
                 }
                 return rows;
               })()
-            : workerRows.map((name, workerIndex) => ({
-                kind: workerIndex === 0 ? ('leader' as const) : ('worker' as const),
-                text: `${workerIndex + 1}. ${name}`,
-              }));
+            : memberRows
+                .map((member, workerIndex) => {
+                  const name = member.employee?.fullName?.trim() ?? '';
+                  const text = formatNumberedScheduleWorkerNameForPrint(
+                    workerIndex + 1,
+                    name,
+                    member.employee?.id,
+                    printTeamAssignments,
+                  );
+                  return text
+                    ? {
+                        kind: workerIndex === 0 ? ('leader' as const) : ('worker' as const),
+                        text,
+                      }
+                    : null;
+                })
+                .filter((row): row is { kind: 'leader' | 'worker'; text: string } => Boolean(row));
           const workerDisplay = workerBlocks.map((row) => row.text).filter(Boolean).join('\n');
-          const driverNames = [assignment.driver1?.fullName, assignment.driver2?.fullName]
-            .map((name) => String(name ?? '').trim())
+          const driverNames = [assignment.driver1, assignment.driver2]
+            .map((driver) =>
+              formatScheduleWorkerNameForPrint(
+                String(driver?.fullName ?? '').trim(),
+                driver?.id,
+                printTeamAssignments,
+              ),
+            )
             .filter(Boolean)
             .join(' / ');
         const breakWindow = String(assignment.breakWindow ?? '').trim();
@@ -505,7 +586,11 @@ export function TemplateBuilder({
             projectQtyArea,
             workProcessDetails,
             targetQty,
-            teamLeaderName: String(assignment.teamLeader?.fullName ?? '').trim(),
+            teamLeaderName: formatScheduleWorkerNameForPrint(
+              String(assignment.teamLeader?.fullName ?? '').trim(),
+              assignment.teamLeader?.id,
+              printTeamAssignments,
+            ),
             driverNames,
             workerNames,
             workerDisplay,
@@ -563,6 +648,10 @@ export function TemplateBuilder({
           driverTripSummary: `${driverTrips.length} active driver${driverTrips.length === 1 ? '' : 's'} listed`,
           notes: String(schedule.notes ?? '').trim(),
           remarksSummary: previewGroups.map((group) => group.remarks).filter(Boolean).join(' | '),
+          multiAssignedWorkerSummary: buildMultiAssignedWorkerSummary(
+            printTeamAssignments,
+            resolveEmployeeName,
+          ),
         },
         scheduleGroups: previewGroups,
         driverTrips,

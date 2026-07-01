@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db/prisma';
-import { P } from '@/lib/permissions';
-import { requireCompanySession, requirePerm } from '@/lib/hr/requireCompanySession';
+import { canHrVisaCreate, canHrVisaView } from '@/lib/hr/visaPermissions';
+import { requireCompanySession } from '@/lib/hr/requireCompanySession';
 import { resolveRouteEmployeeId } from '@/lib/hr/resolveRouteEmployeeId';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z } from 'zod';
@@ -19,7 +19,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_EMPLOYEE_VIEW)) return errorResponse('Forbidden', 403);
+  if (!canHrVisaView(session.user)) return errorResponse('Forbidden', 403);
   const employeeId = await resolveRouteEmployeeId(req, params);
   if (!employeeId) return errorResponse('Employee id required', 400);
 
@@ -37,7 +37,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const ctx = await requireCompanySession();
   if (!ctx.ok) return ctx.response;
   const { session, companyId } = ctx;
-  if (!requirePerm(session.user, P.HR_EMPLOYEE_EDIT)) return errorResponse('Forbidden', 403);
+  if (!canHrVisaCreate(session.user)) return errorResponse('Forbidden', 403);
   const employeeId = await resolveRouteEmployeeId(req, params);
   if (!employeeId) return errorResponse('Employee id required', 400);
 

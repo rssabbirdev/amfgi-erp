@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { auth }            from '@/auth';
 import { prisma }          from '@/lib/db/prisma';
 import { GLOBAL_LIVE_UPDATE_COMPANY_ID, publishLiveUpdate } from '@/lib/live-updates/server';
+import { checkCompanyDeleteEligibility } from '@/lib/companies/checkCompanyDeleteEligibility';
 import { ensureCompanyFallbackWarehouse, normalizeWarehouseMode } from '@/lib/warehouses/companyWarehouseMode';
 import { successResponse, errorResponse } from '@/lib/utils/apiResponse';
 import { z }                from 'zod';
@@ -18,13 +19,19 @@ function normalizeCompanySlug(raw: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return errorResponse('Unauthorized', 401);
 
+  const includeInactive =
+    session.user.isSuperAdmin &&
+    new URL(req.url).searchParams.get('includeInactive') === '1';
+
   const companies = await prisma.company.findMany({
-    where: { isActive: true },
-    orderBy: { name: 'asc' },
+    where: includeInactive
+      ? { id: { not: GLOBAL_LIVE_UPDATE_COMPANY_ID } }
+      : { isActive: true, id: { not: GLOBAL_LIVE_UPDATE_COMPANY_ID } },
+    orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     include: {
       stockFallbackWarehouse: {
         select: { id: true, name: true },
@@ -32,7 +39,21 @@ export async function GET() {
     },
   });
 
-  return successResponse(companies);
+  if (!includeInactive) {
+    return successResponse(companies);
+  }
+
+  const enriched = await Promise.all(
+    companies.map(async (company) => {
+      const eligibility = await checkCompanyDeleteEligibility(prisma, company.id);
+      return {
+        ...company,
+        canDelete: eligibility.canDelete,
+      };
+    }),
+  );
+
+  return successResponse(enriched);
 }
 
 const CreateSchema = z.object({
