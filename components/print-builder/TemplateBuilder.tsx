@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
@@ -34,10 +34,11 @@ import { formatDate } from '@/lib/utils/formatters';
 import {
   buildEmployeeTeamAssignmentMap,
   buildMultiAssignedWorkerSummary,
-  collectApiAssignmentEmployeeIds,
+  collectApiAssignmentWorkerIds,
   formatNumberedScheduleWorkerNameForPrint,
   formatScheduleWorkerNameForPrint,
 } from '@/lib/hr/scheduleMultiAssignPrint';
+import { teamDisplayLabel, teamDisplayLabelShort } from '@/lib/hr/scheduleTeamColumns';
 import { getItemTypeLabel, ITEM_TYPE_LABELS } from '@/lib/utils/itemTypeFields';
 import {
   getPrintBuilderConvertibleItemTypes,
@@ -425,8 +426,8 @@ export function TemplateBuilder({
         const assignments = schedule.assignments ?? [];
         const printTeamAssignments = buildEmployeeTeamAssignmentMap(
           assignments.map((assignment, index) => ({
-            label: String(assignment.label ?? `Group ${index + 1}`).trim() || `Group ${index + 1}`,
-            employeeIds: collectApiAssignmentEmployeeIds(assignment),
+            label: teamDisplayLabel(index),
+            employeeIds: collectApiAssignmentWorkerIds(assignment),
           })),
         );
         const employeeNameById = new Map<string, string>();
@@ -447,6 +448,8 @@ export function TemplateBuilder({
           employeeNameById.get(employeeId) ?? '';
 
         const previewGroups = assignments.map((assignment, index) => {
+          const groupLabel = teamDisplayLabel(index);
+          const currentTeamShort = teamDisplayLabelShort(index);
           const memberRows = assignment.members ?? [];
           const workerRows = memberRows
             .map((member) =>
@@ -454,6 +457,7 @@ export function TemplateBuilder({
                 member.employee?.fullName?.trim() ?? '',
                 member.employee?.id,
                 printTeamAssignments,
+                currentTeamShort,
               ),
             )
             .filter(Boolean);
@@ -464,6 +468,7 @@ export function TemplateBuilder({
                 member.employee?.fullName?.trim() ?? '',
                 member.employee?.id,
                 printTeamAssignments,
+                currentTeamShort,
               ),
             )
             .filter(Boolean);
@@ -490,6 +495,7 @@ export function TemplateBuilder({
                         name,
                         employeeId,
                         printTeamAssignments,
+                        currentTeamShort,
                       ),
                     });
                   } else {
@@ -501,6 +507,7 @@ export function TemplateBuilder({
                         name,
                         employeeId,
                         printTeamAssignments,
+                        currentTeamShort,
                       ),
                     });
                   }
@@ -515,6 +522,7 @@ export function TemplateBuilder({
                     name,
                     member.employee?.id,
                     printTeamAssignments,
+                    currentTeamShort,
                   );
                   return text
                     ? {
@@ -526,13 +534,7 @@ export function TemplateBuilder({
                 .filter((row): row is { kind: 'leader' | 'worker'; text: string } => Boolean(row));
           const workerDisplay = workerBlocks.map((row) => row.text).filter(Boolean).join('\n');
           const driverNames = [assignment.driver1, assignment.driver2]
-            .map((driver) =>
-              formatScheduleWorkerNameForPrint(
-                String(driver?.fullName ?? '').trim(),
-                driver?.id,
-                printTeamAssignments,
-              ),
-            )
+            .map((driver) => String(driver?.fullName ?? '').trim())
             .filter(Boolean)
             .join(' / ');
         const breakWindow = String(assignment.breakWindow ?? '').trim();
@@ -559,7 +561,7 @@ export function TemplateBuilder({
           const siteName = String(assignment.job?.site ?? '').trim();
           const targetQty = String(assignment.targetQty ?? '').trim();
           return {
-            label: String(assignment.label ?? `Group ${index + 1}`).trim() || `Group ${index + 1}`,
+            label: groupLabel,
           locationLabel:
             assignment.locationType === 'SITE_JOB'
               ? 'Site job'
@@ -586,11 +588,7 @@ export function TemplateBuilder({
             projectQtyArea,
             workProcessDetails,
             targetQty,
-            teamLeaderName: formatScheduleWorkerNameForPrint(
-              String(assignment.teamLeader?.fullName ?? '').trim(),
-              assignment.teamLeader?.id,
-              printTeamAssignments,
-            ),
+            teamLeaderName: String(assignment.teamLeader?.fullName ?? '').trim(),
             driverNames,
             workerNames,
             workerDisplay,

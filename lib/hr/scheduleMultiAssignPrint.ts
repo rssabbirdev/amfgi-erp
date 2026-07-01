@@ -42,6 +42,7 @@ export function formatScheduleWorkerNameForPrint(
   fullName: string,
   employeeId: string | null | undefined,
   teamAssignments: Map<string, string[]>,
+  currentTeamShortLabel?: string,
 ): string {
   const name = String(fullName ?? '').trim();
   if (!name) return '';
@@ -49,7 +50,10 @@ export function formatScheduleWorkerNameForPrint(
   if (!id) return name;
   const teams = teamAssignments.get(id);
   if (!teams || teams.length <= 1) return name;
-  return `${name} - [${teams.join(',')}]`;
+  const current = String(currentTeamShortLabel ?? '').trim();
+  const otherTeams = current ? teams.filter((team) => team !== current) : teams;
+  if (otherTeams.length === 0) return name;
+  return `${name} - [${otherTeams.join(',')}]`;
 }
 
 export function formatNumberedScheduleWorkerNameForPrint(
@@ -57,8 +61,14 @@ export function formatNumberedScheduleWorkerNameForPrint(
   fullName: string,
   employeeId: string | null | undefined,
   teamAssignments: Map<string, string[]>,
+  currentTeamShortLabel?: string,
 ): string {
-  const formatted = formatScheduleWorkerNameForPrint(fullName, employeeId, teamAssignments);
+  const formatted = formatScheduleWorkerNameForPrint(
+    fullName,
+    employeeId,
+    teamAssignments,
+    currentTeamShortLabel,
+  );
   return formatted ? `${index}. ${formatted}` : '';
 }
 
@@ -82,8 +92,6 @@ export function buildMultiAssignedWorkerSummary(
 export function collectDraftPrintTeamAssignments(
   drafts: Array<{
     label: string;
-    driver1EmployeeId?: string | null;
-    driver2EmployeeId?: string | null;
     splitMode?: boolean;
     members?: Array<{ employeeId?: string | null }>;
     subTeams?: Array<{ members?: Array<{ employeeId?: string | null }> }>;
@@ -95,8 +103,6 @@ export function collectDraftPrintTeamAssignments(
       const value = String(id ?? '').trim();
       if (value) employeeIds.add(value);
     };
-    add(draft.driver1EmployeeId);
-    add(draft.driver2EmployeeId);
     if (draft.splitMode) {
       for (const subTeam of draft.subTeams ?? []) {
         for (const member of subTeam.members ?? []) add(member.employeeId);
@@ -108,22 +114,13 @@ export function collectDraftPrintTeamAssignments(
   });
 }
 
-export function collectApiAssignmentEmployeeIds(assignment: {
-  teamLeader?: { id?: string | null } | null;
-  driver1?: { id?: string | null } | null;
-  driver2?: { id?: string | null } | null;
+export function collectApiAssignmentWorkerIds(assignment: {
   members?: Array<{ employee?: { id?: string | null } | null }> | null;
 }): string[] {
   const employeeIds = new Set<string>();
-  const add = (id?: string | null) => {
-    const value = String(id ?? '').trim();
-    if (value) employeeIds.add(value);
-  };
-  add(assignment.teamLeader?.id);
-  add(assignment.driver1?.id);
-  add(assignment.driver2?.id);
   for (const member of assignment.members ?? []) {
-    add(member.employee?.id);
+    const value = String(member.employee?.id ?? '').trim();
+    if (value) employeeIds.add(value);
   }
   return [...employeeIds];
 }

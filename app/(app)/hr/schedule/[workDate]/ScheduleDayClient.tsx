@@ -88,6 +88,7 @@ import {
   formatNumberedScheduleWorkerNameForPrint,
   formatScheduleWorkerNameForPrint,
 } from '@/lib/hr/scheduleMultiAssignPrint';
+import { renormalizeTeamColumnDrafts, teamDisplayLabelShort } from '@/lib/hr/scheduleTeamColumns';
 import {
   WORK_SCHEDULE_PRINT_CHANNEL,
   WORK_SCHEDULE_PRINT_PAYLOAD_KEY,
@@ -1746,37 +1747,41 @@ export default function HrScheduleDayPage() {
     suspendHistoryRef.current = true;
     const notesValue = String((sch as { notes?: string | null }).notes ?? '');
     setScheduleInfo(notesValue);
-    const normalizedDrafts = asg.map((a, idx) =>
-      normalizeDraft(
-        {
-          columnIndex: typeof a.columnIndex === 'number' ? a.columnIndex : idx + 1,
-          label: String(a.label ?? `Team#${idx + 1}`),
-          locationType: (a.locationType as AsgDraft['locationType']) ?? 'SITE_JOB',
-          jobId: (a.job as { id?: string })?.id ?? '',
-          factoryCode: String(a.factoryCode ?? ''),
-          jobNumberSnapshot: String(a.jobNumberSnapshot ?? ''),
-          workProcessDetails: getInitialWorkProcessDetails({
-            id: String((a.job as { id?: string })?.id ?? ''),
-            jobNumber: String((a.job as { jobNumber?: string })?.jobNumber ?? a.jobNumberSnapshot ?? ''),
-            customerName: String((a.job as { customer?: { name?: string } })?.customer?.name ?? ''),
-            description: String((a.job as { description?: string })?.description ?? ''),
-            projectDetails: String((a.job as { projectDetails?: string })?.projectDetails ?? '') || '',
-          }),
-          targetQty: String(a.targetQty ?? ''),
-          driver1EmployeeId: String(a.driver1EmployeeId ?? ''),
-          driver2EmployeeId: String(a.driver2EmployeeId ?? ''),
-          dutyStart: String(a.shiftStart ?? ''),
-          dutyEnd: String(a.shiftEnd ?? ''),
-          ...parseBrk(String(a.breakWindow ?? '')),
-          remarks: String(a.remarks ?? ''),
-          members: ((a.members as Array<Record<string, unknown>>) ?? []).map((m, i) => ({
-            employeeId: String(m.employeeId),
-            role: (m.role as MemberRow['role']) ?? 'WORKER',
-            slot: typeof m.slot === 'number' ? m.slot : i + 1,
-          })),
-        },
-        idx,
-      ),
+    const normalizedDrafts = renormalizeTeamColumnDrafts(
+      asg
+        .map((a, idx) =>
+          normalizeDraft(
+            {
+              columnIndex: typeof a.columnIndex === 'number' ? a.columnIndex : idx + 1,
+              label: String(a.label ?? `Team#${idx + 1}`),
+              locationType: (a.locationType as AsgDraft['locationType']) ?? 'SITE_JOB',
+              jobId: (a.job as { id?: string })?.id ?? '',
+              factoryCode: String(a.factoryCode ?? ''),
+              jobNumberSnapshot: String(a.jobNumberSnapshot ?? ''),
+              workProcessDetails: getInitialWorkProcessDetails({
+                id: String((a.job as { id?: string })?.id ?? ''),
+                jobNumber: String((a.job as { jobNumber?: string })?.jobNumber ?? a.jobNumberSnapshot ?? ''),
+                customerName: String((a.job as { customer?: { name?: string } })?.customer?.name ?? ''),
+                description: String((a.job as { description?: string })?.description ?? ''),
+                projectDetails: String((a.job as { projectDetails?: string })?.projectDetails ?? '') || '',
+              }),
+              targetQty: String(a.targetQty ?? ''),
+              driver1EmployeeId: String(a.driver1EmployeeId ?? ''),
+              driver2EmployeeId: String(a.driver2EmployeeId ?? ''),
+              dutyStart: String(a.shiftStart ?? ''),
+              dutyEnd: String(a.shiftEnd ?? ''),
+              ...parseBrk(String(a.breakWindow ?? '')),
+              remarks: String(a.remarks ?? ''),
+              members: ((a.members as Array<Record<string, unknown>>) ?? []).map((m, i) => ({
+                employeeId: String(m.employeeId),
+                role: (m.role as MemberRow['role']) ?? 'WORKER',
+                slot: typeof m.slot === 'number' ? m.slot : i + 1,
+              })),
+            },
+            idx,
+          ),
+        )
+        .sort((a, b) => a.columnIndex - b.columnIndex),
     );
     draftsRef.current = normalizedDrafts;
     setDrafts(normalizedDrafts);
@@ -2722,18 +2727,12 @@ export default function HrScheduleDayPage() {
 
   const removeColumn = (idx: number) => {
     markScheduleStructureDirty();
-    applyDrafts((d) => d.filter((_, i) => i !== idx));
+    applyDrafts((d) => renormalizeTeamColumnDrafts(d.filter((_, i) => i !== idx)));
   };
 
   const reorderTeamColumns = (fromIndex: number, toIndex: number) => {
     markScheduleStructureDirty();
-    applyDrafts((rows) => {
-      const reordered = moveArrayItem(rows, fromIndex, toIndex);
-      return reordered.map((row, index) => ({
-        ...row,
-        columnIndex: index + 1,
-      }));
-    });
+    applyDrafts((rows) => renormalizeTeamColumnDrafts(moveArrayItem(rows, fromIndex, toIndex)));
   };
 
   const moveTeamColumn = (colIdx: number, direction: -1 | 1) => {
@@ -3844,10 +3843,15 @@ export default function HrScheduleDayPage() {
         .find((job): job is JobOpt => Boolean(job)) ?? null;
 
     const printTeamAssignments = buildEmployeeTeamAssignmentMap(
-      collectDraftPrintTeamAssignments(drafts),
+      collectDraftPrintTeamAssignments(
+        drafts.map((draft, index) => ({
+          label: `Team#${index + 1}`,
+          splitMode: draft.splitMode,
+          members: draft.members,
+          subTeams: draft.subTeams,
+        })),
+      ),
     );
-    const printWorkerName = (employeeId: string) =>
-      formatScheduleWorkerNameForPrint(empName(employeeId), employeeId, printTeamAssignments);
 
     return {
       company: {
@@ -3882,9 +3886,18 @@ export default function HrScheduleDayPage() {
         remarksSummary: [scheduleInfo.trim(), ...drafts.map((draft) => draft.remarks.trim()).filter(Boolean)].filter(Boolean).join(' | '),
         multiAssignedWorkerSummary: buildMultiAssignedWorkerSummary(printTeamAssignments, empName),
       },
-      scheduleGroups: drafts.map((draft) => {
+      scheduleGroups: drafts.map((draft, groupIndex) => {
         const job = getJob(draft.jobId);
         const workDetails = getJobWorkDetails(draft.jobId);
+        const currentTeamShort = teamDisplayLabelShort(groupIndex);
+        const displayLabel = `Team#${groupIndex + 1}`;
+        const printWorkerName = (employeeId: string) =>
+          formatScheduleWorkerNameForPrint(
+            empName(employeeId),
+            employeeId,
+            printTeamAssignments,
+            currentTeamShort,
+          );
         const flatWorkerNames = draft.splitMode
           ? draft.subTeams
               .flatMap((subTeam) =>
@@ -3904,6 +3917,7 @@ export default function HrScheduleDayPage() {
                     empName(member.employeeId),
                     member.employeeId,
                     printTeamAssignments,
+                    currentTeamShort,
                   ),
                 )
                 .filter(Boolean),
@@ -3915,6 +3929,7 @@ export default function HrScheduleDayPage() {
                   empName(member.employeeId),
                   member.employeeId,
                   printTeamAssignments,
+                  currentTeamShort,
                 ),
               )
               .filter(Boolean);
@@ -3924,7 +3939,7 @@ export default function HrScheduleDayPage() {
         const breakEndLabel = formatScheduleTimeForPrint(draft.breakEnd);
         const workerNames = flatWorkerNames.join(', ');
         const driverNames = [draft.driver1EmployeeId, draft.driver2EmployeeId]
-          .map((id) => printWorkerName(id))
+          .map((id) => empName(id))
           .filter(Boolean)
           .join(' / ');
         const workerBlockRows = !draft.splitMode
@@ -3935,6 +3950,7 @@ export default function HrScheduleDayPage() {
                   empName(member.employeeId),
                   member.employeeId,
                   printTeamAssignments,
+                  currentTeamShort,
                 );
                 return text
                   ? {
@@ -3954,6 +3970,7 @@ export default function HrScheduleDayPage() {
                   empName(member.employeeId),
                   member.employeeId,
                   printTeamAssignments,
+                  currentTeamShort,
                 );
                 if (!text) return;
                 rows.push({
@@ -3964,7 +3981,7 @@ export default function HrScheduleDayPage() {
               return rows;
             });
         return {
-          label: draft.label,
+          label: displayLabel,
           locationLabel:
             draft.locationType === 'SITE_JOB'
               ? 'Site job'
@@ -5196,8 +5213,7 @@ export default function HrScheduleDayPage() {
 																variant='secondary'
 																className='shrink-0'
 															>
-																Team{' '}
-																{d.columnIndex}
+																Team {ci + 1}
 															</Badge>
 														</div>
 														{canEdit && !dis ? (
